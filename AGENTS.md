@@ -158,6 +158,10 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   its saved permissions (`settings: platform`, as event agent jobs; per point in mailbox-routing.md "11-02").
   When the branch is done, the original session receives the branch's reply and the letters it sent on its next
   activity. Only request/question is handled; info is a notice (one that replies to a live session wakes it, nothing more).
+  A request or question is told per session and the first session told holds it, until an ack, reply or done, its session
+  closing, or 60 minutes from the telling; then the next session's hook gets it (design `docs/design/mailbox-session-first.md`,
+  "The letter's state"). A session's ack lasts while the session runs. Platform runs start only for letters under 7 days old,
+  and a letter is forked once.
   A dispatched letter is recorded as "the platform is handling it", so an open session does not redo it; at most 4
   rounds per thread and 6 dispatches per project per day (brunna.json `mailbox`). Everything specific to Claude Code is
   only in `bin/runtime_claude.py`. Handoffs do not go through this.

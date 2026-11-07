@@ -188,5 +188,12 @@
  "letters open": "封信未結",
  "problem": "個問題",
  "problems": "個問題",
- "{n} more": "另外 {n} 項"
+ "{n} more": "另外 {n} 項",
+ "Waiting: {id} ({project}: {why})": "等候中:{id}({project}:{why})",
+ "session {session} has it": "session {session} 拿著",
+ "seen, held for now": "有人看過,暫時留著",
+ "triaged, waiting for a session": "已初步處理,等 session",
+ "the loop guard asked the owner": "循環防護已問過本人",
+ "too old for a platform run": "太舊,平台不再派人處理",
+ "today's runs are used up": "今天的處理次數用完了"
 }

@@ -543,6 +543,11 @@ class Sessions:
     def live_sessions(self) -> set[str]:
         return {qualify(n, s) for n, m in self.mods.items() for s in m.live_sessions()}
 
+    def judges(self, sid) -> bool:
+        """Whether this session's runtime has the sessions port. If not, it can't be judged: absent from live_sessions
+        says nothing about it (no port is the feature off, not the session gone)."""
+        return self._mod(sid)[0] is not None
+
     def alive(self, sid) -> bool:
         m, native = self._mod(sid)
         return bool(m) and m.alive(native)

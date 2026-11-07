@@ -257,6 +257,13 @@ class Json(unittest.TestCase):
               "to_project": "p", "ref": "m1", "payload": {"v": 1, "session": "S1", "via": "wake", "ok": True}}
         self.assertEqual(contracts.check_json(C / "hubbus.v1.schema.json", ev), [])
 
+    def test_hubbus_routed(self):
+        """docs/design/mailbox-session-first.md: one session holds a letter, or the route ended."""
+        for p in ({"session": "S1", "by": "hook"}, {"session": None, "by": None, "ended": "window"}):
+            ev = {"seq": 4, "id": "m1:routed:ab12cd34", "ts": "2026-11-07T00:00:00+08:00", "type": "message.routed",
+                  "source": "p", "to_project": "p", "ref": "m1", "payload": {"v": 1, **p}}
+            self.assertEqual(contracts.check_json(C / "hubbus.v1.schema.json", ev), [])
+
     def test_hubbus_record(self):
         ev = {"seq": 2, "id": "rec:acts/0.3:p:r:k", "ts": "2026-10-28T00:00:00+08:00", "type": "record", "source": "p",
               "to_project": "owner", "ref": None, "payload": {"v": 1, "record": {

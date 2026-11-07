@@ -31,6 +31,25 @@ class Held(unittest.TestCase):
         self.assertNotIn("m11011200-0123456789ab", page.replace(held, ""), "listed once, not as unclaimed too")
 
 
+class Waiting(unittest.TestCase):
+    build, main_part = golden.StatusPage.build, staticmethod(golden.StatusPage.main_part)
+
+    def test_a_waiting_letter_is_listed_apart_and_raises_no_alert(self):
+        ts = "2026-10-30T09:00:00"
+        waits = {"m1": {"why": "routed", "session": "abcdef0123"}, "m2": {"why": "budget"}, "m3": {"why": "old"}}
+        bus = {**golden.INPUTS["bus_quiet"], "stuck": [],
+               "waiting": [{"id": i, "to": "alpha", "ts": ts, **w} for i, w in waits.items()]}
+        bus["projects"] = {"alpha": {"open": 3, "undelivered": 0, "oldest": ts}}
+        with tempfile.TemporaryDirectory() as d:
+            page = self.main_part(self.build(pathlib.Path(d).resolve(), golden.quiet_options(bus=bus))["index.html"])
+        t = lambda msg, **kw: i18n.translate("gen-status-page", msg, kw, golden_lang())
+        for mid, why in (("m1", t("session {session} has it", session="abcdef01")), ("m2", t("today's runs are used up")),
+                         ("m3", t("too old for a platform run"))):
+            self.assertIn(t("Waiting: {id} ({project}: {why})", id=mid, project="alpha", why=why), page)
+        self.assertNotIn(t("Letter {id} to {to}: unclaimed for over an hour: no session took it and the platform did "
+                           "not handle it (see the hubbus dispatch log and the daily limit)", id="m1", to="alpha"), page)
+
+
 def golden_lang() -> str:
     import golden_lang as gl
     return gl.LANG

@@ -77,7 +77,6 @@
  "The platform has already handled {rounds} rounds of the thread between {a} and {b}; going on may be the two answering each other without end, so it stops here. Latest letter ({id}): {text}\nTo go on, open a session in one of the projects.": "{a} 跟 {b} 之間的一串往來,平台已經代為處理 {rounds} 輪,再下去可能是兩邊互相回信回不完,先停下來。最新一封({id}):{text}\n要繼續的話,在其中一個專案開 session 處理。",
  "{project}: {id}: this thread has already had {rounds} rounds handled; stopping to ask {owner}": "{project}:{id} 這串已經代為處理 {rounds} 輪,停下來問 {owner}",
  "mailbox delegation dispatches no agent: {e}": "信箱交辦不派 agent:{e}",
- "{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply or done; treating it as not taken and dispatching again": "{project}:{id} 送進 session 超過 {minutes} 分鐘沒人 ack/回信/done,當成沒人收,重新分派",
  "dispatch: pulling handoffs failed: {e!r}": "dispatch 拉轉交失敗:{e!r}",
  "dispatch {step} failed: {e!r}": "dispatch {step} 失敗:{e!r}",
  "quick_check is not ok": "quick_check 不是 ok",
@@ -160,5 +159,14 @@
  "a member name appears twice (not I-JSON, core §4)": "有成員名稱出現兩次(不是 I-JSON,core §4)",
  "{ext} is a version brunna does not read: kept, not acted on": "{ext} 是 brunna 不讀的版本:留著,不據以行動",
  "it has no form in {version}, the version {assistant} reads": "它在 {version}({assistant}讀的版本)沒有對應的形式",
- "{assistant} does not read {version} ({n} {n:record|records}: {ids}); the batch is kept and sent again. Set principal_handoff.send_version back to a version {assistant} reads": "{assistant}不讀 {version}({n} 筆 record:{ids});這批留著、下次重送。請把 principal_handoff.send_version 改回{assistant}讀得懂的版本"
+ "{assistant} does not read {version} ({n} {n:record|records}: {ids}); the batch is kept and sent again. Set principal_handoff.send_version back to a version {assistant} reads": "{assistant}不讀 {version}({n} 筆 record:{ids});這批留著、下次重送。請把 principal_handoff.send_version 改回{assistant}讀得懂的版本",
+ "{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply or done; treating it as not taken": "{project}:{id} 送進 session 超過 {minutes} 分鐘沒人 ack/回信/done,當成沒人收",
+ "{project}: {id}: the session that held it has closed with no ack, reply or done; treating it as not taken": "{project}:{id}:拿著這封信的 session 已經關了,沒有 ack/回信/done,當成沒人收",
+ "cannot tell which sessions run: {e!r}": "查不出哪些 session 還在跑:{e!r}",
+ "  (taken)": "  (已有人接手)",
+ "  (seen, held for now)": "  (有人看過,暫時留著)",
+ "  (held by this session)": "  (這個 session 拿著)",
+ "  (held by session {session})": "  (session {session} 拿著)",
+ "Waiting for a session (a session holds them, or the platform has no run left to start): {items}": "等 session(有 session 拿著,或平台沒有可以再啟動的處理):{items}",
+ "(a platform run's ack is not recorded)": "(平台啟動的處理,ack 不記錄)"
 }

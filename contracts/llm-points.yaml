@@ -263,7 +263,7 @@ points:
     extra_args: ["--strict-mcp-config"]
     timeout_s: 1800
     output: {format: text}
-    # a failure records job.failed; not closed after 35 minutes, dispatch hands it on as a request (stale_resumes)
+    # a failure records job.failed; not closed after 35 minutes the letter is open again, and it is not forked twice
     on_failure: retry_later
   lease-session:
     caller: bin/lease-runner.py (llm.py exec)

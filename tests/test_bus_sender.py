@@ -334,6 +334,117 @@ class Outbox(Fixture):
         self.dispatch()
         self.assertEqual([r["source"] for r in self.rows("type='message' AND to_project='open'")], ["box"])
 
+    def in_box(self, *args, session="s-box", live=()):
+        """One mail command as a session of the sandboxed project, in-process (the fixture's runtime has no sessions),
+        reading its view and writing its outbox."""
+        import contextlib
+        import io
+        import runtime_ports
+        m = load_hubbus()
+        m.DB = self.tmp / "bus-not-for-the-sandbox.db"
+        out = io.StringIO()
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m.hubconf, "workspace", lambda p: self.ws.get(p)), \
+                mock.patch.object(m, "project_of", lambda cwd: "box"), \
+                mock.patch.object(runtime_ports, "current_session", lambda env=None: session), \
+                mock.patch.object(sys, "argv", ["hubbus", *args]), contextlib.redirect_stdout(out):
+            m.main()
+        self.assertFalse(m.DB.exists(), "the sandbox never reaches for the bus")
+        return out.getvalue()
+
+    def on_bus(self, live=("s-box", "s-other")):
+        """The platform's side, in-process, with a fake table of running sessions."""
+        import types
+        m = load_hubbus()
+        m.DB = self.tmp / "bus" / "bus.db"
+        m.sessions_port = lambda: types.SimpleNamespace(live_sessions=lambda: set(live))
+        return m
+
+    def view(self):
+        return json.loads((names.repo_dir(self.ws["box"] / ".git") / "inbox.json").read_text())
+
+    def test_a_view_carries_who_holds_a_letter_and_whether_it_is_taken(self):
+        mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m.hubconf, "workspace", lambda p: self.ws.get(p)):
+            self.assertIn("ping", m.mail_text("prompt", "s-box", str(self.ws["box"])) or "")
+        self.assertEqual(self.view()["state"], {mid: {"taken": False, "held": True, "holder": "s-box"}},
+                         "written by the hook, so the session's next command finds it")
+        self.assertTrue(any(e["type"] == "message.routed" for e in self.view()["events"]))
+        out = self.in_box("inbox")
+        self.assertIn(m._("  (held by this session)"), out)
+        self.assertIn(m._("  (held by session {session})", session="s-box"), self.in_box("inbox", session="s-other"))
+        c = m.db()
+        self.addCleanup(c.close)
+        m.publish(c, f"{mid}:ack:s-box", "message.delivered", "box", "box", mid, {"session": "s-box", "via": "ack"})
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.write_view(c, "box", self.ws["box"])
+        self.assertEqual(self.view()["state"][mid]["taken"], True)
+        self.assertIn(m._("  (taken)"), self.in_box("inbox"))
+        m = self.on_bus(live=())
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.write_view(c, "box", self.ws["box"])
+        self.assertEqual(self.view()["state"], {}, "the holder closed: its ack and its route ended, derived on the bus")
+        self.assertNotIn(m._("  (taken)"), self.in_box("inbox"))
+
+    def test_a_view_from_before_has_no_state_and_reads_as_free(self):
+        self.letter_to("box", "ping", typ="request")
+        self.dispatch()
+        f = names.repo_dir(self.ws["box"] / ".git") / "inbox.json"
+        v = json.loads(f.read_text())
+        v.pop("state", None)
+        f.write_text(json.dumps(v))
+        self.assertIn("ping", self.in_box("inbox"))
+
+    def test_a_sandboxed_sessions_inbox_tells_it_through_the_outbox(self):
+        mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"]).stdout)
+        self.dispatch()
+        m = self.on_bus()
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m.hubconf, "workspace", lambda p: self.ws.get(p)):
+            m.mail_text("post-tool", "s-seen", str(self.ws["open"]))   # presence elsewhere isn't this project's
+        c = m.db()
+        self.addCleanup(c.close)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        self.in_box("inbox")
+        self.assertEqual(self.rows("type='message.delivered' AND ref=?", (mid,)), [], "only into the outbox yet")
+        files = list(self.outbox().iterdir())
+        self.assertEqual([json.loads(f.read_text())["op"] for f in files], ["told"])
+        self.in_box("inbox", session=None)                             # no session named: nobody to tell
+        self.assertEqual(len(list(self.outbox().iterdir())), 1)
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(self.refusals(), [])
+        self.assertEqual([(json.loads(r["payload"])["session"], json.loads(r["payload"])["via"])
+                          for r in self.rows("type='message.delivered' AND ref=?", (mid,))], [("s-box", "inbox")])
+        self.assertEqual([json.loads(r["payload"]) for r in self.rows("type='message.routed' AND ref=?", (mid,))],
+                         [{"v": 1, "session": "s-box", "by": "hook"}])
+
+    def test_a_platform_run_in_a_sandboxed_project_writes_no_told(self):
+        self.letter_to("box", "ping", typ="request")
+        self.dispatch()
+        with mock.patch.dict(os.environ, {"HUB_LLM_POINT": "mailbox-escalation"}):
+            self.in_box("inbox")
+        self.assertFalse(self.outbox().exists() and list(self.outbox().iterdir()))
+
+    def test_a_told_entry_is_checked_like_the_command(self):
+        mine = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "a", cwd=self.ws["open"]).stdout)
+        theirs = self.letter_id(self.hubbus("send", "--to", "open", "--type", "request", "--text", "b", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        m.record_presence(c, "s-open", "open", self.ws["open"])
+        self.drop({"v": 1, "op": "told", "ids": [theirs], "session": "s-box"}, name="1.json")
+        self.drop({"v": 1, "op": "told", "ids": "x", "session": "s-box"}, name="2.json")
+        self.drop({"v": 1, "op": "told", "ids": [mine], "session": "s-open"}, name="3.json")  # not this project's session
+        self.drop({"v": 1, "op": "told", "ids": [mine], "session": "made-up"}, name="4.json")
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(len(self.refusals()), 2)
+        self.assertEqual(self.rows("type IN ('message.delivered','message.routed')"), [])
+
     def test_mcp_server_in_a_sandboxed_project(self):
         self.hubbus("send", "--to", "box", "--type", "info", "--text", "for box", cwd=self.ws["open"])
         self.dispatch()

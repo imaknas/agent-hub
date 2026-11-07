@@ -290,6 +290,14 @@ def path_labels() -> dict[str, str]:
             "held": _("held (loop guard)")}
 
 
+def waiting_label(w: dict) -> str:
+    """Why a request/question in hubbus status's waiting list waits, for people."""
+    if w.get("why") == "routed":
+        return _("session {session} has it", session=w["session"][:8]) if w.get("session") else _("seen, held for now")
+    return {"triaged": _("triaged, waiting for a session"), "held": _("the loop guard asked the owner"),
+            "old": _("too old for a platform run"), "budget": _("today's runs are used up")}.get(w.get("why"), w.get("why", ""))
+
+
 def letter_paths(letters: list) -> str:
     """How each request/question of the last day went (docs/design/mailbox-runtimes.md B1): woken (or woken, not picked
     up: the woken session didn't take it in time) / hook / background copy / dispatched, in order."""
@@ -588,6 +596,10 @@ def main() -> None:
                      + "".join("<div class=sub>" + esc(_("Held: {id} ({project} in use by {by})", id=h["id"],
                                                          project=h["to"], by=", ".join(h.get("by") or ["mcp"])))
                                + "</div>" for h in bus.get("held", []))
+                     # routed to a session, or the platform has no run left to start: waiting, not stuck
+                     + "".join("<div class=sub>" + esc(_("Waiting: {id} ({project}: {why})", id=w["id"], project=w["to"],
+                                                         why=waiting_label(w))) + "</div>"
+                               for w in bus.get("waiting", []))
                      + letter_paths(bus.get("letters") or []))
 
     # worktrees of parallel sessions / the merge gate (bin/worktrees.py, bin/merge-branch)

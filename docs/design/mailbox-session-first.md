@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r7, not built. The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, step 1 built (record at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -272,3 +272,28 @@ surviving an idle prune; gates on text; views before wakes; goldens in both lang
 5. **`mailbox-route`**.
 
 The separate work on sandboxed reads (`denyRead`) is independent and goes on its own.
+
+## Step records
+
+### Step 1: where it differs from the text above, and why
+
+- **A telling with no route row holds by that telling** (`route_of`). Two kinds of letter have one: told by a hook before
+  this step, and told by an `inbox` with no session (an MCP client carries none, `docs/mcp.md`; a null `session` on a route
+  would read as an ended route). Read literally, the first would reach every other session's hook at the upgrade, and the
+  second would stop holding what it held. So the first telling acts as a route from its time, ended like any other; with no
+  session it ends by the window alone. No row is written for it until it ends.
+- **A session whose runtime has no sessions port counts as live** (`Live`, `Sessions.judges`), as does a failed lookup. That
+  is the feature being off, not the session gone: its route ends by the window, its ack holds.
+- **`held` until step 2**: `hold()` is unchanged and writes its row and question as before. Dispatch skips a letter with a
+  `held` row (no platform run, nothing logged, counted as waiting), which keeps hold() from running every tick now that the row
+  doesn't take the letter. Hooks show it. `bin/propose_apply.py`'s held row reads the same way.
+- **The 7-day check comes before the loop guard** as well as the forks and the handler, so an old thread doesn't get a new
+  `<id>:loop` question.
+- **The end of a route for a letter taken for good isn't recorded**: it can't come back, and it would write a row for every
+  answered letter still open. Taken for now (an ack, a fork) is recorded, so the route doesn't revive when that take ends.
+- **`waiting` also says `held` and `old`** (`why`: routed, triaged, held, old, budget). Neither is stuck: the platform has
+  nothing left to start for them. A route that ended with nothing started and no such reason is stuck after `STUCK_HOURS`.
+- **The outbox op is `told`.** It re-judges against the bus when taken in, since the view can be a minute old, and it does
+  nothing for a session the hooks haven't seen in this project.
+- **A fork that dies still gets one handler**, as `stale_resumes` gave it: forks 1, handler at most 1. Step 2 makes that run a
+  triage.

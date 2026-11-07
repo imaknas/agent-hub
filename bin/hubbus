@@ -21,6 +21,9 @@ Event types (to add one, have a reader first):
                               the asking session),
                               reply_to, handoff_id
   message.delivered  ref = the letter's id; it was delivered into some session's context (payload: session, via)
+  message.routed     ref = the letter's id; one session holds this request/question (payload: session, by), or a
+                     route ended (session null, ended). Each row has its own id, the latest by seq is the state
+                     (docs/design/mailbox-session-first.md)
   message.done       ref = the letter's id; the receiving project has handled it (payload: note)
   job.failed         a scheduled job failed (payload: job, exit, detail; to_project = the job's project for registry
                      jobs)
@@ -31,6 +34,8 @@ AGENT_HUB_JOB_DEPTH, the causal chain of the scheduled run writing it, so event-
 carry others' events and drop it, and dispatch hands each letter's chain to the handler it starts.
 meta(generation): a random id fixed when the file is created; a reader's cursor (event jobs) is only valid within it.
 A letter's state is a projection, never modified in place: inbox = messages to X that no done event points at yet.
+A request or question is also taken, told per session and routed (letter_state, hook_shows; design
+docs/design/mailbox-session-first.md); a notice keeps the one delivered flag.
 
 Addresses are projects (names in the project registry projects/*.yaml, brunna) and owner, never sessions.
 
@@ -75,6 +80,10 @@ For hooks / the schedule / other scripts:
                                       conversation (a request/question replying to some session) → if that session
                                       is open, wait CONVERSATION_WAIT minutes for its hook, then resume it in the
                                       background (when the context isn't large) or treat it as a delegation;
+                                      a letter a session has taken is left; one a route holds waits; a route ending
+                                      (TAKE_TIMEOUT_MIN from the telling, or its session gone) is recorded once;
+                                      platform runs are only for letters under PLATFORM_RUN_DAYS days, a letter is
+                                      forked once;
                                       delegation → if an MCP session uses the project (the platform's MCP server
                                       records presence, mcp_sessions), hold a letter not yet delivered to any session
                                       while it does, up to MCP_HOLD_MAX_MIN; if someone else is using the project,
@@ -84,9 +93,10 @@ For hooks / the schedule / other scripts:
                                       headless agent dispatched (notes capability). brunna's letters too. When the
                                       fork is done, the original session gets the fork's last reply and the letters it
                                       sent at its next activity (fork_result).
-                                      dispatched letters record message.delivered (via handler|resume|held, the last
-                                      = the loop guard, hold()), and hooks no longer treat them as work to do; a
-                                      letter held for an MCP session records nothing. While a letter not yet
+                                      dispatched letters record message.delivered (via handler: for good; via resume:
+                                      for RESUME_TIMEOUT_MIN; via held = the loop guard, hold(): not taken, the platform
+                                      only stops running for it), and hooks no longer treat a taken one as work to do;
+                                      a letter held for an MCP session records nothing. While a letter not yet
                                       delivered waits for a live session, a runtime with the wake port nudges that
                                       session once (wake(), message.woken; docs/design/mailbox-runtimes.md B1); a
                                       notice (info, done…) replying to a live session wakes it too, and that is all
@@ -136,6 +146,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import NamedTuple
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import event_jobs  # noqa: E402  the causal chain of scheduled runs (docs/design/event-jobs.md section 7)
@@ -205,6 +216,7 @@ CONFLICT_DAYS = 14       # status: a record id sent with other content is listed
 # a background resume not closed after this long (mailbox-conversation's timeout is 30 minutes) → dispatch as a
 # delegation
 RESUME_TIMEOUT_MIN = 35
+PLATFORM_RUN_DAYS = 7    # the platform starts nothing (a fork, a handler) for a letter older than this: it waits for a hook
 # delegation: a live session with activity within this window handles it in a fork with its context
 FORK_RECENT_H = int(_MB.get("fork_recent_hours", 24))
 # A session that reaches the mailbox only through the platform's MCP server (any coding agent;
@@ -289,11 +301,16 @@ def db(timeout: float = 30) -> sqlite3.Connection:
     return c
 
 
+class ViewConnection(sqlite3.Connection):
+    """A sandboxed project's view: derived holds taken and held per letter (letter_state reads it)."""
+    derived: dict = {}
+
+
 def view_db(project: str) -> sqlite3.Connection:
     """A sandboxed project's own mailbox, from the view the platform writes into its folder: an in-memory database
     with the bus's tables, so every reader (inbox, thread, open_questions, the checks send makes) works on it
     unchanged. Missing (the platform hasn't written it yet): empty."""
-    c = sqlite3.connect(":memory:", isolation_level=None)
+    c = sqlite3.connect(":memory:", isolation_level=None, factory=ViewConnection)
     c.row_factory = sqlite3.Row
     c.executescript(SCHEMA)
     ws = hubconf.workspace(project)
@@ -305,6 +322,7 @@ def view_db(project: str) -> sqlite3.Connection:
     for e in data.get("events") or []:
         c.execute("INSERT OR IGNORE INTO events(seq, id, ts, type, source, to_project, ref, payload)"
                   " VALUES(:seq, :id, :ts, :type, :source, :to_project, :ref, :payload)", e)
+    c.derived = data.get("state") or {}
     return c
 
 
@@ -837,49 +855,253 @@ def addressed_to(c, project: str) -> list:
     return c.execute(INBOX_SQL.format(marks=",".join("?" * len(mine))), mine).fetchall()
 
 
-def inbox(c, project, session=None, only_new=False):
+def inbox(c, project, session=None, only_new=False, live=None):
     """Letters to this project not done yet. A reply addressed to a particular session waits for that session a
-    while first."""
+    while first. only_new: only what a hook shows this session (hook_shows)."""
     cutoff = iso(now() - datetime.timedelta(minutes=REPLY_WAIT_MIN))
-    rows, found = [], addressed_to(c, project)
+    rows, found, live = [], addressed_to(c, project), live or Live(me=session)
     losers = record_losers(c, found)   # one record id sent with other content: only the one that prevails (core §10)
     for r in found:
-        if (only_new and r["delivered"]) or r["id"] in losers:
+        if r["id"] in losers:
             continue
         to_s = payload(r).get("to_session")
         if to_s and to_s != session and r["ts"] >= cutoff:
+            continue
+        if only_new and not hook_shows(c, r, session, live):
             continue
         rows.append(r)
     return rows
 
 
+def platform_run() -> bool:
+    """A run the platform started (llm.py sets HUB_LLM_POINT; a lease session too): it marks nothing and holds nothing."""
+    return bool(os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"))
+
+
 def mark_delivered(c, rows, session, via) -> None:
-    # a channel-lease session (the runner sets HUBBUS_LEASE=1): letters still go into the context so the discuss lease
-    # sees them, but aren't marked delivered: a read-only discuss lease can't handle a request, and mustn't block the
-    # 12-hour escalation
-    if os.environ.get("HUBBUS_LEASE") and via in ("session-start", "prompt", "post-tool"):
+    # a platform run: letters may still go into a discuss lease's context, but aren't marked: a read-only lease can't
+    # handle a request, and a handler's first `brunna inbox` must not count as anyone seeing them
+    if platform_run():
         return
     for r in rows:
         publish(c, f"{r['id']}:delivered:{session or via}", "message.delivered", r["to_project"], r["to_project"],
                 r["id"], {"session": session, "via": via})
 
 
-def take_state(c, mid, to_project=None):
-    """Who has taken this letter on: "taken" (a session acked it, the platform dispatched it, or held it) / the last
-    time it was seen (only seen) / None (never delivered).
-    10-27: a letter a hook delivered into a session busy with something else went unhandled: delivered doesn't mean
-    someone took it on (m10270201-921a)."""
-    if to_project and c.execute("SELECT 1 FROM events WHERE type='message' AND ref=? AND source=?",
-                                (mid, to_project)).fetchone():
-        # the receiving project already replied (replied but not done yet still means someone is handling it)
+def actionable(r) -> bool:
+    """A request or question: state is per session. A notice (and a record) keeps the one delivered flag."""
+    return r["type"] == "message" and payload(r).get("type") in ACTIONABLE
+
+
+def sessions_port():
+    """The sessions of every installed runtime (runtime_ports.Sessions)."""
+    import runtime_ports
+    return runtime_ports.Sessions()
+
+
+class Live:
+    """Which sessions run now, looked up at most once (live_sessions: one ps), and not at all if nobody asks. me: the
+    session asking, running by definition (a session can run with no process record until its next hook). A session
+    whose runtime has no sessions port can't be judged: the feature is off, not the session gone, so it counts as live
+    and its route ends by the window alone. A failed lookup is the same."""
+
+    def __init__(self, rt=None, live=None, me=None):
+        self.rt, self.live, self.me, self.failed = rt, live, me, False
+
+    def load(self) -> None:
+        if self.live is not None or self.failed:
+            return
+        try:
+            self.rt = self.rt or sessions_port()
+            self.live = self.rt.live_sessions()
+        except Exception as e:
+            self.failed = True
+            log_once("live-sessions", _("cannot tell which sessions run: {e!r}", e=e))
+
+    def __call__(self, sid) -> bool:
+        if sid == self.me:
+            return True
+        self.load()
+        if self.failed:
+            return True
+        judges = getattr(self.rt, "judges", None)
+        if callable(judges) and not judges(sid):
+            return True
+        return sid in self.live
+
+
+class Route(NamedTuple):
+    session: str | None   # None: told with no session (an MCP client's inbox), held by the window alone
+    ts: str
+    row: str | None       # the message.routed row; None: told before routes existed, or with no session
+
+
+class LetterState(NamedTuple):
+    taken: str            # "": no; "good": for good; "now": while an ack's session lives or a fork runs
+    held: bool            # a route holds it
+    holder: str | None    # the session it holds it for
+    route: Route | None   # the route not yet recorded as ended, holding or not
+    ended: str | None     # why that route no longer holds
+
+
+def party_names(addr: str) -> list[str]:
+    """Every name a sender goes by: the owner's address, or a project's names now and before."""
+    return [OWNER_ADDRESS] if canon(addr) == OWNER_ADDRESS else [addr, *own_names(addr)]
+
+
+def answered(c, r) -> bool:
+    """Taken for good: closed, or a reply from the receiving project to the sender, under any of their names. A
+    question to the owner with ref to the letter (<id>:loop, <id>:propose-failed, a handler's question) isn't an answer,
+    even for the hub's own letters or a letter the owner side sent."""
+    if is_done(c, r["id"]):
+        return True
+    mine, theirs = [r["to_project"], *own_names(r["to_project"])], party_names(r["source"])
+    for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=?", (r["id"],)).fetchall():
+        if m["source"] in mine and canon(m["to_project"]) in theirs \
+                and not (m["to_project"] in OWNERS and payload(m).get("type") == "question"):
+            return True
+    return False
+
+
+def has_via(c, mid, via) -> bool:
+    return c.execute("SELECT 1 FROM events WHERE type='message.delivered' AND ref=? AND json_extract(payload,'$.via')=?"
+                     " LIMIT 1", (mid, via)).fetchone() is not None
+
+
+def taken_how(c, r, live) -> str:
+    """Whether someone has taken this letter on, and for how long ("" no, "good", "now"). Only an ack, a reply or a done
+    by a session counts as acting on it, plus a platform run that is under way or one from before the handler stopped
+    taking letters. Held and triage rows never (docs/design/mailbox-session-first.md)."""
+    if answered(c, r):
+        return "good"
+    if has_via(c, r["id"], "handler"):
+        return "good"
+    cut, how = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN)), ""
+    for e in c.execute("SELECT ts, payload FROM events WHERE type='message.delivered' AND ref=? AND"
+                       " json_extract(payload,'$.via') IN ('resume','ack')", (r["id"],)).fetchall():
+        p = payload(e)
+        if p["via"] == "resume":
+            how = "now" if e["ts"] >= cut else how
+        elif not p.get("session") or p["session"].startswith("mcp:"):
+            return "good"   # no session to outlive (an MCP client, a person at a terminal)
+        elif live(p["session"]):
+            how = "now"
+    return how
+
+
+def told_at(c, mid, session) -> str | None:
+    """When this session was told this letter, by a hook or `brunna inbox`; None: never. A resume row isn't told."""
+    marks = ",".join("?" * len(SEEN_VIA))
+    e = c.execute(f"SELECT ts FROM events WHERE type='message.delivered' AND ref=? AND json_extract(payload,'$.session')=?"
+                  f" AND json_extract(payload,'$.via') IN ({marks}) ORDER BY seq", (mid, session, *SEEN_VIA)).fetchone()
+    return e["ts"] if e else None
+
+
+def route_of(c, r) -> Route | None:
+    """The route not yet recorded as ended. State is the latest row by seq (ids are unique per row: publish drops a
+    repeated one). A letter with no route rows, told by a hook before routes existed or by an `inbox` with no session,
+    is held by the first telling: as it was, until its window ends."""
+    e = c.execute("SELECT id, ts, payload FROM events WHERE type='message.routed' AND ref=? ORDER BY seq DESC LIMIT 1",
+                  (r["id"],)).fetchone()
+    if e is not None:
+        session = payload(e).get("session")
+        return Route(session, e["ts"], e["id"]) if session else None
+    marks = ",".join("?" * len(SEEN_VIA))
+    e = c.execute(f"SELECT ts, payload FROM events WHERE type='message.delivered' AND ref=?"
+                  f" AND json_extract(payload,'$.via') IN ({marks}) ORDER BY seq LIMIT 1", (r["id"], *SEEN_VIA)).fetchone()
+    return Route(payload(e).get("session"), e["ts"], None) if e else None
+
+
+def route_ended(c, r, route, taken, live) -> str | None:
+    """The one judge of whether a route has ended, for dispatch and hooks alike, from the bus and the process records,
+    so it holds where dispatch doesn't run. Why it ended (taken, closed, window), None while it holds. The window is
+    TAKE_TIMEOUT_MIN from the later of the telling and the route; a telling after the window has ended doesn't bring it
+    back."""
+    if taken:
         return "taken"
-    seen = None
-    for r in c.execute("SELECT ts, json_extract(payload,'$.via') AS via FROM events WHERE type='message.delivered' AND ref=?",
-                       (mid,)):
-        if r["via"] not in SEEN_VIA:
-            return "taken"   # ack, handler, resume, held
-        seen = max(seen or r["ts"], r["ts"])
-    return seen
+    if route.session and not live(route.session):
+        return "closed"
+    span = datetime.timedelta(minutes=TAKE_TIMEOUT_MIN)
+    end = datetime.datetime.fromisoformat(route.ts) + span
+    told = told_at(c, r["id"], route.session) if route.session else None
+    if told and datetime.datetime.fromisoformat(told) <= end:
+        end = max(end, datetime.datetime.fromisoformat(told) + span)
+    return None if now() < end else "window"
+
+
+def letter_state(c, r, live) -> LetterState:
+    """Taken and held, for a request or question. A sandboxed project's view carries them: it can't judge liveness."""
+    derived = getattr(c, "derived", None)
+    if derived is not None:
+        d = derived.get(r["id"]) or {}
+        return LetterState("now" if d.get("taken") else "", bool(d.get("held")), d.get("holder"), None, None)
+    taken, route = taken_how(c, r, live), route_of(c, r)
+    ended = route_ended(c, r, route, taken, live) if route else None
+    held = bool(route) and not ended
+    return LetterState(taken, held, route.session if held else None, route, ended)
+
+
+def own_letter(r, session) -> bool:
+    """A session isn't told a letter it sent itself, and can't hold it."""
+    return bool(session) and payload(r).get("from_session") == session
+
+
+def hook_shows(c, r, session, live) -> bool:
+    """Whether a hook shows this letter in full to this session: a notice while nobody has seen it; a request or question
+    when it is open and not taken, this session hasn't been told, and no route points at another session. A lease
+    session is never told, so it sees what is open each time, as before."""
+    if not actionable(r):
+        return not r["delivered"]
+    if own_letter(r, session) or told_at(c, r["id"], session):
+        return False
+    st = letter_state(c, r, live)
+    return not st.taken and (not st.held or st.holder == session)
+
+
+def routed(c, r, session, by, **extra) -> None:
+    """A new row for this letter's route; each has its own id, the latest by seq is the state."""
+    publish(c, f"{r['id']}:routed:{secrets.token_hex(4)}", "message.routed", r["to_project"], r["to_project"], r["id"],
+            {"session": session, "by": by, **extra})
+
+
+def tell(c, rows, session, via, live) -> None:
+    """These letters went to this session (inside the caller's transaction). For a request or question the first session
+    told holds it (by: hook), and nobody pre-empts a holder. A platform run marks nothing and holds nothing."""
+    if platform_run():
+        return
+    for r in rows:
+        hold_it = session and actionable(r) and not letter_state(c, r, live).held
+        mark_delivered(c, [r], session, via)
+        if hold_it:
+            routed(c, r, session, "hook")
+
+
+def untold(c, rows, session, live) -> list:
+    """Of the letters `brunna inbox` lists, those to mark as told to the session listing them. With no session (an MCP
+    client's, a person's at a terminal) only one nobody has seen: as before, it holds by the window alone."""
+    out = []
+    for r in rows:
+        if not actionable(r) or not session:
+            if not r["delivered"]:
+                out.append(r)
+        elif not own_letter(r, session) and not told_at(c, r["id"], session) and not letter_state(c, r, live).taken:
+            out.append(r)
+    return out
+
+
+def state_mark(c, r, session, live) -> str:
+    """What `brunna inbox` says under a request or question that someone has, nothing for one that is free."""
+    if not actionable(r):
+        return ""
+    st = letter_state(c, r, live)
+    if st.taken:
+        return _("  (taken)")
+    if not st.held:
+        return ""
+    if not st.holder:
+        return _("  (seen, held for now)")
+    return _("  (held by this session)") if st.holder == session else _("  (held by session {session})",
+                                                                        session=st.holder[:8])
 
 
 def fmt(r, long=True) -> str:
@@ -1112,18 +1334,24 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
     if not project:
         return None
     c = db(timeout=HOOK_TIMEOUT_S)
+    live = Live(me=session)
+    if any(actionable(r) and c.execute("SELECT 1 FROM events WHERE ref=? AND type IN ('message.routed',"
+                                       "'message.delivered') LIMIT 1", (r["id"],)).fetchone()
+           and taken_how(c, r, lambda s: True) != "good" for r in addressed_to(c, project)):
+        live.load()   # asked here, not under the write lock below; only a letter whose state can turn on it asks
     c.execute("BEGIN IMMEDIATE")
     if not os.environ.get("HUBBUS_LEASE"):  # lease sessions don't count as recipients
         record_presence(c, session, project, cwd, runtime)
     if event == "session-start":
-        # session start (including after compaction): deliver all new ones, list one line for each delivered before
-        # but not done yet, otherwise they'd be invisible after compaction
+        # session start (including after compaction): show what this session should get, list one line for every
+        # other open letter, otherwise they'd be invisible after compaction or to a session opening after a holder closed
         rows = inbox(c, project, session)
-        new = [r for r in rows if not r["delivered"]]
-        old = [r for r in rows if r["delivered"]]
-        mark_delivered(c, new, session, "session-start")
+        new = [r for r in rows if hook_shows(c, r, session, live)]
+        shown = {r["id"] for r in new}
+        old = [r for r in rows if r["id"] not in shown]
+        tell(c, new, session, "session-start", live)
         c.execute("COMMIT")
-        hook_view(c, project)
+        hook_view(c, project, live)
         note = questions_note(c, project)
         if rows:
             parts = [header(len(rows), project), *(fmt(r) for r in new)]
@@ -1134,8 +1362,8 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
                                                   else "") for r in old)]
             return "\n".join([*parts, footer()] + ([note] if note else []))
         return note
-    rows = inbox(c, project, session, only_new=True)
-    mark_delivered(c, rows, session, event)
+    rows = inbox(c, project, session, only_new=True, live=live)
+    tell(c, rows, session, event, live)
     # Conversation replies to this session that the platform handled by resuming it in the background while it was
     # idle: mention them in a line at its next activity, otherwise it wouldn't know.
     # Forks still running aren't mentioned yet (what they said is brought over once done; otherwise the original
@@ -1152,7 +1380,7 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
     mark_delivered(c, handled, session, event)
     c.execute("COMMIT")
     if rows or handled:
-        hook_view(c, project)
+        hook_view(c, project, live)
     if handled:
         rows = rows + handled
     if rows:
@@ -1631,14 +1859,15 @@ def reject(c, ev, err) -> None:
 
 
 def claimed(c, ids) -> set[str]:
-    """Letters the platform has already taken on (dispatched someone / resumed in the background / held by the loop
-    guard, hold(); a letter held for an MCP session is not taken: that hold writes nothing)."""
+    """Letters the platform is handling: an old dispatch (a handler), or a background fork still within its time. The
+    loop guard's held row isn't one: it stops platform runs, the letter stays open for sessions."""
     if not ids:
         return set()
     q = ",".join("?" * len(ids))
     return {r[0] for r in c.execute(
-        f"SELECT ref FROM events WHERE type='message.delivered' AND ref IN ({q})"
-        " AND json_extract(payload,'$.via') IN ('handler','resume','held')", list(ids))}
+        f"SELECT ref FROM events WHERE type='message.delivered' AND ref IN ({q}) AND"
+        " (json_extract(payload,'$.via')='handler' OR (json_extract(payload,'$.via')='resume' AND ts >= ?))",
+        [*ids, iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))])}
 
 
 def claim(c, rows, via, **extra) -> None:
@@ -1775,8 +2004,9 @@ def recent_session(c, proj, live, rt=None) -> str | None:
 
 
 def fork_result(c, r) -> tuple[bool, str]:
-    """The outcome of a background fork handling this letter: (finished or not, the fork's last reply + the letters it
-    sent for this one). Finished = has a result, the letter is closed, or timed out."""
+    """The outcome of a background fork handling this letter: (handled or not, the fork's last reply + the letters it
+    sent for this one). Handled = it replied or the letter is closed; a fork that ended without either hasn't handled
+    it, and the letter is open again once its time is up."""
     out = hubconf.STATE / "mailbox" / f"resume-{r['id']}.log"
     text = ""
     try:
@@ -1788,16 +2018,12 @@ def fork_result(c, r) -> tuple[bool, str]:
         pass
     replies = [m for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=? ORDER BY seq", (r["id"],))
                if payload(m).get("reply_to") == r["id"]]
-    done = c.execute("SELECT 1 FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone() is not None
-    claimed_at = c.execute("SELECT ts FROM events WHERE type='message.delivered' AND ref=? "
-                           "AND json_extract(payload,'$.via')='resume' ORDER BY seq DESC", (r["id"],)).fetchone()
-    stale = claimed_at is not None and claimed_at["ts"] < iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
     parts = []
     if text:
         parts.append(_("The branch's reply: {text}", text=text[:800]))
     parts += [_("Letter the branch sent [{id}] → {to}: {text}", id=m["id"], to=m["to_project"],
                 text=payload(m).get("text", "")[:300]) for m in replies]
-    return bool(text or done or stale), "\n  ".join(parts)
+    return answered(c, r), "\n  ".join(parts)
 
 
 CONFINED_TYPES = ("manifest.update", "task", "drop")
@@ -1894,19 +2120,6 @@ def run_handler(c, proj, ws, rows) -> None:
         _("{project}: could not dispatch: {err}", project=proj, err=(res.stderr or res.stdout).strip()[-200:]))
 
 
-def stale_resumes(c, proj) -> list:
-    """Letters resumed in the background, not closed after RESUME_TIMEOUT_MIN and not re-dispatched yet (a failed
-    resume mustn't leave a letter stuck)."""
-    cutoff = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN))
-    mine = own_names(proj)
-    return c.execute(f"""SELECT m.* FROM events m JOIN events d ON d.ref=m.id AND d.type='message.delivered'
-        AND json_extract(d.payload,'$.via')='resume' AND d.ts < ?
-        WHERE m.type='message' AND m.to_project IN ({','.join('?' * len(mine))})
-          AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
-          AND NOT EXISTS(SELECT 1 FROM events h WHERE h.type='message.delivered' AND h.ref=m.id
-                         AND json_extract(h.payload,'$.via') IN ('handler','held'))""", (cutoff, *mine)).fetchall()
-
-
 def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
     """Conversation: resume with that session's context in the background (a fork; the original session is
     untouched). If it can't be started, dispatch it as a delegation right away."""
@@ -1987,6 +2200,25 @@ def hold(c, r) -> None:
           project=r["to_project"], id=r["id"], rounds=THREAD_MAX_ROUNDS, owner=OWNER))
 
 
+def end_route(c, r, st, proj) -> bool:
+    """Record that a route ended (a row with no session), so it never revives; said once per letter when it ended
+    untaken. False when a hook moved the letter meanwhile: nothing written, the caller reads it again next tick."""
+    c.execute("BEGIN IMMEDIATE")
+    same = route_of(c, r) == st.route
+    if same:
+        first = c.execute("SELECT 1 FROM events WHERE type='message.routed' AND ref=? AND"
+                          " json_extract(payload,'$.session') IS NULL", (r["id"],)).fetchone() is None
+        routed(c, r, None, None, ended=st.ended)
+    c.execute("COMMIT")
+    if same and first and st.ended == "window":
+        log(_("{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply or done; "
+              "treating it as not taken", project=proj, id=r["id"], minutes=TAKE_TIMEOUT_MIN))
+    elif same and first and st.ended == "closed":
+        log(_("{project}: {id}: the session that held it has closed with no ack, reply or done; treating it as not "
+              "taken", project=proj, id=r["id"]))
+    return same
+
+
 def dispatch(c, rt=None) -> int:
     """The platform handles requests/questions nobody took (see the file header). Returns the number of letters still
     waiting for a hook."""
@@ -2002,9 +2234,10 @@ def dispatch(c, rt=None) -> int:
             return 0
         log_once("dispatch-unsupported", "")
     live, leases = rt.live_sessions(), lease_ids()
+    alive = Live(rt, live)
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
-    take_cut = iso(now() - datetime.timedelta(minutes=TAKE_TIMEOUT_MIN))
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
+    run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
     waiting = 0
     for proj, ws in projects().items():
         if not ws.is_dir():
@@ -2019,18 +2252,29 @@ def dispatch(c, rt=None) -> int:
                 if to_s and not r["delivered"] and to_s in live and to_s not in leases and r["ts"] >= wait_cut:
                     wake(c, rt, r, to_s)
                 continue
-            if r["delivered"]:
-                st = take_state(c, r["id"], r["to_project"])
-                if st == "taken":
-                    continue
-                if st and st >= take_cut:   # just delivered into a session: give it time to ack, reply or done
-                    waiting += 1
-                    continue
-                log(_("{project}: {id} sat in a session for over {minutes} {minutes:minute|minutes} with no ack, reply "
-                      "or done; treating it as not taken and dispatching again", project=proj, id=r["id"], minutes=TAKE_TIMEOUT_MIN))
+            st = letter_state(c, r, alive)
+            # taken for good needs no end recorded: it can't come back. Taken for now can (an ack's session closing, a
+            # fork's time running out), and the route it ended mustn't revive then
+            if st.route and st.ended and st.taken != "good" and not end_route(c, r, st, proj):
+                waiting += 1
+                continue
+            if st.taken:
+                continue
+            if st.held:   # a session has it: give it time to ack, reply or done
+                waiting += 1
+                continue
+            # the platform runs nothing more for these; they wait for a session's hook. Held: asked the owner once
+            # already (hold(), bin/propose_apply.py); hold() itself is step 2's (mailbox-session-first.md), and this
+            # keeps it from running, and logging, every tick now that held isn't taken
+            if has_via(c, r["id"], "held") or r["ts"] < run_cut:
+                waiting += 1
+                continue
             if platform_rounds(c, thread_chain(c, r)) >= THREAD_MAX_ROUNDS:
                 hold(c, r)
                 continue
+            # one fork per letter, on both paths: claim's fixed id means runs_today and platform_rounds don't rise for a
+            # second one, so a fork that ended without closing it would otherwise start again every tick
+            forked = has_via(c, r["id"], "resume")
             to_s = p.get("to_session")
             # conversation: a reply to some session (lease sessions aren't resumed; treated as a delegation)
             if to_s and to_s not in leases:
@@ -2039,7 +2283,7 @@ def dispatch(c, rt=None) -> int:
                         wake(c, rt, r, to_s)
                     waiting += 1
                     continue
-                tokens = rt.context_size(to_s) if can_resume(rt, to_s) else None
+                tokens = rt.context_size(to_s) if not forked and can_resume(rt, to_s) else None
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
                     continue
@@ -2063,13 +2307,12 @@ def dispatch(c, rt=None) -> int:
                 # delegation: a live session with recent activity in this project → handled in a background fork with
                 # its context (owner's trial since 10-26, m10261706), which can answer about what that session has on
                 # hand; none, context too large, or today's quota used up → headless agent
-                sid = recent_session(c, proj, live, rt)
+                sid = None if forked else recent_session(c, proj, live, rt)
                 tokens = rt.context_size(sid) if sid else None
                 if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
                     resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=DELEGATE_PROMPT)
                     continue
             delegate.append(r)
-        delegate += stale_resumes(c, proj)  # background resume failed or never closed: re-dispatch
         # agent-hub's letters too (they used to be left for its dedicated session; with nobody typing, nobody took
         # them, m10261706)
         if delegate:
@@ -2166,6 +2409,19 @@ def take(c, proj: str, entry) -> None:
             else:
                 publish(c, f"{i}:done", "message.done", proj, proj, i,
                         {"note": entry.get("note") or _("handled"), "session": session})
+    elif op == "told":
+        # a session's `brunna inbox`: told only for that session (one the hooks saw in this project), judged against the
+        # bus now, since the view it read can be a minute old
+        ids = entry.get("ids")
+        if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
+            refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
+        rows = [get_event(c, i) for i in ids]
+        for i, r in zip(ids, rows):
+            if r is None or r["to_project"] != proj:
+                refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
+        if session:
+            live = Live(me=session)
+            tell(c, untold(c, [r for r in rows if not is_done(c, r["id"])], session, live), session, "inbox", live)
     elif op == "publish":
         if entry.get("type") not in OUTBOX_PUBLISH or not isinstance(entry.get("id"), str) \
                 or not EVENT_ID.match(entry["id"]) or not isinstance(entry.get("payload"), dict):
@@ -2204,15 +2460,16 @@ def outbox_refused(c, proj: str, name: str, why: str) -> None:
 
 VIEW_SQL = """
 SELECT * FROM events WHERE (type IN ('message','record') AND (to_project=:p OR source=:p))
-   OR (type IN ('message.delivered','message.done') AND ref IN
+   OR (type IN ('message.delivered','message.routed','message.done') AND ref IN
        (SELECT id FROM events WHERE type IN ('message','record') AND (to_project=:p OR source=:p)))
 ORDER BY seq"""
 
 
-def view(c, proj: str) -> dict:
+def view(c, proj: str, live=None) -> dict:
     """A sandboxed project's mailbox: the letters and records to or from it, with what happened to them. Other
-    projects' session ids are left out (only a hint to them, and a way in to anyone who could name one)."""
-    events = []
+    projects' session ids are left out (only a hint to them, and a way in to anyone who could name one). state: each
+    open request or question someone has, taken and who holds it, derived here since a sandbox can't judge liveness."""
+    events, state, live = [], {}, live or Live()
     for r in c.execute(VIEW_SQL, {"p": proj}):
         p = payload(r)
         if r["source"] != proj:
@@ -2221,18 +2478,24 @@ def view(c, proj: str) -> dict:
         if r["to_project"] != proj:
             p.pop("to_session", None)
         events.append({**dict(r), "payload": json.dumps(p, ensure_ascii=False)})
-    return {"v": 1, "project": proj, "events": events}
+    for r in addressed_to(c, proj):
+        if r["to_project"] == proj and actionable(r):
+            st = letter_state(c, r, live)
+            if st.taken or st.held:
+                state[r["id"]] = {"taken": bool(st.taken), "held": st.held, "holder": st.holder}
+    return {"v": 1, "project": proj, "events": events, "state": state}
 
 
 def write_views(c) -> None:
+    live = Live()
     for proj, ws in projects().items():
         if outboxed(proj) and ws.is_dir():
-            write_view(c, proj, ws)
+            write_view(c, proj, ws, live)
 
 
-def write_view(c, proj: str, ws: pathlib.Path) -> None:
+def write_view(c, proj: str, ws: pathlib.Path, live=None) -> None:
     """A sandboxed project's view into its folder, only when it changed; replaced, never written through a link."""
-    data = json.dumps(view(c, proj), ensure_ascii=False, sort_keys=True).encode()
+    data = json.dumps(view(c, proj, live), ensure_ascii=False, sort_keys=True).encode()
     try:
         cur = nofollow.read(ws, view_rel(ws), VIEW_CAP)
     except OSError:
@@ -2246,12 +2509,12 @@ def write_view(c, proj: str, ws: pathlib.Path) -> None:
         log_once(f"view-{proj}", _("{project}: cannot write its mailbox view: {e}", project=proj, e=e))
 
 
-def hook_view(c, project: str) -> None:
+def hook_view(c, project: str, live=None) -> None:
     """The hooks just delivered letters into a sandboxed project's session: its view gets them now, so a reply, ack or
     done the session makes right away finds them (dispatch writes it only once a minute)."""
     ws = hubconf.workspace(project)
     if outboxed(project) and ws and ws.is_dir():
-        write_view(c, project, ws)
+        write_view(c, project, ws, live)
 
 
 def mailbox_step(c, step) -> None:
@@ -2311,10 +2574,10 @@ def prune(c) -> None:
             # one record id sent with other content: every content stays, or removing the one that prevails would
             # leave the other to prevail (core §10)
             continue
-        # only delete this letter and its delivered/done; letters replying to it (ref also points at it) have their
+        # only delete this letter and what happened to it; letters replying to it (ref also points at it) have their
         # own lifecycle
-        c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.done'))",
-                  (mid, mid))
+        c.execute("DELETE FROM events WHERE id=? OR (ref=? AND type IN ('message.delivered', 'message.routed',"
+                  " 'message.woken', 'message.done'))", (mid, mid))
     c.execute("DELETE FROM events WHERE type='job.failed' AND ts < ? AND seq <= ?", (cutoff, upto))
     c.execute("DELETE FROM presence WHERE session LIKE 'mcp:%' AND seen < ?",   # one row per MCP server process
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
@@ -2489,7 +2752,8 @@ def cmd_status(as_json: bool) -> None:
     per: dict[str, dict] = {}
     cutoff = iso(now() - datetime.timedelta(hours=STUCK_HOURS))
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
-    stuck, held = [], []
+    run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
+    stuck, held, waiting, live = [], [], [], Live()
     for proj in sorted(projects()):
         rows = inbox(c, proj)
         if rows:
@@ -2497,13 +2761,25 @@ def cmd_status(as_json: bool) -> None:
             per[proj] = {"open": len(rows), "undelivered": len(new), "oldest": rows[0]["ts"]}
             # only letters to handle (request/question) count as stuck; info/progress/done are notifications, and
             # nobody taking them isn't a problem (m10261706)
-            todo = [r for r in new if payload(r).get("type") in ACTIONABLE]
+            todo = [r for r in rows if actionable(r)]
             # held while an MCP session uses the project (dispatch's rule), not unclaimed
-            mcp = mcp_sessions(c, proj) if any(r["ts"] >= hold_cut for r in todo) else []
+            mcp = mcp_sessions(c, proj) if any(not r["delivered"] and r["ts"] >= hold_cut for r in todo) else []
             by = sorted({m["runtime"] or "mcp" for m in mcp})
-            held += [{"id": r["id"], "to": proj, "ts": r["ts"], "by": by} for r in todo if mcp and r["ts"] >= hold_cut]
-            stuck += [{"id": r["id"], "to": proj, "ts": r["ts"]} for r in todo
-                      if r["ts"] < cutoff and not (mcp and r["ts"] >= hold_cut)]
+            spent = bool(todo) and runs_today(c, proj) >= DAILY_RUNS
+            for r in todo:
+                st = letter_state(c, r, live)
+                one = {"id": r["id"], "to": proj, "ts": r["ts"]}
+                if st.taken:
+                    continue
+                if mcp and not r["delivered"] and r["ts"] >= hold_cut:
+                    held.append({**one, "by": by})
+                elif (why := "routed" if st.held else "triaged" if has_via(c, r["id"], "triage")
+                        else "held" if has_via(c, r["id"], "held") else "old" if r["ts"] < run_cut
+                        else "budget" if spent else None):
+                    # someone has it, or the platform has no run left to start: it waits, nothing is wrong
+                    waiting.append({**one, "why": why, **({"session": st.holder} if st.holder else {})})
+                elif r["ts"] < cutoff:
+                    stuck.append(one)
     items = [ev for ev in c.execute("SELECT * FROM events WHERE seq > ? ORDER BY seq", (cursor(c, BRIDGE),))
              if to_assistant(c, ev)]
     failed = [dict(id=r["id"], ts=r["ts"], **payload(r)) for r in c.execute(
@@ -2511,7 +2787,7 @@ def cmd_status(as_json: bool) -> None:
         (iso(now() - datetime.timedelta(days=1)),))]
     corrupt = sorted(p.name for p in DB.parent.glob("bus.db.corrupt-*") if not p.name.endswith(("-wal", "-shm")))
     conflicts = record_conflicts(c, iso(now() - datetime.timedelta(days=CONFLICT_DAYS)))
-    out = {"projects": per, "stuck": stuck, "held": held, "letters": delivery_paths(c),
+    out = {"projects": per, "stuck": stuck, "held": held, "waiting": waiting, "letters": delivery_paths(c),
            "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
            "job_failed_24h": failed, "corrupt": corrupt, "record_conflicts": conflicts}
     if as_json:
@@ -2527,6 +2803,9 @@ def cmd_status(as_json: bool) -> None:
     if held:
         print(_("Held while an MCP session uses the project (dispatched after {minutes} minutes at most): {items}",
                 minutes=MCP_HOLD_MAX_MIN, items=_(", ").join(f"{s['id']}→{s['to']}" for s in held)))
+    if waiting:
+        print(_("Waiting for a session (a session holds them, or the platform has no run left to start): {items}",
+                items=_(", ").join(f"{s['id']}→{s['to']} ({s['why']})" for s in waiting)))
     if items:
         print(_("Waiting to go to the assistant: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
     for f in failed:
@@ -2633,6 +2912,10 @@ def mail_command(a) -> None:
     box = mail_box(a, here)
     if box:
         here = box
+    if a.cmd == "ack" and platform_run():
+        # an ack says a session has it for as long as it lives; a platform run's says nothing
+        print(_("(a platform run's ack is not recorded)"), file=sys.stderr)
+        return
     c = view_db(box) if box else db()
     if a.cmd == "publish":
         pl = json.loads(a.payload)
@@ -2662,15 +2945,23 @@ def mail_command(a) -> None:
         project = now_named(a.project) if a.project else here
         if not project:
             refuse(_("hubbus: not in a project folder, add --project <name>"))
-        rows = inbox(c, project, session)
+        rows, live = inbox(c, project, session), Live(me=session)
         for r in rows:
             print(fmt(r))
+            if (mark := state_mark(c, r, session, live)):
+                print(mark)
         print(_("({project}: {n} open {n:letter|letters})", project=project, n=len(rows)) if rows else
               _("{project}'s mailbox is empty", project=project))
-        if project == here and not box:   # a sandboxed session's letters are marked delivered by its hooks
-            c.execute("BEGIN IMMEDIATE")
-            mark_delivered(c, [r for r in rows if not r["delivered"]], session, "inbox")
-            c.execute("COMMIT")
+        if project == here and not platform_run():   # reading a letter tells this session, and holds it if free
+            tellable = untold(c, rows, session, live)
+            if box:   # through its outbox, under the sandbox; with no session named there is no one to tell
+                ids = [r["id"] for r in tellable]
+                for at in range(0, len(ids) if session else 0, 50):
+                    outbox_put(box, {"op": "told", "ids": ids[at:at + 50], "session": session})
+            else:
+                c.execute("BEGIN IMMEDIATE")
+                tell(c, tellable, session, "inbox", live)
+                c.execute("COMMIT")
     elif a.cmd == "show":
         r = must_message(c, a.id)
         confined_letter(r, here)

@@ -151,7 +151,7 @@ class ProposeApply(unittest.TestCase):
             f".agent-memory/memory/{datetime.date.today().isoformat()}.md"], out)
 
     def test_a_failed_run_holds_the_letter_and_asks_the_owner(self):
-        """claimed by dispatch, failed: never left claimed without a word, never dispatched again (nothing loops)"""
+        """claimed by dispatch, failed: held, the owner asked, never dispatched again (nothing loops)"""
         (self.tmp / "agent.py").write_text("import sys\nsys.exit(2)\n")
         r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "request", "--text", "do it")
         mid = r.stdout.strip().split()[-1]
@@ -161,7 +161,7 @@ class ProposeApply(unittest.TestCase):
                  "s = importlib.util.spec_from_loader('hb', l); m = importlib.util.module_from_spec(s); l.exec_module(m)\n"
                  "c = m.db(); mid = sys.argv[1]\n"
                  "q = lambda sql: c.execute(sql, (mid,)).fetchone()[0]\n"
-                 "print(json.dumps([sorted(m.claimed(c, [mid])),"
+                 "print(json.dumps([[mid] if m.has_via(c, mid, 'held') else [],"
                  " q(\"SELECT COUNT(*) FROM events WHERE type='message' AND ref=? AND id LIKE '%propose-failed'\"),"
                  " q(\"SELECT COUNT(*) FROM events WHERE type='job.failed' AND ? IS NOT NULL\")]))\n")
         out = json.loads(subprocess.run([sys.executable, "-c", check, mid], env=self.env, capture_output=True,
@@ -173,7 +173,7 @@ class ProposeApply(unittest.TestCase):
                  f"l = importlib.machinery.SourceFileLoader('hb', '{BIN / 'hubbus'}')\n"
                  "s = importlib.util.spec_from_loader('hb', l); m = importlib.util.module_from_spec(s); l.exec_module(m)\n"
                  "c = m.db(); mid = sys.argv[1]\n"
-                 "print(json.dumps([sorted(m.claimed(c, [mid])), c.execute(\"SELECT COUNT(*) FROM events WHERE "
+                 "print(json.dumps([[mid] if m.has_via(c, mid, 'held') else [], c.execute(\"SELECT COUNT(*) FROM events WHERE "
                  "type='message' AND ref=? AND id LIKE '%propose-failed'\", (mid,)).fetchone()[0]]))\n")
         return json.loads(subprocess.run([sys.executable, "-c", check, mid], env=self.env, capture_output=True,
                                          text=True, check=True).stdout) == [[mid], 1]

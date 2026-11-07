@@ -64,6 +64,8 @@ class Dispatch(unittest.TestCase):
         m.log = lambda msg: None
         self.leases: set = set()
         self.handled, self.resumed, self.prompts = [], [], []
+        m.sessions_port = lambda: self.rt   # hooks and status ask the same fake which sessions run
+        m.real_resume = m.resume            # a test that counts the processes it starts
         # MCP server processes taken as running (the real check reads the process table: tests.test_mcp_server)
         self.running: set = set()
         m.mcp_process = lambda sid: sid in self.running
@@ -137,6 +139,7 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(self.handled, [])
 
     def test_delivered_by_hook_not_dispatched(self):
+        self.rt.live.add("S1")
         self.send("m1", "proj", "request")
         self.m.mark_delivered(self.c, [self.m.get_message(self.c, "m1")], "S1", "prompt")
         self.dispatch()
@@ -144,6 +147,7 @@ class Dispatch(unittest.TestCase):
 
     # --- delivered into a session only counts as seen (10-27, m10270201-921a) ---
     def seen_by_session(self, mid, minutes_ago, via="prompt"):
+        self.rt.live.add("S9")   # a route to a closed session ends at once: tests.test_mailbox_state
         self.m.mark_delivered(self.c, [self.m.get_message(self.c, mid)], "S9", via)
         ts = (datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)).isoformat(timespec="seconds")
         self.c.execute("UPDATE events SET ts=? WHERE type='message.delivered' AND ref=?", (ts, mid))
@@ -181,9 +185,12 @@ class Dispatch(unittest.TestCase):
         self.send("m1", "proj", "request")
         self.seen_by_session("m1", minutes_ago=0)
         self.m.db = lambda *a, **k: self.c
-        with unittest.mock.patch.object(sys, "argv", ["hubbus", "ack", "m1"]), redirect_stdout(io.StringIO()):
+        import runtime_ports
+        with unittest.mock.patch.object(sys, "argv", ["hubbus", "ack", "m1"]), redirect_stdout(io.StringIO()), \
+                unittest.mock.patch.object(runtime_ports, "current_session", lambda env=None: None):
             self.m.main()
-        self.assertEqual(self.m.take_state(self.c, "m1", "proj"), "taken")
+        st = self.m.letter_state(self.c, self.m.get_message(self.c, "m1"), self.m.Live(self.rt, {"S9"}))
+        self.assertEqual(st.taken, "good", "an ack with no session has nothing to outlive")
 
     def test_claimed_not_redispatched(self):
         self.send("m1", "proj", "request")
@@ -341,7 +348,7 @@ class Dispatch(unittest.TestCase):
         self.send("t-next", "proj", "question", reply_to=prev)
         self.dispatch()
         self.assertEqual(self.handled, [])
-        self.assertIn("t-next", self.m.claimed(self.c, ["t-next"]))
+        self.assertTrue(self.m.has_via(self.c, "t-next", "held"))
         q = self.c.execute("SELECT * FROM events WHERE id='t-next:loop'").fetchone()
         self.assertEqual(q["to_project"], self.m.OWNER_ADDRESS)
 
@@ -398,7 +405,7 @@ class Dispatch(unittest.TestCase):
         self.assertEqual([s["id"] for s in st["stuck"]], ["q1"])
         # A3 (step 1): held letters are listed apart (none here: no MCP server is running)
         self.assertEqual(sorted(st), ["corrupt", "held", "job_failed_24h", "letters", "projects",
-                                    "record_conflicts", "stuck", "to_muninn"])
+                                    "record_conflicts", "stuck", "to_muninn", "waiting"])
         self.assertEqual(st["held"], [])
 
     # --- hook ---

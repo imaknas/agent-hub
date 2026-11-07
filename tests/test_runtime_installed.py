@@ -349,12 +349,13 @@ class Hooks(WithHalf, Bus):
 
     def test_each_runtimes_hook_records_its_sessions_in_the_platforms_ids(self):
         self.send("m1")
+        self.hb.sessions_port = lambda: mock.Mock(live_sessions=lambda: {SID, "fake:F1"}, judges=lambda sid: True)
         with hub_json(installed=["claude", "fake"]):
             self.he.handle("prompt", self.claude_hook("prompt"), name="claude")
             out = self.he.handle("prompt", self.fake_hook(), name="fake")
         self.assertEqual(self.runtimes(), [(SID, "claude"), ("fake:F1", "fake")])
         self.assertEqual(self.delivered(), [f"m1:delivered:{SID}"])
-        self.assertEqual(out, "")   # already delivered to the Claude session: new letters only
+        self.assertEqual(out, "")   # the Claude session was told first and holds it
 
     def test_a_hook_without_runtime_is_the_default_runtimes(self):
         with hub_json():
