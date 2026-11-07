@@ -24,6 +24,7 @@ import test_mailbox_route as tmr  # noqa: E402
 
 BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
 SECRET = "SECRET-WORDS-FROM-THE-MODEL"
+REAL_START = mr.start
 
 
 class Files(unittest.TestCase):
@@ -151,6 +152,36 @@ class Pick(Harness):
         self.start_ok = False
         self.two()
         self.dispatch()
+        self.assertEqual([p["job"] for _i, p in self.failures()], ["mailbox-route:proj"])
+
+    def test_a_record_that_cant_be_kept_spends_the_call_and_the_tick_goes_on(self):
+        """The folder can't be written (a file where it should be: refused whoever runs the test): no process, recency at
+        once, one job.failed naming the error's type, and the project's other letters dispatched as ever."""
+        d = mr.hubconf.mailbox_route_dir()
+        d.parent.mkdir(parents=True, exist_ok=True)
+        d.write_text("not a folder")
+        popen = mock.Mock(side_effect=AssertionError("no call that isn't on record"))
+        with mock.patch.object(mr, "start", REAL_START), mock.patch.object(mr.subprocess, "Popen", popen):
+            self.two()
+            self.send("m2", "proj", "request")
+            self.dispatch()
+            self.assertEqual((self.by("m1"), self.by("m2")), ([("S2", "recent")], [("S2", "recent")]))
+            self.dispatch()
+        popen.assert_not_called()
+        got = self.failures()
+        self.assertEqual([p["job"] for _i, p in got], ["mailbox-route:proj"], "no dispatch-failed: the tick went on")
+        kind = got[0][1]["detail"].split("(")[1].split(")")[0]
+        self.assertEqual(got[0][1]["detail"], self.m._("mailbox-route could not keep its record ({kind}); the most recently "
+                                                       "active session got the letter", kind=kind))
+        self.assertTrue(kind.endswith("Error") and " " not in kind, "the type, not what it says")
+
+    def test_an_answer_that_cant_be_consumed_spends_the_call(self):
+        self.two()
+        self.dispatch()
+        self.answer("m1", "S1")
+        with mock.patch.object(mr, "_save", mock.Mock(side_effect=PermissionError("denied"))):
+            self.dispatch()
+        self.assertEqual(self.by("m1"), [("S2", "recent")])
         self.assertEqual([p["job"] for _i, p in self.failures()], ["mailbox-route:proj"])
 
     def test_a_pick_no_longer_free_is_said_so_and_isnt_a_failure(self):

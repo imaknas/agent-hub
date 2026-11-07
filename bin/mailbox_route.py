@@ -202,7 +202,8 @@ def prompt(project: str, letter: dict, cands: list[dict]) -> str:
 def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
     """Start the call for this letter in the background; whether it started. Either way the letter has had its one call: it
     is marked before the start, so a dispatch killed in between leaves a letter asked with no answer (recency after WAIT_S),
-    never a second call; a start that failed is done at once, and recency picks."""
+    never a second call; a start that failed is done at once, and recency picks. A mark that can't be written raises OSError
+    before anything starts: no call is made that isn't on record."""
     k = key(letter_id)
     answer_file(letter_id).unlink(missing_ok=True)
     mark(letter_id, project)
@@ -212,7 +213,10 @@ def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
         p.stdin.write(json.dumps({"key": k, "prompt": text, "cands": list(cands)}, ensure_ascii=False))
         p.stdin.close()
     except (OSError, ValueError):
-        mark(letter_id, project, done=True)
+        try:
+            mark(letter_id, project, done=True)
+        except OSError:   # marked as started already: no answer, then recency after WAIT_S
+            pass
         return False
     return True
 

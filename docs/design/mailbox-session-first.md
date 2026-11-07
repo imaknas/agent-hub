@@ -741,7 +741,10 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
   recency picks. The call's process ends itself and its process group at 75 s (the runtime's own process with it), and the point's
   `timeout_s` is 60.
 - **One call per letter, for the letter's life.** Its answer read or passed over, a later pick for that letter (its route ended) is
-  recency. A start that failed spends the call, and recency picks at once.
+  recency. A start that failed spends the call, and recency picks at once. So does a record that can't be written or removed (the
+  folder unwritable, a disk full): before the cold review that error left `model_pick` and rolled back the project's whole tick, every
+  tick. Now it is a `job.failed` naming only the error's type, the letter goes by recency, and the tick goes on; a call is never started
+  without its mark on record.
 - **One call per project per tick: the tick's other letters for that project are picked by recency**, not held to a later tick. "Past the
   cap" reads as the daily one; holding them would make a flood's last letter wait a tick per letter before it. The day's cap is
   `DAILY_CALLS`, 24 per project, twice the default wakes, a constant rather than a setting.

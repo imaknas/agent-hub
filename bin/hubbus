@@ -2722,6 +2722,21 @@ def model_pick(c, t, r, cands: list[str], ws=None, proj=None):
     job.failed once a day per project with a fixed detail (route_failed): a broken router shows, without its text."""
     import mailbox_route as mr
     proj = proj or now_named(r["to_project"])
+    try:
+        return _model_pick(c, t, r, cands, ws, proj)
+    except OSError as e:   # its record couldn't be written or removed: this letter's call is spent, recency picks
+        log_once(f"route-{proj}", _("{project}: mailbox-route could not keep its record ({kind}); the most recently active "
+                                    "session was picked", project=proj, kind=type(e).__name__))
+        route_failed(c, proj, type(e).__name__)
+        try:
+            mr.mark(r["id"], proj, done=True)
+        except OSError:
+            pass
+        return None
+
+
+def _model_pick(c, t, r, cands, ws, proj):
+    import mailbox_route as mr
     done = mr.call_of(r["id"])
     if done is not None:
         if done.get("done"):
