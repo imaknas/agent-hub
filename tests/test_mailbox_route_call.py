@@ -579,6 +579,8 @@ class Background(Files):
         pidfile = self.tmp / "hung.pid"
         code = ("import sys, subprocess, json; sys.path.insert(0, sys.argv[1]); import mailbox_route as mr, llm\n"
                 "mr.CALL_TIMEOUT_S = 1\n"
+                "mr.target = lambda: ({'provider': 'p', 'impl': 'fake', 'model': 'small', 'location': 'cloud',\n"
+                "                      'conf': {'key': {'env': 'X'}}, 'price': None}, None)\n"
                 "def hang(point, prompt):\n"
                 "    p = subprocess.Popen(['sleep', '60']); open(sys.argv[2], 'w').write(str(p.pid)); p.wait()\n"
                 "llm.answer = hang\n"
@@ -599,6 +601,9 @@ class Background(Files):
             time.sleep(0.1)
         with self.assertRaises(ProcessLookupError):
             os.kill(hung, 0)
+        rows = [json.loads(x) for x in (self.tmp / "state" / "llm-usage.jsonl").read_text().splitlines()]
+        self.assertEqual([(r["point"], r["provider"], r["model"], r["stop"], r["billing"]) for r in rows],
+                         [(mr.POINT, "p", "small", "timeout", "metered")], "a call killed at its time still counts")
 
 
 if __name__ == "__main__":

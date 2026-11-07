@@ -739,7 +739,9 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
 - **While the model is asked the letter isn't routed**: it counts as waiting, and a hook may show it as before, holding it by its own
   route; the answer then goes unused. The tick reads the answer next time; none after `WAIT_S` (90 s, two ticks a minute apart) and
   recency picks. The call's process ends itself and its process group at 75 s (the runtime's own process with it), and the point's
-  `timeout_s` is 60.
+  `timeout_s` is 60. It leads that group whoever starts it: `main()` makes it so, and the kill takes the group only when it does
+  (the first version took whatever group it was in, its caller's too when run by hand). A call ended so writes a usage row first,
+  `stop: timeout`, so time a provider may have billed is counted.
 - **One call per letter, for the letter's life.** Its answer read or passed over, a later pick for that letter (its route ended) is
   recency. A start that failed spends the call, and recency picks at once. So does a record that can't be written or removed (the
   folder unwritable, a disk full): before the cold review that error left `model_pick` and rolled back the project's whole tick, every

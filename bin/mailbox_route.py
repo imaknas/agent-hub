@@ -229,10 +229,12 @@ def call(data: dict) -> None:
     k, cands = data.get("key"), data.get("cands")
     if not isinstance(k, str) or not isinstance(cands, list):
         return
+    where = target()[0]   # for the usage row of a call killed at its time: it may have been billed
 
     def out_of_time(_sig, _frame):
         try:
             write_answer(k, "")
+            timed_out(where)
         finally:
             if os.getpgid(0) == os.getpid():
                 os.killpg(os.getpid(), signal.SIGKILL)
@@ -247,6 +249,19 @@ def call(data: dict) -> None:
         signal.signal(signal.SIGALRM, before)
     sid = got.get("session") if isinstance(got, dict) else None
     write_answer(k, sid if isinstance(sid, str) and sid in [c for c in cands if isinstance(c, str)] else "")
+
+
+def timed_out(where) -> None:
+    """A usage row for a call ended at CALL_TIMEOUT_S, before the runtime returned and its own row was written: stop
+    "timeout", tokens and cost unknown, so the call still counts where usage is counted (billed time included)."""
+    if not where:
+        return
+    try:
+        import completion
+        from runtime_ports import CompletionResult
+        completion.record(POINT, where, CompletionResult(False, stop="timeout", error=""))
+    except Exception:   # never in the way of the kill
+        pass
 
 
 def main() -> int:
