@@ -118,10 +118,32 @@ class StandIn(unittest.TestCase):
 
     def test_a_point_that_says_restricted_gets_it(self):
         import yaml
-        spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["mailbox-propose"]
-        self.assertIs(spec.get("restricted"), True)
-        cmd = runtime_claude.describe(runtime_ports.Task(point="mailbox-propose", prompt="p", spec=spec, env={"PATH": ""}))
+        spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["login-check"]
+        self.assertIs(spec.get("restricted"), True, "the check after an update: complete passes this flag, so it has to work")
+        cmd = runtime_claude.describe(runtime_ports.Task(point="login-check", prompt="p", spec=spec, env={"PATH": ""}))
         self.assertIn("--restricted", cmd)
+
+    def test_a_read_only_secrets_folder_is_a_failed_result_not_a_crash(self):
+        if os.geteuid() == 0:
+            self.skipTest("root writes anywhere")
+        secrets = self.tmp / "ro"
+        secrets.mkdir()
+        secrets.chmod(0o500)
+        self.addCleanup(secrets.chmod, 0o700)
+        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")):
+            got = runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
+        self.assertFalse(got.ok)
+        self.assertTrue(got.error)
+        import propose_apply
+        import runtime_command
+        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(hubconf, "projects", lambda: {"p": {}}), \
+                mock.patch.object(hubconf, "get", lambda k, d=None: {"run": ["true"]} if k == "runtime.command" else d):
+            got = runtime_command.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
+            self.assertFalse(got.ok)
+            self.assertTrue(got.error)
+            res = propose_apply.run("p", self.tmp, "mailbox-propose", "p", [])
+            self.assertFalse(res["ok"])
+            self.assertTrue(res["error"])
 
     def test_it_overrides_what_a_caller_set(self):
         task = runtime_ports.Task(point="x", prompt="p", spec={}, env={VAR: "0", "PATH": ""})
@@ -193,6 +215,7 @@ class Probe(unittest.TestCase):
         with mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets"):
             d = hubconf.private_tmp()
             self.assertEqual(d.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(d.parent.stat().st_mode & 0o777, 0o700, "a secrets folder it had to make, too")
             self.assertTrue(any(d.is_relative_to(x) for x in policy.secret_dirs()), "every sandbox's deny_read; no write list has it")
 
     def test_anything_that_breaks_alerts_and_nothing_is_recorded(self):
@@ -244,6 +267,83 @@ class Probe(unittest.TestCase):
             self.assertEqual(probe.call_count, 1)
 
 
+class PrivateTmpPrune(unittest.TestCase):
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp)
+        p.start()
+        self.addCleanup(p.stop)
+        self.d = hubconf.private_tmp()
+
+    def old(self, *paths):
+        t = __import__("time").time() - (hubconf.PRIVATE_TMP_KEEP_DAYS + 1) * 86400
+        for p in paths:
+            os.utime(p, (t, t), follow_symlinks=False)
+
+    def leftover(self, name):
+        d = self.d / name
+        (d / "repo").mkdir(parents=True)
+        (d / "repo" / "f").write_text("x")
+        self.old(d / "repo" / "f", d / "repo", d)
+        return d
+
+    def test_an_old_leftover_goes_and_a_fresh_one_stays(self):
+        old, fresh = self.leftover("old"), self.d / "fresh"
+        fresh.mkdir()
+        self.assertEqual(hubconf.prune_private_tmp(dry_run=True), ["old"])
+        self.assertTrue(old.exists(), "a dry run touches nothing")
+        self.assertEqual(hubconf.prune_private_tmp(), ["old"])
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists())
+
+    def test_something_written_deep_inside_keeps_it(self):
+        d = self.leftover("busy")
+        (d / "repo" / "f").write_text("y")
+        self.assertEqual(hubconf.prune_private_tmp(), [])
+        self.assertTrue(d.exists())
+
+    def test_a_process_working_in_it_keeps_it_however_old(self):
+        d = self.leftover("running")
+        p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], cwd=d / "repo")
+        self.addCleanup(p.wait)
+        self.addCleanup(p.kill)
+        for _i in range(50):
+            if hubconf.cwd_users(d):
+                break
+            __import__("time").sleep(0.1)
+        self.assertTrue(hubconf.cwd_users(d), "this machine can tell who is in a folder")
+        self.old(d / "repo" / "f", d / "repo", d)
+        self.assertEqual(hubconf.prune_private_tmp(), [])
+        self.assertTrue((d / "repo" / "f").exists())
+
+    def test_a_link_is_removed_not_followed(self):
+        target = self.tmp / "keep"
+        target.mkdir()
+        (target / "f").write_text("x")
+        link = self.d / "link"
+        link.symlink_to(target)
+        self.old(link)
+        self.assertEqual(hubconf.prune_private_tmp(), ["link"])
+        self.assertFalse(link.is_symlink())
+        self.assertTrue((target / "f").exists())
+
+
+class CommandRuntimeFolder(unittest.TestCase):
+    def test_complete_gets_an_empty_folder_of_its_own(self):
+        import runtime_command
+        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), \
+                mock.patch.object(hubconf, "get", lambda k, d=None: {"run": ["/bin/sh", "-c", 'echo "{cwd}"; pwd; ls -A']} if k == "runtime.command" else d):
+            (hubconf.private_tmp() / "another-runs-file").write_text("x")
+            got = runtime_command.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
+        self.assertTrue(got.ok, got.error)
+        named, here, *listed = got.text.split("\n")
+        self.assertEqual(os.path.realpath(named), os.path.realpath(here))
+        self.assertTrue(pathlib.Path(here).name.startswith("hub-command-cwd-"))
+        self.assertEqual(pathlib.Path(os.path.realpath(here)).parent, secrets / "tmp")
+        self.assertEqual([x for x in listed if x], [], "nothing of another run's")
+
+
 class ProbeThroughTheRealPath(tbs.Fixture):
     """agent_run on the platform's path, the agent a stand-in: the request reaches it in the repo, with the variable."""
 
@@ -281,6 +381,27 @@ class ProbeThroughTheRealPath(tbs.Fixture):
             self.assertEqual((got["var"], got["cwd"]), (want, str(repo)), how)
             seen_argv[how] = got["argv"]
         self.assertEqual(seen_argv["guarded"], seen_argv["bare"], "the same flags")
+        self.assertIn("--restricted", seen_argv["guarded"], "and the flag every completion depends on")
+        # an answer it can't count: ended in an error with exit 0, or nothing it can read
+        for said in ("json.dumps({'type': 'result', 'result': 'boom', 'is_error': True, 'session_id': 's', 'num_turns': 1})", "'not an answer'"):
+            (fake / "claude").write_text(f"#!{sys.executable}\nimport json\nprint({said})\n")
+            for how in ("guarded", "bare"):
+                with self.subTest(said=said, how=how):
+                    r = subprocess.run([sys.executable, "-c", code, how], cwd=repo, capture_output=True, text=True, timeout=60, env=env)
+                    self.assertNotEqual(r.stdout.strip(), "None", "not a pass")
+                    self.assertTrue(r.stdout.strip(), r.stderr)
+
+    def test_a_restricted_point_on_a_runtime_that_cant_says_so(self):
+        (self.tmp / "config" / "hub.json").write_text(json.dumps({**json.loads((self.tmp / "config" / "hub.json").read_text()),
+                                                                  "runtime": {"default": "command", "command": {"run": [sys.executable, "-c", "print('ran')"]}}}))
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        env = {**self.env, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable}
+        r = subprocess.run([sys.executable, str(BIN / "llm.py"), "run", "login-check", "--cwd", str(repo)], input="ok", cwd=repo,
+                           capture_output=True, text=True, timeout=60, env=env)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertNotIn("ran", r.stdout.split("llm_error")[0], r.stdout)
+        self.assertIn("command", r.stdout + r.stderr, "which runtime, and why")
 
 
 class ARuntimeThatDoesntSay(unittest.TestCase):
@@ -494,8 +615,33 @@ class TheHourlySync(twp.Fixture):
             return subprocess.run([sys.executable, str(BIN / "project_git.py"), *a], capture_output=True, text=True, env=self.hook_env(), timeout=60).returncode
         self.assertEqual(cli("sandboxed-project", "box"), 0)
         self.assertEqual(cli("sandboxed-project", "open"), 3)
-        self.assertEqual(cli("sandboxed-project", "nobody"), 3)
         self.assertEqual(cli("sync-memory", "open"), 3, "that path is a sandboxed project's job")
+        import project_git
+        for args in (("sandboxed-project", "nobody"), ("sync-memory", "nobody"), ("run-as", "nobody", str(self.tmp), "--", "true")):
+            self.assertEqual(cli(*args), project_git.COULD_NOT_TELL, args)
+
+    def test_a_name_the_roster_gives_and_the_index_lacks_runs_nothing_as_the_user(self):
+        self.plant_memory(self.ws["box"])
+        index = self.tmp / "state" / "registry" / "index.json"
+        docs = json.loads(index.read_text())
+        del docs["projects"]["box"]
+        index.write_text(json.dumps(docs))
+        self.assertEqual(self.sync().returncode, 0)
+        self.assertEqual(self.ran_as_the_user(), [])
+        self.assertFalse(self.marker.exists())
+        self.assertIn("box", "".join(p.read_text() for p in self.log_files()), "said")
+
+    def test_as_project_doesnt_pass_a_name_the_index_lacks_through_as_the_user(self):
+        import isolation
+        with mock.patch.object(hubconf, "projects", lambda: {}), mock.patch.object(hubconf, "roster", lambda: {"box": {}}):
+            self.assertIn("--project", isolation.as_project("box", self.tmp, ["git", "status"]), "to bin/sandboxed-run, which refuses it")
+            self.assertEqual(isolation.as_project("left-the-registry", self.tmp, ["git", "status"]), ["git", "status"])
+            self.assertEqual(isolation.as_project(None, self.tmp, ["git", "status"]), ["git", "status"])
+
+    def test_a_platform_scripts_sync_of_a_name_the_index_lacks_doesnt_run(self):
+        import project_git
+        with mock.patch.object(hubconf, "projects", lambda: {}), mock.patch.object(project_git.subprocess, "run", side_effect=AssertionError("as the user")):
+            project_git.sync_memory_of("box", self.ws["box"])
 
     def test_git_sync_memory_doesnt_ask_by_folder(self):
         self.assertNotIn("project_git.py", (BIN / "git-sync-memory.sh").read_text().replace("project_git.py sync-memory <name>", ""))
@@ -536,11 +682,19 @@ while time.time() < end:
 
 class SystemTempIsNoPlaceForIt(unittest.TestCase):
     """The system's temp folder is every sandboxed project's to write. What the platform runs, loads or trusts as the user goes in
-    hubconf.private_tmp; these are the uses left, each with its reason in docs/design/mailbox-session-first.md. A new one has to say why."""
+    hubconf.private_tmp; these are the uses left, each with its reason in docs/design/mailbox-session-first.md. A new one has to say why.
+    A hint, not a proof: it reads lines, so a call split over lines or a path built elsewhere goes unseen."""
     LEFT = {"bin/gen-index-roster.sh", "bin/config-check", "bin/run-tests", "bin/test-runner.py", "bin/sync-local-setup.sh", "bin/runtime_acp.py", "bin/seatbelt.py", "bin/landlock.py",
             "bin/cap-runner.py", "bin/linux-test", "bin/lint"}
     USE = __import__("re").compile(r"tempfile[.](?:mkdtemp|TemporaryDirectory|NamedTemporaryFile|mkstemp|gettempdir|TemporaryFile)[(]"
-                                   r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders")
+                                   r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders|TMPDIR")
+    MOVED = __import__("re").compile(r"dir=(?:hubconf[.])?(?:private_tmp[(][)]|STATE\b)")   # both denied to every sandbox
+
+    def test_only_those_two_folders_count_as_moved(self):
+        for line in ("tempfile.mkdtemp(dir=other)", "tempfile.mkdtemp(prefix='x', dir=hubconf.STATEFUL)", 'TMPDIR="$tmp" run'):
+            self.assertTrue(self.USE.search(line) and not self.MOVED.search(line), line)
+        for line in ("tempfile.mkdtemp(dir=hubconf.private_tmp())", "tempfile.mkdtemp(dir=hubconf.STATE)", "tempfile.mkdtemp(dir=private_tmp())"):
+            self.assertTrue(self.MOVED.search(line), line)
 
     def test_no_new_one(self):
         found = set()
@@ -553,7 +707,7 @@ class SystemTempIsNoPlaceForIt(unittest.TestCase):
             except UnicodeDecodeError:
                 continue
             for line in text.splitlines():
-                if self.USE.search(line) and "dir=" not in line and not line.lstrip().startswith("#"):
+                if self.USE.search(line) and not self.MOVED.search(line) and not line.lstrip().startswith("#"):
                     found.add(rel)
         self.assertEqual(sorted(found - self.LEFT), [])
 
