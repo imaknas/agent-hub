@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r4, not built. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r5, not built. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -56,19 +56,21 @@ for requests and questions state becomes:
   - an ack, while the session that acked is live: **an ack has an end.** A closed session's ack no longer holds. An ack with no
     session (an MCP client, a runtime with no record) holds as today;
   - a `resume` row, for `RESUME_TIMEOUT_MIN`: **a fork has an end.** After that the letter is open again, whether or not it was
-    triaged, and `stale_resumes` goes away;
+    triaged, and `stale_resumes` goes away. A letter is forked once, so a fork that ends without closing it can't re-fire;
   - an old `handler` row: for good, so letters from before this change don't come back.
 
   `held` and `triage` are never taken. Only `ack`, `reply` and `done` by a session count as acting on it.
 - **Told**, per session: a `message.delivered` row with that session, from a hook or `brunna inbox`. A session is told a letter
-  once. A `resume` row isn't told, and the "handled in a background branch, nothing more to do" text shows only when the fork
-  closed the letter.
+  once. A `resume` row isn't told, and the "handled in a background branch" text shows only when the fork replied or closed the
+  letter. A session that sent a letter to its own project isn't told it and can't hold it.
 - **Routed**: one session holds the letter. `message.routed` `{session, by: only|thread|model|recent|hook}`, in dispatch or, for
   a session told with no route, in the hook itself (`by: hook`): the first session to see a letter holds it, as today's 60
   minutes do, and nobody pre-empts it.
 
-**A route always ends:** by its window, by pass, by the letter being taken, or when its session is no longer live. Dispatch
-records the end as a `message.routed` with no session, so a lapsed route can't revive when the session is told later.
+**A route always ends:** by its window, by pass, by the letter being taken, or when its session is no longer live. One helper
+judges this, for dispatch and for hooks alike, from the bus and the process records, so it holds where dispatch doesn't run
+(`runtime.default` with no `sessions` port). Dispatch records the end as a `message.routed` with no session, and a route
+judged ended never revives, even if the session is told later.
 
 **The window** is derived, not stored: from the wake, or from the route if no wake was needed, 5 minutes (`WAKE_PICKUP_MIN`)
 until the session is told, then 60 from the telling (`TAKE_TIMEOUT_MIN`). A session working for 20 minutes isn't pre-empted, and
@@ -77,11 +79,12 @@ is idle and still untold, dispatch wakes it (a hook skipped by `POST_TOOL_EVERY_
 the letter). A busy session's route is bounded by 60 minutes from the route.
 
 **A hook shows a letter** to a session when it is open and not taken, that session hasn't been told, and no route points at
-another session. Session-start keeps listing open letters it has been told, in one line: that list is what survives compaction.
-Letters a closed session had acked come back this way too.
+another session. Session-start keeps listing every open letter it isn't showing in full, in one line, as today: that list is what survives
+compaction, and it reaches a session opening after the holder closed.
 
 **`brunna inbox`** lists every open letter, marked with who holds it and whether it is taken. It marks told only for the session
-listing it, and not at all for a platform run (`HUB_LLM_POINT` set: the handler's first command must not count). Footer and wake
+listing it (a sandboxed session through a new outbox op), and not at all for a platform run (`HUB_LLM_POINT` set: the handler's
+first command must not count). A sandboxed view carries the derived taken and held state, since it can't judge liveness itself. Footer and wake
 notice say `brunna ack <id>` as soon as you take it, `brunna pass <id>` if it isn't yours. Someone else's ack ends the matter.
 
 Notices (info, done, progress) keep today's one-flag behaviour: nothing routes them.
@@ -93,12 +96,12 @@ Notices (info, done, progress) keep today's one-flag behaviour: nothing routes t
    after a wake): wait, as today. Bounded by the letter's age, so a wandered session can't hold it.
 3. **A candidate not yet tried exists**, wake is on, the budget has room and the letter is under 7 days old: pick one and route it;
    wake it if `idle` or `unknown`.
-4. **The only candidates left are `waiting`** (a dialog is open): wait, up to 60 minutes from when they were first seen waiting,
-   then go on as if they weren't there.
-5. **A reply to a closed session** whose context is small, from a sender that isn't sandboxed: today's background resume. It's
-   the only way to reach a closed session, and a fork's whole context mustn't answer a sandboxed sender.
+4. **The only candidates left are `waiting`** (a dialog is open) and the letter is under 60 minutes old: wait. Older, go on as if
+   they weren't there.
+5. **A reply to a closed session** whose context is small, from a sender that isn't sandboxed, not forked before: today's
+   background resume. It's the only way to reach a closed session, and a fork's whole context mustn't answer a sandboxed sender.
 6. **A live session of a runtime with no wake port** (`runtime_ports.Sessions` routes by each session's runtime), context small,
-   sender not sandboxed: today's delegation fork, that session only.
+   sender not sandboxed, not forked before: today's delegation fork, that session only.
 7. **Not yet triaged**: triage.
 8. **Otherwise**: nothing. It waits for a hook or a new candidate.
 
@@ -116,7 +119,8 @@ heartbeat is fresh), not yet routed this letter. Never MCP rows, lease sessions 
 
 `.live` gains `project`, set when the process is first recorded and carried over whenever the record is rewritten for that
 process, so a compaction after wandering into another folder doesn't move it. A record with no `project` (a session running at
-the upgrade) gets it at its next hook, even with `refresh=False`. Mail shown by cwd stays as it is. The wake notice names the
+the upgrade) gets it at its next hook, even with `refresh=False`. The hub's own sessions get `hub_project()`: `project_at` returns
+nothing for them. Mail shown by cwd stays as it is. The wake notice names the
 project (`brunna inbox --project P`), so a session in another folder can read it.
 
 `session_status(sid)` (optional port) answers `busy|idle|waiting|unknown`; Claude: `claude agents --json`, checked live: it lists
@@ -147,7 +151,7 @@ today always publishes `job.failed`, and failure text can echo model output) and
 invalid output and rate limits today). The process's stdout isn't kept, since `llm_error` can carry model text. Its schema is one string, `session`, with no `enum` or `pattern`, so a validation error can't echo a value. The
 platform checks the answer against the list and writes only a matching id, to a mode-600 file in the secrets sessions folder.
 Not recorded for evals. **No text from the model is kept:** a crafted letter could otherwise have it copy a last reply and read
-it back with `brunna show`. The bus gets `message.routed` with `{session, by: only|thread|model|recent, window}`.
+it back with `brunna show`. The bus gets `message.routed` with `{session, by}`.
 
 The model reads, marked as data: the letter's sender, type and first 1000 characters, and for each candidate its id, worktree
 name from `.live`, idle time, and the gated text below. No branch lookup (that would need a `project_git` op and time).
@@ -187,12 +191,12 @@ its own project are already there), so the routed session can tell it's itself.
 ## Triage: the headless handler as last resort
 
 - **It takes only what it finishes.** `via: triage`, not taken, so the state rules above apply. `run_handler` enforces once per
-  letter. `runs_today` and `platform_rounds` count it, `stale_resumes` excludes it, `PATH_OF` and `path_labels` name it.
+  letter. `runs_today` and `platform_rounds` count it, `PATH_OF` and `path_labels` name it.
 - **`hold()` stops platform runs without taking.** At `thread_max_rounds` it asks the owner once (its event id makes that once,
   and it logs once) and the letter stays open for sessions. `held` is no longer taken; `claimed()` drops it. Routing goes on.
 - **Its own rules, not all confined runs'.** `run_handler` passes `MAILBOX_LETTERS=<ids>`. When that's set, `confined_refusal`
   allows only: `done` replying to one of those letters (`info` too for an `asks` letter, which tells it to), `done <id>` for them, a
-  question to the owner, and `done|drop --question` to the owner (reconciliation needs it). No other `info`, no other recipient, no
+  question to the owner with `--reply-to` one of them, and `done|drop --question` to the owner (reconciliation needs it). No other `info`, no other recipient, no
   `ack`, no `pass`. A confined run could otherwise send
   to any project and wake a session. The other `settings: platform` points (fork, event and clock jobs) keep today's rules.
 - **A session and a handler don't both answer.** Refused too, if another session has taken the letter. The inbox and `show` of
@@ -203,9 +207,12 @@ its own project are already there), so the routed session can tell it's itself.
   neither takes the letter nor wakes anyone. It carries the letter's chain, so an event job can't loop on it. None for the owner
   side, the hub's own letters or reconciliation letters. When the budget stops routing, the same line goes out.
 - **Its question closes with the letter.** When a letter is taken, the platform closes a question a handler asked about it, so the
-  owner isn't asked what a session has answered. `<id>:loop` and `propose-failed` too.
+  owner isn't asked what a session has answered. That needs a link that doesn't exist today: with records on, `send_decision` drops
+  `ref`, so it's passed through to `publish_record`. Propose's `ask_owner` schema gains the letter id. `<id>:loop` and `propose-failed`
+  are v1 with `ref` already and close as v1 (their key doesn't fit the record schema).
 - **It can write its notes, and so can a fork.** Today the confined run's `deny_write` covers the hub's own project, and
-  `own_state_dir` only carves out `<state>/agent-jobs/<job>`. Both gain the project's `.agent-memory/memory/`. The hub's notes aren't committed (`memory: false`),
+  `own_state_dir` only carves out `<state>/agent-jobs/<job>`. Both gain the project's `.agent-memory/memory/`, by absolute path, since
+  a fork of a hub session may run in a linked worktree. The hub's notes aren't committed (`memory: false`),
   so the prompt stops saying the platform commits them there. The prompt also says: state an action only after its tool succeeded.
 - **No repeats and no noise.** `dispatch`'s "treating it as not taken" log fires once per letter.
 
@@ -226,7 +233,7 @@ Characterization of today's routing first, committed before any change. Then, ti
 woken for a request at any context size; the second candidate told and marked after the first passed; a busy candidate that goes
 idle untold, then woken; a route lapsing with no next candidate, then any hook shows it; a route to a closed session ending; budget
 used up, then triage; triage, then a session opening later; a handler's inbox marks nothing; a fork that dies, before and after
-triage; a closed session's ack; `<id>:loop` on a letter to the hub stays open; `held` leaves it open; compaction keeps the list; `to_session` outside the candidates;
+triage, counting processes started (one); a closed session's ack; `<id>:loop` on a letter to the hub stays open; `held` leaves it open; compaction keeps the list; `to_session` outside the candidates;
 wandering and compaction; `waiting` skipped; `pass` rules; the off switch and budget on notices; confined rules for a handler, and
 unchanged for the other points, with reconciliation; the fixed line neither takes nor wakes and carries the chain; the route call in
 the background, its timeout, a bad answer, nothing it wrote reaching the bus, a failed call publishing no `job.failed`; `.last`
