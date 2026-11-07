@@ -510,7 +510,10 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     `private_tmp()`; none there is a failed run (exit 2), never the system's folder, and a private folder inside a repo (the old layout's `<hub>/.secrets`) is refused
     with `move-instance` named, since tests that strip the git ceiling would find that repo (this instance has no repo above it). A sandboxed project's run can't reach
     the private folder: its `TMPDIR` is its run folder, in its own workspace, where no other project's sandbox writes (the system's would let one project's process into
-    another's sandbox); that folder is inside its repo, so a test that strips `GIT_CEILING_DIRECTORIES` there finds it. No project with a sandbox declares tests yet.
+    another's sandbox); that folder is inside its repo, so a test that strips `GIT_CEILING_DIRECTORIES` there finds it. No project with a sandbox declares tests yet,
+    so that branch is tested only by the unit tests. A project whose jobs are exempt (`service_sandbox_exempt`) runs its nightly tiers as the user: those get the
+    private folder, not one its own sessions write; its sessions, sandboxed, get the run folder. With `~` itself a repo every run as the user is refused, and the
+    hint names `move-instance`, which doesn't apply there.
     `bin/run-tests` run by hand moves off the system's folder the same way; a clone with no instance keeps what it was given. The runner's version went to 2, so a tree
     that passed in the old folder isn't a hit. Rerun with this branch's runner, `full` tier, the racer aimed at the private folder itself: 0 scripts changed, 20,538
     writes refused, 0 runs. No Seatbelt test needed the profile's temp area: the twelve modules that use a profile give the same results with `TMPDIR` in the
@@ -539,6 +542,12 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     otherwise asks of a runtime with no confined runs: those core points keep running there. What's left there, and doctor says so: that agent's own settings, and a
     rules file above the folder (none above the copies or the clones here). ACP is as before: it refuses every point but the throwaway one. The flag's own goldens:
     three points, four variants, `--restricted` and nothing else.
+    **Left:** a refused project is refused again every hour, and says so only in the hourly sync's log and the hook's error, and after 72 hours in `memory-gaps`
+    (no alert, no status row); getting out means rewriting the commits on its `.agent-memory` branch that the bare repo lacks (reset to the bare repo's tip, add the
+    notes again), which only the project's session or the owner does. A project that isn't sandboxed pushes to its bare repo itself, so nothing checks what enters
+    there: it has the user's authority anyway, and the look before an agent and doctor's row cover its copies. Over 5,000 new trees in one bundle is refused (a
+    bound on the work; this machine's longest history is far below it). The look reads the files, so a dotfile no commit holds (a `.DS_Store`) stops that night's
+    run of the point in that copy; the librarian's failure path cleans untracked files, but `git clean` leaves what a global ignore names.
 - **Older and open, not fixed here:**
   - Seatbelt denies don't resolve links, and `bin/evals/` is exposed while it runs.
 - **Asked by the name, not the folder.** The hourly sync asked `sandboxed "$(pwd -P)"` and `git-sync-memory.sh` asked again, each re-reading the `.agent-memory` link: a flipper got "not sandboxed" and git ran its config as the
