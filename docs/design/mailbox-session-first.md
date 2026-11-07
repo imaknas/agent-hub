@@ -445,20 +445,44 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   not. A letter with no handoff keeps its thread. As in step 2, a file in an outbox can't prove it came from such a run, so a
   hand-written one isn't caught, and an ordinary session's reply is unchanged.
 
-- **A pointer under a session's folder is a claim, not a fact** (found by the cold review, on main before this step).
-  `worktree-memory.sh` decided "sandboxed" from `$main`, read from `.git` pointer files the project can write, so a sandboxed
-  project could name an unsandboxed project's repo and get a planted memory repo's config run as the user, at a start and at an end,
-  and a line written into that repo's `info/exclude`. Now `project_git.py worktree-scope` decides: the folder's own path first, and the
-  memory synced is the one the registry entry names. A repo a sandboxed project writes is never run as the user, whoever names it. In
-  no project at all (its service can write the temp folder), a pointer counts only if the repo it names has this worktree in
-  `worktrees/` with a back pointer (`gitdirs.confirmed`). `project_of` (which project's mail a session gets) and the guard (which sessions it
-  may open) read pointers the same way; the guard also goes by path first, or a sandboxed project could open a session in the project
-  it names, outside its sandbox. A worktree moved by hand outside its project's folder, whose back pointer is stale, gets no hooks
-  until `git worktree repair`.
-- **Not closed, no pointer in it:** `hub-event`'s own handlers, in a folder in no project that holds `.agent-memory/.git`, run git as the
-  user (`memory_pull`, `memory_sync`, `local_setup`, `nudge`; run in a fixture). It takes a sandboxed session whose hook reports a
-  working folder outside its project, and a sandboxed session's cwd leaving its project wasn't checked live. Refusing such a folder would
-  also lose the moved-folder reminder on a laptop's old copy, which may not be in the registry there, so it wants its own decision.
+- **What a hook may run, and as whom** (two cold reviews; the first fix was wrong). What sits under a session's folder is a claim, and a
+  back pointer proves nothing when the same writer owns both ends. The rule, in `project_git.py`:
+  - **A folder is a sandboxed project's as the hook's `cwd` names it, unresolved, or as it resolves** (`sandbox_of`): `handle`, `worktree`,
+    `worktree_scope`, `guard.own_project`, `hubbus.project_of`, and through them the record's `project` and the label for `.last`.
+    There it runs as the project, and only in a folder its workspace really holds (`holds`); a folder swapped for a link elsewhere gets no
+    work at all, so nothing of another sandboxed project is printed into this session.
+  - **Git, or a script that runs it, goes as the user only in a registered project that isn't sandboxed, the hub's checkout, or a confirmed
+    worktree of one of those** (`user_git_ok`). Everything else is no, not a list of bad cases: `hub-event`'s `NOT_IN_FOLDER` names what
+    runs no git, and any other handler, a new one too, doesn't run elsewhere. `memory-nudge.py` asks the same, for hooks installed before
+    `hub-event`.
+  - `gitdirs.confirmed` alone is worth nothing: a repo a stranger made confirms itself, and `git init box/nested; git worktree add <outside>`
+    needs no forging. Being registered is what counts. What it still gives: a pointer naming a registered repo, which a stranger can't
+    write, is believed only if that repo lists the folder.
+- **How the swap reaches a hook.** Read by the cold review from the 2.1.319 CLI, not watched live: a plain `cd` out of the project is reset
+  after each Bash call, but `cd box/sub` stores that string, a background process can then `mv sub sub2; ln -s <target> sub`, only Bash
+  re-checks, and a hook's input still says that `cwd`. `UserPromptSubmit`, `PreCompact`, `SessionEnd` and `SessionStart` on compact or resume fire
+  so. The target needs no temp folder: a sandboxed project's settings allow writes to its `~/services/<project>`. The tests build the
+  swapped folder and fire the real hooks; they don't prove a real session gets there. **Assumed, not checked:** a session's `cwd` string stays
+  under its workspace (or a folder it was given). A string outside it would still get no git as the user, by the second rule, but one that
+  resolves into an open project would be that project's for mail, since no name says otherwise.
+- **A laptop's old copy keeps its reminder** (`sync-local-setup.sh --moved-only`: a marker file read, no git; the marker isn't printed through
+  a link). It loses memory pull and sync where it isn't registered, which fits "do not work here".
+- **A worktree moved by hand** outside its project's folder: its record and mail hook still run but find no project, so no mail, no memory
+  and no linked files. Its start says so, with `git worktree repair` (exit 4 of the scope), and the guard refuses to open a session from it,
+  saying the same. Moved inside its project's folder it goes on, by path.
+- **The guard from a planted folder outside every project** refuses everything: its pointer can't say whose folder this is. Before, it denied
+  all but the project named, and doubting the pointer without refusing allowed everything. A folder with no repo at all, in no project, is
+  as before.
+- **Checked past the reported paths.** Every hook entry (`HOOK_TABLE`, `WORKTREE_HOOKS`) and what it starts: `hub-event`, `worktree-memory.sh`,
+  `sync-local-setup.sh`, `memory-nudge.py`, `git-sync-memory.sh`, `with-lock.sh`, `hub-runtime`, `render-project-settings --worktree` (by path, and
+  `nofollow`), `hubbus hook` (mail only), `project_git run-as` (by path). Found so: `hub_json_get`'s `py -c` put the current folder on the import path, so a
+  `json.py` there ran as the user wherever there's no `plutil` (now `-I`; the prototype's inline `py -c` for the `cwd` would have added
+  another, so the script asks `hub-event`, whose runtime reads the input); `hub_pull` under a link to the hub's checkout (now not run in a
+  sandboxed project's folder); the reminder printing what its marker links to. `git-sync-memory.sh` isn't gated itself: its callers are `memory_sync`,
+  the worktree's `end` and the hourly sync over the registry.
+  **Left open, not a hook:** a platform fork's working folder is the session's last `cwd` (`session_cwd`), so `claude` itself starts there, and a
+  coding agent's own git status runs outside its tool sandbox. That holds for any platform run in a sandboxed project's own folder too, with
+  no swap needed: the agent's process isn't under the sandbox its Bash is. Not changed, not measured; it wants its own look.
 - **How far to trust `project`.** The record can say where a process began as far as its hooks showed. It can't settle more, and the
   send-time gate should read it that way:
   - It says nothing about what the session has read: one that wandered through a private project holds that text whatever the field says.
@@ -471,6 +495,10 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     really carries the parent's id isn't known**: it rests on a code comment, not on a run. If it doesn't, nothing here is reached.
     Either way a parent with no record of its own at that moment has nothing to protect, and its next hook records where it is. A
     lookup that fails writes the record, as before: a session with no record is the worse mistake.
+  - **A resume while the old process is dying:** its start writes nothing, and if the old one then dies no record runs until its next hook.
+    All 20 Desktop processes on this machine carry `--resume` or `--session-id` on the command line (11-07, `ps`, 2.1.3xx), which `live_sessions` counts,
+    so Desktop doesn't reach this. A terminal's `claude --continue` would: none was running to look at. There a hook within 30 minutes still counts
+    as alive (`SEEN_ALIVE_MIN`), so what's at stake is a session that has had no hook for 30 minutes, whose letter goes to another session.
 
 What step 4 must know: `Sessions.open_sessions()` gives each session's record with `project`, `can_wake`, `session_status` and
 `session_summary` are there and nothing reads them yet. A record with no `project` lasts until a hook can name its folder's project.
