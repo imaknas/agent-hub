@@ -14,12 +14,14 @@
 #          (`hub-runtime instructions-file`) into the context (it didn't exist yet when the session started),
 #          remind when memory is behind
 #   end    (SessionEnd / PreCompact) sync the memory notes, same script as the main checkout's hook; at SessionEnd the
-#          session's letters are free again (hub-event worktree, which every event here goes through first, for its record)
+#          session's letters are free again
 #   nudge  (PostToolUse) remind when notes are behind after a git commit/push; deliver new letters from the project
-#          mailbox (hubbus, rate-limited)
+#          mailbox (rate-limited)
 #   start also delivers the project mailbox's letters that aren't closed yet into the context
 #   prompt (UserPromptSubmit) deliver new letters from the project mailbox into the context (a user-level hook,
 #          installed only with the owner's approval: U4)
+#   Every event here goes through `hub-event worktree` first, outside any sandbox: the session's record, its end, its mail
+#   and the reminder (the bus is in no sandbox, and a hook's output is one JSON or none). Only what's left runs below.
 #   wait   (Stop, run in the background) hand over to `hub-event wait`, the waiter that wakes the idle session when a
 #          letter comes (docs/design/mailbox-runtimes.md B1); its exit code is the wake
 # The symlink points at the same .agent-memory, and with-lock uses the same git dir, so it doesn't collide with the
@@ -45,10 +47,10 @@ cd "$top" || exit 0
 hook_json=""
 [ -t 0 ] || IFS= read -r -t 1 hook_json || true
 
-# The session's process record and its end, before its mail and outside any sandbox (the secrets folder and the bus are in
-# none): a session here is judged like any other (hubbus Live), and one that exits frees what it holds
+# The session's process record, its end and its mail, outside any sandbox (the secrets folder and the bus are in none): a
+# session here is judged and told like any other (hubbus Live), and one that exits frees what it holds
 if [ -z "${HUB_AS_PROJECT:-}" ] && [ -n "$hook_json" ]; then
-  printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree "$event" >/dev/null 2>&1
+  printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree "$event" 2>/dev/null
 fi
 
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
@@ -61,9 +63,10 @@ if [ -z "${HUB_AS_PROJECT:-}" ]; then
     0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$main/.agent-memory"
        # the worktree's settings (its sandbox, the platform's hooks) are the platform's to write: the project can't
        # write them there itself (the sandbox's protect list), so they are a plain file written here, not a link
-       [ "$event" = start ] && "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
-       printf '%s' "$hook_json" | AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
-         bash "$HUB/bin/worktree-memory.sh" "$event"
+       [ "$event" = start ] || exit 0   # a prompt or a tool call has nothing left to do as the project
+       "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
+       AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$top" -- \
+         bash "$HUB/bin/worktree-memory.sh" "$event" </dev/null
        exit 0 ;;
     3) ;;
     *) exit 0 ;;
@@ -103,19 +106,9 @@ case "$event" in
       sed 's/^/  /' "$git_dir/agent-hub-deps-pruned"
       hub_say "  once rebuilt, remove the marker: rm \"{marker}\"" marker="$git_dir/agent-hub-deps-pruned"
     fi
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook session-start 2>/dev/null
     ;;
   end)
     [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
-    ;;
-  prompt)
-    # UserPromptSubmit: deliver new letters mid-conversation (the main checkout has the project's own hook; this only
-    # handles worktrees)
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook prompt 2>/dev/null
-    ;;
-  nudge)
-    [ -e .agent-memory ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/memory-nudge.py" --post-tool
-    [ -n "$hook_json" ] && printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hubbus" hook post-tool 2>/dev/null
     ;;
 esac
 exit 0

@@ -16,9 +16,10 @@ wires its native hooks to this.
                               platform's replaced with new ones, the user's own kept): called by sync-local-setup
   hub-event worktree <start|prompt|nudge|end>
                               worktree-memory.sh's user-level hooks, before anything runs as the project: a session in
-                              a linked worktree goes on record as any session does, and its end (the runtime's
-                              session_ending: that command also runs at compaction) counts as any session's. Its mail
-                              stays with `hubbus hook`
+                              a linked worktree goes on record as any session does, gets its mail (the bus is in no
+                              sandbox, so it has to be from here) and its after-commit reminder in one output, and its
+                              end (the runtime's session_ending: that command also runs at compaction) counts as any
+                              session's
   hub-event as-project <event> <workspace> <command>
                               inside a sandboxed project's sandbox: its handlers that touch its repo (AS_PROJECT),
                               JSON out (called by hub-event itself)
@@ -335,8 +336,22 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
 WORKTREE_EVENTS = {"start": "session_start", "prompt": "prompt", "nudge": "tool_used", "end": "session_end"}
 
 
+def _worktree_nudge(ev, ws, proj, caged):
+    """The after-commit reminder, as handle gives it (as the project when it is sandboxed). Here because a hook's output is
+    one JSON or none: this and a letter printed apart would both be lost, and the letter counted as told."""
+    if caged:
+        if not _needs_project(ev):
+            return None
+        inner = _as_project(proj[0], ws, ev).get("nudge")
+        if not isinstance(inner, dict) or not inner.get("ok"):
+            raise RuntimeError("as the project")
+        return inner.get("text") if isinstance(inner.get("text"), str) else None
+    return nudge(ev, ws)
+
+
 def worktree(what: str, raw: str) -> int:
-    """A session in a linked worktree (worktree-memory.sh): what session_record and session_end do for the others."""
+    """A session in a linked worktree (worktree-memory.sh): what session_record, mail and session_end do for the others, run
+    outside any sandbox. A runtime that may not hold a sandboxed project's sessions gets no mail there, as in handle."""
     global _RT, _RT_NAME
     if what not in WORKTREE_EVENTS:
         return 0
@@ -347,11 +362,30 @@ def worktree(what: str, raw: str) -> int:
         return 0
     ev = ev._replace(session=runtime_ports.qualify(_RT_NAME, ev.session))
     ws = _workspace(ev.cwd)
-    if what != "end":
-        session_record(ev, ws)
-    elif callable(ending := getattr(rt, "session_ending", None)) and ending(raw):
-        mail_end(ev, ws)
-        wake_address_drop(ev, ws)
+    if what == "end":
+        if callable(ending := getattr(rt, "session_ending", None)) and ending(raw):
+            mail_end(ev, ws)
+            wake_address_drop(ev, ws)
+        return 0
+    proj = project_git.project_at(ws) if ws else None
+    caged = bool(proj) and isolation.sandboxed(proj[1])
+    refused = caged and not CAGED_NEEDS <= runtime_ports.capabilities(_RT_NAME)
+    steps = [("session_record", lambda: session_record(ev, ws))]
+    if not refused:
+        steps += [("nudge", lambda: _worktree_nudge(ev, ws, proj, caged))] if what == "nudge" else []
+        steps += [("mail", lambda: mail(ev, ws))]
+    texts, ran, failed = [], [], []
+    for name, fn in steps:
+        try:
+            out = fn()
+            ran.append(name)
+            if out:
+                texts.append(out)
+        except Exception as e:   # one broke; the others still run
+            failed.append(f"{name}:{type(e).__name__}")
+    _log(f"worktree-{what}", ws.name if ws else None, ran, failed)
+    if texts and (out := rt.inject(ev.event, "\n\n".join(texts))):
+        print(out)
     return 0
 
 

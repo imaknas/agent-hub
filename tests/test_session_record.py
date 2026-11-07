@@ -56,45 +56,6 @@ class CharacterizeRecord(tcsr.SecretsDir):
         self.assertEqual(json.loads(hubconf.session_file(B, "live").read_text())["cwd"], "/elsewhere")
 
 
-class CharacterizeWaiter(tmw.ClaudeSessionsDir):
-    """The waiter as it reads the Stop hook's input."""
-
-    def hub_event(self):
-        m = tmw.load_file("hub_event_record", BIN / "hub-event")
-        m.LOG = self.tmp / "hub-event.log"
-        return m
-
-    def stdin(self, text):
-        """A stdin as a hook's: not a terminal, readable at once, larger than a pipe's buffer if it wants to be."""
-        f = self.tmp / "stdin"
-        f.write_text(text)
-        fh = open(f)
-        self.addCleanup(fh.close)
-        return mock.patch.object(sys, "stdin", fh)
-
-    def test_a_headless_run_reads_its_input_and_arms_nothing(self):
-        m = self.hub_event()
-        raw = json.dumps({"session_id": self.SID, "cwd": str(self.tmp), "hook_event_name": "Stop",
-                          "last_assistant_message": "y" * 200000})
-        env = {"CLAUDE_PID": str(os.getpid()), "CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}
-        with self.stdin(raw), mock.patch.dict(os.environ, env):
-            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE"):
-                os.environ.pop(var, None)
-            self.assertEqual(m.main(["--runtime", "claude", "wait"]), 0)
-        self.assertEqual(self.files(), [], "nothing armed, nothing kept")
-        self.assertIn("wait - ran=headless", m.LOG.read_text())
-
-    def test_a_platform_run_reads_its_input_and_does_nothing(self):
-        m = self.hub_event()
-        with self.stdin(self.raw()), mock.patch.dict(os.environ, {"HUB_LLM_POINT": "librarian"}):
-            self.assertEqual(m.main(["--runtime", "claude", "wait"]), 0)
-        self.assertEqual(self.files(), [])
-        self.assertFalse(m.LOG.exists())
-
-    def test_the_hook_declares_the_waiters_own_timeout(self):
-        self.assertEqual(self.rc.wait_hook()["timeout"], self.rc.WAIT_TIMEOUT_S)
-
-
 class Project(tcsr.SecretsDir):
     """`project` in the record: set when the process is first recorded, carried over whenever it is rewritten."""
 
@@ -208,6 +169,45 @@ class ProjectThroughTheHook(tcsr.HookFixture):
             self.hook("prompt", B)
             self.assertEqual(self.read(B)["project"], hubconf.hub_project(), ws)
             self.hook("session_end", B)
+
+
+class CharacterizeWaiter(tmw.ClaudeSessionsDir):
+    """The waiter as it reads the Stop hook's input."""
+
+    def hub_event(self):
+        m = tmw.load_file("hub_event_record", BIN / "hub-event")
+        m.LOG = self.tmp / "hub-event.log"
+        return m
+
+    def stdin(self, text):
+        """A stdin as a hook's: not a terminal, readable at once, larger than a pipe's buffer if it wants to be."""
+        f = self.tmp / "stdin"
+        f.write_text(text)
+        fh = open(f)
+        self.addCleanup(fh.close)
+        return mock.patch.object(sys, "stdin", fh)
+
+    def test_a_headless_run_reads_its_input_and_arms_nothing(self):
+        m = self.hub_event()
+        raw = json.dumps({"session_id": self.SID, "cwd": str(self.tmp), "hook_event_name": "Stop",
+                          "last_assistant_message": "y" * 200000})
+        env = {"CLAUDE_PID": str(os.getpid()), "CLAUDE_CODE_ENTRYPOINT": "sdk-cli"}
+        with self.stdin(raw), mock.patch.dict(os.environ, env):
+            for var in ("HUB_LLM_POINT", "HUBBUS_LEASE"):
+                os.environ.pop(var, None)
+            self.assertEqual(m.main(["--runtime", "claude", "wait"]), 0)
+        self.assertEqual(self.files(), [], "nothing armed, nothing kept")
+        self.assertIn("wait - ran=headless", m.LOG.read_text())
+
+    def test_a_platform_run_reads_its_input_and_does_nothing(self):
+        m = self.hub_event()
+        with self.stdin(self.raw()), mock.patch.dict(os.environ, {"HUB_LLM_POINT": "librarian"}):
+            self.assertEqual(m.main(["--runtime", "claude", "wait"]), 0)
+        self.assertEqual(self.files(), [])
+        self.assertFalse(m.LOG.exists())
+
+    def test_the_hook_declares_the_waiters_own_timeout(self):
+        self.assertEqual(self.rc.wait_hook()["timeout"], self.rc.WAIT_TIMEOUT_S)
 
 
 class WaitLifetime(tmw.ClaudeSessionsDir):
@@ -618,34 +618,108 @@ class SessionStatus(unittest.TestCase):
         self.assertEqual(rt.session_status(self.SID), "unknown")
 
 
-class CharacterizeWorktreeMail(tbs.WorktreeFixture):
-    """A linked worktree's mail: told in an open project; in a sandboxed one its re-run can't reach the bus."""
+class WorktreeMail(tbs.WorktreeFixture):
+    """A linked worktree's mail goes through `hub-event worktree`, outside any sandbox, through the real script with the
+    runtime's real hook input. Before: told in an open project, and in a sandboxed one the re-run couldn't reach the bus."""
+
+    def hook_env(self):   # the after-tool rate limit's stamp is per session id, in the temp folder
+        return {**super().hook_env(), "TMPDIR": str(self.tmp)}
 
     def told(self, text):
         [letter] = [r["id"] for r in self.rows("type='message'") if json.loads(r["payload"]).get("text") == text]
         return [json.loads(r["payload"]).get("session") for r in self.rows("type='message.delivered' AND ref=?", (letter,))]
 
-    def hook_out(self, what, wt, name):
-        payload = json.dumps({"session_id": self.SID, "cwd": str(wt), "hook_event_name": name, "prompt": "hello"})
+    def hook_out(self, what, wt, name, **extra):
+        payload = json.dumps({"session_id": self.SID, "cwd": str(wt), "hook_event_name": name, "prompt": "hello", **extra})
         r = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), what], cwd=wt, input=payload + "\n",
                            capture_output=True, text=True, timeout=120, env=self.hook_env())
         self.assertEqual(r.returncode, 0, r.stderr)
         return r.stdout
 
-    def test_an_open_project_is_told(self):
+    def context(self, out):
+        """A hook's stdout as the runtime reads it: one JSON object, or nothing it can use."""
+        return json.loads(out)["hookSpecificOutput"]["additionalContext"]
+
+    def test_an_open_project_is_told_once(self):
         wt = self.tree("open")
         self.letter_to("open", "for the open project", typ="request")
         out = self.hook_out("prompt", wt, "UserPromptSubmit")
-        self.assertIn("for the open project", out)
+        self.assertIn("for the open project", self.context(out))
+        self.assertEqual(self.told("for the open project"), [self.SID])
+        self.assertNotIn("for the open project", self.hook_out("prompt", wt, "UserPromptSubmit"))
         self.assertEqual(self.told("for the open project"), [self.SID])
 
-    @unittest.skipUnless(tbs.seatbelt.can_sandbox() is None, "needs Seatbelt")
-    def test_a_sandboxed_project_is_told_nothing_silently(self):
+    def test_a_sandboxed_project_is_told(self):
         wt = self.tree("box")
         self.letter_to("box", "for the box", typ="request")
         out = self.hook_out("prompt", wt, "UserPromptSubmit")
-        self.assertNotIn("for the box", out)
-        self.assertEqual(self.told("for the box"), [])
+        self.assertIn("for the box", self.context(out))
+        self.assertEqual(self.told("for the box"), [self.SID])
+        self.assertTrue(self.record().exists(), "on record first: a tick in between mustn't judge it closed")
+        self.assertEqual(json.loads(self.record().read_text())["project"], "box")
+
+    def test_a_sandboxed_project_is_told_at_its_start_and_after_a_tool(self):
+        for what, name, extra in (("start", "SessionStart", {}), ("nudge", "PostToolUse", {"tool_input": {"command": "ls"}})):
+            with self.subTest(what=what):
+                wt = self.tree("box") if what == "start" else self.wt
+                self.wt = wt
+                self.letter_to("box", f"for the box at {what}", typ="request")
+                out = self.hook_out(what, wt, name, **extra)
+                self.assertIn(f"for the box at {what}", out)
+                self.assertEqual(self.told(f"for the box at {what}"), [self.SID])
+
+    def test_the_hook_the_platform_may_have_written_too_tells_nothing_twice(self):
+        """The sandboxed worktree's own settings carry hub-event's hooks; if the session picked them up, both run."""
+        wt = self.tree("box")
+        self.letter_to("box", "for the box", typ="request")
+        payload = json.dumps({"session_id": self.SID, "cwd": str(wt), "hook_event_name": "UserPromptSubmit", "prompt": "hi"})
+        first = subprocess.run([sys.executable, str(BIN / "hub-event"), "--runtime", "claude", "prompt"], cwd=wt, input=payload,
+                               capture_output=True, text=True, timeout=60, env=self.hook_env())
+        self.assertIn("for the box", first.stdout)
+        self.assertNotIn("for the box", self.hook_out("prompt", wt, "UserPromptSubmit"))
+        self.assertEqual(self.told("for the box"), [self.SID])
+
+    def behind(self, project):
+        """A worktree whose memory notes are two commits behind, with its link to them (what `start` makes)."""
+        wt = self.tree(project)
+        ws, env = self.ws[project], {**os.environ, **tbs.GIT_ENV}
+        mem = ws / ".agent-memory"
+        (mem / "memory").mkdir()
+        (mem / "AGENT.md").write_text("x")
+        old = {**env, "GIT_AUTHOR_DATE": "2020-01-01T00:00:00", "GIT_COMMITTER_DATE": "2020-01-01T00:00:00"}
+        for args, e in ((("init", "-q", "-b", "agent-memory"), env), (("add", "AGENT.md"), env), (("commit", "-qm", "x"), old)):
+            subprocess.run(["git", "-C", str(mem), *args], check=True, env=e)
+        (ws / "g").write_text("y")
+        subprocess.run(["git", "-C", str(ws), "add", "g"], check=True, env=env)
+        subprocess.run(["git", "-C", str(ws), "commit", "-qm", "feat: more"], check=True, env=env)
+        subprocess.run(["git", "-C", str(wt), "reset", "-q", "--hard", "main"], check=True, env=env)
+        (wt / ".agent-memory").symlink_to(mem)
+        return wt
+
+    def test_a_letter_and_a_reminder_come_as_one_output(self):
+        """Printed apart they'd be two JSON documents, which the runtime reads as none: the letter told, and lost."""
+        for project in ("open", "box"):
+            with self.subTest(project=project):
+                wt = self.behind(project)
+                self.letter_to(project, f"for {project}", typ="request")
+                out = self.hook_out("nudge", wt, "PostToolUse", tool_input={"command": "git commit -m x"})
+                self.assertIn(f"for {project}", self.context(out))
+                self.assertIn(".agent-memory/memory/", self.context(out))
+                (pathlib.Path(self.tmp) / f"hubbus-post-tool-{self.SID}").unlink()
+
+    def test_a_tool_that_commits_nothing_gets_no_reminder(self):
+        wt = self.behind("box")
+        out = self.hook_out("nudge", wt, "PostToolUse", tool_input={"command": "ls"})
+        self.assertNotIn(".agent-memory/memory/", out)
+
+    def test_a_broken_record_doesnt_stop_the_mail(self):
+        wt = self.tree("open")
+        self.letter_to("open", "for the open project", typ="request")
+        env = {**self.hook_env(), "CLAUDE_PID": "not a pid"}
+        payload = json.dumps({"session_id": self.SID, "cwd": str(wt), "hook_event_name": "UserPromptSubmit", "prompt": "hi"})
+        r = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), "prompt"], cwd=wt, input=payload + "\n",
+                           capture_output=True, text=True, timeout=120, env=env)
+        self.assertIn("for the open project", r.stdout)
 
 
 class Detach(unittest.TestCase):
