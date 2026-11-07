@@ -94,6 +94,8 @@ class Dispatch(unittest.TestCase):
             self.prompts.append(prompt)
 
         m.run_handler, m.resume = run_handler, resume
+        # mailbox-route starts a process: off here, so a pick past the thread is recency; tests.test_mailbox_route_call has it
+        m.real_model_pick, m.model_pick = m.model_pick, lambda *a, **k: None
         self.rt = FakeRuntime()
         self.c = m.db()
         self.addCleanup(self.c.close)

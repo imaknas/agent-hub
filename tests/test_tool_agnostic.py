@@ -17,7 +17,9 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 # the nightly core: judgment points that must run for someone with only an API key and no coding agent at all
-CORE = {"librarian-state", "librarian-todo-format", "librarian-index", "reflect-week"}
+CORE = {"librarian-state", "librarian-todo-format", "librarian-index", "reflect-week",
+        # not nightly, but every letter with a choice of sessions goes through it (mailbox-session-first.md, Picking one)
+        "mailbox-route"}
 # not yet converted to completion (switched only once the shadow-mode comparison is clean; llm-providers.md step 4)
 PENDING = {"librarian-state", "librarian-todo-format", "librarian-index"}
 

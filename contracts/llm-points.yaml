@@ -19,7 +19,9 @@
 # 0;
 #   everything else is structured_output: null, exit 1, and the caller takes its own failure path (what is marked above
 #   is what that path does).
-# Either way, job.failed (point, reason) is recorded on the bus.
+# Either way, job.failed (point, reason) is recorded on the bus; except through llm.answer (mailbox-route), which prints
+#   and publishes nothing, since a reason can quote the model: its caller says in fixed words that there was no answer.
+# max_attempts: the most requests one completion call makes, every retry counted (1: none).
 #
 # shape: completion (the model has no tools and only returns an answer; when hub.json has an llm block it goes to
 #   completion.py, any provider) | agent (coding agent).
@@ -257,6 +259,22 @@ points:
     timeout_s: 1800
     # nothing is applied, sent or closed; propose_apply records job.failed, holds the letter and asks the owner why
     on_failure: say_so
+  mailbox-route:
+    caller: "bin/hubbus (dispatch → bin/mailbox_route.py, in the background, through llm.answer)"
+    shape: completion
+    model_group: fast
+    purpose: "a request or question with several live sessions of its project to go to and nothing in its thread to pick one: which session gets it (docs/design/mailbox-session-first.md, Picking one)"
+    # Its input is a letter any project can send, a sandboxed one included: one request a call (max_attempts), a short
+    # answer, and a schema with no enum or pattern, so an error can't echo a value. llm.answer prints and publishes
+    # nothing, since a reason can quote the model: no job.failed, dispatch logs the miss in fixed words
+    tools: ""
+    output: {format: json, schema: llm/mailbox-route.schema.json}
+    max_tokens: 200
+    max_attempts: 1
+    timeout_s: 60
+    # the platform takes only an id from the candidates it computed; anything else, or no answer in two ticks, and the
+    # most recently active session gets it
+    on_failure: default
   mailbox-conversation:
     caller: bin/hubbus (dispatch → llm.py run, with runtime_claude.resume_args)
     shape: agent

@@ -2567,6 +2567,16 @@ class Tick:
         self.c, self.rt, self.live, self.opened, self.leases = c, rt, live, opened, leases
         self.statuses, self.owed, self.on, self.wakeable = {}, {}, {}, {}
         self.listed, self.spent = False, 0.0
+        self.asked, self.where = set(), None   # projects a mailbox-route call started for this tick; where the point runs
+
+    def route_target(self):
+        """Where mailbox-route would run, looked up once a tick: a target, or None when it can't run anywhere (said once)."""
+        if self.where is None:
+            tgt, why = route_target()
+            log_once("route-off", _("mailbox-route can't run, so the most recently active session gets each letter: {why}",
+                                    why=why) if tgt is None else "")
+            self.where = (tgt,)
+        return self.where[0]
 
     def wake_on(self, proj) -> bool:
         if proj not in self.on:
@@ -2675,14 +2685,104 @@ def most_recent(c, cands: list[str]) -> str:
     return max(sorted(cands), key=lambda s: seen.get(s) or "")
 
 
-def pick(c, r, cands: list[str]) -> tuple[str, str]:
+def pick(c, t, r, cands: list[str], ws=None) -> tuple[str, str] | None:
     """Which one, and how it was picked (message.routed's by), design "Picking one": the only one; the to_session or the last to
-    act in the thread; the mailbox-route model call will go here, read on a later tick (step 5); the most recently active."""
+    act in the thread; the mailbox-route model's pick, read on a later tick; the most recently active. None: the model is
+    being asked, and the letter waits for its answer this tick."""
     if len(cands) == 1:
         return cands[0], "only"
     to_s = payload(r).get("to_session")
     thread = to_s if to_s in cands else last_in_thread(c, r, cands)
-    return (thread, "thread") if thread else (most_recent(c, cands), "recent")
+    if thread:
+        return thread, "thread"
+    got = model_pick(c, t, r, cands, ws)
+    if got is ASKING:
+        return None
+    return (got, "model") if got else (most_recent(c, cands), "recent")
+
+
+ASKING = object()   # model_pick: the call is under way
+
+
+def route_target():
+    """mailbox_route.target(), here so a test can say where the point runs."""
+    import mailbox_route
+    return mailbox_route.target()
+
+
+def model_pick(c, t, r, cands: list[str], ws=None):
+    """mailbox-route (bin/mailbox_route.py): the session its call picked, if that is still a candidate; ASKING while the call
+    runs (at most WAIT_S); None for recency: off, the call gave no answer or one outside the list, the letter's one call
+    spent, this tick's call for the project already started, or its day's calls used up. A call is started here, in the
+    background, and never waited on. What the model wrote reaches the bus only as an id checked against these candidates;
+    a miss is logged in fixed words, once until a call answers again (no job.failed: a reason can quote the model)."""
+    import mailbox_route as mr
+    proj = r["to_project"]
+    done = mr.call_of(r["id"])
+    if done is not None:
+        if done.get("done"):
+            return None
+        state, sid = mr.read_answer(r["id"])
+        if state == "pending" and time.time() - done["ts"] < mr.WAIT_S:
+            return ASKING
+        mr.consume(r["id"])
+        if state == "answer" and sid in cands:
+            log_once(f"route-{proj}", "")
+            return sid
+        log_once(f"route-{proj}", _("{project}: mailbox-route gave no usable answer for a letter; the most recently active "
+                                    "session was picked", project=proj))
+        return None
+    if proj in t.asked or t.route_target() is None or mr.calls_today(own_names(proj)) >= mr.DAILY_CALLS:
+        return None
+    t.asked.add(proj)
+    return ASKING if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws), cands) else None
+
+
+def route_prompt(c, t, r, cands: list[str], ws=None) -> str:
+    """What mailbox-route reads (design "Picking one", "The last reply"): the letter's sender (an address, or ?), type and the
+    start of its text; for each candidate, the most recently active first and at most MAX_CANDIDATES, its id, its folder under
+    the project, minutes since its last hook, what it is doing, and its last reply where mailbox_route.text_allowed lets it.
+    No branch, nothing read from the session's folder, and from a session nothing else it wrote."""
+    import mailbox_route as mr
+    proj, p = r["to_project"], payload(r)
+    q = ",".join("?" * len(cands))
+    seen = {e["session"]: e["seen"] for e in c.execute(f"SELECT session, seen FROM presence WHERE session IN ({q})", cands)}
+    order = sorted(sorted(cands), key=lambda s: seen.get(s) or "", reverse=True)[:mr.MAX_CANDIDATES]
+    tgt, rows = t.route_target(), []
+    for sid in order:
+        rec = t.opened.get(sid) or {}
+        row = {"session": sid, "folder": folder_name(rec.get("cwd"), ws), "idle_minutes": minutes_since(seen.get(sid)),
+               "doing": t.statuses.get(sid)}
+        if mr.text_allowed(tgt, rec.get("runtime"), proj):
+            try:
+                row["last_reply"] = t.rt.session_summary(sid) if callable(getattr(t.rt, "session_summary", None)) else None
+            except Exception:   # a summary that can't be read is none
+                row["last_reply"] = None
+        rows.append(row)
+    sender = sender_of(r)
+    return mr.prompt(proj, {"from": sender if valid_address(sender) else "?", "type": p.get("type"), "text": p.get("text")},
+                     rows)
+
+
+def folder_name(cwd, ws) -> str | None:
+    """A session's folder as the model may see it: "main" for the project's own, the last part of a folder under it (a
+    worktree's name), or nothing for one elsewhere: another project's folder names aren't this prompt's."""
+    if not isinstance(cwd, str) or ws is None:
+        return None
+    try:
+        here, top = pathlib.Path(cwd).resolve(), pathlib.Path(ws).resolve()
+    except (OSError, RuntimeError):
+        return None
+    if here == top:
+        return "main"
+    return here.name if here.is_relative_to(top) else None
+
+
+def minutes_since(ts) -> int | None:
+    try:
+        return max(0, int((now() - datetime.datetime.fromisoformat(ts)).total_seconds() // 60)) if ts else None
+    except (TypeError, ValueError):
+        return None
 
 
 def route_to(c, r, sid, by, alive) -> bool:
@@ -2864,9 +2964,10 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
                 log_once(f"daily-wakes-{proj}", "")
             free = [s for s in ready if t.status(s) != "waiting"]
             if free:
-                sid, by = pick(c, r, free)
-                if route_to(c, r, sid, by, alive) and t.status(sid) in ("idle", "unknown"):
-                    t.owe(proj, sid, r)
+                # None: mailbox-route is being asked; the letter isn't routed yet, so a hook can still show it meanwhile
+                if (picked := pick(c, t, r, free, ws)) and route_to(c, r, *picked, alive) \
+                        and t.status(picked[0]) in ("idle", "unknown"):
+                    t.owe(proj, picked[0], r)
                 waiting += 1
                 continue
             # 4. Only sessions with a dialog open are left: not woken, not tried; for an hour, then as if they weren't there
@@ -3272,6 +3373,8 @@ def prune(c) -> None:
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
     c.execute("COMMIT")
     prune_wake_addresses()
+    import mailbox_route
+    mailbox_route.prune()   # what mailbox-route's calls left for letters past routing
     for f in (hubconf.STATE / "hubbus-post-tool").glob("*"):   # one per session, of use for seconds
         if time.time() - f.lstat().st_mtime > 86400:
             f.unlink(missing_ok=True)

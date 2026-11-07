@@ -195,6 +195,8 @@
  "{project}: woke the session {session} for {n} {n:letter|letters}": "{project}:為 {n} 封信叫醒 session {session}",
  "{project}: could not wake the session {session} for {n} {n:letter|letters}{why}": "{project}:為 {n} 封信叫不醒 session {session}{why}",
  "{project}: {id} routed to the session {session} ({by})": "{project}:{id} 派給 session {session}({by})",
+ "mailbox-route can't run, so the most recently active session gets each letter: {why}": "mailbox-route 跑不了,所以每封信都給最近活動的 session:{why}",
+ "{project}: mailbox-route gave no usable answer for a letter; the most recently active session was picked": "{project}:mailbox-route 對一封信沒給出可用的答案,改給最近活動的 session",
  "{project}: {max} {max:wake|wakes} today already; no more routes today (triage and hooks go on)": "{project}:今天已叫醒 {max} 次,今天不再派信(triage 和 hook 照常)",
  "{project}: {id}: the session woken for it wasn't told within {minutes} {minutes:minute|minutes}; going on": "{project}:{id}:叫醒的 session {minutes} 分鐘內沒讀到信,往下走"
 }

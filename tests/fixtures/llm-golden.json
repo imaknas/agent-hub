@@ -1215,6 +1215,78 @@
   "exit": 0,
   "token_passed": true
  },
+ "mailbox-route/default": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the id of the one candidate session the letter should go to, copied exactly from the list\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-route/model": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "golden-model",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the id of the one candidate session the letter should go to, copied exactly from the list\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
+ "mailbox-route/subscription": {
+  "auth": "subscription",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the id of the one candidate session the letter should go to, copied exactly from the list\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": false
+ },
+ "mailbox-route/token": {
+  "auth": "token",
+  "cmd": [
+   "claude",
+   "-p",
+   "golden prompt",
+   "--model",
+   "haiku",
+   "--tools",
+   "",
+   "--output-format",
+   "json",
+   "--json-schema",
+   "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the id of the one candidate session the letter should go to, copied exactly from the list\"}}}"
+  ],
+  "exit": 0,
+  "token_passed": true
+ },
  "reflect-week/default": {
   "auth": "token",
   "cmd": [
