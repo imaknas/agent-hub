@@ -252,14 +252,88 @@ class DispatchPerProject(tmt.Base):
         self.assertEqual(self.handled[-1][0], "proj", "it goes on once it can")
 
 
-class CharacterizeOwnerQuestion(tmt.Base):
-    def test_a_run_s_question_on_an_asks_letter_carries_its_handoff(self):
+class OwnerQuestion(tmt.Base):
+    """A confined run's question on a letter that carries a handoff stays a question: it reaches the owner, it is no answer."""
+
+    def asks(self):
         self.m.publish(self.c, "asks", "message", self.owner, "proj", None,
                        {"type": "question", "text": "x", "effect": "asks", "handoff_id": 7})
-        self.cli("send", "--to", self.owner, "--reply-to", "asks", "--type", "question", "--text", "which one?",
-                 env=tmt.with_letters(tmt.ESCALATION, "asks"))
+
+    def ask(self, env, *extra):
+        self.cli("send", "--to", self.owner, "--reply-to", "asks", "--type", "question", "--text", "which one?", *extra, env=env)
+
+    def question(self):
         [q] = self.rows("type='message' AND source='proj'")
-        self.assertEqual(self.m.to_assistant(self.c, q)["handoff_id"], 7, "said as the project's answer")
+        return q
+
+    def test_a_handlers_goes_without_the_handoff(self):
+        self.asks()
+        self.ask(tmt.with_letters(tmt.ESCALATION, "asks"))
+        q = self.question()
+        item = self.m.to_assistant(self.c, q)
+        self.assertEqual(item["text"], "which one?", "it reaches the owner")
+        self.assertNotIn("handoff_id", item, "not said as the project's answer")
+        self.assertIsNone(q["ref"])
+        self.assertEqual(self.state("asks").taken, "", "the letter stays open")
+
+    def test_a_forks_too(self):
+        self.asks()
+        self.ask(tmt.with_letters(tmt.FORK, "asks"))
+        self.assertNotIn("handoff_id", self.m.to_assistant(self.c, self.question()))
+
+    def test_a_confined_run_with_no_letters_too(self):
+        self.asks()
+        self.ask(tmt.EVENT_JOB)
+        self.assertNotIn("handoff_id", self.m.to_assistant(self.c, self.question()))
+
+    def test_as_a_record_it_is_a_question_the_owner_side_can_answer(self):
+        self.m.RECORDS = True
+        self.asks()
+        self.ask(tmt.with_letters(tmt.ESCALATION, "asks"))
+        [r] = [json.loads(x["payload"]) for x in self.rows("type='record' AND source='proj'")]
+        self.assertEqual((r["record"]["type"], r["record"]["terms"]["text"]), ("raised", "which one?"))
+
+    def test_a_session_still_replies_as_before(self):
+        self.asks()
+        self.ask({})
+        self.assertEqual(self.m.to_assistant(self.c, self.question())["handoff_id"], 7, "not a confined run: unchanged")
+
+    def test_its_real_answer_still_carries_the_handoff(self):
+        self.asks()
+        self.cli("send", "--to", self.owner, "--reply-to", "asks", "--type", "done", "--text", "the answer",
+                 env=tmt.with_letters(tmt.ESCALATION, "asks"))
+        self.assertEqual(self.m.to_assistant(self.c, self.question())["handoff_id"], 7)
+
+    def test_a_letter_with_no_handoff_keeps_its_thread(self):
+        self.send("m1", "proj", "request")
+        self.cli("send", "--to", self.owner, "--reply-to", "m1", "--type", "question", "--text", "which one?",
+                 env=tmt.with_letters(tmt.ESCALATION, "m1"))
+        self.assertEqual(self.question()["ref"], "m1")
+
+
+class SandboxedOwnerQuestion(tbs.Fixture):
+    """The same through a sandboxed project's outbox and view: what the run writes is what the bus gets."""
+
+    @unittest.skipUnless(tbs.seatbelt.can_sandbox() is None, "needs Seatbelt")
+    def test_the_file_carries_no_reply(self):
+        self.letter_to("open", "a bus to be on")
+        m = tbs.load_hubbus()
+        m.DB = self.tmp / "bus" / "bus.db"
+        c = m.db()
+        self.addCleanup(c.close)
+        owner = m.OWNER_ADDRESS
+        m.publish(c, "asks1", "message", owner, "box", None,
+                  {"type": "question", "text": "x", "effect": "asks", "handoff_id": 7})
+        self.dispatch()
+        self.env.update(HUB_LLM_POINT="mailbox-escalation", AGENT_HUB_CONFINED="1", MAILBOX_LETTERS=json.dumps(["asks1"]))
+        r = self.in_sandbox("send", "--to", owner, "--reply-to", "asks1", "--type", "question", "--text", "which one?")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for var in ("HUB_LLM_POINT", "AGENT_HUB_CONFINED", "MAILBOX_LETTERS"):
+            del self.env[var]
+        self.dispatch()
+        got = [json.loads(x["payload"]) for x in self.rows("source='box'")]
+        self.assertFalse([p for p in got if p.get("handoff_id") is not None], got)
+        self.assertTrue(got, "it reached the bus")
 
 
 if __name__ == "__main__":

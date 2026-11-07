@@ -3275,6 +3275,17 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     return mid
 
 
+def not_the_answer(c, a) -> bool:
+    """A confined run's question to the owner on a letter that carries a handoff: it goes as a question of its own, no reply
+    to that letter. As a reply it would carry the handoff, and the assistant would say the question as the project's answer
+    and mark the handoff done. Sent, not refused: a run told no may not ask again, and then nobody is asked. An outbox file
+    can't prove it came from such a run, so this holds where the run sends it, as run_refusal does."""
+    if a.cmd != "send" or not a.reply_to or a.type != "question" or canon(a.to) not in OWNERS:
+        return False
+    r = get_message(c, a.reply_to)
+    return r is not None and payload(r).get("handoff_id") is not None
+
+
 def mail_command(a) -> None:
     """send / inbox / show / thread / ack / done / open-questions / publish. For a sandboxed project the reads come
     from its view and the writes go into its outbox, after the same checks against the view that the platform makes
@@ -3295,6 +3306,8 @@ def mail_command(a) -> None:
     c = view_db(box) if box else db()
     if letters is not None and (why := run_refusal(c, a, letters, here, Live(me=session, c=c))):
         refuse(why)
+    if (letters is not None or names.env("CONFINED")) and not_the_answer(c, a):
+        a.reply_to = None
     if a.cmd == "publish":
         pl = json.loads(a.payload)
         if box:
