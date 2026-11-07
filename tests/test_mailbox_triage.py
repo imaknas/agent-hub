@@ -236,19 +236,44 @@ class ProposeRefused(Base):
     def refused_with(self, docs):
         self.real_handler()
         self.send("m1", "proj", "request")
+        self.send("m2", "proj", "request")
         started = []
         with mock.patch.object(self.m.subprocess, "Popen", lambda cmd, **kw: started.append(cmd)), \
                 mock.patch.object(self.m.hubconf, "projects", lambda: docs), \
                 mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
-            self.dispatch()
+            for _i in range(3):
+                self.dispatch()
+                self.c.execute("UPDATE events SET ts=? WHERE type='job.failed'", (tms.ago(self.m.START_RETRY_MIN + 1),))   # were it a retry, it's due
             why = load_propose().unsupported("proj")
+            status = self.status()
         self.assertEqual(started, [], "no run")
-        self.assertEqual(self.vias("m1"), [], "no triage spent, and nobody holds it")
+        for mid in ("m1", "m2"):
+            self.assertEqual(self.vias(mid), [], "no triage spent, and nobody holds it")
+            self.assertEqual(self.rows("id=?", f"{mid}:received"), [], "no word to the sender about a run that isn't")
+            self.assertEqual(self.rows("type='message.done' AND ref=?", mid), [], "never closed as handled")
+            self.assertEqual(self.rows("type='job.failed' AND ref=?", mid), [], "not a start that failed")
         self.assertEqual(self.m.runs_today(self.c, "proj"), 0)
-        self.assertEqual(self.rows("id='m1:received'"), [], "no word to the sender about a run that isn't")
-        self.assertEqual(self.rows("type='message.done' AND ref=?", "m1"), [], "never closed as handled")
-        self.assertEqual(json.loads(self.rows("type='job.failed' AND ref=?", "m1")[0]["payload"])["detail"], why)
+        failed = self.rows("type='job.failed'")
+        self.assertEqual(len(failed), 1, "one a day, however many letters and ticks")
+        self.assertEqual(failed[0]["id"], f"propose-refused:proj:{self.m.now():%Y%m%d}", "by the day")
+        self.assertEqual(json.loads(failed[0]["payload"])["detail"], why)
+        self.assertEqual({w["id"]: w["why"] for w in status["waiting"]}, {"m1": "refused", "m2": "refused"})
+        self.assertEqual(status["stuck"], [], "it waits for a session: not a letter nobody handled, one red line each")
         return why
+
+    def test_a_session_is_still_told(self):
+        self.refused_with({"proj": {"enforce": {"sandbox": True}}})
+        told = [r["id"] for r in self.m.inbox(self.c, "proj")]
+        self.assertEqual(sorted(told), ["m1", "m2"])
+
+    def test_the_handler_changing_lets_it_start_again(self):
+        self.refused_with({"proj": {"enforce": {"sandbox": True}}})
+        started = []
+        with mock.patch.object(self.m.subprocess, "Popen", lambda cmd, **kw: started.append(cmd)), \
+                mock.patch.object(self.m.hubconf, "projects", lambda: {"proj": {}}), \
+                mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
+            self.dispatch()
+        self.assertEqual(len(started), 1, "nothing was spent, so nothing stands in the way")
 
     def test_sandboxed(self):
         self.assertIn("proj", self.refused_with({"proj": {"enforce": {"sandbox": True}}}))
@@ -322,7 +347,7 @@ class StartFailed(Base):
 
         def nope(*a, **k):
             raise OSError("no such file")
-        with mock.patch.object(self.m.subprocess, "Popen", nope), \
+        with mock.patch.object(self.m.subprocess, "Popen", nope), mock.patch.object(self.m.hubconf, "projects", lambda: {"proj": {}}), \
                 mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
             self.dispatch()
         self.assertEqual(self.vias("m1"), [])

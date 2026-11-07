@@ -236,6 +236,9 @@ def _status(project: str, state: str, **extra) -> None:
 
 
 def mailbox(project: str, ids: list[str]) -> int:
+    if (why := unsupported(project)):   # no run, so nothing to hold and nothing to ask anyone about
+        print(why, file=sys.stderr)
+        return 1
     _status(project, "running", ids=ids)
     try:
         return _mailbox(project, ids)

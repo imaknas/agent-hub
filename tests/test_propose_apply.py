@@ -168,15 +168,15 @@ class ProposeApply(unittest.TestCase):
         mid = self.letter()
         r = self.run_("propose_apply.py", "mailbox", "demo", mid)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        out = json.loads(r.stdout.strip().splitlines()[-1])
-        self.assertEqual((out["ok"], out["applied"], out["done"]), (False, [], []))
-        self.assertIn("demo", out["error"])
+        self.assertIn("demo", r.stderr)
         self.assertFalse((self.tmp / "tries.json").exists(), "the agent never ran")
+        self.assertFalse((self.tmp / "state" / "agent-jobs" / "mailbox-demo").exists(), "no status of a run that wasn't")
         self.assertFalse(list((self.tmp / "secrets").rglob("hub-propose-*")))
         self.assertEqual(sh("git", "worktree", "list", "--porcelain", cwd=self.ws).count("worktree "), 1)
         import sqlite3
         c = sqlite3.connect(next((self.tmp / "bus").rglob("*.db")))
-        self.assertEqual(c.execute("SELECT count(*) FROM events WHERE type='message.done' AND ref=?", (mid,)).fetchone()[0], 0, "never closed as handled")
+        self.assertEqual(c.execute("SELECT count(*) FROM events WHERE ref=?", (mid,)).fetchone()[0], 0, "not closed, not held, no question to the owner")
+        self.assertEqual(c.execute("SELECT count(*) FROM events WHERE type='job.failed'").fetchone()[0], 0)
 
     def test_note_a_hook_committed_is_still_adopted(self):
         """a session-end hook of the agent's runtime commits the memory notes inside the throwaway worktree (10-31): the

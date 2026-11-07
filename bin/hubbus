@@ -2302,6 +2302,10 @@ def run_handler(c, proj, ws, rows) -> None:
     rows = [r for r in rows if not has_via(c, r["id"], "triage") and may_start(c, r)]
     if not rows:
         return
+    if (why := propose_refusal(proj)):
+        propose_refused(c, proj, why)
+        return
+    log_once(f"propose-refused-{proj}", "")
     # one at a time per project, whichever of its names a handler still running was started under
     for name in own_names(proj):
         try:
@@ -2337,14 +2341,28 @@ def run_handler(c, proj, ws, rows) -> None:
         _("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", **said))
 
 
+def propose_refusal(proj) -> str | None:
+    """Why this project's letters get no propose run, when that is the handler."""
+    if (hubconf.get("mailbox") or {}).get("handler") != "propose":
+        return None
+    import propose_apply
+    return propose_apply.unsupported(proj)
+
+
+def propose_refused(c, proj, why: str) -> None:
+    """Not a start that failed: it can't pass, so no tries. Nothing started and nothing spent: the letter stays open and sessions are
+    told as ever. On the status page once a day per project, however many letters ask (anyone can send them: job_failed_24h is short),
+    as dispatch_failed is."""
+    log_once(f"propose-refused-{proj}", why)
+    publish(c, f"propose-refused:{proj}:{now():%Y%m%d}", "job.failed", "hubbus-dispatch", None, None,
+            {"job": f"mailbox-propose:{proj}", "detail": storable(why)})
+
+
 def start_handler(proj, ws, rows) -> str | None:
     """Start the run for these letters. Why it couldn't, or None."""
     letters = json.dumps([r["id"] for r in rows], ensure_ascii=False)
     try:
         if (hubconf.get("mailbox") or {}).get("handler") == "propose":
-            import propose_apply
-            if (why := propose_apply.unsupported(proj)):
-                return why   # nothing started, nothing spent: the letter stays open for sessions, and this shows
             # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
             # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
             # in the background; it writes status.json itself (running → done), one at a time per project
@@ -3174,6 +3192,7 @@ def cmd_status(as_json: bool) -> None:
             mcp = mcp_sessions(c, proj) if any(not r["delivered"] and r["ts"] >= hold_cut for r in todo) else []
             by = sorted({m["runtime"] or "mcp" for m in mcp})
             spent = bool(todo) and runs_today(c, proj) >= DAILY_RUNS
+            refused = bool(todo) and propose_refusal(proj)
             for r in todo:
                 st = letter_state(c, r, live)
                 one = {"id": r["id"], "to": proj, "ts": r["ts"]}
@@ -3184,7 +3203,7 @@ def cmd_status(as_json: bool) -> None:
                 elif (why := "routed" if st.held else "triaged" if has_via(c, r["id"], "triage")
                         else "held" if has_via(c, r["id"], "held")
                         else ("old" if r["delivered"] else None) if r["ts"] < run_cut
-                        else "budget" if spent else None):
+                        else "budget" if spent else "refused" if refused else None):
                     # someone has it, or the platform has tried what it can: it waits, nothing is wrong. A letter too old
                     # for a run that nothing ever tried, nobody seen it, is not quiet: it stays stuck
                     waiting.append({**one, "why": why, **({"session": st.holder} if st.holder else {})})

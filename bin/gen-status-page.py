@@ -318,7 +318,8 @@ def waiting_label(w: dict) -> str:
     if w.get("why") == "routed":
         return _("session {session} has it", session=w["session"][:8]) if w.get("session") else _("seen, held for now")
     return {"triaged": _("triaged, waiting for a session"), "held": _("the loop guard asked the owner"),
-            "old": _("too old for a platform run"), "budget": _("today's runs are used up")}.get(w.get("why"), w.get("why", ""))
+            "old": _("too old for a platform run"), "budget": _("today's runs are used up"),
+            "refused": _("no propose run for this project; its sessions handle it")}.get(w.get("why"), w.get("why", ""))
 
 
 def letter_paths(letters: list) -> str:
