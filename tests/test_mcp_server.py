@@ -171,7 +171,11 @@ class Server(unittest.TestCase):
                     "name": "connect_project", "arguments": {"path": str(code / "notes")}}},
                 {"jsonrpc": "2.0", "id": 2, "method": "ping"},   # arrives while the server waits: answered after
                 {"jsonrpc": "2.0", "id": "agenthub-elicit-1", "result": {"action": "decline"}}]
-        r = subprocess.run([sys.executable, str(BIN / "mcp_server.py")], input="".join(json.dumps(m) + "\n" for m in msgs),
+        # the hidden check off: this fixture's temp folder can be under the instance's, which is itself hidden (bin/test-runner.py)
+        code_run = ("import runpy, sys; sys.path.insert(0, sys.argv[1]); import connect; connect.hidden = lambda p: False; "
+                    "sys.argv = sys.argv[2:]; runpy.run_path(sys.argv[0], run_name='__main__')")
+        r = subprocess.run([sys.executable, "-c", code_run, str(BIN), str(BIN / "mcp_server.py")],
+                           input="".join(json.dumps(m) + "\n" for m in msgs),
                            env=self.env, cwd=self.tmp, capture_output=True, text=True, timeout=120)
         out = [json.loads(x) for x in r.stdout.splitlines()]
         self.assertEqual(out[1]["method"], "elicitation/create", r.stdout)
@@ -193,7 +197,9 @@ class Server(unittest.TestCase):
         m = importlib.util.module_from_spec(spec)
         loader.exec_module(m)
         done = subprocess.CompletedProcess([], 0, "connected", "")
-        with mock.patch.object(m.hubconf, "project_roots", lambda: [code.resolve()]), \
+        import connect
+        with mock.patch.object(connect, "hidden", lambda p: False), \
+             mock.patch.object(m.hubconf, "project_roots", lambda: [code.resolve()]), \
              mock.patch.object(m.subprocess, "run", return_value=done) as run, \
              mock.patch.dict(os.environ, {"HUBBUS_LEASE": "", "HUB_LLM_POINT": ""}):
             ok, text = m.outside("connect_project", {"path": str(code / "notes")}, m.Client())

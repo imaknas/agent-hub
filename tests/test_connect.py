@@ -46,7 +46,9 @@ class Connect(unittest.TestCase):
         patches = [mock.patch.object(connect.hubconf, "projects", lambda: self.projects),
                    mock.patch.object(connect.hubconf, "MAIN", self.tmp / "hub"),
                    mock.patch.object(connect.hubconf, "instance_home", lambda: self.tmp / "instance"),
-                   mock.patch.object(connect.pathlib.Path, "home", classmethod(lambda cls: self.home))]
+                   mock.patch.object(connect.pathlib.Path, "home", classmethod(lambda cls: self.home)),
+                   # from this fixture down: the test runner's temp folder is under the instance's, which is itself hidden
+                   mock.patch.object(connect, "hidden", lambda p: any(x.startswith(".") for x in p.relative_to(self.tmp).parts))]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
