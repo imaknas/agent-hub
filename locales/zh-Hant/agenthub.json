@@ -229,5 +229,7 @@
  "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said": "執行環境 {runtime} 沒有{missing}:分派信件時把它的 session 當作閒置,也不讀它們說過的話",
  "the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any sandbox, isn't known: a sandboxed project's repo config could then run as you": "執行環境 {runtime} 在專案資料夾裡跑,但不確定它會不會在沙箱外自己跑 git:這樣的話,沙箱專案的 repo 設定可能以你的身分執行",
  "{settings} mailbox.handler is propose, and that is off for sandboxed projects ({projects}): an agent running as you in a folder the project can write can be sent elsewhere by it. Their letters stay open for their sessions, and each start that was refused shows on the status page": "{settings} 的 mailbox.handler 是 propose,這對有沙箱的專案({projects})是關的:用你的身分跑在專案寫得到的資料夾裡的 agent,會被它指到別的地方去。它們的信留給它們的 session 處理,每次被拒絕的啟動都會顯示在狀態頁",
- "until the agent process itself runs under the sandbox, sessions handle those letters": "在 agent 程序本身能跑在沙箱裡之前,這些信由 session 處理"
+ "until the agent process itself runs under the sandbox, sessions handle those letters": "在 agent 程序本身能跑在沙箱裡之前,這些信由 session 處理",
+ "{point} runs on {runtime}, which can't be told to load no settings file. The platform holds it to its throwaway copy and applies only the notes, but a letter's prompt can reach whatever that agent's own settings let it read": "{point} 跑在 {runtime} 上,它沒辦法指定不載入設定檔。平台把它限制在一次性副本裡,也只採用筆記,但信裡的提示可以碰到這個 agent 自己的設定允許讀的任何東西",
+ "put {point} on a runtime with confined runs ({settings} llm.points.<point>.runtime), or keep what its own settings allow small": "把 {point} 放到有受限執行的 runtime 上({settings} llm.points.<point>.runtime),或把它自己設定允許的範圍收小"
 }

@@ -200,8 +200,6 @@ points:
     # don't load the environment's MCP (the global ones include production databases; turning tools off doesn't block
     # them, 10-27 experiment)
     extra_args: ["--strict-mcp-config"]
-    # `complete` always passes the flag, so a claude that drops it fails every completion: this check is how that shows (update-claude.py)
-    restricted: true
     purpose: "hourly check that claude's login still works (one minimal request each with the subscription login under launchd and the headless token); sends Discord when broken"
     auth: subscription            # for the token check the caller sets LLM_AUTH=token
     tools: ""
@@ -241,6 +239,9 @@ points:
     # the tool's permissions; no tool that runs commands is given: sending letters doesn't need it to run anything
     permission_mode: acceptEdits
     tools: Read,Edit,Write,Glob,Grep
+    # the prompt comes from a letter any project can send, and a settings file the run loads can grant it reads past its folder
+    # (real runs: docs/design/mailbox-session-first.md, step 3's record). A runtime that can't be told is held to the throwaway copy
+    restricted: true
     extra_args: ["--strict-mcp-config"]
     output: {format: json, schema: llm/mailbox-propose.schema.json}
     timeout_s: 1800

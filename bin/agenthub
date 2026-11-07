@@ -1361,6 +1361,15 @@ def doctor_propose(add) -> None:
     if (hubconf.get("mailbox") or {}).get("handler") != "propose":
         return
     import isolation
+    import runtime_ports
+    for point in runtime_ports.THROWAWAY_POINTS:
+        runtime = ((hubconf.get("llm") or {}).get("points") or {}).get(point, {}).get("runtime") or runtime_ports.default_name()
+        if "confine" not in runtime_ports.capabilities(runtime):
+            add("warn", _("{point} runs on {runtime}, which can't be told to load no settings file. The platform holds it to its throwaway copy "
+                          "and applies only the notes, but a letter's prompt can reach whatever that agent's own settings let it read",
+                          point=point, runtime=runtime),
+                _("put {point} on a runtime with confined runs ({settings} llm.points.<point>.runtime), or keep what its own settings allow small",
+                  point=point))
     off = sorted(n for n, d in hubconf.projects().items() if isolation.sandboxed({**d, "name": n}))
     if off:
         add("warn", _("{settings} mailbox.handler is propose, and that is off for sandboxed projects ({projects}): an agent running as "

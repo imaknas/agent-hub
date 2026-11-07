@@ -424,7 +424,7 @@ def _in_copy(task) -> tuple[str | None, str]:
     marked = ((os.environ if task.env is None else task.env).get(COPY_VAR) or "")
     # the mark, the point, and the place itself (no git is run here: the platform runs git in a project's repo only as the project)
     import hubconf
-    if task.point not in runtime_ports.THROWAWAY_POINTS or not marked or os.path.realpath(marked) != cwd or not hubconf.is_throwaway_copy(cwd):
+    if task.point not in runtime_ports.THROWAWAY_POINTS or not hubconf.is_throwaway_copy(cwd, marked=marked):
         return None, _("the ACP runtime runs only in the platform's throwaway worktree, and {cwd} is not one (the "
                        "agent decides when to ask, so nothing else would hold it to the point's limits)", cwd=cwd)
     return cwd, ""

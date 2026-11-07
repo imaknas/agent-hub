@@ -237,13 +237,19 @@ def run(a) -> int:
     model = model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
-    # declared permissions (unattended allow:, settings: platform, restricted) must be honoured, never dropped by a runtime
-    # that can't (docs/design/event-jobs.md section 3.2)
-    confined = spec.get("settings") or spec.get("restricted") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
+    # declared permissions (unattended allow:, settings: platform) must be honoured, never dropped by a runtime that
+    # can't (docs/design/event-jobs.md section 3.2)
+    confined = spec.get("settings") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
     try:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
+    # restricted: a runtime that can't be told to load no settings file runs it only in the platform's throwaway copy (doctor says what
+    # that leaves), never anywhere else with the ask dropped
+    if spec.get("restricted") and "confine" not in runtime_ports.capabilities(point_runtime(a.point, spec)) \
+            and not hubconf.is_throwaway_copy(a.cwd or os.getcwd(), marked=os.environ.get("HUB_THROWAWAY_COPY") or ""):
+        return fail(a.point, spec, _("{point} asks that no settings file be loaded, and this runtime can't be told that: it runs only in the "
+                                     "platform's throwaway copy, and {cwd} is not one", point=a.point, cwd=a.cwd or os.getcwd()))
     if "auth" in runtime_ports.capabilities(point_runtime(a.point, spec)):
         env, why = auth_env(spec, rt)
         if env is None:

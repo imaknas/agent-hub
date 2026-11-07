@@ -78,8 +78,9 @@ Fork is not offered: `session/fork` is unstable. The adapter speaks only stable 
   subprocess, not `--cwd`) and is checked the same way, never swapped for another directory. The points that run
   there are listed once, in `runtime_ports.THROWAWAY_POINTS` (today `mailbox-propose`); the adapter declares
   `THROWAWAY_ONLY = True`. All three must hold: the mark, the point being one of those, and the place looking like
-  the platform's copy (`<temp dir>/hub-propose-<project>-…/ws`, judged by path: the platform runs no git in a
-  project's repository except as the project).
+  the platform's copy (`hubconf.is_throwaway_copy`: `<secrets>/tmp/hub-propose-<project>-…/ws`, judged by path: the platform runs no
+  git in a project's repository except as the project). `mailbox-propose` asks that no settings file be loaded, which this runtime can't
+  be told: the agent's own settings are its own, and it decides when to ask. `llm.py` lets the point run here only in that copy, and doctor says what that leaves.
 
   Anything else is refused before the agent starts, with the reason: "the ACP runtime runs only in the platform's
   throwaway worktree". Config check already refuses pinning `acp` on any other point and refuses it as the default

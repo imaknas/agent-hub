@@ -56,12 +56,18 @@ def T(msgid: str, **kw) -> str:
 class ProposeOff(unittest.TestCase):
     """mailbox.handler: propose, with sandboxed projects: the doctor says which are off, and why."""
 
-    def rows(self, handler, docs):
+    def rows(self, handler, docs, caps=frozenset({"confine"})):
         rows = []
         with mock.patch.object(hubconf, "get", lambda k, d=None: {"handler": handler} if k == "mailbox" else (d if d is not None else {})), \
-                mock.patch.object(hubconf, "projects", lambda: docs):
+                mock.patch.object(hubconf, "projects", lambda: docs), mock.patch("runtime_ports.capabilities", lambda r=None: caps):
             load_agenthub().doctor_propose(lambda *a: rows.append(a))
         return rows
+
+    def test_a_runtime_that_cant_confine_is_said(self):
+        got = self.rows("propose", {"open": {}}, caps=set())
+        self.assertEqual(len(got), 1)
+        self.assertIn("settings", got[0][1])
+        self.assertEqual(self.rows("headless", {"open": {}}, caps=set()), [])
 
     def test_named(self):
         got = self.rows("propose", {"box": {"enforce": {"sandbox": True}}, "open": {}})

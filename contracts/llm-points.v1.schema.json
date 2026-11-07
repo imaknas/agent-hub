@@ -68,7 +68,7 @@
         "auth": {"enum": ["token", "subscription"], "description": "Which login to use"},
         "permission_mode": {"type": "string"},
         "prompts": {"type": "string", "description": "Who answers permission prompts; none = always deny"},
-        "restricted": {"type": "boolean", "description": "no settings file of the folder the run starts in; on a runtime that can't say so (no confined runs) the run fails, saying so (llm.py)"},
+        "restricted": {"type": "boolean", "description": "no settings file is loaded; a runtime that can't be told (no confined runs) may run the point only in the platform's throwaway copy, otherwise the run fails saying so (llm.py), and doctor says what that leaves"},
         "tools": {"type": "string", "description": "Tools it may use (comma-separated; empty string = all off)"},
         "allowed_tools": {"type": "array", "items": {"type": "string"}, "description": "Permission rules that are allowed automatically"},
         "extra_allow_env": {"type": "string", "description": "Extra allow rules the caller adds through this environment variable (a JSON list; adds rules, does not change the mode)"},
