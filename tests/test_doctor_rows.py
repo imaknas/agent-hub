@@ -80,6 +80,52 @@ class ProposeOff(unittest.TestCase):
         self.assertEqual(self.rows("headless", {"box": {"enforce": {"sandbox": True}}}), [])
 
 
+class MemoryBranches(unittest.TestCase):
+    """A memory branch already holding more than notes; and what the check leaves on a runtime that can't be told."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+                    "GIT_CONFIG_GLOBAL": "/dev/null"}
+
+    def bare(self, name, *files):
+        bare = self.tmp / f"{name}.git"
+        seed = self.tmp / f"seed-{name}"
+        for args in (["init", "-q", "--bare", "-b", "agent-memory", str(bare)], ["init", "-q", "-b", "agent-memory", str(seed)]):
+            subprocess.run(["git", *args], check=True, capture_output=True, env=self.env)
+        for f in files:
+            (seed / f).parent.mkdir(parents=True, exist_ok=True)
+            (seed / f).write_text("x\n")
+        for args in (["add", "-A"], ["commit", "-q", "-m", "m"], ["push", "-q", str(bare), "agent-memory"]):
+            subprocess.run(["git", "-C", str(seed), *args], check=True, capture_output=True, env=self.env)
+        return {"paths": {"memory_bare": str(bare)}}
+
+    def rows(self, docs, default="claude", caps=frozenset({"confine"})):
+        rows = []
+        with mock.patch.object(hubconf, "get", lambda k, d=None: d if d is not None else {}), mock.patch.object(hubconf, "projects", lambda: docs), \
+                mock.patch("runtime_ports.default_name", lambda: default), mock.patch("runtime_ports.capabilities", lambda r=None: caps), \
+                mock.patch("runtime_ports.throwaway_only", lambda r=None: False):
+            load_agenthub().doctor_memory_branches(lambda *a: rows.append(a))
+        return rows
+
+    def test_a_planted_branch_is_said_and_a_clean_or_absent_one_is_not(self):
+        docs = {"clean": self.bare("clean", "memory/.gitkeep", "STATE.md", "AGENT.md", "RULES"), "no-bare": {"paths": {"memory_bare": str(self.tmp / "none.git")}},
+                "planted": self.bare("planted", "memory/.gitkeep", ".claude/settings.json")}
+        got = self.rows(docs)
+        self.assertEqual(len(got), 1, got)
+        self.assertEqual(got[0][0], "warn")
+        self.assertIn("planted", got[0][1])
+        self.assertIn(".claude/settings.json", got[0][1])
+
+    def test_a_runtime_that_cant_be_told_says_what_is_left(self):
+        got = self.rows({}, default="command", caps=frozenset())
+        self.assertEqual(len(got), 1, got)
+        self.assertEqual(got[0][0], "info")
+        self.assertIn("librarian-state", got[0][1])
+        self.assertEqual(self.rows({}), [], "one that can")
+
+
 class Doctor(unittest.TestCase):
     PORTS = "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said"
 

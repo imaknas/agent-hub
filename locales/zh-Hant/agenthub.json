@@ -231,5 +231,8 @@
  "{settings} mailbox.handler is propose, and that is off for sandboxed projects ({projects}): an agent running as you in a folder the project can write can be sent elsewhere by it. Their letters stay open for their sessions, and each start that was refused shows on the status page": "{settings} 的 mailbox.handler 是 propose,這對有沙箱的專案({projects})是關的:用你的身分跑在專案寫得到的資料夾裡的 agent,會被它指到別的地方去。它們的信留給它們的 session 處理,每次被拒絕的啟動都會顯示在狀態頁",
  "until the agent process itself runs under the sandbox, sessions handle those letters": "在 agent 程序本身能跑在沙箱裡之前,這些信由 session 處理",
  "{point} runs on {runtime}, which can't be told to load no settings file. The platform holds it to its throwaway copy and applies only the notes, but a letter's prompt can reach whatever that agent's own settings let it read": "{point} 跑在 {runtime} 上,它沒辦法指定不載入設定檔。平台把它限制在一次性副本裡,也只採用筆記,但信裡的提示可以碰到這個 agent 自己的設定允許讀的任何東西",
- "put {point} on a runtime with confined runs ({settings} llm.points.<point>.runtime), or keep what its own settings allow small": "把 {point} 放到有受限執行的 runtime 上({settings} llm.points.<point>.runtime),或把它自己設定允許的範圍收小"
+ "put {point} on a runtime with confined runs ({settings} llm.points.<point>.runtime), or keep what its own settings allow small": "把 {point} 放到有受限執行的 runtime 上({settings} llm.points.<point>.runtime),或把它自己設定允許的範圍收小",
+ "{project}'s memory branch holds what it may not: {paths}. No agent starts in a copy of it": "{project} 的 memory 分支有不該有的東西:{paths}。不會在它的副本裡啟動 agent",
+ "a commit on that branch removing it is taken; notes go on syncing until then": "那條分支上移除它的 commit 會被接受;在那之前筆記照常同步",
+ "the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks the folder holds only notes first; what that agent's own settings say, and any rules file above the folder, it still reads": "執行環境 {runtime} 無法被要求不載入設定檔。{points} 還是在上面跑,因為平台會先檢查資料夾裡只有筆記;但那個 agent 自己的設定,以及資料夾上層的規則檔,它還是會讀"
 }

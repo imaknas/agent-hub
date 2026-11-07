@@ -1242,6 +1242,7 @@ def cmd_doctor(argv: list[str]) -> int:
                           "sandbox, isn't known: a sandboxed project's repo config could then run as you", runtime=name))
     doctor_wake_misses(add)
     doctor_propose(add)
+    doctor_memory_branches(add)
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -1355,6 +1356,29 @@ def cmd_doctor(argv: list[str]) -> int:
 
 
 WAKE_MISS_REMIND = 2   # letters in hubbus' window (WAKE_MISS_DAYS) whose wake reached a session that didn't take them
+
+
+def doctor_memory_branches(add) -> None:
+    """A branch already holding more than notes: new commits don't add to it (project_git.fetch_bundle), and no agent starts in a copy of
+    it (llm.py), until a commit removes it. Nothing is taken out for the project. Then what the platform's own check leaves on a runtime
+    that can't be told to load no settings file."""
+    import llm
+    import memory_paths
+    import policy
+    import project_git
+    import runtime_ports
+    for name, doc in hubconf.projects().items():
+        bare = policy.memory_bare(name, doc)
+        if (bare / "objects").is_dir() and project_git.owned_git(bare, "rev-parse", "--verify", "-q", "refs/heads/agent-memory").returncode == 0 \
+                and (bad := memory_paths.tree_problems(bare, "refs/heads/agent-memory")):
+            add("warn", _("{project}'s memory branch holds what it may not: {paths}. No agent starts in a copy of it", project=name, paths="; ".join(bad)),
+                _("a commit on that branch removing it is taken; notes go on syncing until then"))
+    place = sorted(p for p, spec in llm.points()["points"].items() if spec.get("works_in") == "memory")
+    runtimes = {((hubconf.get("llm") or {}).get("points") or {}).get(p, {}).get("runtime") or runtime_ports.default_name() for p in place}
+    for runtime in sorted(r for r in runtimes if r != "none" and "confine" not in runtime_ports.capabilities(r) and not runtime_ports.throwaway_only(r)):
+        add("info", _("the runtime {runtime} can't be told to load no settings file. {points} run there because the platform checks the folder holds "
+                      "only notes first; what that agent's own settings say, and any rules file above the folder, it still reads",
+                      runtime=runtime, points=", ".join(place)))
 
 
 def doctor_propose(add) -> None:
