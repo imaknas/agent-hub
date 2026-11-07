@@ -128,26 +128,50 @@ def auth_env(spec: dict, rt) -> tuple[dict | None, str]:
     return rt.auth_env(auth_mode(spec), base)
 
 
-def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
-    """A shape: completion judgment point: handed to completion.py (the same handling for every provider).
-    hub.json has llm.providers → completion.resolve picks the provider and model (--model is not used);
-    otherwise → handed to runtime.default's completion interface, with the model model_for computes."""
+def completion_target(point: str, spec: dict, model: str | None = None) -> dict:
+    """Where a shape: completion judgment point goes. hub.json has llm.providers → completion.resolve picks the provider and
+    model (model is not used); otherwise → runtime.default's completion interface, with the model model_for computes.
+    Raises completion.Refused when it has nowhere to go (no provider, and a runtime with no completion interface)."""
     import completion
     import runtime_ports
+    if completion.settings():
+        return completion.resolve(point, spec)
+    name = point_runtime(point, spec) or runtime_ports.default_name()
+    if "completion" not in runtime_ports.capabilities(name):
+        raise completion.Refused(_("runtime {name} has no completion interface, and {settings} has no llm section "
+                                   "(set up an LLM provider)", name=name))
+    return completion.runtime_target(name, model if model is not None else model_for(point, spec, runtime=name),
+                                     auth_mode(spec))
+
+
+def run_completion(a, spec: dict, prompt: str, model: str | None) -> int:
+    """A shape: completion judgment point: handed to completion.py (the same handling for every provider), to the target
+    completion_target names."""
+    import completion
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
-    target = None
-    if not completion.settings():
-        name = point_runtime(a.point, spec) or runtime_ports.default_name()
-        if "completion" not in runtime_ports.capabilities(name):
-            return fail(a.point, spec, _("runtime {name} has no completion interface, and {settings} has no llm section "
-                                         "(set up an LLM provider)", name=name))
-        target = completion.runtime_target(name, model, auth_mode(spec))
     try:
-        out = completion.run(a.point, spec, prompt, schema, target=target)
+        out = completion.run(a.point, spec, prompt, schema, target=completion_target(a.point, spec, model))
     except completion.Refused as e:
         return fail(a.point, spec, str(e))
     print(json.dumps(out, ensure_ascii=False))
     return 0
+
+
+def answer(point: str, prompt: str):
+    """A completion point's structured answer, or None, for a caller none of whose failures may carry text
+    (mailbox-route: a reason can quote the model, and its input is a letter anyone can send). It prints nothing and
+    publishes nothing, so no job.failed: the caller says, in its own fixed words, that the point gave no answer. The
+    declaration's checks are run.py's: the same target, schema and max_attempts."""
+    import completion
+    spec = points()["points"].get(point) or {}
+    if spec.get("shape") != "completion":
+        return None
+    try:
+        schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
+        out = completion.run(point, spec, prompt, schema, target=completion_target(point, spec))
+    except Exception:   # Refused, and whatever an implementation raises: no answer, said by the caller
+        return None
+    return out.get("structured_output") if isinstance(out, dict) else None
 
 
 def project_call(project: str, point: str, request: pathlib.Path) -> int:

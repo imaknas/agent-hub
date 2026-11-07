@@ -26,6 +26,7 @@ The handling is the same for every provider (an implementation only "sends it an
      way again)
   5. strip a reasoning model's <think>…</think>, parse the JSON (tolerating ``` fences), validate with minischema;
      if invalid, retry once with the errors attached
+     a point declaring max_attempts makes at most that many requests, retries of both kinds counted (1: none)
   6. every call is recorded in .state/llm-usage.jsonl (tokens, cost, billing = metered | subscription | local; and the
      project, for a project's own calls). A subscription call's cost_usd is the tool's own estimate, not a charge
 The key is read only here (secrets_dir or an environment variable) and handed to the implementation in conf["_key"],
@@ -236,12 +237,16 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
     req = runtime_ports.CompletionRequest(point=point, prompt=prompt, model=target["model"], schema=schema,
                                           max_tokens=max_tokens, timeout_s=int(spec.get("timeout_s") or 600))
     cost_total, last_errs = 0.0, None
+    # max_attempts: the most requests one call may make, retries of both kinds included (a point anyone's text reaches, so a
+    # crafted input can't make it cost more than one); unset = the retries above
+    left = int(spec.get("max_attempts") or 0) or None
     for attempt in range(2):   # the second = ask again with the errors attached when the output was invalid
         rate_tries = 0
         while True:
             res = impl.complete(req, conf)
             cost_total += record(point, target, res, project) or 0
-            if res.stop != "rate_limited" or rate_tries >= MAX_RATE_RETRIES:
+            left = left - 1 if left is not None else None
+            if res.stop != "rate_limited" or rate_tries >= MAX_RATE_RETRIES or left == 0:
                 break
             rate_tries += 1
             sleep(min(res.retry_after_s or 5 * 2 ** rate_tries, 60))
@@ -259,8 +264,12 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
             obj, last_errs = None, [_("not JSON")]
         if not last_errs:
             return _out(point, target, res.text, obj, cost_total)
+        if left == 0:
+            break
         req = req._replace(prompt=prompt + "\n\n---\nThe previous answer was not valid (" + "; ".join(last_errs[:5])
                            + "). This time reply with one valid JSON only, no other text.")
+    if left == 0 and attempt == 0:
+        raise Refused(_("output does not match the schema: {errors}", errors="; ".join(last_errs[:3])))
     raise Refused(_("output does not match the schema (after one retry): {errors}", errors="; ".join(last_errs[:3])))
 
 

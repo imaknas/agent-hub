@@ -52,6 +52,7 @@
         "model_group": {"type": "string", "description": "The group name when models are chosen by group (e.g. fast / standard / strong; default = unspecified, the tool's own default)"},
         "shape": {"enum": ["completion", "agent"], "description": "completion = the model has no tools and only answers (any LLM provider can run it); agent = a coding agent that needs tools, a working directory and permissions (docs/design/llm-providers.md)"},
         "max_tokens": {"type": "integer", "minimum": 1, "description": "Output limit for completion (default 8192)"},
+        "max_attempts": {"type": "integer", "minimum": 1, "description": "The most requests one completion call may make, every retry counted (rate limits, an invalid answer asked again); 1 = no retry. Default: the implementation's own retries"},
         "material": {"enum": ["cloud_safe", "personal", "sensitive", "local_only"], "description": "What kind of material is sent to the model (decides whether it may go to the cloud)"},
         "eval": {
           "type": "object",

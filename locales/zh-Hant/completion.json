@@ -14,6 +14,7 @@
  "output cut off at the length limit ({provider}/{model}, max_tokens {max_tokens}); not retried": "輸出被長度截斷({provider}/{model},max_tokens {max_tokens});不重試",
  "not JSON": "不是 JSON",
  "output does not match the schema (after one retry): {errors}": "輸出不符合 schema(重試一次後):{errors}",
+ "output does not match the schema: {errors}": "輸出不符合 schema:{errors}",
  "{where} looks like a key value: the value goes in the secrets directory ({{\"secret\": file name}}) or an environment variable ({{\"env\": name}})": "{where} 看起來是 key 的值——值放 secrets 目錄({{\"secret\": 檔名}})或環境變數({{\"env\": 名稱}})",
  "providers must be an object": "providers 要是物件",
  "use is set but providers is not (to pin only some judgment points' models, write only points)": "寫了 use 但沒有 providers(只想指定個別判斷點的模型:只寫 points)",

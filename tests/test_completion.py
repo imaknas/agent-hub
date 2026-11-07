@@ -102,6 +102,28 @@ class Pipeline(Base):
         self.assertEqual(out["structured_output"], {"answer": "a"})
         self.assertEqual(slept, [7])
 
+    def test_max_attempts_one_asks_once_whatever_comes_back(self):
+        """A point anyone's text reaches (mailbox-route): one request, never a second for an invalid answer or a rate limit."""
+        one = {**SPEC, "max_attempts": 1}
+        for first in (CompletionResult(True, text="not json", stop="end"),
+                      CompletionResult(False, stop="rate_limited", retry_after_s=1)):
+            with self.subTest(stop=first.stop):
+                runtime_fake.reset()
+                slept = []
+                runtime_fake.set_completions("p", first, CompletionResult(True, text='{"answer": "a"}', stop="end"))
+                with self.assertRaises(completion.Refused) as cm:
+                    completion.run("p", one, "hi", SCHEMA, sleep=slept.append)
+                self.assertEqual((len(runtime_fake._asked), slept), (1, []))
+                self.assertNotIn(zh("output does not match the schema (after one retry): {errors}"), str(cm.exception))
+
+    def test_max_attempts_bounds_both_kinds_together(self):
+        runtime_fake.set_completions("p", CompletionResult(False, stop="rate_limited", retry_after_s=1),
+                                     CompletionResult(True, text="not json", stop="end"),
+                                     CompletionResult(True, text='{"answer": "a"}', stop="end"))
+        with self.assertRaises(completion.Refused):
+            completion.run("p", {**SPEC, "max_attempts": 2}, "hi", SCHEMA, sleep=lambda s: None)
+        self.assertEqual(len(runtime_fake._asked), 2)
+
     def test_think_and_fences_are_stripped(self):
         runtime_fake.set_completions("p", CompletionResult(True, text='<think>hmm {"x":1}</think>\n```json\n{"answer": "b"}\n```',
                                                            stop="end"))
@@ -335,6 +357,58 @@ class Providers(unittest.TestCase):
         ok, why = provider_ollama.health({"base_url": s.url, "models": {"fast": "b"}})
         self.assertFalse(ok)
         self.assertIn("b", why)
+
+
+class QuietAnswer(Base):
+    """llm.answer: a completion point's answer for a caller none of whose failures may carry text (mailbox-route): the same
+    target and checks as `llm.py run`, but nothing printed and no job.failed, however it fails."""
+
+    def setUp(self):
+        super().setUp()
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("llm_quiet", ROOT / "bin" / "llm.py")
+        self.llm_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.llm_mod)
+        self.published = []
+        self.llm_mod.job_failed = lambda point, reason: self.published.append(reason)
+        self.points = {"points": {"q": {"shape": "completion", "model_group": "fast", "max_attempts": 1, "max_tokens": 100,
+                                        "output": {"format": "json", "schema": "llm/mailbox-route.schema.json"}},
+                                  "a": {"shape": "agent"}}}
+        self.llm_mod.points = lambda: self.points
+
+    def ask(self, point="q"):
+        import contextlib
+        import io
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            got = self.llm_mod.answer(point, "which one")
+        self.assertEqual((out.getvalue(), err.getvalue()), ("", ""), "nothing printed")
+        return got
+
+    def test_an_answer(self):
+        runtime_fake.set_completions("q", CompletionResult(True, text='{"session": "S2"}', stop="end"))
+        self.assertEqual(self.ask(), {"session": "S2"})
+        self.assertEqual(len(runtime_fake._asked), 1)
+
+    def test_no_answer_however_it_fails_and_nothing_published(self):
+        cases = {"invalid": CompletionResult(True, text='{"session": 3, "why": "SECRET TEXT"}', stop="end"),
+                 "error": CompletionResult(False, stop="error", error="SECRET TEXT"),
+                 "limited": CompletionResult(False, stop="rate_limited")}
+        for name, res in cases.items():
+            with self.subTest(name):
+                runtime_fake.reset()
+                runtime_fake.set_completions("q", res)
+                self.assertIsNone(self.ask())
+                self.assertEqual(len(runtime_fake._asked), 1, "max_attempts 1: asked once")
+        self.assertEqual(self.published, [])
+
+    def test_nowhere_to_run_and_an_agent_point(self):
+        self.llm = None   # no provider; the default runtime: none
+        with mock.patch.object(runtime_ports, "default_name", lambda: "none"):
+            self.assertIsNone(self.ask())
+        self.assertIsNone(self.ask("a"))
+        self.assertIsNone(self.ask("not-declared"))
+        self.assertEqual((runtime_fake._asked, self.published), ([], []))
 
 
 class CompletionContract(unittest.TestCase):
