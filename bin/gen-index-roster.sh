@@ -26,7 +26,7 @@ INDEX="$HUB_DATA/index.md"
 
 [ -f "$INDEX" ] || printf '# brunna index\n' > "$INDEX"
 
-mkdir -p -m 700 "$HUB_SECRETS/tmp"; export TMPDIR="$HUB_SECRETS/tmp"   # what it writes goes into index.md: not in a folder sandboxes can write
+mkdir -p -m 700 "$HUB_SECRETS" "$HUB_SECRETS/tmp"; export TMPDIR="$HUB_SECRETS/tmp"   # what it writes goes into index.md: not in a folder sandboxes can write
 block=$(mktemp); out=$(mktemp); rows=$(mktemp); ideas=$(mktemp)
 trap 'rm -f "$block" "$out" "$rows" "$ideas"' EXIT
 AGENT_HUB_ROOT="$HUB" "$PY" "$HUB/bin/hubconf.py" roster > "$rows"
