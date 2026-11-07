@@ -669,7 +669,9 @@ class EachLineOfTheRule(Fixture):
         (self.tmp / "state" / "hubbus-post-tool" / self.SID).unlink(missing_ok=True)
 
     def last_log(self):
-        return (BIN.parent / ".logs" / "hub-event.log").read_text().splitlines()[-1]
+        """This worktree's own line: bin/run-tests runs modules side by side, and they all log to this file."""
+        lines = (BIN.parent / ".logs" / "hub-event.log").read_text().splitlines()
+        return [x for x in lines if " session_start open-side " in x][-1]
 
     def test_a_worktree_under_workspace_root_gets_the_reminder_and_local_setup(self):
         wt = self.behind_at(self.ws["open"].parent / "open-side")

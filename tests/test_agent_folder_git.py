@@ -429,9 +429,9 @@ class TheHourlySync(twp.Fixture):
         self.assertIn(str(self.ws["box"]), roster)
         self.assertIn(str(self.ws["open"]), roster)
 
-    def sync(self):
+    def sync(self, **env):
         return subprocess.run(["bash", str(BIN / "sync-all-memory.sh")], capture_output=True, text=True, timeout=180,
-                              env=self.hook_env(), cwd=self.tmp)
+                              env={**self.hook_env(), **env}, cwd=self.tmp)
 
     def test_a_folder_the_registry_doesnt_name_runs_nothing(self):
         left = self.tmp / "home" / "workspace" / "left-behind"
@@ -442,6 +442,34 @@ class TheHourlySync(twp.Fixture):
         self.assertFalse(self.marker.exists())
 
     def test_a_sandboxed_projects_link_at_a_planted_repo_runs_nothing_as_the_user(self):
+        """Outside its workspace, somewhere it writes, as the system's temp folder is."""
+        ws = self.ws["box"]
+        planted = self.tmp / "its-temp"
+        planted.mkdir()
+        (ws / ".agent-memory").symlink_to(self.plant_memory(planted))
+        self.sync()
+        self.assertEqual(self.ran_as_the_user(), [])
+
+    def test_the_link_moving_between_the_look_and_the_question(self):
+        """The flipper's race with the timing taken out: the sync went in by the link and looked where it is, the link then says
+        something else, so that folder is nobody's and git runs there as the user. Going by the name, it never goes in."""
+        ws = self.ws["box"]
+        planted = self.tmp / "its-temp"
+        planted.mkdir()
+        (ws / "other").mkdir()
+        mem = self.plant_memory(planted)
+        (ws / ".agent-memory").symlink_to(mem)
+        env = self.tmp / "moves-the-link.sh"
+        env.write_text(f"""pwd() {{
+  local here; here=$(builtin pwd "$@"); printf '%s\\n' "$here"
+  [ "$here" = "{mem.resolve()}" ] && ln -sfn "{ws / 'other'}" "{ws / '.agent-memory'}"
+  return 0
+}}
+""")
+        self.sync(BASH_ENV=str(env))
+        self.assertEqual(self.ran_as_the_user(), [])
+
+    def test_the_same_link_inside_its_workspace(self):
         ws = self.ws["box"]
         planted = ws / "planted"
         planted.mkdir()
@@ -474,14 +502,13 @@ class TheHourlySync(twp.Fixture):
 
     FLIP = """
 import os, sys, time
-ws, mem, other = sys.argv[1:4]
-link, tmp = ws + "/.agent-memory", ws + "/.am.tmp"
-end, a = time.time() + float(sys.argv[4]), True
+ws, end, targets = sys.argv[1], time.time() + float(sys.argv[2]), sys.argv[3:]
+link, tmp, i = ws + "/.agent-memory", ws + "/.am.tmp", 0
 open(ws + "/flip.ok", "w").write("started")
 while time.time() < end:
-    os.symlink(other if a else mem, tmp)
+    os.symlink(targets[i % len(targets)], tmp)
     os.replace(tmp, link)
-    a = not a
+    i += 1
     time.sleep(0.004)
 """
 
@@ -489,11 +516,12 @@ while time.time() < end:
     def test_a_flipper_under_its_real_profile_gets_nothing(self):
         ws = self.ws["box"]
         (ws / "planted").mkdir()
-        mem = self.plant_memory(ws / "planted")
+        (self.tmp / "its-temp").mkdir()
         (ws / "other").mkdir()
+        targets = (ws / "other", self.plant_memory(ws / "planted"), self.plant_memory(self.tmp / "its-temp"))
         (self.tmp / "f.py").write_text(self.FLIP)
         flip = subprocess.Popen([tbs.seatbelt.SANDBOX_EXEC, "-p", self.profile("box"), sys.executable, "-I", str(self.tmp / "f.py"),
-                                 str(ws), str(mem), str(ws / "other"), "40"], cwd=ws, stderr=subprocess.DEVNULL)
+                                 str(ws), "40", *map(str, targets)], cwd=ws, stderr=subprocess.DEVNULL)
         self.addCleanup(flip.wait)
         self.addCleanup(flip.kill)
         for _i in range(100):
