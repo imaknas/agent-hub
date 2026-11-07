@@ -321,18 +321,33 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
 
 ### Step 2: where it differs from the text above, and why
 
-- **A fork is under the rules too, not "today's rules".** "Its own rules" says the fork keeps today's rules; "It reads only its
-  letters" and the step's brief give it its own letter in `MAILBOX_LETTERS`, and the rules go by that variable. So a fork
-  replies `--type done` (`info` only to an `asks` letter), closes only its letter, has no `ack` and no `open-questions`.
-  The reading: a fork is reached by anyone who can write the bus exactly as a handler is, and it has a whole session's context
-  to quote. `mailbox-resume.md` and `mailbox-delegate.md` say so. Event and clock jobs carry no letters and are unchanged. A fork
-  can no longer ask the sender a question back: it asks the owner, or leaves it for the session.
+- **A fork isn't a handler** (decided 11-07, after the cold review). It gets its own letter in `MAILBOX_LETTERS`, so it reads and closes
+  only that letter and sends to nobody but its sender and the owner; it has no `ack` and no `open-questions`. But it has the
+  session's context, so its reply is any ordinary type, a question back to the sender included. Handlers keep `done` (`info` to
+  an `asks` letter). They are told apart by the point (`run_point() == FORK_POINT`). Event and clock jobs carry no letters and
+  are unchanged.
+- **The rules bind only the agent, which has a point** (`run_letters`): `llm.py` and `run-agent-job.sh` around it inherit the
+  list and have none, or `job_failed`'s `publish` would be refused and a run's failure never recorded. The agent's Bash reaches
+  no `publish`, by the point's allow rules and by `run_refusal` alike.
+- **`--question` refuses `--reply-to`, for everyone** (`send_letter`, so an outbox file too): it would carry that letter's handoff
+  and take it, a forged answer that reaches the assistant.
+- **A question to the owner has no `--reply-to` to judge "taken" by**, and on an `asks` letter one would make it count as the
+  answer. So it is refused when all the run's letters are taken, and no letters at all count as taken. Propose's `ask_owner`
+  the same. A fork is under this too.
+- **A start that failed spends nothing**: `run_handler` starts first, then writes the triage row and the fixed line. A failure
+  is a `job.failed` with `ref` to the letter (`mailbox-start:<project>`, id `<id>:start-failed:<n>`), which `gen-status-page`
+  alerts on, as it does for a mailbox run's own failure. Tried `START_TRIES` times, `START_RETRY_MIN` apart; then the letter
+  shows as stuck and hooks still get it. The price of that order: a dispatch killed between the start and the row can start
+  a second run for the letter. A run that dies without `llm.py` exiting leaves `status.json` at `running`, as before this step,
+  which holds the project's next handler back.
+- **A propose reply carries what a session's does** (`reply_fields`): thread, asking session, handoff, or an answer to an `asks`
+  letter doesn't reach the owner as the answer.
 - **`MAILBOX_LETTERS` is a JSON list**, not comma-separated: `--id` is free text for an unsandboxed sender, so `a,b` would hand
   a run the letter `b`. A value that can't be read is no letters: refused, never unlimited. Propose's agent gets it too, for its
   reads (its writes are refused already).
 - **The rules live in `run_refusal`, called from `mail_command`, not `confined_refusal`**: they need the bus (or the view), and
   `confined_refusal` runs before either is open. `confined_refusal` stays as it was, for every confined run. They apply
-  wherever the variable is set, with or without `CONFINED`.
+  to an agent with the variable, with or without `CONFINED`.
 - **"Taken by another" leaves out the run's own acts** (`taken_by_another`), or `send` then `done` would refuse the second. A
   letter is triaged once and forked once, so a reply or close with this run's point is its own. From an outbox there is no
   point: there, one with no session is its own, so a close by a person at a terminal or an MCP client in a sandboxed project
