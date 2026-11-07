@@ -12,5 +12,10 @@
  "{latest} would not install ({detail}); ": "{latest} 裝不起來({detail}),",
  "{old} is back in place": "已裝回 {old}",
  "putting the old version back failed too, so claude may not work now": "裝回也失敗,claude 現在可能不能用",
- "{latest} would not install: {detail}": "{latest} 裝不起來:{detail}"
+ "{latest} would not install: {detail}": "{latest} 裝不起來:{detail}",
+ "the probe says nothing: a plain git status didn't run the filter either": "這個探測沒有意義:單純的 git status 也沒跑 filter",
+ "the probe could not run: {why}": "探測跑不起來:{why}",
+ "claude ran a repo's git filter as you, in a platform run: a sandboxed project can run code outside its sandbox this way, until the variable that stops it is put right (runtime_claude.py NO_FOLDER_GIT)": "平台執行時 claude 以你的身分跑了 repo 的 git filter:沙箱專案可以這樣在沙箱外執行程式,要修好阻止它的變數才會停(runtime_claude.py NO_FOLDER_GIT)",
+ "claude {version}: {why}": "claude {version}:{why}",
+ "claude {version} leaves a repo's git filter alone again": "claude {version} 不再跑 repo 的 git filter 了"
 }

@@ -11,6 +11,8 @@ the runtime's real hook input; a scratch instance and repos only. The planted sc
 
     bin/run-tests        (running this module directly in a worktree reads the real config through .hub-home)
 """
+import importlib.machinery
+import importlib.util
 import json
 import os
 import pathlib
@@ -28,6 +30,13 @@ import guard  # noqa: E402
 import hubconf  # noqa: E402
 import project_git  # noqa: E402
 import test_bus_sender as tbs  # noqa: E402
+
+
+def load_hub_event():
+    loader = importlib.machinery.SourceFileLoader("hub_event_pointer", str(BIN / "hub-event"))
+    m = importlib.util.module_from_spec(importlib.util.spec_from_loader("hub_event_pointer", loader))
+    loader.exec_module(m)
+    return m
 
 
 class Fixture(tbs.WorktreeFixture):
@@ -529,6 +538,172 @@ class AWorktreeMovedByHand(Fixture):
         self.assertEqual(self.scope(inside, self.ws["open"]), (project_git.NOT_SANDBOXED, ""))
 
 
+class ByTheFileNotTheSpelling(Fixture):
+    """The name of the folder, however it is written, and the nearest of several."""
+
+    def setUp(self):
+        super().setUp()
+        self.sub = self.ws["box"] / "sub"
+        self.sub.mkdir()
+        p = mock.patch.object(hubconf, "projects", lambda: self.docs)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def spellings(self):
+        box = str(self.ws["box"])
+        out = [f"/{box}/sub", f"{self.ws['open']}/../box/sub"]
+        if pathlib.Path(box.upper()).exists() and pathlib.Path(box.upper()).samefile(box):   # a case-insensitive disk
+            out.append(f"{box.upper()}/sub")
+        return out
+
+    def test_each_is_the_project(self):
+        for s in self.spellings():
+            self.assertEqual((project_git.sandbox_of(s) or [None])[0], "box", s)
+
+    def test_a_link_swapped_in_doesnt_change_it(self):
+        self.sub.rmdir()
+        self.sub.symlink_to(self.ws["open"])
+        for s in self.spellings():
+            self.assertEqual((project_git.sandbox_of(s) or [None])[0], "box", s)
+
+    def test_the_letter_of_the_project_it_links_to_isnt_delivered(self):
+        self.sub.rmdir()
+        self.sub.symlink_to(self.ws["open"])
+        self.letter_to("open", "for the open project", typ="request")
+        for s in self.spellings():
+            payload = json.dumps({"session_id": self.SID, "cwd": s, "hook_event_name": "UserPromptSubmit", "prompt": "x"})
+            r = subprocess.run([sys.executable, str(BIN / "hub-event"), "--runtime", "claude", "prompt"], cwd=self.ws["box"], input=payload,
+                               capture_output=True, text=True, timeout=60, env=self.hook_env())
+            self.assertNotIn("for the open project", r.stdout, s)
+        self.assertEqual(self.rows("type='message.delivered'"), [])
+
+    def test_a_link_from_outside_into_the_project_is_the_project(self):
+        out = self.tmp / "link-in"
+        out.symlink_to(self.sub)
+        self.assertEqual((project_git.sandbox_of(out) or [None])[0], "box")
+        self.assertEqual(self.mail_project(out), "box")
+
+    def mail_project(self, cwd):
+        hb = tbs.load_hubbus()
+        return hb.project_of(pathlib.Path(cwd))
+
+    def test_the_nearest_of_two_nested_and_everyone_agrees(self):
+        inner = self.ws["box"] / "inner"
+        inner.mkdir()
+        for order in (("inner", "box"), ("box", "inner")):
+            docs = {"inner": {"v": 1, "name": "inner", "paths": {"workspace": str(inner)}, "enforce": {"sandbox": True}},
+                    "box": self.docs["box"]}
+            docs = {k: docs[k] for k in order}
+            with mock.patch.object(hubconf, "projects", lambda docs=docs: docs):
+                self.assertEqual(project_git.sandbox_of(inner / "x")[0], "inner", order)
+                self.assertEqual(guard.own_project(inner / "x")[0], "inner", order)
+                self.assertEqual(project_git.sandbox_of(self.sub)[0], "box", order)
+                self.assertEqual(self.mail_project(inner), "inner", order)
+
+    def test_a_hook_input_with_no_folder_is_no_session(self):
+        import runtime_claude
+        self.assertIsNone(runtime_claude.parse_event("prompt", json.dumps({"session_id": "s"})), "not this process's own folder")
+
+
+class EachLineOfTheRule(Fixture):
+    """What the rule's other lines hold, each of which an earlier check doesn't."""
+
+    def setUp(self):
+        super().setUp()
+        self.sub = self.ws["box"] / "sub"
+
+    def test_git_as_the_user_is_no_in_a_sandboxed_projects_folder(self):
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            self.assertFalse(project_git.user_git_ok(self.ws["box"]), "memory-nudge.py asks it directly")
+            self.assertFalse(project_git.folder_git_ok(self.ws["box"]))
+            self.assertTrue(project_git.user_git_ok(self.ws["open"]))
+            self.assertTrue(project_git.folder_git_ok(self.ws["open"]))
+
+    def test_a_sandboxed_project_is_no_registered_main(self):
+        wt = self.tree("box")
+        out = self.tmp / "out"
+        wt.rename(out)
+        self.git("-C", self.ws["box"], "worktree", "repair", out)
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            self.assertTrue(gitdirs.confirmed(gitdirs.dirs(out)))
+            self.assertFalse(project_git.registered_main(self.ws["box"]))
+            self.assertFalse(project_git.user_git_ok(out))
+            self.assertTrue(project_git.registered_main(self.ws["open"]))
+
+    def test_a_worktree_out_in_the_temp_folder_gets_git_in_its_memory_only(self):
+        self.tree("open")
+        out = self.tmp / "out"
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", out, "-b", "o")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs):
+            self.assertTrue(project_git.user_git_ok(out))
+            self.assertFalse(project_git.folder_git_ok(out))
+            self.assertEqual(project_git.memory_dir(out), self.ws["open"].resolve() / ".agent-memory")
+            self.assertEqual(project_git.memory_dir(self.ws["open"]), self.ws["open"] / ".agent-memory")
+
+    def test_a_memory_link_flipped_beside_a_real_worktree_isnt_followed(self):
+        """Planted after any look: what runs is the main checkout's, by name."""
+        self.tree("open")
+        mem = self.ws["open"] / ".agent-memory"
+        self.git("init", "-q", "-b", "agent-memory", mem)
+        out = self.tmp / "out"
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", out, "-b", "o")
+        planted = self.tmp / "planted"
+        planted.mkdir()
+        self.plant_memory(planted)
+        (out / ".agent-memory").symlink_to(planted / ".agent-memory")
+        for what, name in (("start", "SessionStart"), ("end", "SessionEnd")):
+            self.run_hook(what, out, name)
+            self.assertEqual(self.ran_as_the_user(), [], what)
+        self.handle("session_start", out, "SessionStart", source="startup")
+        self.handle("pre_compact", out, "PreCompact")
+        self.assertEqual(self.ran_as_the_user(), [])
+
+    def test_the_scope_prints_the_memory_as_it_resolves(self):
+        """The script compares it with the top it found, which is resolved: a project registered through a link still runs."""
+        real = self.tmp / "real-box"
+        self.ws["box"].rename(real)
+        self.ws["box"].symlink_to(real)
+        self.assertEqual(self.scope(real, real), (0, str(real / ".agent-memory")))
+
+    def swap_to_a_repo_with_a_signed_log(self):
+        out = self.tmp / "plain"
+        out.mkdir()
+        self.git("init", "-q", "-b", "main", out)
+        self.plant_memory(out)
+        self.signed_log(out / ".agent-memory")
+        self.sub.symlink_to(out)
+        self.marker.unlink(missing_ok=True)
+
+    def test_the_reminder_in_a_folder_not_held_doesnt_run_even_as_the_project(self):
+        self.swap_to_a_repo_with_a_signed_log()
+        self.run_hook("nudge", self.sub, "PostToolUse", tool_input={"command": "git commit -m x"})
+        self.assertFalse(self.marker.exists())
+
+    def test_the_memory_sync_in_a_folder_not_held_doesnt_run_even_as_the_project(self):
+        m = load_hub_event()
+        m.LOG = self.tmp / "hub-event.log"
+        (self.tmp / "plain").mkdir()
+        self.sub.symlink_to(self.tmp / "plain")
+        (self.tmp / "plain" / ".git").mkdir()
+        (self.tmp / "plain" / ".agent-memory" / ".git").mkdir(parents=True)
+        import runtime_claude
+        raw = json.dumps({"session_id": self.SID, "cwd": str(self.sub), "hook_event_name": "PreCompact"})
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m, "_memory_sync_as_project", side_effect=AssertionError("ran")) as sync:
+            m.handle("pre_compact", raw, runtime_claude, "claude")
+        self.assertEqual(sync.call_count, 0)
+
+    def test_a_sandboxed_folder_swapped_to_an_old_copy_doesnt_say_its_reminder(self):
+        old = self.tmp / "oldcopy"
+        old.mkdir()
+        self.git("init", "-q", "-b", "main", old)
+        self.git("init", "-q", "-b", "agent-memory", old / ".agent-memory")
+        (old / ".git" / "agent-hub-migrated-to-mini").write_text("mini:/x\t2026-10-15\n")
+        self.sub.symlink_to(old)
+        r = self.handle("session_start", self.sub, "SessionStart", source="compact")
+        self.assertNotIn("mini:/x", r.stdout)
+
+
 class Guard(Fixture):
     """The guard stops a session opening a session elsewhere. A pointer must not make the sandboxed project's session another's."""
 
@@ -587,6 +762,13 @@ class Guard(Fixture):
         wt = self.tree("open")
         self.assertEqual(guard.own_project(wt)[0], "open")
         self.assertIsNone(guard.decide({"cwd": str(wt)}, wt))
+
+    def test_a_worktree_moved_inside_its_project_is_still_that_projects(self):
+        wt = self.tree("open")
+        inside = self.ws["open"] / "moved-here"
+        wt.rename(inside)
+        self.assertEqual(guard.own_project(inside), ("open", self.ws["open"].resolve()))
+        self.assertTrue(guard.decide({"cwd": str(self.ws["box"])}, inside))
 
     def test_a_folder_with_no_repo_in_no_project_as_before(self):
         plain = self.tmp / "plain"

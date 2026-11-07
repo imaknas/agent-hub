@@ -44,14 +44,9 @@ else
 fi
 export AGENT_HUB_OFFLINE="$OFFLINE"
 
-# Since 2026-10-15 the manifest's paths are the hub machine's ~/workspace/<name>; ~/workspace is also scanned
-# once, to cover folders not registered yet. Each path is done only once.
-{
-  "$HUB/bin/py" "$HUB/bin/hubconf.py" roster | cut -f1,2
-  for d in "$HOME"/workspace/*/; do
-    [ -d "$d.agent-memory" ] && printf '%s\t%s\n' "$(basename "$d")" "${d%/}"
-  done
-} | awk -F'\t' '!seen[$2]++' | while IFS=$'\t' read -r name path; do
+# The registry's paths only: git runs below as the user, and a folder left behind by a project that left the registry, or one
+# nobody registered, is nobody's to vouch for. Each path is done only once.
+"$HUB/bin/py" "$HUB/bin/hubconf.py" roster | cut -f1,2 | awk -F'\t' '!seen[$2]++' | while IFS=$'\t' read -r name path; do
   mem="$path/.agent-memory"
   [ -d "$mem" ] || continue
   (

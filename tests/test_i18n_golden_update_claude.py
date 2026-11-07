@@ -78,7 +78,7 @@ class Golden(unittest.TestCase):
             for ok in (False, True):
                 sent = []
                 o, e = io.StringIO(), io.StringIO()
-                with mock.patch.object(m, "update", return_value=(ok, "MSG")), \
+                with mock.patch.object(m, "update", return_value=(ok, "MSG")), mock.patch.object(m, "probe_new_version"), \
                         mock.patch.object(m.alert, "once", side_effect=lambda *a: sent.append(a)), \
                         mock.patch.object(sys, "argv", ["update-claude.py"]), redirect_stdout(o), redirect_stderr(e):
                     code = m.main()

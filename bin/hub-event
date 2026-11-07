@@ -82,14 +82,14 @@ def _workspace(cwd: str) -> pathlib.Path | None:
 def _memory(ws) -> bool:
     """Whether this project's memory is connected: .agent-memory is its own checkout (a worktree has a .git file). A
     plain folder of that name (agent-hub itself, memory: false) is not: git commands there act on the enclosing repo."""
-    return bool(ws) and (ws / ".agent-memory" / ".git").exists()
+    return bool(ws) and (project_git.memory_dir(ws) / ".git").exists()
 
 
 # ---------- handlers: the platform's logic, returning only neutral results (text / None / reason to block) ----------
 
 def memory_pull(ev, ws):
     if _memory(ws):
-        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=ws / ".agent-memory",
+        subprocess.run([str(BIN / "with-lock.sh"), "git", "pull", "-q"], cwd=project_git.memory_dir(ws),
                        capture_output=True, timeout=60)
 
 
@@ -104,7 +104,7 @@ def hub_pull(ev, ws):
 
 def memory_sync(ev, ws):
     if _memory(ws):
-        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
+        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=project_git.memory_dir(ws),
                        capture_output=True, timeout=120)
 
 
@@ -289,6 +289,8 @@ AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
 # What runs no git and no script of the folder's. Any other handler, a new one included, runs only where the folder lets it: as
 # the project, or as the user where project_git.user_git_ok says so. The default is no.
 NOT_IN_FOLDER = {"session_record", "mail", "mail_end", "wake_address", "wake_address_drop", "guard"}
+# What runs only in the project's memory checkout (project_git.memory_dir), so it can go on where its folder is only a worktree
+MEMORY_ONLY = {"memory_pull", "memory_sync"}
 
 
 def _read_stdin() -> str:
@@ -332,12 +334,14 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
         return ""
     # as the project only in a folder its workspace really holds: one swapped for a link elsewhere gets no work at all
     inside = bool(cage) and bool(ws) and project_git.holds(cage[1], ws)
-    user_ok = not cage and bool(ws) and (bool(os.environ.get("HUB_AS_PROJECT")) or project_git.user_git_ok(ws))
+    as_project = bool(os.environ.get("HUB_AS_PROJECT"))
+    memory_ok = not cage and bool(ws) and (as_project or project_git.user_git_ok(ws))
+    folder_ok = memory_ok and (as_project or project_git.folder_git_ok(ws))
     inner = _as_project(cage[0], ws, ev) if inside and _needs_project(ev) else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
-            if name in NOT_IN_FOLDER or (user_ok and not cage):
+            if name in NOT_IN_FOLDER or folder_ok or (memory_ok and name in MEMORY_ONLY):
                 out = fn(ev, ws)
             elif inside and name in AS_PROJECT:
                 if not isinstance(inner.get(name), dict) or not inner[name].get("ok"):
@@ -375,7 +379,7 @@ def _worktree_nudge(ev, ws, cage):
         if not isinstance(inner, dict) or not inner.get("ok"):
             raise RuntimeError("as the project")
         return inner.get("text") if isinstance(inner.get("text"), str) else None
-    return nudge(ev, ws) if ws and project_git.user_git_ok(ws) else None
+    return nudge(ev, ws) if ws and project_git.folder_git_ok(ws) else None
 
 
 def worktree(what: str, raw: str) -> int:
@@ -450,7 +454,7 @@ def _as_project(project: str, ws: pathlib.Path, ev) -> dict:
 
 
 def _memory_sync_as_project(proj, ws):
-    if _memory(ws):
+    if (ws / ".agent-memory" / ".git").exists():
         why = project_git.sync_memory(proj[0], proj[1], ws / ".agent-memory", lock=True)
         if why:
             raise RuntimeError(why)

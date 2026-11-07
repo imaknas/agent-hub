@@ -105,8 +105,7 @@ def main(argv: list[str]) -> int:
                 project=name, problems="; ".join(problems)[:300]))
         return 1
     nofollow.replace(ws, ".agent-memory/STATE.md", (state.rstrip() + "\n").encode())
-    subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
-                   capture_output=True)
+    project_git.sync_memory_of(name, ws)
     print(_("✓ {project}: {summary}", project=name, summary=str(got.get("summary") or "").strip()))
     heads = {todo_tokens.tokens(lang)["todo_heading"] for lang in todo_tokens.SETS}
     lines = state.splitlines()

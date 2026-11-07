@@ -97,7 +97,7 @@ def _git_may_run() -> bool:
     if os.environ.get("HUB_AS_PROJECT"):
         return True
     import project_git
-    return project_git.user_git_ok(pathlib.Path.cwd())
+    return project_git.folder_git_ok(pathlib.Path.cwd())
 
 
 def main() -> None:

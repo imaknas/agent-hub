@@ -226,5 +226,6 @@
  "{feature}: reading sessions from {sources}": "{feature}:讀取來自 {sources} 的 session",
  "they start once a coding agent has sessions on this machine, or files in the contract's format are put in {folder} (contracts/session-record.v1.schema.json)": "這台機器上有 coding agent 的 session、或把合約格式的檔案放進 {folder}(contracts/session-record.v1.schema.json)之後就會開始",
  "{feature}: off ({reason})": "{feature}:關閉({reason})",
- "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said": "執行環境 {runtime} 沒有{missing}:分派信件時把它的 session 當作閒置,也不讀它們說過的話"
+ "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said": "執行環境 {runtime} 沒有{missing}:分派信件時把它的 session 當作閒置,也不讀它們說過的話",
+ "the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any sandbox, isn't known: a sandboxed project's repo config could then run as you": "執行環境 {runtime} 在專案資料夾裡跑,但不確定它會不會在沙箱外自己跑 git:這樣的話,沙箱專案的 repo 設定可能以你的身分執行"
 }

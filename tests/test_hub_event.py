@@ -10,6 +10,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -30,7 +31,11 @@ class HubEvent(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
         self.m.LOG = self.tmp / "hub-event.log"
         self.m._workspace = lambda cwd: self.tmp
-        self.m.project_git.user_git_ok = lambda folder: True   # these handlers are stand-ins: the rule has tests/test_worktree_pointer.py
+        # these handlers are stand-ins: the rule has tests/test_worktree_pointer.py
+        for p in (mock.patch.object(self.m.project_git, "user_git_ok", lambda folder: True),
+                  mock.patch.object(self.m.project_git, "folder_git_ok", lambda folder: True)):
+            p.start()
+            self.addCleanup(p.stop)
         self.calls = []
 
     def test_a_session_is_on_record_before_its_mail_is_told(self):

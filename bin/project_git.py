@@ -193,25 +193,20 @@ def project_at(d) -> tuple[str, dict] | None:
 
 
 def sandbox_of(cwd) -> tuple[str, dict] | None:
-    """The sandboxed project this folder is under, as a hook's cwd names it or as it resolves. As named comes first: a folder a
-    sandboxed project owns can be swapped for a link after the runtime took it as the session's folder, and a hook's input
-    still names it, so what it resolves to says nothing about whose session this is."""
-    raw = pathlib.Path(cwd)
-    for name, doc in hubconf.projects().items():
-        ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
-        if ws and (raw.is_relative_to(ws) or raw.is_relative_to(ws.resolve())) and isolation.sandboxed({**doc, "name": name}):
-            return name, {**doc, "name": name}
-    try:
-        at = project_at(cwd)
-    except (OSError, RuntimeError):
-        return None
-    return at if at and isolation.sandboxed(at[1]) else None
+    """The sandboxed project this folder is under, the nearest, as a hook's cwd names it or as it resolves (gitdirs.holder). As
+    named comes first: a folder a sandboxed project owns can be swapped for a link after the runtime took it as the session's
+    folder, and a hook's input still names it, so what it resolves to says nothing about whose session this is."""
+    docs = {name: {**doc, "name": name} for name, doc in hubconf.projects().items()}
+    roots = {name: ws for name, doc in docs.items()
+             if (ws := hubconf.path((doc.get("paths") or {}).get("workspace"))) and isolation.sandboxed(doc)}
+    name = gitdirs.holder(cwd, roots)
+    return (name, docs[name]) if name else None
 
 
 def holds(doc: dict, folder) -> bool:
     """Whether this project's workspace really holds the folder, resolved (a sandbox_of by name may not)."""
     ws = hubconf.path((doc.get("paths") or {}).get("workspace"))
-    return ws is None or pathlib.Path(folder).resolve().is_relative_to(ws.resolve())
+    return ws is None or gitdirs.holder(pathlib.Path(folder).resolve(), {"": ws}) is not None
 
 
 def registered_main(main) -> bool:
@@ -223,23 +218,49 @@ def registered_main(main) -> bool:
 
 
 def user_git_ok(folder) -> bool:
-    """Whether a hook may run git, or a script that does, as the user in this folder. Git reads the repo's config and runs what it
-    names, so the answer is yes only for what isn't a stranger's: a registered project that isn't sandboxed, the hub, or a
-    linked worktree of one of those that it confirms (a repo a stranger made confirms itself, so its being registered is what
-    counts). Everything else is no, not a list of bad cases."""
+    """Whether a hook may run git in this project's memory as the user (memory_dir says which folder that is). Git reads the repo's
+    config and runs what it names, so the answer is yes only for what isn't a stranger's: a registered project that isn't
+    sandboxed, the hub, or a linked worktree of one of those that it confirms (a repo a stranger made confirms itself, so its
+    being registered is what counts). Everything else is no, not a list of bad cases."""
     at = project_at(folder)
     if at:
         return not isolation.sandboxed(at[1])
     found = gitdirs.dirs(folder)
     if not found:
         return False
-    if found.top == hubconf.MAIN.resolve():
-        return True
-    if not gitdirs.confirmed(found) or not registered_main(found.common.parent):
+    return found.top == hubconf.MAIN.resolve() or (gitdirs.confirmed(found) and registered_main(found.common.parent))
+
+
+def folder_git_ok(folder) -> bool:
+    """Whether a hook may run git in this very folder as the user: user_git_ok, and not a worktree out in a folder others can write
+    (the temp folder), where its .git file and all beside it can change between a look and the git."""
+    if not user_git_ok(folder):
         return False
-    # a real worktree in a folder others can write (the temp folder): the memory there has to be its main checkout's
-    mem = found.top / ".agent-memory"
-    return not os.path.lexists(mem) or mem.resolve() == (found.common.parent / ".agent-memory").resolve()
+    if project_at(folder):
+        return True
+    found = gitdirs.dirs(folder)
+    return bool(found) and found.top.is_relative_to(hubconf.MAIN.resolve())
+
+
+def memory_dir(folder) -> pathlib.Path:
+    """The memory checkout a hook in this folder works on: a confirmed linked worktree's is its main checkout's, whatever sits beside
+    it (a link there can be changed after it was looked at), others their own."""
+    found = gitdirs.dirs(folder)
+    if found and gitdirs.confirmed(found):
+        return found.common.parent / ".agent-memory"
+    return pathlib.Path(folder) / ".agent-memory"
+
+
+def sync_memory_of(name: str, ws) -> None:
+    """A platform script's sync of this project's memory: as the project when it is sandboxed (with-lock.sh's own rev-parse reads the
+    repo's config, which can hang on a FIFO), otherwise the hook's path. Failures are the next hourly sync's."""
+    doc = hubconf.projects().get(name) or {}
+    mem = pathlib.Path(ws) / ".agent-memory"
+    if isolation.sandboxed({**doc, "name": name}):
+        sync_memory(name, doc, mem, lock=True)
+        return
+    bin_dir = pathlib.Path(__file__).resolve().parent
+    subprocess.run([str(bin_dir / "with-lock.sh"), str(bin_dir / "git-sync-memory.sh")], cwd=mem, capture_output=True)
 
 
 def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:

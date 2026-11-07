@@ -418,20 +418,16 @@ def project_of(cwd: pathlib.Path) -> str | None:
     paths = {}
     for name, p in projects().items():
         try:
-            paths[p] = paths[p.resolve()] = name
+            paths[p.resolve()] = name
         except OSError:
             pass
-    raw = pathlib.Path(cwd)
-    for p in (raw, *raw.parents):
-        if p in paths and outboxed(paths[p]):
-            return paths[p]
+    named = gitdirs.holder(cwd, {name: p for name, p in projects().items() if outboxed(name)})
+    if named:
+        return named
     try:
-        here = cwd.resolve()
+        cwd.resolve()
     except OSError:
         return None
-    for p in (here, *here.parents):
-        if p in paths and outboxed(paths[p]):
-            return paths[p]
     found = gitdirs.dirs(cwd)
     main = gitdirs.main_checkout(found) if found else None
     candidates = [main] if main else []
@@ -2056,9 +2052,24 @@ def active_sessions(c, proj, live, mcp=None) -> list[str]:
             if r["session"] in live] + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
 
 
-def session_cwd(c, sid):
+def session_cwd(c, sid, ws) -> pathlib.Path | None:
+    """The folder to start a fork of this session in, for the project at ws: where its hooks last were, resolved, if that really is
+    this project's: under its folder, or a linked worktree its repo lists. What a hook named is only a name by now: a
+    project's folder can have been swapped for a link into another's, and a run is started there as the user."""
     r = c.execute("SELECT cwd FROM presence WHERE session=?", (sid,)).fetchone()
-    return pathlib.Path(r["cwd"]) if r and r["cwd"] and pathlib.Path(r["cwd"]).is_dir() else None
+    if not r or not r["cwd"]:
+        return None
+    try:
+        p = pathlib.Path(r["cwd"]).resolve()
+        main = pathlib.Path(ws).resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not p.is_dir():
+        return None
+    if p.is_relative_to(main):
+        return p
+    found = gitdirs.dirs(p)
+    return p if found and gitdirs.main_checkout(found) == main else None
 
 
 # The prompts of the background branch copies (templates/prompts/<name>.md): a reply reaching an idle session (resume)
@@ -2599,7 +2610,7 @@ def dispatch(c, rt=None) -> int:
                 waiting += 1
                 continue
             if fork:
-                resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=None if conversation else DELEGATE_PROMPT)
+                resume(c, r, sid, session_cwd(c, sid, ws) or ws, rt, ws, prompt=None if conversation else DELEGATE_PROMPT)
                 continue
             if not r["delivered"] and mcp:
                 log(_("{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the "

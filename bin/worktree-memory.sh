@@ -96,7 +96,9 @@ case "$event" in
     # the .agent-memory/ rule only matches a directory; the symlink needs its own exclude (info/exclude is shared by
     # all worktrees)
     grep -qxF ".agent-memory" "$common/info/exclude" 2>/dev/null || echo ".agent-memory" >>"$common/info/exclude"
-    (cd .agent-memory && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
+    # the main checkout's, by name: what sits here could have been changed since it was looked at, and this folder may be out
+    # where others can write
+    (cd "$main/.agent-memory" && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
     instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
     if [ -n "$linked" ] && [ -n "$instr" ] && [ -f "$instr" ]; then
       hub_say "(this session is in a git worktree of {main}. Memory is linked to the main checkout's .agent-memory;
@@ -113,7 +115,7 @@ case "$event" in
     fi
     ;;
   end)
-    [ -e .agent-memory ] && cd .agent-memory && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
+    [ -e "$main/.agent-memory" ] && cd "$main/.agent-memory" && "$HUB/bin/with-lock.sh" "$HUB/bin/git-sync-memory.sh"
     ;;
 esac
 exit 0

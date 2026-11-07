@@ -383,7 +383,7 @@ class Hooks(WithHalf, Bus):
 
     def test_in_a_sandboxed_project_a_runtime_without_control_and_confine_does_nothing(self):
         self.send("m1")
-        caged = (mock.patch.object(self.he.project_git, "project_at", lambda ws: ("proj", {"name": "proj"})),
+        caged = (mock.patch.object(self.he.project_git, "sandbox_of", lambda cwd: ("proj", {"name": "proj"})),
                  mock.patch.object(self.he.project_git.isolation, "sandboxed", lambda doc: True))
         self.he._workspace = lambda cwd: self.ws
         with hub_json(installed=["claude", "half"]), caged[0], caged[1]:

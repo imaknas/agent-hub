@@ -314,8 +314,7 @@ def _mailbox(project: str, ids: list[str]) -> int:
         raise
     # notes committed + pushed to the memory repo (the same path as the hook)
     if res["applied"] and (ws / ".agent-memory").is_dir():
-        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=ws / ".agent-memory",
-                       capture_output=True)
+        project_git.sync_memory_of(project, ws)
     deferred = [{"id": d.get("id"), "why": str(d.get("why") or "")[:300]} for d in out.get("deferred") or []
                 if isinstance(d, dict) and d.get("id") in handled]   # why a letter waits, in the run's log
     print(json.dumps({"project": project, "ok": res["ok"], "applied": res["applied"], "refused": res["refused"],

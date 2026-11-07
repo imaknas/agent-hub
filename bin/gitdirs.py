@@ -19,6 +19,10 @@ project's to set, not the platform's to follow.
     top's .git. What sits under top is top's to write, so all of the above is only a claim about whose repo this is. This
     much is written in the repo it names, so it proves something only about a repo the writer can't write: one that is itself
     planted confirms itself. Worth nothing without knowing whose common is (project_git.user_git_ok).
+  holder(cwd, roots) → key | None
+    Which of {key: folder} holds cwd: the nearest as cwd names it, then the nearest as it resolves. By the file, not the spelling
+    (BOX/sub, another Unicode form, //, open/../box all name box), and a link on the way is no folder of the target's: a
+    box/sub swapped for a link to another root is still under box.
   main_checkout(found) → Path | None
     The main checkout, as far as the pointers agree: top itself, or a confirmed linked worktree's. A .git file naming another
     repo's .git, or a worktree that repo doesn't know, says nothing about whose folder this is. Same limit as confirmed.
@@ -85,6 +89,30 @@ def confirmed(found: Dirs) -> bool:
 def main_checkout(found: Dirs) -> pathlib.Path | None:
     main = found.common.parent
     return main if main == found.top or confirmed(found) else None
+
+
+def holder(cwd, roots: dict):
+    ids = {}
+    for key, root in roots.items():
+        try:
+            st = os.stat(root)
+        except OSError:
+            continue
+        ids.setdefault((st.st_dev, st.st_ino), key)
+    raw = pathlib.Path(cwd)
+    try:
+        walks = (raw, raw.resolve())
+    except (OSError, RuntimeError):
+        walks = (raw,)
+    for walk in walks:
+        for p in (walk, *walk.parents):
+            try:
+                st = os.lstat(p)
+            except OSError:
+                continue
+            if not stat.S_ISLNK(st.st_mode) and (st.st_dev, st.st_ino) in ids:
+                return ids[(st.st_dev, st.st_ino)]
+    return None
 
 
 if __name__ == "__main__":

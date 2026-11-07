@@ -136,6 +136,15 @@ class Doctor(unittest.TestCase):
         self.cfg["runtime"] = {"default": "none"}
         self.assertEqual(self.port_rows(self.doctor()), [])
 
+    def test_a_runtime_that_doesnt_say_what_it_runs_in_a_folder_says_so(self):
+        tail = T("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any sandbox, "
+                 "isn't known: a sandboxed project's repo config could then run as you", runtime="\0").split("\0")[-1]
+        self.assertEqual([r for r in self.doctor() if r[1].endswith(tail)], [], "the fake says it runs nothing there")
+        self.cfg["runtime"] = {"default": "acp"}
+        [row] = [r for r in self.doctor() if r[1].endswith(tail)]
+        self.assertEqual(row[0], "info")
+        self.assertIn("acp", row[1])
+
     # ---------- the isolation row ----------
 
     def isolation_row(self, rows):

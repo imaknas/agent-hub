@@ -160,8 +160,9 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
 
 
 def session_env(pol: dict) -> dict[str, str]:
-    """The settings file's env for a sandboxed project's sessions (its own tool caches: policy.py env)."""
-    return dict(pol.get("env") or {})
+    """The settings file's env for a sandboxed project's sessions: its own tool caches (policy.py env), and no git of the CLI's own
+    in the folder. A session a person opens has the tool's own protection; this is reinforcement."""
+    return {**(pol.get("env") or {}), **NO_FOLDER_GIT}
 
 
 def lease_settings(pol: dict) -> dict:
@@ -564,12 +565,20 @@ import os  # noqa: E402
 from runtime_ports import TaskResult  # noqa: E402
 
 
+# At its start `claude -p` runs `git status` in its folder for the prompt, outside any sandbox: the CLI turns fsmonitor, hooks and
+# signatures off, not a repo's clean filter, and a sandboxed project writes its own repo's config. This variable stops that git
+# (real runs, 2.1.319: docs/design/mailbox-session-first.md, step 3's record). It is a tool's feature and an update could drop
+# it: update-claude.py runs a real probe for each new version and alerts.
+NO_FOLDER_GIT = {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"}
+FOLDER_GIT_OFF = True   # runtime_ports.folder_git_unknown
+
+
 def _env(task) -> dict:
-    """claude's environment variables: PATH gets nvm's default-version bin added. claude itself can be called by its
-    full path, but plugin hooks (e.g. vercel's SessionEnd `node …`) find node through PATH; under the scheduler PATH
-    has no nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command not found every
-    time."""
-    env = dict(os.environ if task.env is None else task.env)
+    """claude's environment variables: no git of its own in the folder (above), and PATH gets nvm's default-version bin added.
+    claude itself can be called by its full path, but plugin hooks (e.g. vercel's SessionEnd `node …`) find node through PATH;
+    under the scheduler PATH has no nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command
+    not found every time."""
+    env = {**(os.environ if task.env is None else task.env), **NO_FOLDER_GIT}
     try:
         import hubconf
         nvm = hubconf.nvm_bin()
@@ -963,7 +972,9 @@ def parse_event(event: str, raw: str):
     session = data.get("session_id")
     if not session:  # no hook JSON = no real session running (onboard/recover also run the setup)
         return None
-    cwd = data.get("cwd") or os.getcwd()
+    cwd = data.get("cwd")   # as the input names it: this process's own folder would be it resolved, and the name decides
+    if not cwd or not isinstance(cwd, str):
+        return None
     ti = data.get("tool_input") or {}
     if event == "tool_used":
         return HubEvent(event, session, cwd, command=str(ti.get("command", "")))

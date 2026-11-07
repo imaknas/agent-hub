@@ -254,6 +254,12 @@ def missing_session_ports(name: str | None = None) -> list[str]:
     return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named]
 
 
+def folder_git_unknown(name: str | None = None) -> bool:
+    """Whether this runtime runs agents in a project's folder and doesn't say that it runs no git of its own there, outside any
+    sandbox (FOLDER_GIT_OFF, in the adapter): a repo's config can name a program git then runs as the user. Unknown is said."""
+    return "agent" in capabilities(name) and not getattr(_module(name or default_name()), "FOLDER_GIT_OFF", False)
+
+
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
     """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names (missing_label)."""
     have = capabilities(name)

@@ -79,10 +79,13 @@ def read_settings(doc: dict) -> tuple[dict, str | None]:
 
 def write_settings(doc: dict, content: dict, folder: pathlib.Path | None = None) -> None:
     """Replaces the file (a link or a FIFO there is replaced, never written through), in the workspace or in another of
-    its session folders (a worktree)."""
+    its session folders (a worktree). Always walked down from the workspace, link by link refused: a session folder is the
+    project's to swap for a link into another project, whenever it was last looked at. One that resolves elsewhere raises."""
     ws = registry.dirs(doc)["workspace"]
-    nofollow.replace(folder or ws, settings_path(doc).relative_to(ws),
-                     (json.dumps(content, indent=2, ensure_ascii=False) + "\n").encode())
+    rel = settings_path(doc).relative_to(ws)
+    if folder is not None:
+        rel = pathlib.Path(folder).resolve().relative_to(ws.resolve()) / rel
+    nofollow.replace(ws, rel, (json.dumps(content, indent=2, ensure_ascii=False) + "\n").encode())
 
 
 def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict, dict, dict, str | None] | None:

@@ -103,6 +103,9 @@ def wake(sid: str, text: str) -> bool:
     return True
 
 
+FOLDER_GIT_OFF = True   # it starts nothing in a folder
+
+
 def can_wake(sid: str) -> bool:
     return sid in _live
 
