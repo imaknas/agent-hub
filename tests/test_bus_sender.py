@@ -142,10 +142,8 @@ class Fixture(unittest.TestCase):
                 if json.loads(r["payload"]).get("outbox_refused")]
 
 
-class WorktreeHooks(Fixture):
-    """A session in a linked worktree hangs off user-level hooks (bin/worktree-memory.sh), not hub-event's: it must be on
-    record and end cleanly the same way, or what it holds stays held after it exits, and for as long as it works it has only
-    its hooks to say it runs. The runtime's real hook input; the installed command is one for SessionEnd and PreCompact."""
+class WorktreeFixture(Fixture):
+    """A session in a linked worktree, through the real script (bin/worktree-memory.sh) with the runtime's real hook input."""
     SID = "0a1b2c3d-0000-4000-8000-00000000abcd"
 
     def setUp(self):
@@ -177,7 +175,8 @@ class WorktreeHooks(Fixture):
 
     def hook_env(self):
         # bin/py finds the platform's Python under HOME, and this HOME is a scratch one
-        env = {**self.env, "CLAUDE_PID": str(self.proc.pid), "AGENT_HUB_PYTHON": sys.executable}
+        # an explicit root: from a linked worktree hub-event's log would otherwise be the main checkout's, the live one
+        env = {**self.env, "CLAUDE_PID": str(self.proc.pid), "AGENT_HUB_PYTHON": sys.executable, "AGENT_HUB_ROOT": str(ROOT)}
         env.pop("CLAUDE_CODE_ENTRYPOINT", None)   # the test runner's own, which may be a headless one
         return env
 
@@ -190,6 +189,12 @@ class WorktreeHooks(Fixture):
             return c.execute("SELECT via FROM presence WHERE session=?", (self.SID,)).fetchone()
         finally:
             c.close()
+
+
+class WorktreeHooks(WorktreeFixture):
+    """A session in a linked worktree hangs off user-level hooks (bin/worktree-memory.sh), not hub-event's: it must be on
+    record and end cleanly the same way, or what it holds stays held after it exits, and for as long as it works it has only
+    its hooks to say it runs. The installed command is one for SessionEnd and PreCompact."""
 
     def test_a_prompt_records_the_session_and_a_clean_end_withdraws_its_evidence(self):
         wt = self.tree()
