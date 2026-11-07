@@ -56,11 +56,12 @@ fi
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
 # its repo, files it can plant, such as the marker or the rules file that get printed into the session) runs as the
 # project instead (project_git.py run-as → sandboxed-run); its memory sync is the platform's bundle path. What runs
-# here first, finding the repo above, starts no git.
+# here first, finding the repo above, starts no git. $main comes from pointer files under $top, which the project can
+# write: whose this is is project_git.py's call, from $top's path first.
 if [ -z "${HUB_AS_PROJECT:-}" ]; then
-  "$HUB/bin/py" "$HUB/bin/project_git.py" sandboxed "$main/.agent-memory"
+  memdir=$("$HUB/bin/py" "$HUB/bin/project_git.py" worktree-scope "$top" "$main")
   case $? in
-    0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$main/.agent-memory"
+    0) [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$memdir"
        # the worktree's settings (its sandbox, the platform's hooks) are the platform's to write: the project can't
        # write them there itself (the sandbox's protect list), so they are a plain file written here, not a link
        [ "$event" = start ] || exit 0   # a prompt or a tool call has nothing left to do as the project

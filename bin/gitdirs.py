@@ -14,6 +14,13 @@ project's to set, not the platform's to follow.
     common    git_dir's "commondir", relative to git_dir, when it has one; else git_dir (`--git-common-dir`)
   All three resolved. A pointer file is opened non-blocking and read only when it is a regular file (a FIFO there
   reads as nothing).
+  confirmed(found) → bool
+    Whether the repo itself says top is its linked worktree: git_dir is in common's worktrees/, and its "gitdir" names
+    top's .git. What sits under top is top's to write, so all of the above is only a claim about whose repo this is; this
+    much is written in the repo it names, which only that repo's owner can write.
+  main_checkout(found) → Path | None
+    The main checkout, when that can be believed: top itself, or a confirmed linked worktree's. A .git file naming another
+    repo's .git, or a worktree that repo doesn't know, says nothing about whose folder this is.
 
 CLI: gitdirs.py <dir> → "<top>\t<git_dir>\t<common>"; exit 1 when <dir> is in no repo.
 
@@ -65,6 +72,18 @@ def dirs(d) -> Dirs | None:
         common = read_pointer(gd / "commondir")
         return Dirs(top, gd.resolve(), (gd / common).resolve() if common else gd.resolve())
     return None
+
+
+def confirmed(found: Dirs) -> bool:
+    if found.git_dir.parent != found.common / "worktrees":
+        return False
+    back = read_pointer(found.git_dir / "gitdir")
+    return bool(back) and (found.git_dir / back).resolve() == (found.top / ".git").resolve()
+
+
+def main_checkout(found: Dirs) -> pathlib.Path | None:
+    main = found.common.parent
+    return main if main == found.top or confirmed(found) else None
 
 
 if __name__ == "__main__":

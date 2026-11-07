@@ -20,6 +20,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import isolation  # noqa: E402
+import project_git  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -28,10 +30,15 @@ def main_checkout(cwd: pathlib.Path) -> pathlib.Path | None:
     """From the .git pointer files, not git: the hook runs as the user, and the repo's config can hang even
     rev-parse."""
     found = gitdirs.dirs(cwd)
-    return found.common.parent if found else None
+    return gitdirs.main_checkout(found) if found else None
 
 
 def own_project(cwd: pathlib.Path) -> tuple[str | None, pathlib.Path | None]:
+    """A sandboxed project's folder is its own by path: its pointer files are its to write, and naming another project's repo
+    there would let it open a session in that project, outside its sandbox."""
+    at = project_git.project_at(cwd)
+    if at and isolation.sandboxed(at[1]):
+        return at[0], hubconf.workspace(at[0]).resolve()
     main = main_checkout(cwd)
     for name in hubconf.projects():
         ws = hubconf.workspace(name)

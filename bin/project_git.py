@@ -21,6 +21,10 @@ for a write outside the project's own job.
                                                             as the project; the platform fetches the bundle)
 
 CLI (git-sync-memory.sh, sync-all-memory.sh):
+  project_git.py worktree-scope <top> <main>
+                                      a linked worktree's hook (worktree-memory.sh), <main> read from pointers under <top>:
+                                      exit 0 with the memory folder to sync when either is a sandboxed project's, 3 when the
+                                      hook may go on as the user, 1 when <top> is in no project and <main> doesn't confirm it
   project_git.py sandboxed <dir>      exit 0 when <dir> is the .agent-memory of a sandboxed project, 3 when not (any
                                       other exit: it couldn't tell)
   project_git.py run-as <dir> -- <argv…>
@@ -45,6 +49,7 @@ from typing import NamedTuple
 
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
+import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
 import names  # noqa: E402
 import isolation  # noqa: E402
@@ -225,9 +230,31 @@ def run_as_cli(d: str, argv: list[str]) -> int:
     return r.returncode
 
 
+def worktree_scope_cli(top: str, main: str) -> int:
+    """Whether a linked worktree's hook goes on as the user. <main> comes from pointer files under <top>, so a sandboxed project
+    can name any repo there: its own folder decides first, by path (project_at), and the memory is the one its registry entry
+    says. <main> counts too: a repo a sandboxed project writes is never run as the user, whoever names it. A <top> in no
+    project has no path to go by (a sandboxed project's service can write the temp folder), so <main> must confirm it."""
+    at_top = project_at(top)
+    if at_top and isolation.sandboxed(at_top[1]):
+        print(hubconf.path((at_top[1].get("paths") or {}).get("workspace")) / ".agent-memory")
+        return 0
+    memdir = pathlib.Path(main) / ".agent-memory"
+    at_main = memory_project(memdir)
+    if at_main and isolation.sandboxed(at_main[1]):
+        print(memdir)
+        return 0
+    if at_top:
+        return NOT_SANDBOXED
+    found = gitdirs.dirs(top)
+    return NOT_SANDBOXED if found and gitdirs.confirmed(found) else 1
+
+
 def main(argv: list[str]) -> int:
     if argv[:1] == ["run-as"] and len(argv) >= 4 and argv[2] == "--":
         return run_as_cli(argv[1], argv[3:])
+    if argv[:1] == ["worktree-scope"] and len(argv) == 3:
+        return worktree_scope_cli(argv[1], argv[2])
     lock = "--lock" in argv
     argv = [a for a in argv if a != "--lock"]
     if len(argv) != 2 or argv[0] not in ("sandboxed", "sync-memory"):
