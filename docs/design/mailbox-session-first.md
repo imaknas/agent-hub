@@ -480,6 +480,20 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 - **Checked past the reported paths.** Every hook entry (`HOOK_TABLE`, `WORKTREE_HOOKS`) and what it starts. Found so: `hub_json_get`'s `py -c` put the
   current folder on the import path, so a `json.py` there ran as the user wherever there's no `plutil` (now `-I`); `hub_pull` under a link to the
   hub's checkout (not run in a sandboxed project's folder now); the reminder printing what its marker links to.
+- **The system's temp folder is every sandboxed project's to write**, the same uid whatever its mode (Seatbelt `TMP`, Landlock's). So what the platform runs, loads or trusts as
+  the user goes in `hubconf.private_tmp()` (`<secrets>/tmp`: every sandbox is denied it both ways; not `.state`, which sits under the hub's own rules file; not backed up, not scanned).
+  Moved there: the update probe, `complete` (now also `--restricted`: a real run in a folder with a planted settings file and a rules file above it fired its hooks 3 times and read the rules
+  without it, 0 and not with it), `runtime_command`'s prompt and answer files, `consolidate`'s clone (git and an agent run in it), `upgrade-idea`, `sync_memory`'s bundle, `gen-index-roster`'s
+  files, and `schedulectl run`'s plist, which launchd runs as the user and was at a fixed name in `/tmp`. `mailbox-propose` has a checkout of the project's repo and a sandboxed project's job must write it, so
+  it goes in that repo's own `.git` for a sandboxed project, and runs `--restricted` (`restricted: true`), or a settings file in it, committed or planted, runs hooks as the user. The post-tool stamp moved
+  to `.state`: in temp a project could hold back any session's after-tool mail. **Left, each with its reason:** `config-check`'s export (data only, read by the owner's own commit; a race can only make a check
+  pass); `sync-local-setup.sh`'s list of missing rules (a registered project's, or as the project; only a warning's text); `test-runner.py`'s and `run-tests`' `TMPDIR` (tests run as the user and do make
+  scripts there, so a sandbox racing a test run could reach them: only while someone runs the suite, and giving each run a private one breaks tests that look for a folder outside every repo, so it wants its own
+  change); `bin/evals/` (by hand, on the owner's say); `runtime_acp`'s anonymous file. `tests/test_agent_folder_git.py` keeps this list: a new use has to say why.
+- **Asked by the name, not the folder.** The hourly sync asked `sandboxed "$(pwd -P)"` and `git-sync-memory.sh` asked again, each re-reading the `.agent-memory` link: a flipper got "not sandboxed" and git ran its config as the
+  user (the review: 14 times in 3 rounds). It now goes by the registered name before it goes anywhere, never `cd`s through a link, and `git-sync-memory.sh` doesn't ask: its five callers have all decided (above). `sync-memory` and `run-as` take a name too, and
+  refuse what isn't sandboxed. A script's `$main` is checked again when it asks (`worktree_scope`), and a hook's memory comes from one look at its pointers (`scope_of`). Against the review's flipper under the real profile: 200 rounds, 5200 flips, 0 runs as the user.
+- **`bin/run-tests` keeps tests off the real coding agent:** a fresh HOME and a recording `claude` first on PATH, and any call fails the run. A test that didn't mock the update probe made a real request through it once.
 - **`git-sync-memory.sh` has five callers.** `memory_sync` and the worktree's `end` go through the rule. The hourly sync isn't under it: it goes by
   the registry now, no longer scanning `~/workspace`, where a project that left the registry would have left a folder to run git in as the
   user. `propose_apply.py` and `first-look.py` took a registered name but ran `with-lock.sh`, whose `git rev-parse` reads a sandboxed repo's config as
@@ -509,8 +523,8 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   throwaway worktree shares the repo's config and `info/attributes` (a linked worktree's common dir), so it had the same hole and has the same answer.
   **What this rests on, plainly: one environment variable of one tool.** It isn't a platform guarantee, and AGENTS.md's rule says that's what's owed. The review lists
   other callers of that status in the CLI (`Ddn`, `Lbt`, `Dke`, what triggers them unknown) and 41 git call sites nobody traced; the runs above cover the start and those
-  tools, nothing more. An update could drop the variable silently, so `update-claude.py` runs a real probe for each version it finds, whoever installed it (one
-  small request; `filter_probe`), and what's wrong goes to the alerts and is tried again next night. Desktop's and terminal sessions have the tool's own protection: the
+  tools, nothing more. An update could drop the variable silently, so `update-claude.py` runs a real probe for each version it finds, whoever installed it (`filter_probe`): the same flags with the variable
+  and, as a negative control, without it, two small requests, since a version that stopped running status under those flags would otherwise pass forever telling nothing. What's wrong goes to the alerts, an exception too, and is tried again next night. Desktop's and terminal sessions have the tool's own protection: the
   rendered settings carry the variable for sandboxed projects' sessions, as reinforcement only, and whether the setting's `env` reaches that git in time wasn't run.
   **A neutral guarantee would take the whole agent process under the platform's sandbox**, not just the commands it runs. Not built here.
   **Other runtimes:** `command` and `acp` also start in the folder, and what they run there isn't known; doctor says so per runtime (`folder_git_unknown`).
