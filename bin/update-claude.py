@@ -115,7 +115,7 @@ def filter_probe(run=agent_run) -> str | None:
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
                GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-    with tempfile.TemporaryDirectory(prefix="filter-probe-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True) as tmp:
+    with tempfile.TemporaryDirectory(prefix="filter-probe-", dir=hubconf.private_tmp()) as tmp:
         repo, marker, script = pathlib.Path(tmp) / "repo", pathlib.Path(tmp) / "ran", pathlib.Path(tmp) / "filter.sh"
         repo.mkdir()
         script.write_text(f'#!/bin/sh\necho x >> "{marker}"\ncat\n')

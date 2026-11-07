@@ -195,13 +195,6 @@ class Probe(unittest.TestCase):
             self.assertEqual(d.stat().st_mode & 0o777, 0o700)
             self.assertTrue(any(d.is_relative_to(x) for x in policy.secret_dirs()), "every sandbox's deny_read; no write list has it")
 
-    def test_a_file_left_in_the_folder_isnt_a_crash(self):
-        def run(repo, guarded):
-            self.as_claude_is(repo, guarded)
-            (repo.parent / "sub").mkdir(exist_ok=True)
-            (repo.parent / "sub" / "left").write_text("x")
-        self.assertIsNone(self.m.filter_probe(run=run))
-
     def test_anything_that_breaks_alerts_and_nothing_is_recorded(self):
         for boom in (OSError(66, "not empty"), subprocess.CalledProcessError(1, "git"), ValueError("x")):
             with self.subTest(boom=boom), self.state(self.tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: self.tmp), \
