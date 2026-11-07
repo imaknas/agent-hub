@@ -13,7 +13,8 @@ for a write outside the project's own job.
                                                             stdout (bytes; streamed into `out` when given), stderr
   data(project, cwd, op, *args) → object                    its JSON output; raises Unavailable (sandbox refused,
                                                             git failed, malformed output)
-  fetch_bundle(bare, bundle, branch) → None | why not       fast-forward <bare>'s branch to the bundle's HEAD
+  fetch_bundle(bare, bundle, branch) → None | why not       fast-forward <bare>'s branch to the bundle's HEAD, every new commit
+                                                            holding only what a memory branch may (memory_paths)
   memory_project(dir) → (name, doc) | None                  whose .agent-memory this is
   project_at(dir) → (name, doc) | None                      whose workspace holds this folder (by path, no git)
   run(project, cwd, argv, …) → Result                       any argv as the project, bounded like job
@@ -49,6 +50,7 @@ import gitdirs  # noqa: E402
 import hubconf  # noqa: E402
 import names  # noqa: E402
 import isolation  # noqa: E402
+import memory_paths  # noqa: E402
 import policy  # noqa: E402
 import registry  # noqa: E402
 
@@ -157,7 +159,10 @@ def owned_git(repo, *args) -> subprocess.CompletedProcess:
 
 def fetch_bundle(bare: pathlib.Path, bundle: pathlib.Path, branch: str) -> str | None:
     """Fast-forward <bare>'s refs/heads/<branch> to the bundle's HEAD. The bundle is untrusted data: objects are
-    checked (fsck), and anything but a fast-forward is refused (the next round merges first)."""
+    checked (fsck), anything but a fast-forward is refused (the next round merges first), and so is a new commit holding what a memory
+    branch may not (memory_paths): git plumbing gets past the job's commit of memory/ and STATE.md, and agents run as the user in clones
+    of this branch. Nothing of it lands, and the reason goes where any other failed sync's does. A later commit removing the path
+    doesn't clear it: those commits have to go from the project's branch."""
     fsck = ["-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true"]
     r = owned_git(bare, *fsck, "fetch", "-q", "--no-tags", "--no-write-fetch-head", str(bundle), f"+HEAD:{INCOMING}")
     if r.returncode != 0:
@@ -167,6 +172,9 @@ def fetch_bundle(bare: pathlib.Path, bundle: pathlib.Path, branch: str) -> str |
         old = owned_git(bare, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").stdout.strip()
         if old and owned_git(bare, "merge-base", "--is-ancestor", old, new).returncode != 0:
             return f"not a fast-forward of {branch} (the bare repo moved on; the next round merges it first)"
+        if (bad := memory_paths.new_commit_problems(bare, old or None, new)):
+            return (f"refused: new commits on {branch} hold what a memory branch may not: {'; '.join(bad)}. It holds "
+                    f"{', '.join(memory_paths.TOP)} and {memory_paths.TREE}/**, plain files; those commits have to go from the branch")
         r = owned_git(bare, "update-ref", f"refs/heads/{branch}", new, old)
         return None if r.returncode == 0 else f"update-ref failed: {r.stderr.strip()[-300:]}"
     finally:

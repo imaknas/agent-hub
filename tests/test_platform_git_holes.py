@@ -364,6 +364,162 @@ class MemorySync(Base):
                             "the other project's object reached this project's memory bare repo")
 
 
+def plant(repo, path, content="{}\n", mode="100644", message="planted"):
+    """What git plumbing does past a refused write: the file never exists in the folder."""
+    blob = subprocess.run(["git", "-C", str(repo), "hash-object", "-w", "--stdin"], input=content, capture_output=True, text=True, env=ENV,
+                          check=True).stdout.strip()
+    git(repo, "update-index", "--add", "--cacheinfo", f"{mode},{blob},{path}")
+    git(repo, "commit", "-q", "-m", message)
+
+
+class MemoryBranchPaths(Base):
+    """A sandboxed project's memory branch reaches agents that run as the user, in a clone (consolidate) or a copy (the librarian)."""
+
+    def setUp(self):
+        super().setUp()
+        import project_git
+        self.fetch = project_git.fetch_bundle
+        _r, self.bare = self.project_with_memory("proj")
+        self.work = self.tmp / "work"
+        git(self.tmp, "clone", "-q", "-b", "agent-memory", str(self.bare), str(self.work))
+        self.tip = self.bare_tip()
+
+    def bare_tip(self):
+        return git(self.bare, "rev-parse", "refs/heads/agent-memory").strip()
+
+    def send(self):
+        """The work repo's HEAD as a bundle of what the bare repo lacks, as the memory-sync job makes it."""
+        b = self.tmp / "m.bundle"
+        b.unlink(missing_ok=True)
+        git(self.work, "bundle", "create", "-q", str(b), "HEAD", f"^{self.bare_tip()}")
+        return self.fetch(self.bare, b, "agent-memory")
+
+    def assert_refused(self, *says):
+        before = self.bare_tip()
+        why = self.send()
+        self.assertIsNotNone(why, "it landed")
+        for s in says:
+            self.assertIn(s, why)
+        self.assertEqual(self.bare_tip(), before, "nothing of it landed")
+        self.assertEqual(git(self.bare, "for-each-ref", "refs/agent-hub", "refs/brunna"), "", "the incoming ref is gone")
+
+    def test_a_settings_file_put_there_by_plumbing_is_refused(self):
+        plant(self.work, ".claude/settings.json", '{"hooks": {}}\n')
+        self.assert_refused(".claude/settings.json")
+
+    def test_every_new_commit_counts_not_just_the_tip(self):
+        plant(self.work, ".claude/settings.json")
+        git(self.work, "rm", "-q", "--cached", ".claude/settings.json")
+        git(self.work, "commit", "-q", "-m", "gone again")
+        self.assertEqual(git(self.work, "ls-tree", "-r", "--name-only", "HEAD").split(), ["memory/.gitkeep"], "the tip is clean")
+        self.assert_refused(".claude/settings.json")
+
+    def test_a_merge_that_drops_it_still_counts(self):
+        base = git(self.work, "rev-parse", "HEAD").strip()
+        plant(self.work, ".mcp.json")
+        side = git(self.work, "rev-parse", "HEAD").strip()
+        git(self.work, "reset", "-q", "--hard", base)
+        commit(self.work, "memory/a.md", "a\n", "a note")
+        git(self.work, "merge", "-q", "-s", "ours", "--no-edit", side)
+        self.assert_refused(".mcp.json")
+
+    def odd_commit(self, path, mode):
+        """A commit on the bare repo's tip whose tree has this entry and nothing else new, whatever the index would say to it."""
+        blob = subprocess.run(["git", "-C", str(self.work), "hash-object", "-w", "--stdin"], input="x\n", capture_output=True, text=True,
+                              env=ENV, check=True).stdout.strip()
+        idx = {**ENV, "GIT_INDEX_FILE": str(self.tmp / "idx")}
+        (self.tmp / "idx").unlink(missing_ok=True)
+        if path != "memory":   # a file where the folder is: nothing else in that tree
+            subprocess.run(["git", "-C", str(self.work), "read-tree", self.tip], env=idx, check=True)
+        subprocess.run(["git", "-C", str(self.work), "update-index", "--add", "--cacheinfo", f"{mode},{blob},{path}"], env=idx, check=True)
+        tree = subprocess.run(["git", "-C", str(self.work), "write-tree"], env=idx, capture_output=True, text=True, check=True).stdout.strip()
+        git(self.work, "reset", "-q", "--hard", git(self.work, "commit-tree", tree, "-p", self.tip, "-m", "odd").strip())
+
+    def test_what_a_memory_branch_may_not_hold(self):
+        for path, mode, says in ((".claude/hooks/x.sh", "100644", ".claude"), (".mcp.json", "100644", ".mcp.json"),
+                                 ("CLAUDE.md", "100644", "CLAUDE.md"), ("AGENTS.md", "100644", "AGENTS.md"), ("run.sh", "100644", "run.sh"),
+                                 ("state.md", "100644", "state.md"), ("Memory/a.md", "100644", "Memory/a.md"), ("memory", "100644", "memory"),
+                                 ("memory/.claude/settings.json", "100644", "hidden"), ("memory/.hidden.md", "100644", "hidden"),
+                                 ("memory/a.gitkeep/.x", "100644", "hidden"), ("memory/ab\u200b.md", "100644", "hidden"),
+                                 ("memory/link.md", "120000", "120000"), ("STATE.md", "120000", "120000"),
+                                 ("memory/run.sh", "100755", "100755"), ("STATE.md", "100755", "100755")):
+            with self.subTest(path=path, mode=mode):
+                self.odd_commit(path, mode)
+                self.assert_refused(says)
+
+    def test_a_gitlink_is_refused(self):
+        sub = git(self.work, "rev-parse", "HEAD").strip()
+        git(self.work, "update-index", "--add", "--cacheinfo", f"160000,{sub},memory/sub")
+        git(self.work, "commit", "-q", "-m", "a gitlink")
+        self.assert_refused("memory/sub", "160000")
+
+    def test_a_healthy_branch_lands(self):
+        for path in ("memory/2026-11-08.md", "memory/reference/topic.md", "STATE.md", "AGENT.md", "RULES", "memory/reference/.gitkeep"):
+            commit(self.work, path, "x\n", f"add {path}")
+        self.assertIsNone(self.send())
+        self.assertEqual(self.bare_tip(), git(self.work, "rev-parse", "HEAD").strip())
+
+    def test_a_first_sync_checks_the_whole_history(self):
+        bare = self.tmp / "origin" / "empty.git"
+        bare.mkdir()
+        git(bare, "init", "-q", "--bare", "-b", "agent-memory")
+        plant(self.work, ".claude/settings.json")
+        git(self.work, "rm", "-q", "--cached", ".claude/settings.json")
+        git(self.work, "commit", "-q", "-m", "gone again")
+        b = self.tmp / "all.bundle"
+        git(self.work, "bundle", "create", "-q", str(b), "HEAD")
+        self.assertIn(".claude/settings.json", self.fetch(bare, b, "agent-memory"))
+
+    def test_a_repo_that_already_holds_one_goes_on_taking_notes_and_its_removal_not_a_change(self):
+        plant(self.work, ".claude/settings.json", "old\n")
+        git(self.work, "push", "-q", str(self.bare), "HEAD:refs/heads/agent-memory")   # there before this check, as the platform finds it
+        commit(self.work, "memory/n.md", "note\n", "a note")
+        self.assertIsNone(self.send(), "notes go on")
+        plant(self.work, ".claude/settings.json", "new\n")
+        self.assert_refused(".claude/settings.json")
+        git(self.work, "reset", "-q", "--hard", self.bare_tip())
+        git(self.work, "rm", "-q", "--cached", ".claude/settings.json")
+        git(self.work, "commit", "-q", "-m", "removed")
+        self.assertIsNone(self.send(), "its removal lands")
+
+    def test_a_path_in_the_refusal_is_the_projects_own_text(self):
+        plant(self.work, "x\ny\033[31m.md")
+        why = self.send()
+        self.assertNotIn("\033", why)
+        self.assertNotIn("\n", why)
+
+    def test_the_refusal_is_the_syncs_failure(self):
+        import project_git
+        bundle = self.tmp / "job.bundle"
+        plant(self.work, ".claude/settings.json")
+        git(self.work, "bundle", "create", "-q", str(bundle), "HEAD", f"^{self.tip}")
+
+        def job(project, cwd, op, *args, out=None, **kw):
+            out.write(bundle.read_bytes())
+            return project_git.Result(0, b"", "")
+        with mock.patch.object(project_git, "job", job), mock.patch.object(hubconf, "private_tmp", lambda: self.tmp):
+            why = project_git.sync_memory("proj", self.docs["proj"], self.tmp / "ws" / "proj" / ".agent-memory")
+        self.assertIn("proj: refused", why)
+        self.assertEqual(self.bare_tip(), self.tip)
+
+    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
+    def test_the_real_job_under_the_real_profile(self):
+        """The attack end to end: plumbing in the project's memory worktree, then the job as the project, then the platform's half."""
+        import project_git
+        r = self.tmp / "ws" / "proj"
+        mem = r / ".agent-memory"
+        plant(mem, ".claude/settings.json", '{"hooks": {}}\n')
+        pol = {"workspace": r, "write": [], "other_projects": [], "deny_read": [], "credentials": [], "credential_files": []}
+
+        def sandboxed(project, cwd, argv, port=None):
+            return [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, [r]), *argv]
+        with mock.patch.object(isolation, "wrap", sandboxed):
+            why = project_git.sync_memory("proj", self.docs["proj"], mem)
+        self.assertIn(".claude/settings.json", why or "")
+        self.assertEqual(self.bare_tip(), self.tip)
+        self.assertNotIn(".claude/settings.json", git(self.bare, "ls-tree", "-r", "--name-only", "refs/heads/agent-memory").split())
+
+
 class WritesThroughLinks(Base):
     """Round 6: cap-runner and lease-runner wrote .git/info/exclude (and lease attachments) through paths a sandboxed
     project can turn into links to files of the user's."""
