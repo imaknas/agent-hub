@@ -53,7 +53,7 @@ class Bus(unittest.TestCase):
         hb.lease_ids = lambda: set()
         self.logged = []
         hb.log = self.logged.append
-        for name, value in (("STATE", self.tmp / "state"),):
+        for name, value in (("STATE", self.tmp / "state"), ("secrets_dir", lambda: self.tmp / "secrets")):
             p = mock.patch.object(hubconf, name, value)
             p.start()
             self.addCleanup(p.stop)
@@ -123,12 +123,17 @@ class ClaudeOnlyToday(Bus):
         self.assertEqual(argv[1:5], [str(BIN / "llm.py"), "run", "mailbox-conversation", "--cwd"])
         self.assertEqual(argv[6:], ["--", "--resume", SID, "--fork-session"])
 
-    def test_a_delegation_forks_the_recent_live_session(self):
+    def test_a_live_session_a_wake_could_reach_but_cant_yet_gets_no_fork(self):
+        """Claude has the wake port, so a session of its with no waiter goes on to triage: no fork pretends to be the session
+        (docs/design/mailbox-session-first.md, "Each tick", step 6). A runtime with no wake port: tests.test_mailbox_route."""
+        handled = []
+        self.hb.run_handler = lambda c, proj, ws, rows: handled.append([r["id"] for r in rows])
         self.hb.record_presence(self.c, SID, "proj", self.ws)
         self.c.commit()
         self.send("m1", "request", minutes_ago=10)
         _w, started = self.dispatch({SID}, {SID: 1000})
-        self.assertEqual(started[0][6:], ["--", "--resume", SID, "--fork-session"])
+        self.assertEqual(started, [])
+        self.assertEqual(handled, [["m1"]])
 
     def test_the_rules_file_and_local_files(self):
         env = {**os.environ, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(self.tmp / "cfg")}
@@ -311,10 +316,13 @@ class RoutedDispatch(Bus):
             waiting = self.hb.dispatch(self.c)
         return waiting, started
 
-    def test_a_live_session_of_another_runtime_waits_and_is_woken_through_it(self):
+    def test_a_live_session_of_another_runtime_is_routed_and_woken_through_it(self):
         runtime_fake.start(FAKE_SID)
         self.send("m1", "question", to_session="fake:F1")
-        self.assertEqual(self.dispatch(), (1, []))
+        record = {"fake:F1": {"runtime": "fake", "pid": 1, "start": "1", "cwd": str(self.ws), "project": "proj"}}
+        with mock.patch.object(runtime_ports, "open_sessions", lambda: record), \
+                mock.patch.object(hubconf, "projects", lambda: {"proj": {"v": 2, "name": "proj"}}):
+            self.assertEqual(self.dispatch(), (1, []))
         self.assertEqual([s for s, _t in runtime_fake._woken], [FAKE_SID])
 
     def test_an_idle_session_of_a_runtime_the_platform_cannot_resume_is_a_delegation(self):

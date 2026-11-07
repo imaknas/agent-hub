@@ -41,8 +41,15 @@ def load_file(name: str, path: pathlib.Path):
 
 
 class Harness(unittest.TestCase):
-    """tests.test_mailbox_dispatch's bus and fake runtime, without running its tests again."""
-    setUp = tmd.Dispatch.setUp
+    """tests.test_mailbox_dispatch's bus and fake runtime, without running its tests again. The registry's index has its projects
+    (with no validated entry nothing may wake: bin/hubbus wake_on)."""
+    def setUp(self):
+        tmd.Dispatch.setUp(self)
+        self.docs = {n: {"v": 2, "name": n} for n in ("proj", "other", "beta", hubconf.hub_project())}
+        p = mock.patch.object(hubconf, "projects", lambda: self.docs)
+        p.start()
+        self.addCleanup(p.stop)
+
     send = tmd.Dispatch.send
     seen = tmd.Dispatch.seen
     dispatch = tmd.Dispatch.dispatch
@@ -117,14 +124,34 @@ class CharacterizeSecrets(unittest.TestCase):
 
 
 class WakingRuntime(tmd.FakeRuntime):
-    """tests.test_mailbox_dispatch's fake runtime with the wake port."""
+    """tests.test_mailbox_dispatch's fake runtime with the wake port: its live sessions have a process record naming a project
+    (`records` says otherwise for one), and a waiter unless in `unarmed`; `statuses` says what each is doing, `asked` counts the
+    questions, as session_status starts a process per call."""
 
-    def __init__(self, answer=True):
+    def __init__(self, answer=True, project="proj"):
         super().__init__()
-        self.answer, self.woken = answer, []
+        self.answer, self.woken, self.project = answer, [], project
+        self.records, self.unarmed, self.statuses, self.asked = {}, set(), {}, []
+        self.on_wake = None
+
+    def open_sessions(self):
+        return {s: {"runtime": "fake", "pid": 1, "start": "1", "cwd": "/x", **({"project": p} if (p := self.records.get(s, self.project)) else {})}
+                for s in self.live}
+
+    def can_wake(self, sid):
+        return sid in self.live and sid not in self.unarmed
+
+    def wake_gap(self, sid):
+        return None if self.can_wake(sid) else "not_armed"
+
+    def session_status(self, sid):
+        self.asked.append(sid)
+        return self.statuses.get(sid, "idle")
 
     def wake(self, sid, text):
         self.woken.append((sid, text))
+        if self.on_wake:
+            self.on_wake(sid)
         if isinstance(self.answer, BaseException):
             raise self.answer
         return self.answer
@@ -136,7 +163,7 @@ class Wake(Harness):
         self.rt = WakingRuntime()
 
     def woken_events(self) -> list:
-        return [(r["id"], {k: v for k, v in json.loads(r["payload"]).items() if k != "v"}) for r in
+        return [(r["id"], {k: v for k, v in json.loads(r["payload"]).items() if k not in ("v", "batch")}) for r in
                 self.c.execute("SELECT id, payload FROM events WHERE type='message.woken' ORDER BY seq")]
 
     def test_a_conversation_to_a_live_session_wakes_it_once_then_waits_as_before(self):
@@ -148,7 +175,7 @@ class Wake(Harness):
         self.assertEqual([s for s, _t in self.rt.woken], ["S1"])
         self.assertIn("m1", self.rt.woken[0][1])
         self.assertIn("brunna inbox", self.rt.woken[0][1])
-        self.assertEqual(self.woken_events(), [("m1:woken", {"session": "S1", "via": "wake", "ok": True})])
+        self.assertEqual(self.woken_events(), [("m1:woken:S1", {"session": "S1", "via": "wake", "ok": True})])
         self.assertEqual((self.handled, self.resumed), ([], []))
 
     def test_a_delegation_wakes_the_session_most_recently_active_in_the_project(self):
@@ -161,13 +188,15 @@ class Wake(Harness):
         self.assertEqual([s for s, _t in self.rt.woken], ["S2"])
         self.assertEqual(self.handled, [])
 
-    def test_a_notice_replying_to_a_live_session_wakes_it_once_and_nothing_else(self):
+    def test_notices_replying_to_a_live_session_wake_it_once_for_both_and_nothing_else(self):
         self.rt.live.add("S1")
         self.send("m1", "proj", "info", to_session="S1")
         self.send("m2", "proj", "done", to_session="S1")
         self.assertEqual(self.dispatch(), 0)   # nothing waits on a notice
         self.dispatch()
-        self.assertEqual(sorted(t.split("(")[1].split(")")[0] for _s, t in self.rt.woken), ["m1", "m2"])
+        self.assertEqual(len(self.rt.woken), 1)
+        self.assertIn("m1", self.rt.woken[0][1])
+        self.assertIn("m2", self.rt.woken[0][1])
         self.assertEqual((self.handled, self.resumed), ([], []))
 
     def test_a_notice_is_not_woken_for_when_unaddressed_old_or_its_session_gone(self):
@@ -187,12 +216,12 @@ class Wake(Harness):
         self.assertNotIn("text m1", self.rt.woken[0][1])
         self.assertEqual(len(self.m.inbox(self.c, "proj", "S1", only_new=True)), 1)   # still for the hook to deliver
 
-    def test_a_delivered_letter_is_not_woken_for(self):
+    def test_a_letter_told_to_a_session_that_holds_it_is_not_woken_for(self):
         self.rt.live.add("S1")
         self.seen("S1")
         self.send("m1", "proj", "request")
         self.c.execute("BEGIN IMMEDIATE")
-        self.m.mark_delivered(self.c, self.m.inbox(self.c, "proj", "S1"), "S1", "prompt")
+        self.m.tell(self.c, self.m.inbox(self.c, "proj", "S1"), "S1", "prompt", self.m.Live(self.rt, {"S1"}, c=self.c))
         self.c.execute("COMMIT")
         self.dispatch()
         self.assertEqual(self.rt.woken, [])
@@ -204,23 +233,24 @@ class Wake(Harness):
         self.dispatch()
         self.assertEqual(self.rt.woken, [])
 
-    def test_a_failed_wake_is_recorded_once_and_changes_nothing(self):
+    def test_a_failed_wake_is_recorded_once_and_ends_the_route(self):
         self.rt.answer = False
         self.rt.live.add("S1")
-        self.seen("S1")
+        self.seen("S1", minutes_ago=30)
         self.send("m1", "proj", "request")
         self.assertEqual(self.dispatch(), 1)
-        self.assertEqual(self.dispatch(), 1)
-        self.assertEqual(len(self.rt.woken), 1)
-        self.assertEqual(self.woken_events(), [("m1:woken", {"session": "S1", "via": "wake", "ok": False})])
+        self.assertEqual(self.woken_events(), [("m1:woken:S1", {"session": "S1", "via": "wake", "ok": False})])
+        self.dispatch()
+        self.assertEqual(len(self.rt.woken), 1, "that session isn't tried again for this letter")
+        self.assertEqual(self.handled, [("proj", ["m1"])], "on down the order: nobody else to try")
 
     def test_a_broken_wake_is_recorded_with_its_error_and_dispatch_goes_on(self):
-        self.rt.answer = OSError("refused")
+        self.rt.answer = OSError("refused: text of a letter")
         self.rt.live.add("S1")
         self.seen("S1")
         self.send("m1", "proj", "request")
         self.assertEqual(self.dispatch(), 1)
-        self.assertEqual(self.woken_events()[0][1]["error"], "OSError")
+        self.assertEqual(self.woken_events()[0][1]["error"], "OSError", "the type only: what it says can quote a letter")
 
     def test_a_runtime_that_cannot_wake_this_session_records_nothing(self):
         import runtime_ports
@@ -230,10 +260,6 @@ class Wake(Harness):
         self.send("m1", "proj", "request")
         self.dispatch()
         self.assertEqual(self.woken_events(), [])
-
-    def test_after_the_wait_the_routes_are_unchanged(self):
-        CharacterizeDispatch.test_after_the_wait_the_routes_are_unchanged(self)
-        self.assertEqual(self.rt.woken, [])   # past the wait: nothing to wake for
 
     def test_status_shows_how_each_letter_went(self):
         import contextlib
@@ -250,7 +276,7 @@ class Wake(Harness):
         with mock.patch.object(self.m, "db", lambda *a, **k: self.c), contextlib.redirect_stdout(out):
             self.m.cmd_status(True)
         letters = json.loads(out.getvalue())["letters"]
-        self.assertEqual([(x["id"], x["path"], x["done"]) for x in letters], [("m1", ["woken", "hook"], False)])
+        self.assertEqual([(x["id"], x["path"], x["done"]) for x in letters], [("m1", ["routed", "woken", "hook"], False)])
 
 
 class WakeAddresses(unittest.TestCase):
@@ -628,19 +654,20 @@ class ClaudeDispatch(Harness):
     def test_dispatch_wakes_through_the_real_adapter(self):
         import runtime_ports
         rt = runtime_ports.Sessions(["claude"])
-        self.send("m1", "proj", "request", src="beta")
-        self.m.wake(self.c, rt, self.m.get_message(self.c, "m1"), self.SID)   # no waiter yet: not reached
+        self.send("m1", "proj", "request", src="other")
+        self.m.wake(self.c, rt, "proj", self.SID, [self.m.get_message(self.c, "m1")])   # no waiter yet: not reached
         f = hubconf.session_file(self.SID, "waiter")
         f.parent.mkdir(parents=True)
         f.write_text("1-a")
-        self.send("m2", "proj", "request", src="beta")
-        self.m.wake(self.c, rt, self.m.get_message(self.c, "m2"), self.SID)
+        self.send("m2", "proj", "request", src="other")
+        self.m.wake(self.c, rt, "proj", self.SID, [self.m.get_message(self.c, "m2")])
         oks = [(r["id"], json.loads(r["payload"])["ok"]) for r in
                self.c.execute("SELECT id, payload FROM events WHERE type='message.woken' ORDER BY seq")]
-        self.assertEqual(oks, [("m1:woken", False), ("m2:woken", True)])
+        self.assertEqual(oks, [(f"m1:woken:{self.SID}", False), (f"m2:woken:{self.SID}", True)])
         [req] = [p for p in f.parent.iterdir() if ".wake-" in p.name]
-        self.assertEqual(req.read_text(), self.m._("📬 brunna: 1 letter from {project} ({id}). Run brunna inbox.",
-                                                   project="beta", id="m2"))
+        self.assertEqual(req.read_text(), self.m.wake_notice("proj", [self.m.get_message(self.c, "m2")]))
+        self.assertIn("other", req.read_text())
+        self.assertIn("m2", req.read_text())
 
 
 class ClaudeSessionFiles(ClaudeSessionsDir):
@@ -677,10 +704,10 @@ class WokenNotPickedUp(Harness):
 
     def woke(self, mid, minutes_ago, ok=True):
         self.c.execute("BEGIN IMMEDIATE")
-        self.m.publish(self.c, f"{mid}:woken", "message.woken", "proj", "proj", mid,
+        self.m.publish(self.c, f"{mid}:woken:S1", "message.woken", "proj", "proj", mid,
                        {"session": "S1", "via": "wake", "ok": ok})
         self.c.execute("COMMIT")
-        self.age(f"{mid}:woken", minutes_ago)
+        self.age(f"{mid}:woken:S1", minutes_ago)
 
     def age(self, eid, minutes_ago):
         self.c.execute("UPDATE events SET ts=? WHERE id=?", (self.ts(minutes_ago), eid))

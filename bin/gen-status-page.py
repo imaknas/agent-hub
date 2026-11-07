@@ -290,8 +290,8 @@ def mail_failure(f: dict) -> bool:
 
 def path_labels() -> dict[str, str]:
     """hubbus delivery_paths' steps, for people."""
-    return {"woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
-            "hook": _("hook"), "inbox": _("inbox"),
+    return {"routed": _("routed"), "woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
+            "hook": _("hook"), "inbox": _("inbox"), "passed": _("passed on"),
             "ack": _("acked"), "resume": _("background copy"), "handler": _("agent dispatched"),
             "triage": _("agent triaged it"), "held": _("held (loop guard)")}
 
@@ -318,7 +318,7 @@ def waiting_label(w: dict) -> str:
     if w.get("why") == "routed":
         return _("session {session} has it", session=w["session"][:8]) if w.get("session") else _("seen, held for now")
     return {"triaged": _("triaged, waiting for a session"), "held": _("the loop guard asked the owner"),
-            "old": _("too old for a platform run"), "budget": _("today's runs are used up"),
+            "old": _("too old for a platform run"), "budget": _("today's runs or wakes are used up"),
             "refused": _("no propose run for this project; its sessions handle it")}.get(w.get("why"), w.get("why", ""))
 
 

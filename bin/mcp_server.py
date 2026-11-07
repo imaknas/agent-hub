@@ -323,7 +323,9 @@ def call(project: str | None, why: str, name: str, args: dict, client: "Client |
         except Exception:   # the inbox call below reports what is wrong
             n = 0
         ok, out = hubbus_cli(project, "inbox", "--project", project)
-        return ok, f"{_hubbus().header(n, project)}\n\n{out}" if n else out
+        # a session's `inbox` says what letters are itself; a platform run's doesn't (hubbus.mail_command)
+        platform = os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE")
+        return ok, f"{_hubbus().header(n, project)}\n\n{out}" if n and platform else out
     if name in ("show", "thread"):
         return hubbus_cli(project, name, str(args["id"]))
     if name == "send":

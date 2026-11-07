@@ -43,7 +43,7 @@ class Waiting(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             page = self.main_part(self.build(pathlib.Path(d).resolve(), golden.quiet_options(bus=bus))["index.html"])
         t = lambda msg, **kw: i18n.translate("gen-status-page", msg, kw, golden_lang())
-        for mid, why in (("m1", t("session {session} has it", session="abcdef01")), ("m2", t("today's runs are used up")),
+        for mid, why in (("m1", t("session {session} has it", session="abcdef01")), ("m2", t("today's runs or wakes are used up")),
                          ("m3", t("too old for a platform run"))):
             self.assertIn(t("Waiting: {id} ({project}: {why})", id=mid, project="alpha", why=why), page)
         self.assertNotIn(t("Letter {id} to {to}: unclaimed for over an hour: no session took it and the platform did "

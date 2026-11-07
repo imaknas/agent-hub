@@ -384,43 +384,56 @@ class HookPath(HookFixture):
 
 
 class Dispatch(tmw.Harness):
-    """Dispatch through the real Claude adapter: a forked session (id on no command line, a hook record) is the one
-    a delegation wakes and the one dispatch holds back for; once its process is gone, neither."""
+    """Dispatch through the real Claude adapter: a forked session (id on no command line, a hook record) is routed to and woken
+    while its waiter heartbeats, held back for while it doesn't and has had a hook; once its process is gone, neither."""
 
     def setUp(self):
         super().setUp()
-        p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
-        p.start()
-        self.addCleanup(p.stop)
+        for target, name, value in ((hubconf, "secrets_dir", lambda: self.tmp / "secrets"),
+                                    (runtime_claude, "session_status", lambda sid: "idle")):
+            p = mock.patch.object(target, name, value)
+            p.start()
+            self.addCleanup(p.stop)
         self.rt = runtime_ports.Sessions(["claude"])
         self.session = session_process(self)
-        runtime_ports.record_session(B, "claude", self.session.pid, str(self.ws))
+        runtime_ports.record_session(B, "claude", self.session.pid, str(self.ws), project_of=lambda folder: "proj")
+
+    def arm(self):
+        f = hubconf.session_file(B, "waiter")
+        f.write_text("1-a")
 
     def woken(self):
         return [(r["id"], json.loads(r["payload"])["session"]) for r in
                 self.c.execute("SELECT id, payload FROM events WHERE type='message.woken' ORDER BY seq")]
 
-    def test_a_forked_session_is_the_wake_target_and_is_held_back_for(self):
+    def test_a_forked_session_with_a_waiter_is_routed_to_and_woken(self):
+        self.arm()
+        self.seen(B)
+        self.send("m1", "proj", "request")
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual((self.handled, self.resumed), ([], []))
+        self.assertEqual(self.woken(), [(f"m1:woken:{B}", B)])
+
+    def test_a_forked_session_with_no_waiter_yet_is_held_back_for(self):
         self.seen(B)
         live = self.rt.live_sessions()
-        self.assertEqual(self.m.wake_target(self.c, "proj", live), B)
         self.assertEqual(self.m.active_sessions(self.c, "proj", live, []), [B])
         self.send("m1", "proj", "request")
         self.assertEqual(self.dispatch(), 1, "waits for the session's hook")
-        self.assertEqual((self.handled, self.resumed), ([], []))
-        self.assertEqual(self.woken(), [("m1:woken", B)])
+        self.assertEqual((self.handled, self.resumed, self.woken()), ([], [], []))
 
-    def test_a_reply_to_a_forked_session_wakes_it_and_waits(self):
+    def test_a_reply_to_a_forked_session_wakes_it(self):
+        self.arm()
         self.seen(B)
         self.send("m1", "proj", "question", to_session=B)
         self.assertEqual(self.dispatch(), 1)
         self.assertEqual((self.handled, self.resumed), ([], []))
-        self.assertEqual(self.woken(), [("m1:woken", B)])
+        self.assertEqual(self.woken(), [(f"m1:woken:{B}", B)])
 
     def test_once_its_process_is_gone_the_project_is_unattended(self):
+        self.arm()
         self.seen(B)
         end(self.session)
-        self.assertIsNone(self.m.wake_target(self.c, "proj", self.rt.live_sessions()))
         self.send("m1", "proj", "request")
         self.dispatch()
         self.assertEqual(self.handled, [("proj", ["m1"])])

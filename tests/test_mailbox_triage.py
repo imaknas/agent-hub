@@ -443,15 +443,12 @@ class Hold(Base):
         self.assertEqual(len(self.logged), 1)
 
     def test_it_stops_platform_runs_not_a_session(self):
-        """A letter just come, in a thread past its rounds, with a session in use: the session's wait and its wake go on
-        as for any letter; hold() comes only when the platform would start something."""
-        woke = []
-        self.m.wake = lambda c, rt, r, sid: woke.append((r["id"], sid))
+        """A letter just come, in a thread past its rounds, with a session in use: the session's wait goes on as for any
+        letter; hold() comes only when the platform would start something."""
         self.rt.live.add("S1")
         self.seen("S1")
         self.thread()
         self.dispatch()
-        self.assertIn(("next", "S1"), woke)
         self.assertEqual(self.vias("next"), [], "not held yet")
         self.age("next", self.m.CONVERSATION_WAIT_MIN + 1)
         self.dispatch()

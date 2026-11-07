@@ -195,7 +195,6 @@
  "triaged, waiting for a session": "已初步處理,等 session",
  "the loop guard asked the owner": "循環防護已問過本人",
  "too old for a platform run": "太舊,平台不再派人處理",
- "today's runs are used up": "今天的處理次數用完了",
  "agent triaged it": "agent 看過了",
  "A mailbox run failed ({job}): {detail}": "信箱的執行失敗了({job}):{detail}",
  "its coding agent has no way to wake a session": "它的 coding agent 沒有叫醒 session 的方法",
@@ -203,5 +202,8 @@
  "what waited to wake it was stopped: a hook installed with a shorter timeout, or the coding agent itself": "等著叫醒它的東西被停掉了:hook 裝的是較短的 timeout,或 coding agent 自己停的",
  "{n}: {why}": "{n} 個:{why}",
  "{n} of {open} open {open:session|sessions} can't be woken by a letter ({why})": "開著的 {open} 個 session 裡有 {n} 個信來了叫不醒({why})",
- "no propose run for this project; its sessions handle it": "這個專案不跑 propose,由它的 session 處理"
+ "no propose run for this project; its sessions handle it": "這個專案不跑 propose,由它的 session 處理",
+ "routed": "派給 session",
+ "passed on": "轉交下一個",
+ "today's runs or wakes are used up": "今天的執行或叫醒次數用完了"
 }
