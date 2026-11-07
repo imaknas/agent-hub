@@ -110,7 +110,7 @@ def holder(cwd, roots: dict):
                 st = os.lstat(p)
             except OSError:
                 continue
-            if not stat.S_ISLNK(st.st_mode) and (st.st_dev, st.st_ino) in ids:
+            if (st.st_dev, st.st_ino) in ids:   # lstat: a link is its own file, never the folder it names
                 return ids[(st.st_dev, st.st_ino)]
     return None
 

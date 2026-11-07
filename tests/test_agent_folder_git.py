@@ -298,6 +298,17 @@ class SettingsThroughASwap(twp.Fixture):
             m.write_settings(doc, {"a": 1}, link)
         self.assertFalse(self.target.exists())
 
+    def test_it_walks_down_from_the_workspace_whatever_the_folder_is_called(self):
+        """The walk refuses a link at each step: the folder given isn't opened, so it can't change after the look."""
+        m = load("render_walk", BIN / "render-project-settings.py")
+        doc = {**self.docs["box"], "name": "box"}
+        wt = self.ws["box"] / ".claude" / "worktrees" / "w"
+        wt.mkdir(parents=True)
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), mock.patch.object(m.nofollow, "replace") as put:
+            m.write_settings(doc, {"a": 1}, wt)
+        self.assertEqual(put.call_args[0][0].resolve(), self.ws["box"].resolve())
+        self.assertEqual(str(put.call_args[0][1]), ".claude/worktrees/w/.claude/settings.local.json")
+
     def test_a_real_folder_of_its_own_is_written(self):
         m = load("render_real", BIN / "render-project-settings.py")
         doc = {**self.docs["box"], "name": "box"}

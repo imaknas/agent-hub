@@ -678,6 +678,11 @@ class EachLineOfTheRule(Fixture):
         self.swap_to_a_repo_with_a_signed_log()
         self.run_hook("nudge", self.sub, "PostToolUse", tool_input={"command": "git commit -m x"})
         self.assertFalse(self.marker.exists())
+        m = load_hub_event()
+        ev = m.runtime_ports.HubEvent("tool_used", self.SID, str(self.sub), "git commit -m x")
+        with mock.patch.object(hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m, "_as_project", side_effect=AssertionError("ran as the project")):
+            self.assertIsNone(m._worktree_nudge(ev, self.sub.resolve(), project_git.sandbox_of(self.sub)))
 
     def test_the_memory_sync_in_a_folder_not_held_doesnt_run_even_as_the_project(self):
         m = load_hub_event()
