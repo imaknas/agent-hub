@@ -279,7 +279,7 @@ class Conformance(unittest.TestCase):
     def test_what_counts_as_a_temp_area_sandboxes_write(self):
         for t in [*seatbelt.TMP, *landlock.TMP]:
             self.assertTrue(isolation.in_system_tmp(pathlib.Path(t) / "x"), t)
-        self.assertFalse(isolation.in_system_tmp(BIN))
+        self.assertFalse(isolation.in_system_tmp("/etc"))   # not BIN: bin/linux-test copies the tree into /tmp
 
     def test_every_guarantee_has_a_probe_or_a_reason(self):
         self.assertEqual(set(isolation.GUARANTEES), set(PROBES) | set(UNPROBED))
