@@ -68,6 +68,25 @@ CALLS = GUARD / "calls.log"
 (GUARD / "bin" / "claude").chmod(0o755)
 
 
+def private_temp() -> pathlib.Path | None:
+    """The tests run as the user and execute what they write in their temp folder, and the system's is every sandboxed project's to
+    write. The test runner hands over a private one (bin/test-runner.py: tier_tmp); run by hand, this run takes its own. A clone with no
+    instance has no private folder outside its repo, and no projects: it keeps the temp folder it was given, as does a run that can't
+    have one, saying so (a sandboxed session's, say)."""
+    import hubconf
+    import isolation
+    if not isolation.in_system_tmp(tempfile.gettempdir()) or hubconf.instance_home() is None:
+        return None
+    try:
+        return hubconf.test_tmp("run-tests-")
+    except OSError as e:
+        print(f"run-tests: no private temp folder, the tests run in the system's: {e.strerror or e}", file=sys.stderr)
+        return None
+
+
+TMP = private_temp()
+
+
 def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     # the tree under test is the platform the tests see (as the test runner's export is): an explicit root skips hubconf's
     # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
@@ -78,6 +97,8 @@ def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     if not names.env("PYTHON", environ=env):
         names.env_set(env, "PYTHON", sys.executable)   # bin/py looks for it under HOME
     names.env_set(env, "TEST_RUNNER", "1")
+    if TMP:
+        env["TMPDIR"] = str(TMP)
     names.env_set(env, "ROOT", names.env("ROOT") or str(tests.resolve().parent))
     # the gate runs as a zh-Hant instance and CI (bin/linux-test: plain unittest, a bare HOME) as an English one, so a
     # test that assumes either language fails in one of them without running anything twice; a caller's own setting wins
@@ -229,6 +250,8 @@ def main(argv: list[str]) -> int:
     except OSError as e:
         leaks = [f"the leak check could not run: {e}"]
     shutil.rmtree(GUARD, ignore_errors=True)
+    if TMP:
+        shutil.rmtree(TMP, ignore_errors=True)
     if leaks:
         failed.append("leaks")
         total["errors"] += 1

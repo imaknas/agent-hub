@@ -28,6 +28,7 @@ checks each guarantee it declares (Conformance): a new backend is added by passi
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 
@@ -49,6 +50,15 @@ GUARANTEES = {
 }
 # what a sandboxed service or job must never get past, whatever the backend
 REQUIRED = ("own-writes-only", "isolated-reads", "declared-port-only")
+
+
+def in_system_tmp(path) -> bool:
+    """Whether this is in a temp area some sandbox writes (any adapter's, whichever this machine has): the same uid, so every sandboxed
+    project's own processes can write it."""
+    import landlock
+    import seatbelt
+    real = pathlib.Path(os.path.realpath(path))
+    return any(real.is_relative_to(os.path.realpath(t)) for t in [*seatbelt.TMP, *landlock.TMP])
 
 
 def adapter():

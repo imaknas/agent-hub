@@ -95,6 +95,42 @@ class Runner(unittest.TestCase):
         self.assertTrue(all(r["total"] >= r["secs"] >= 0 and r["run"] and r["tree"] for r in log))
         self.assertEqual(len({r["run"] for r in log}), 3)
 
+    def tier_tmpdir(self, env=None, **doc):
+        """The run, and the TMPDIR its tier saw (None: no tier ran)."""
+        out = self.tmp / "tmpdir-was"
+        self.declare(v=2, inputs=["env:OUT"], tests=[{"tier": "t", "when": ["merge"], "run": 'echo "$TMPDIR" > "$OUT" && echo x > "$TMPDIR/f"'}], **doc)
+        r = self.run_("--tier", "t", OUT=str(out), **(env or {}))
+        return r, pathlib.Path(out.read_text().strip()) if out.exists() else None
+
+    def test_a_tiers_temp_folder_is_private_and_goes_with_the_run(self):
+        """Tests execute what they write there: in the system's temp folder a sandboxed project's process ran its code as the user."""
+        r, tmp = self.tier_tmpdir()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(tmp.is_relative_to(self.tmp / "secrets" / "tmp"), tmp)
+        self.assertEqual(list((self.tmp / "secrets" / "tmp").iterdir()), [], "removed with the run")
+
+    def test_no_private_folder_is_a_failed_run_not_the_systems_folder(self):
+        (self.tmp / "secrets").write_text("in the way")
+        r, tmp = self.tier_tmpdir()
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIsNone(tmp, "no tier ran")
+        self.assertIn("private temp folder", r.stderr)
+
+    def test_a_private_folder_inside_a_repo_is_refused(self):
+        """The old layout's <hub>/.secrets: tests that strip the git ceiling would find that repo."""
+        r, tmp = self.tier_tmpdir(env={"AGENT_HUB_SECRETS": str(self.ws / ".secrets")})
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIsNone(tmp, "no tier ran")
+        self.assertIn("move-instance", r.stderr)
+
+    def test_a_sandboxed_projects_run_keeps_it_in_its_own_folder(self):
+        """Its sandbox can't reach the private folder, and the system's would let another project's process into this one's sandbox."""
+        r, tmp = self.tier_tmpdir(enforce={"sandbox": True})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(tmp.is_relative_to(names.resolve(self.ws, "product", ".{}") / "test"), tmp)
+        self.assertFalse(tmp.exists(), "removed with the run")
+        self.assertFalse((self.tmp / "secrets").exists(), "the private folder isn't asked for")
+
     def test_failure_keeps_the_complete_output(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "echo first-line; i=0; while [ $i -lt 100 ]; do echo $i; "
                                                          "i=$((i+1)); done; exit 3", "when": ["merge"]}])

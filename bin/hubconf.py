@@ -197,6 +197,17 @@ def private_tmp() -> pathlib.Path:
     return d
 
 
+def test_tmp(prefix: str) -> pathlib.Path:
+    """A folder of its own, in private_tmp, for a test run's temp folder: tests run as the user and execute what they write there. Raises
+    OSError when it can't be made, or when private_tmp is inside a repo (the old layout's <hub>/.secrets): tests that strip
+    GIT_CEILING_DIRECTORIES would find that repo, so such a run is refused, not moved to the system's temp folder."""
+    import tempfile
+    top = private_tmp()
+    if (repo := next((d for d in (top, *top.parents) if os.path.lexists(d / ".git")), None)):
+        raise OSError(0, f"{top} is inside the repo {repo}")
+    return pathlib.Path(tempfile.mkdtemp(prefix=prefix, dir=private_tmp()))
+
+
 PRIVATE_TMP_KEEP_DAYS = 7   # far over the longest run's time limit (the longest in contracts/llm-points.yaml is an hour)
 
 

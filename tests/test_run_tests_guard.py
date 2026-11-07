@@ -36,6 +36,13 @@ class T(unittest.TestCase):
 """
 
 
+SAYS_TMPDIR = """import os, pathlib, unittest
+class T(unittest.TestCase):
+    def test_x(self):
+        pathlib.Path(os.environ["SAY_TO"]).write_text(os.environ.get("TMPDIR") or "")
+"""
+
+
 class Guard(unittest.TestCase):
     def run_on(self, body):
         with tempfile.TemporaryDirectory() as d:
@@ -52,6 +59,30 @@ class Guard(unittest.TestCase):
                 r = self.run_on(body)
                 self.assertNotEqual(r.returncode, 0, r.stdout)
                 self.assertIn(says, r.stdout)
+
+    def test_a_system_temp_folder_is_left_for_a_private_one(self):
+        """Run by hand. The tests run as the user and execute what they write there, and the system's is every sandboxed project's to write."""
+        state = BIN.parent / ".state"   # outside the system's temp folder, whichever TMPDIR this suite runs under
+        state.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory(dir="/tmp") as system, tempfile.TemporaryDirectory(dir=state) as private:
+            d = pathlib.Path(d).resolve()
+            (d / "tests").mkdir()
+            (d / "tests" / "test_one.py").write_text(SAYS_TMPDIR)
+            base = {**{k: v for k, v in os.environ.items() if not k.startswith(("BRUNNA_", "AGENT_HUB_"))},
+                    "AGENT_HUB_ROOT": str(d), "AGENT_HUB_PYTHON": sys.executable, "SAY_TO": str(d / "said")}
+            for label, extra, want_private in (("an instance", {"AGENT_HUB_HOME": str(d / "instance"), "TMPDIR": system}, True),
+                                               ("a clone with no instance", {"TMPDIR": system}, False),
+                                               ("given a private one", {"AGENT_HUB_HOME": str(d / "instance"), "TMPDIR": private}, False)):
+                with self.subTest(label):
+                    r = subprocess.run([sys.executable, str(BIN / "run-tests"), str(d / "tests")], capture_output=True, text=True, timeout=120,
+                                       env={**base, **extra})
+                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                    said = pathlib.Path((d / "said").read_text())
+                    if want_private:
+                        self.assertTrue(said.is_relative_to(d / "instance" / "secrets" / "tmp"), said)
+                        self.assertFalse(said.exists(), "removed with the run")
+                    else:
+                        self.assertEqual(said, pathlib.Path(extra["TMPDIR"]))
 
     def test_a_call_fails_the_run_and_says_so(self):
         r = self.run_on(CALLS)

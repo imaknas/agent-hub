@@ -15,8 +15,8 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
      base with main (nightly, deploy and --rev without a merge moment: every tier of the moment).
   4. Per tier: its key (tiers.key); a recorded pass in the repo's store is a hit (--force runs anyway). Otherwise a
      fresh environment (uv sync --frozen / npm ci from the repo's own tool caches, policy.cache_env), a fixed tier
-     environment (the platform's PATH and the system's admin tools, a fresh HOME in the run folder and TMPDIR in
-     the system's temporary folder, the cache variables, AGENTHUB_TIER_CACHE (a folder of the tier's own that
+     environment (the platform's PATH and the system's admin tools, a fresh HOME in the run folder, a TMPDIR no other
+     project can write (tier_tmp), the cache variables, AGENTHUB_TIER_CACHE (a folder of the tier's own that
      outlives runs, for scheduling data such as test durations: not part of the key, it must not change results),
      declared env: and config:
      inputs; nothing else from the caller), worker slots from the machine's budget, the command in its own process
@@ -60,7 +60,7 @@ import tiers  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-RUNNER_VERSION = 1
+RUNNER_VERSION = 2   # 2: TMPDIR is no longer the system's (a tree that passed there has not passed here)
 TIMEOUT = 1800
 GRACE = 10
 SLOT_WAIT = 60
@@ -98,7 +98,7 @@ def repo_dirs(cwd: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path, pathlib.Pa
 
 
 def runs_dir(main: pathlib.Path, common: pathlib.Path) -> pathlib.Path:
-    """Where runs export and keep their HOME and TMPDIR: an excluded folder of the main checkout, which every caller can
+    """Where runs export and keep their HOME: an excluded folder of the main checkout, which every caller can
     write (a session of the repo; the project's sandbox, whose workspace it is). Not under .git: tests that make git
     repos or check paths in their temporary folders treat a path through a .git folder as git's own (the step 2.3
     rehearsal, 11-01); not the system's temporary folder, which sandbox profiles let everything write, so the tests
@@ -169,7 +169,27 @@ def declaration(name: str, doc: dict, tree: pathlib.Path, run: pathlib.Path) -> 
     return out["doc"]
 
 
-def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, dict]:
+def tier_tmp(run: pathlib.Path, doc: dict) -> str:
+    """The tier's TMPDIR. Never the system's: every sandboxed project's own processes write it, and tests execute what they write in
+    their temp folder, so a racer there runs its code as whoever runs the tests (real runs: docs/design/mailbox-session-first.md, step 3).
+    Run as the user: the private temp folder, outside every repo, since tests make git repos there and some strip GIT_* (the
+    ceiling too) from what they start, and then a folder inside a checkout makes git find the enclosing repo (the rehearsal). No folder
+    there is a failed run, not a run in the system's.
+    A sandboxed project's run (its sandbox can't reach the private folder): the run folder, in its own workspace, where no other
+    project's sandbox writes. That one is inside its repo: GIT_CEILING_DIRECTORIES holds for what doesn't strip it."""
+    if (doc.get("enforce") or {}).get("sandbox") is True:
+        tmp = run / "tmp"
+        tmp.mkdir()
+        return str(tmp)
+    try:
+        return str(hubconf.test_tmp(f"{names.current('cli')}-test."))
+    except OSError as e:
+        raise SetupError(_("no private temp folder for the tests ({error}); they don't run in the system's, which every sandboxed project "
+                           "can write. A hub in the old layout moves with {command}", error=e.strerror or e,
+                           command=f"{names.current('cli')} move-instance")) from e
+
+
+def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool, doc: dict) -> tuple[dict, dict]:
     """The fixed tier environment, and the part of it a result depends on (for the key)."""
     uv = shutil.which("uv", path=f"{os.environ.get('PATH', '')}:{hubconf.LAUNCHD_PATH}")
     # the system's admin tools too (lsof, which hubconf.cwd_users asks): without it a "who is in this folder" check
@@ -178,11 +198,8 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool) -> tuple[dict, di
     caches = policy.cache_env(main)
     caches["PLAYWRIGHT_BROWSERS_PATH"] = str(names.repo_dir(main / ".git") / "cache" / "playwright")
     (run / "home").mkdir()
-    # TMPDIR outside every repo: tests make git repos there and some strip GIT_* (GIT_CEILING_DIRECTORIES too) from
-    # what they start, so a temporary folder inside the checkout made git find the enclosing repo (the rehearsal);
-    # removed with the run (main's finally)
-    tmp = tempfile.mkdtemp(prefix=f"{names.current('cli')}-test.")
-    (run / "tmpdir").write_text(tmp)
+    tmp = tier_tmp(run, doc)
+    (run / "tmpdir").write_text(tmp)   # removed with the run (main's finally)
     env = {"PATH": path, "LANG": os.environ.get("LANG") or "en_US.UTF-8", "HOME": str(run / "home"),
            "TMPDIR": tmp, "GIT_CEILING_DIRECTORIES": str(run), "PYTHONDONTWRITEBYTECODE": "1", **caches}
     if hub:
@@ -386,7 +403,7 @@ def main(argv: list[str]) -> int:
             print(_("brunna test: nothing to run for {project} ({when}): no declared tier is affected",
                     project=name, when=a.when))
             return 0
-        env, identity = base_env(main_dir, run, name == hubconf.hub_project())
+        env, identity = base_env(main_dir, run, name == hubconf.hub_project(), doc)
         values, extra = inputs(decl, tree, env)
         store = tiers.Store(common)
         runlog = tiers.RunLog(common)

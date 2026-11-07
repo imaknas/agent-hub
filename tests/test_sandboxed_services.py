@@ -276,6 +276,11 @@ sys.exit(m.main(["--project", "proj", "--cwd", args["ws"], "--port", str(args["p
 
 
 class Conformance(unittest.TestCase):
+    def test_what_counts_as_a_temp_area_sandboxes_write(self):
+        for t in [*seatbelt.TMP, *landlock.TMP]:
+            self.assertTrue(isolation.in_system_tmp(pathlib.Path(t) / "x"), t)
+        self.assertFalse(isolation.in_system_tmp(BIN))
+
     def test_every_guarantee_has_a_probe_or_a_reason(self):
         self.assertEqual(set(isolation.GUARANTEES), set(PROBES) | set(UNPROBED))
         self.assertFalse(set(PROBES) & set(UNPROBED))
