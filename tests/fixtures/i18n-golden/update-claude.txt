@@ -18,6 +18,10 @@
 (False, '2.1.5 裝不起來(npm ERR! boom),已裝回 2.1.4')
 === new fails probe, put back fails
 (False, '2.1.5 裝不起來(unknown flag -p),裝回也失敗,claude 現在可能不能用')
+=== a completion fails on the new one, put back
+(False, '2.1.5 裝好了,但 completion 在它上面失敗,可能是它不再接受每個 completion 都會傳的旗標(unknown option); 已裝回 2.1.4')
+=== a completion fails on the new one, none before
+(False, '2.1.5 裝好了,但 completion 在它上面失敗,可能是它不再接受每個 completion 都會傳的旗標(unknown option)')
 === install fails, none before
 (False, '2.1.5 裝不起來:EACCES')
 === probe timeout

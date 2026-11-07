@@ -40,7 +40,7 @@ class Golden(unittest.TestCase):
         spec.loader.exec_module(m)
         return m
 
-    def case(self, m, *, nvm=True, has_claude=True, runs=(), versions=(), smokes=(), dry=False):
+    def case(self, m, *, nvm=True, has_claude=True, runs=(), versions=(), smokes=(), dry=False, flag=None):
         tmp = pathlib.Path(tempfile.mkdtemp())
         bin_dir = tmp / "v22.1.0" / "bin"
         bin_dir.mkdir(parents=True)
@@ -49,7 +49,7 @@ class Golden(unittest.TestCase):
         with mock.patch.object(m.hubconf, "nvm_bin", return_value=bin_dir if nvm else None), \
                 mock.patch.object(m, "run", side_effect=list(runs)), \
                 mock.patch.object(m, "version", side_effect=list(versions)), \
-                mock.patch.object(m, "smoke", side_effect=list(smokes)):
+                mock.patch.object(m, "smoke", side_effect=list(smokes)), mock.patch.object(m, "restricted_check", return_value=flag):
             return repr(m.update(dry))
 
     def scenario(self) -> str:
@@ -71,6 +71,10 @@ class Golden(unittest.TestCase):
             out.append(("new fails probe, put back fails",
                         self.case(m, runs=[view, proc(), proc(1)], versions=["2.1.4", "2.1.5", None],
                                   smokes=[None, "unknown flag -p"])))
+            out.append(("a completion fails on the new one, put back",
+                        self.case(m, runs=[view, proc(), proc()], versions=["2.1.4", "2.1.5", "2.1.4"], smokes=[None, None], flag="unknown option")))
+            out.append(("a completion fails on the new one, none before",
+                        self.case(m, has_claude=False, runs=[view, proc()], versions=["2.1.5"], smokes=[None], flag="unknown option")))
             out.append(("install fails, none before", self.case(m, has_claude=False, runs=[view, proc(1, "", "EACCES")],
                                                                 smokes=[])))
             with mock.patch.object(m.subprocess, "run", side_effect=subprocess.TimeoutExpired(["llm.py"], 180)):

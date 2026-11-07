@@ -10,8 +10,9 @@ manual updating every time).
      token) -- if that already fails, do not update (it is a login or network problem, not the new version's;
      claude-login reports it), exit 1
   2. npm install -g @anthropic-ai/claude-code@latest (with the nvm default version's npm)
-  3. The new version's `claude --version` does not run, or the same request fails (e.g. a -p flag changed) ->
-     reinstall the old version, exit 1 (the scheduler records job.failed, the status page turns red)
+  3. The new version's `claude --version` does not run, the same request fails (e.g. a -p flag changed), or a completion fails on it
+     (what every completion passes, --restricted, is only asked of the version being installed: an old one without it must still
+     be able to upgrade) -> reinstall the old version, exit 1 (the scheduler records job.failed, the status page turns red)
   No new version: nothing is done (no request made).
 Claude Code's own auto-update carries on as usual (the owner, 2026-10-24: no unified update process needed, but it
 must not fall behind silently): this script is the nightly safety net, and any kind of "cannot get to the latest
@@ -90,6 +91,16 @@ def not_answered(r) -> str | None:
 
 
 REQUEST = "Reply with just the two letters: ok"
+
+
+def restricted_check() -> str | None:
+    """A completion on the claude there now, the way every completion runs, whichever runtime is the default: None, or why not."""
+    try:
+        got = runtime_ports.load_completion("claude").complete(
+            runtime_ports.CompletionRequest(point="login-check", prompt=REQUEST, timeout_s=170), {"auth": "token"})
+    except Exception as e:   # what can't be told is said too
+        return repr(e)
+    return None if got.ok else (got.error or _("no answer"))
 
 
 def agent_run(repo: pathlib.Path, guarded: bool = True) -> str | None:
@@ -180,9 +191,12 @@ def probe_new_version() -> None:
         why = filter_probe()
     except Exception as e:   # what can't be told is said too: a pass must be earned
         why = _("the probe broke: {error!r}", error=e)
-    if not why:
+    flag = restricted_check()   # claude's own auto-update brings versions this script never installed
+    if not why and not flag:
         PROBED.parent.mkdir(parents=True, exist_ok=True)
         PROBED.write_text(json.dumps({"version": now}))
+    alert.once("claude-restricted", [_("claude {version}: every completion will fail, a test one did: {why}", version=now, why=flag)] if flag else [],
+               _("completions work again on claude {version}", version=now))
     alert.once("claude-git-filter", [_("claude {version}: {why}", version=now, why=why)] if why else [],
                _("claude {version} leaves a repo's git filter alone again", version=now))
 
@@ -222,17 +236,20 @@ def update(dry: bool) -> tuple[bool, str]:
     r = run(str(npm), "install", "-g", f"{PKG}@{latest}", "--no-audit", "--no-fund")
     new = version(claude) if r.returncode == 0 else None
     err = smoke() if new == latest else None
-    if new == latest and err is None:
+    flag = restricted_check() if new == latest and err is None else None
+    if new == latest and err is None and flag is None:
         return True, _("claude {old} → {new} (node {node}), the request test passed", old=old or _("not installed"),
                        new=new, node=bin_dir.parent.name)
-    detail = (err or (r.stderr or r.stdout).strip())[-200:]
+    detail = (flag or err or (r.stderr or r.stdout).strip())[-200:]
+    said = _("{latest} installed, but a completion fails on it, perhaps because it no longer takes a flag every completion passes ({detail})",
+             latest=latest, detail=detail) if flag else None
     if old:
         back = run(str(npm), "install", "-g", f"{PKG}@{old}", "--no-audit", "--no-fund")
         restored = back.returncode == 0 and version(claude) == old
-        return False, (_("{latest} would not install ({detail}); ", latest=latest, detail=detail) +
+        return False, ((f"{said}; " if said else _("{latest} would not install ({detail}); ", latest=latest, detail=detail)) +
                        (_("{old} is back in place", old=old) if restored
                         else _("putting the old version back failed too, so claude may not work now")))
-    return False, _("{latest} would not install: {detail}", latest=latest, detail=detail)
+    return False, said or _("{latest} would not install: {detail}", latest=latest, detail=detail)
 
 
 if __name__ == "__main__":

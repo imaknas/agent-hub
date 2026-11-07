@@ -18,6 +18,10 @@
 (False, '2.1.5 would not install (npm ERR! boom); 2.1.4 is back in place')
 === new fails probe, put back fails
 (False, '2.1.5 would not install (unknown flag -p); putting the old version back failed too, so claude may not work now')
+=== a completion fails on the new one, put back
+(False, '2.1.5 installed, but a completion fails on it, perhaps because it no longer takes a flag every completion passes (unknown option); 2.1.4 is back in place')
+=== a completion fails on the new one, none before
+(False, '2.1.5 installed, but a completion fails on it, perhaps because it no longer takes a flag every completion passes (unknown option)')
 === install fails, none before
 (False, '2.1.5 would not install: EACCES')
 === probe timeout

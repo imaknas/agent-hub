@@ -19,5 +19,9 @@
  "claude {version}: {why}": "claude {version}:{why}",
  "claude {version} leaves a repo's git filter alone again": "claude {version} 不再跑 repo 的 git filter 了",
  "the probe no longer tests anything: without the variable claude didn't run the filter either, so its git status has moved or gone; look again at what stops it (runtime_claude.py NO_FOLDER_GIT)": "這個探測已經測不到東西:沒有那個變數時 claude 也沒跑 filter,表示它的 git status 改了或沒了;要重新看什麼在擋它(runtime_claude.py NO_FOLDER_GIT)",
- "the probe broke: {error!r}": "探測壞了:{error!r}"
+ "the probe broke: {error!r}": "探測壞了:{error!r}",
+ "no answer": "沒有回應",
+ "claude {version}: every completion will fail, a test one did: {why}": "claude {version}:每個 completion 都會失敗,測試的那一次失敗了:{why}",
+ "completions work again on claude {version}": "claude {version} 上的 completion 恢復正常了",
+ "{latest} installed, but a completion fails on it, perhaps because it no longer takes a flag every completion passes ({detail})": "{latest} 裝好了,但 completion 在它上面失敗,可能是它不再接受每個 completion 都會傳的旗標({detail})"
 }
