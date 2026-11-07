@@ -88,7 +88,9 @@ For hooks / the schedule / other scripts:
                                       is free (design docs/design/mailbox-session-first.md, "Each tick"): held while an MCP
                                       session uses the project, up to MCP_HOLD_MAX_MIN; waits while under CONVERSATION_WAIT
                                       minutes old for a session with a hook that isn't a candidate; routed to a candidate (one a
-                                      wake can reach, whose process record names this project) and woken if idle, under
+                                      wake can reach, whose process record names this project: the only one, the thread's, else
+                                      the mailbox-route model's pick, asked in the background and read on a later tick, else
+                                      the most recently active; bin/mailbox_route.py) and woken if idle, under
                                       {settings} mailbox.wake and DAILY_WAKES; a session with a dialog open waits up to
                                       TAKE_TIMEOUT_MIN; a reply to a closed session is resumed in a background fork, and a
                                       session of a runtime with no wake port gets that fork (each with its context small, not to a

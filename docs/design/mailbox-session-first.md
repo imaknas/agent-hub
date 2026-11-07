@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r7, steps 1 to 4 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, steps 1 to 5 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -710,3 +710,59 @@ been done.
 - **`mailbox-route` isn't built** (step 5). `pick` says where it goes, between the thread and recency.
 
 What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Tick.status` has read what the candidates are doing, once for the tick. `message.routed`'s `by: model` is in the contract.
+
+### Step 5: where it differs from the text above, and why
+
+- **A call that gives no answer publishes no `job.failed`.** The text says both: "Picking one" has a `job.failed` with a fixed sentence,
+  "Tests" has a failed call publishing none. The owner's brief for this step says none, so none. A broken router still shows, without its
+  text: dispatch logs a miss in fixed words, once per project until a call answers again, and a point that can't run anywhere once, with
+  its reason (a settings text, never the model's). The `by: recent` rows on the bus say the rest. So the call doesn't go through
+  `llm.py run`, whose `fail()` publishes the reason: `llm.answer` runs the point to the same target (`completion_target`, which
+  `run_completion` uses too), with its schema and limits, and prints and publishes nothing. No "fixed-text failure" field was needed.
+- **`max_attempts`** (new in `contracts/llm-points.v1`, so the other side syncs its copy) counts every request, the 429 back-off and the
+  invalid answer asked again alike: the point declares 1, one request a call.
+- **Where things are kept.** The answer: `<hash>.route` in the secrets sessions folder (`hubconf.session_file`, the suffix added), mode
+  600, the hash being the first 32 hex of the letter id's sha256, since `--id` is free text for an unsandboxed sender. The folder's own
+  prune takes it ten minutes on. What has to outlive that (one call per letter, the day's count) is `.state/mailbox/route-calls.json`:
+  the hash, the project, when the call started, and whether it's spent. No text. Dispatch's prune drops entries after 8 days.
+- **While the model is asked the letter isn't routed**: it counts as waiting, and a hook may show it as before, holding it by its own
+  route; the answer then goes unused. The tick reads the answer next time; none after `WAIT_S` (90 s, two ticks a minute apart) and
+  recency picks. The call's process ends itself and its process group at 75 s (the runtime's own process with it), and the point's
+  `timeout_s` is 60.
+- **One call per letter, for the letter's life.** Its answer read or passed over, a later pick for that letter (its route ended) is
+  recency. A start that failed spends the call, and recency picks at once.
+- **One call per project per tick: the tick's other letters for that project are picked by recency**, not held to a later tick. "Past the
+  cap" reads as the daily one; holding them would make a flood's last letter wait a tick per letter before it. The day's cap is
+  `DAILY_CALLS`, 24 per project, twice the default wakes, a constant rather than a setting.
+- **Only when there's a choice**: more than one candidate left, none of them the `to_session` or the thread's. A candidate in a dialog
+  (`waiting`) is out before the pick, as in step 4.
+- **What the model reads.** One JSON block between `<data>` tags, every `<` in it written `<`, so a letter's text closes neither the
+  JSON nor the tag; the prompt says the block is data, from other agents. The letter: its sender (an address, or `?`), type, first 1000
+  characters. At most 8 candidates, the most recently active first (the model can pick only those): id, `folder` (`main` for the
+  project's own, the last part of a folder under it, i.e. a worktree's name, or nothing for a folder elsewhere, whose name isn't this
+  project's to show), idle minutes from the last hook, and what it's doing (the tick's status). The folder is the record's `cwd`, where
+  the process was first recorded.
+- **The last reply's gate**: `privacy.reflection` include for the project (a registry that can't be read is no), the target's
+  implementation is the session's own runtime (from its record), and no `llm.points` entry for this point at all, a model pin included.
+  Otherwise that candidate goes as metadata.
+- **The first lines of letters a session sent are left out.** The owner's decision names the last reply only, and a session's letters
+  are the text most likely to be another project's business. Nothing in the pick needs them.
+- **What `.last` can carry, read for this step.** Step 3 keeps it only under the label of the project at the session's folder at that
+  turn's end, and drops it when that label doesn't allow it. A session recorded in one project that has wandered into another
+  project's folder, both include, keeps that other project's text, and it reaches this project's prompt. It goes only to the runtime that
+  session runs on, which already holds it, and what comes back is an id. Accepted, not tightened: tightening means changing step 3's
+  write rule to compare the folder's project with the record's.
+- **What a crafted letter can do**: steer which of the recipient's own candidates gets it, any of which recency could have picked. It
+  can't add a session, name another project's, or get text back: the process writes only an id from its list, and dispatch checks it
+  against the candidates again. The pick itself carries at most three bits per letter to anyone who can see which session answered:
+  accepted. Its cost is bounded: one request of at most 200 output tokens, a prompt of about 1000 + 8 × 600 characters plus the
+  template, one call per letter, one per project per tick, 24 per project per day.
+- **Tool neutrality**: `shape: completion`, so any provider runs it, and `tests/test_tool_agnostic.py` lists it with the core points.
+  With no provider and a runtime with no completion interface, `mailbox_route.target()` says why, dispatch logs it once and recency
+  decides; doctor's row for judgment points with nowhere to run already covers the machine.
+- **Tests**: `tests/test_mailbox_route_call.py`. The dispatch harness turns the call off (recency, as before), so steps 1 to 4's tests
+  keep their meaning; this file turns it on with the start stubbed, and runs the call's own process against a fake provider, and once
+  for real with a model call that hangs, to see it end itself and what it started.
+
+What isn't verified: a real model's picks, and a real call's time on the default runtime for this prompt. The live check after merge:
+a project with two armed sessions on record, a request with no thread, and `hubbus.log` shows the route `(model)`.

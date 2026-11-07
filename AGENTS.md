@@ -149,7 +149,8 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   `docs/design/mailbox-session-first.md`, routing history in `docs/design/mailbox-routing.md`). Each tick, for one open,
   not taken and not routed: held while an MCP session uses the project; waits up to 5 minutes for a session having a hook that
   can't be woken yet; then one candidate (`.live` names the project, it runs, its waiter is fresh, it hasn't had this letter; picked
-  as the only one, the one in the thread, or the most recent) is routed the letter and, if idle, woken with a notice to read
+  as the only one, the one in the thread, the `mailbox-route` model's pick (a small model asked in the background, read next tick,
+  `bin/mailbox_route.py`), or the most recent) is routed the letter and, if idle, woken with a notice to read
   its mail, at most `mailbox.daily_wakes_per_project` (12) per project per day, one per session per tick. A busy one is routed and woken
   when idle; one with a dialog open waits up to an hour; a woken one has 5 minutes to be told, then 60 to act; `brunna pass <id>`
   gives it to the next. `mailbox.wake: false` (in brunna.json or a registry entry, which manifest.update can't change) turns off
