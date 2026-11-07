@@ -457,7 +457,8 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     `hub-event`.
   - `gitdirs.confirmed` alone is worth nothing: a repo a stranger made confirms itself, and `git init box/nested; git worktree add <outside>`
     needs no forging. Being registered is what counts. What it still gives: a pointer naming a registered repo, which a stranger can't
-    write, is believed only if that repo lists the folder.
+    write, is believed only if that repo lists the folder. And a real worktree in a folder others can write (the temp folder) runs a
+    memory only if it is its main checkout's: a service could plant one beside it.
 - **How the swap reaches a hook.** Read by the cold review from the 2.1.319 CLI, not watched live: a plain `cd` out of the project is reset
   after each Bash call, but `cd box/sub` stores that string, a background process can then `mv sub sub2; ln -s <target> sub`, only Bash
   re-checks, and a hook's input still says that `cwd`. `UserPromptSubmit`, `PreCompact`, `SessionEnd` and `SessionStart` on compact or resume fire

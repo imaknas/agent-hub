@@ -235,7 +235,11 @@ def user_git_ok(folder) -> bool:
         return False
     if found.top == hubconf.MAIN.resolve():
         return True
-    return gitdirs.confirmed(found) and registered_main(found.common.parent)
+    if not gitdirs.confirmed(found) or not registered_main(found.common.parent):
+        return False
+    # a real worktree in a folder others can write (the temp folder): the memory there has to be its main checkout's
+    mem = found.top / ".agent-memory"
+    return not os.path.lexists(mem) or mem.resolve() == (found.common.parent / ".agent-memory").resolve()
 
 
 def sync_memory(name: str, doc: dict, memdir, branch: str = "agent-memory", lock: bool = False) -> str | None:
@@ -292,7 +296,7 @@ def worktree_scope(top: str, main: str, cwd: str | None = None) -> int:
     if user_git_ok(top):
         return NOT_SANDBOXED
     found = gitdirs.dirs(top)
-    return UNCONFIRMED if found and registered_main(found.common.parent) else 1
+    return UNCONFIRMED if found and registered_main(found.common.parent) and not gitdirs.confirmed(found) else 1
 
 
 def main(argv: list[str]) -> int:

@@ -189,6 +189,20 @@ class PlantedOutsideEveryProject(Fixture):
         self.assertNotIn("for the open project", r.stdout)
         self.assertEqual(self.rows("type='message.delivered'"), [])
 
+    def test_a_real_worktree_in_the_temp_folder_doesnt_run_a_memory_planted_in_it(self):
+        """The worktree is real and its repo registered, but a sandboxed project's service can write there."""
+        self.tree("open")
+        real = self.tmp / "outside" / "real"
+        real.parent.mkdir()
+        self.git("-C", self.ws["open"], "worktree", "add", "-q", real, "-b", "outside")
+        self.plant_memory(real)
+        for what, name in (("start", "SessionStart"), ("end", "SessionEnd")):
+            r = self.run_hook(what, real, name)
+            self.assertEqual(self.ran_as_the_user(), [], what)
+            self.assertNotIn("git worktree repair", r.stdout, "it isn't that")
+        self.handle("session_start", real, "SessionStart", source="startup")
+        self.assertEqual(self.ran_as_the_user(), [])
+
     def test_a_real_worktree_outside_its_projects_folder_goes_on(self):
         self.tree("open")
         (self.ws["open"] / "memory-file").write_text("x")
@@ -197,6 +211,7 @@ class PlantedOutsideEveryProject(Fixture):
         self.git("-C", self.ws["open"], "worktree", "add", "-q", real, "-b", "outside")
         self.run_hook("start", real, "SessionStart")
         self.assertTrue((real / ".agent-memory").is_symlink(), "linked, as a worktree of an open project is")
+        self.assertEqual(self.scope(real, self.ws["open"]), (project_git.NOT_SANDBOXED, ""), "and goes on once linked")
 
 
 class RealWorktrees(Fixture):
