@@ -99,6 +99,8 @@ class PlantedInASandboxedProject(Fixture):
         self.run_hook("nudge", self.sub, "PostToolUse", tool_input={"command": "git commit -m x"})
         self.assertEqual(self.ran_as_the_user(), [])
 
+    @unittest.skipUnless(tbs.seatbelt.can_sandbox() is None, "the fixture's repos are in /tmp, which Landlock's profile lets the "
+                                                             "project write; a real project's aren't")
     def test_nothing_is_written_into_the_other_projects_repo(self):
         exclude = self.ws["open"] / ".git" / "info" / "exclude"
         before = exclude.read_text() if exclude.exists() else None
