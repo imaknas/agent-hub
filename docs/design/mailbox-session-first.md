@@ -488,7 +488,7 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   without it, 0 and not with it), `runtime_command`'s prompt and answer files, `consolidate`'s clone (git and an agent run in it), `upgrade-idea`, `sync_memory`'s bundle, `gen-index-roster`'s
   files, and `schedulectl run`'s plist, which launchd runs as the user and was at a fixed name in `/tmp`. The post-tool stamp moved
   to `.state`: in temp a project could hold back any session's after-tool mail. **Left, each with its reason:** `config-check`'s export (data only, read by the owner's own commit; a race can only make a check
-  pass); `sync-local-setup.sh`'s list of missing rules (a registered project's, or as the project; only a warning's text); `runtime_acp`'s anonymous file. `test-runner.py`'s `TMPDIR` and `bin/evals/` are open, below.
+  pass); `sync-local-setup.sh`'s list of missing rules (a registered project's, or as the project; only a warning's text); `runtime_acp`'s anonymous file. `test-runner.py`'s `TMPDIR` moved after this step (below); `bin/evals/` is open.
   `tests/test_agent_folder_git.py` keeps this list, and it's a hint: it reads lines, so a call split over lines or a path built elsewhere goes unseen.
 - **`mailbox.handler: propose` is off for a sandboxed project, and says so,** until the agent process itself runs under the sandbox (decided on the fifth review). The agent runs as the user in the copy and the project's own job has to
   make that copy, so it's in a folder the project can write, and the project can swap it for a link wherever that folder is. Keeping it in the repo's own `.git` closed nothing and broke more: `worktree-add` fails under the real profile for a repo
@@ -502,10 +502,44 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   What the flag changed in these runs: a hook in the copy's `.claude/settings.json` fires once without it and never with it, and a refused path is refused as outside the working folder, not as not yet granted. So it's on, and the note still lands.
   **A runtime that can't be told** (no `confine` port: `command`, ACP) runs the point only in the marked throwaway copy, or fails saying so (`llm.py`); doctor names what that leaves. ACP doesn't count as confining: the platform answers its permission requests by the unattended rules, but the agent decides when to ask, and what its own settings allow it doesn't ask about.
   `--restricted` leaves the git filter to the variable (real run: it fired without the variable, with the flag or without), so the probe still tests what it did. `update-claude.py` asks a real completion of the version it has just installed, and of each new version it finds; `login-check` doesn't pass the flag, so a version too old for it can still be upgraded, and the check before an update says nothing about it.
+- **Older, and closed after this step (11-08):**
+  - **`test-runner.py`'s `TMPDIR`.** A racer under the real profile ran its payload outside the sandbox 50 times (fifth review), and the `full` tier runs unattended every night;
+    an earlier version of this record called that exposure limited to someone running the suite, which doesn't hold. Rerun on the old tree (a racer under `service_profile`
+    adding a line to every new `#!…sh` executable in the tests' temp folder; `test_platform_hooks`, `test_upgrade_idea`, `test_platform_git_holes`): 52 runs outside the
+    sandbox from 27 scripts, each reading a file the profile denies, the 40 tests green. Now a tier run as the user gets `hubconf.test_tmp()`, a folder of its own in
+    `private_tmp()`; none there is a failed run (exit 2), never the system's folder, and a private folder inside a repo (the old layout's `<hub>/.secrets`) is refused
+    with `move-instance` named, since tests that strip the git ceiling would find that repo (this instance has no repo above it). A sandboxed project's run can't reach
+    the private folder: its `TMPDIR` is its run folder, in its own workspace, where no other project's sandbox writes (the system's would let one project's process into
+    another's sandbox); that folder is inside its repo, so a test that strips `GIT_CEILING_DIRECTORIES` there finds it. No project with a sandbox declares tests yet.
+    `bin/run-tests` run by hand moves off the system's folder the same way; a clone with no instance keeps what it was given. The runner's version went to 2, so a tree
+    that passed in the old folder isn't a hit. Rerun with this branch's runner, `full` tier, the racer aimed at the private folder itself: 0 scripts changed, 20,538
+    writes refused, 0 runs. No Seatbelt test needed the profile's temp area: the twelve modules that use a profile give the same results with `TMPDIR` in the
+    system's folder or a private one, since a process inside a sandbox whose `TMPDIR` it can't write falls back to the system's on its own (`mktemp`, Python's
+    `tempfile`, measured). What is still in the system's folder: those fallbacks, inside the sandbox they ran in; `test_cap_profile`'s socket in `/private/tmp`, which the
+    test listens on and executes nothing from; and a child a test starts with an environment that drops `TMPDIR`, which falls back the same way: not audited one by one
+    (a read-only watcher of the system's folder couldn't tell this run's files from the live nightly's, which ran at the same time on the old runner).
+    `connect`'s hidden-folder rule reads the whole path, and the private folder is under a hidden instance folder: the tests judge it from their fixture down.
+  - **A sandboxed project's memory branch.** Git plumbing (`hash-object`, `update-index --cacheinfo`, `commit`) put `.claude/settings.json` on it past the sync's commit
+    of `memory/` and `STATE.md`, `fetch_bundle` took it, and `consolidate` and the two librarian points ran in its clone and copy without `--restricted`. Rerun on the old
+    tree in a throwaway instance, the plumbing as the project under the real profile (its direct write refused), then `llm.py run consolidate` in a clone with the real
+    agent (`--setting-sources project`): the bundle landed and the hook ran as the user twice, reading a file the profile denies both times.
+    Two layers now. Where it enters: `fetch_bundle` reads the whole tree of every commit in `old..new` (all of them on a first sync), so a path added and removed again
+    counts and a merge needs no reasoning, and refuses anything but `AGENT.md`, `RULES`, `STATE.md` and `memory/**` as mode 100644, no name under `memory/` starting with
+    a dot but `.gitkeep` (`bin/memory_paths.py`). That is everything the machine's 26 memory repos hold in all their history, read 11-08: no project had planted anything.
+    A refusal is the sync's failure (the hourly sync's log, the hook's error), nothing of it lands, and the commits have to go from the project's branch; a healthy
+    project isn't touched. Where it's used: `consolidate`, `librarian-state` and `librarian-todo-format` declare `restricted: true` and `works_in: memory`, and `llm.py`
+    looks at the folder's files before any of them starts, on every runtime, and refuses a folder holding more than notes (`job.failed`, said in `llm_error`).
+    Real runs (claude 2.1.319, scratch repos, `--setting-sources project`, the points' own flags): a hook in the folder's settings file fired twice without the flag and
+    never with it, and the point's edit of `STATE.md` or `memory/reference/` landed in all seven, in folders shaped like the clone's and the copy's too. Rerun of the attack
+    on this branch: the sync refused, the bare repo unchanged, and the agent in the clone ran no hook; a branch pushed straight into the bare repo instead: `llm.py`
+    refused, no agent started, one `job.failed`.
+    **What the platform does with a repo already holding such a path:** keeps it (nothing is taken out for the project), takes no new commit adding to it or changing
+    it, takes the project's notes and the commit removing it (what the old tip holds is not new), starts no agent in its copies, and doctor names it.
+    **Another runtime:** under the tool-neutrality rule the flag is reinforcement, so a folder that passes the look doesn't need the throwaway copy that `restricted`
+    otherwise asks of a runtime with no confined runs: those core points keep running there. What's left there, and doctor says so: that agent's own settings, and a
+    rules file above the folder (none above the copies or the clones here). ACP is as before: it refuses every point but the throwaway one. The flag's own goldens:
+    three points, four variants, `--restricted` and nothing else.
 - **Older and open, not fixed here:**
-  - `test-runner.py`'s `TMPDIR`: a racer under the real profile ran its payload outside the sandbox 50 times (fifth review), and the `full` tier runs unattended every night. An earlier version of this record called that exposure limited to someone running the suite, which doesn't hold.
-    A private `TMPDIR` for each run has to stay outside every repo (tests look for that), and `private_tmp()` would do; tracked apart from this step.
-  - A sandboxed project's memory branch can carry `.claude/settings.json` by git plumbing, past the sync's commit of `memory/` and `STATE.md`: `fetch_bundle` has no path check, and `consolidate` and `librarian-state` then run in that clone without `--restricted`.
   - Seatbelt denies don't resolve links, and `bin/evals/` is exposed while it runs.
 - **Asked by the name, not the folder.** The hourly sync asked `sandboxed "$(pwd -P)"` and `git-sync-memory.sh` asked again, each re-reading the `.agent-memory` link: a flipper got "not sandboxed" and git ran its config as the
   user (the review: 14 times in 3 rounds). It now goes by the registered name before it goes anywhere, never `cd`s through a link, and `git-sync-memory.sh` doesn't ask: its five callers have all decided (above). `sync-memory` and `run-as` take a name too, and

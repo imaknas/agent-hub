@@ -484,7 +484,7 @@ rebase, no lock.
 
 - **Where:** the export goes into an excluded folder of the main checkout (`.agent-hub/test/`, listed in the repo's
   `info/exclude`), which every caller can write — a session of the repo, and the project's sandbox, whose workspace it
-  is — with the run's HOME and TMPDIR inside it. Not under `.git` (the design's first choice: the step 2.3 rehearsal
+  is — with the run's HOME inside it (TMPDIR: below). Not under `.git` (the design's first choice: the step 2.3 rehearsal
   showed tests that make git repos or check paths in their temporary folders treat any path through a `.git` folder as
   git's own, and 25 failed), nor a temporary directory (sandbox profiles allow writing those, so the tests that catch
   writes outside a folder could not), nor the hub's `.state` (denied to sandboxes). Git is fenced off from the
@@ -513,8 +513,9 @@ rebase, no lock.
   `_STATE` or `_CONFIG`, so a tier's own tests choose their roots; locale; the
   platform's variables; the run environment's `bin`) plus its declared `env:`
   inputs; nothing else from the caller, so a session's `PYTEST_ADDOPTS` or `SKIP_E2E` cannot turn a pass into a false
-  one; `GIT_*` cleared; a fresh `HOME` inside the run's directory and a fresh `TMPDIR` in the system's temporary
-  folder (inside the checkout, git found the enclosing repo for tests that strip `GIT_*`: the step 2.3 rehearsal);
+  one; `GIT_*` cleared; a fresh `HOME` inside the run's directory and a fresh `TMPDIR` outside every repo (inside the
+  checkout, git found the enclosing repo for tests that strip `GIT_*`: the step 2.3 rehearsal), in the private temp folder, never the system's,
+  where any sandboxed project's process can change what the tests execute (11-08, `docs/design/mailbox-session-first.md`, step 3's record);
   `PATH` includes the system's admin tools (`lsof`).
 
 **Authority (r7).** Everything a run evaluates — the git export (clean filters and fsmonitor come from the repo's own

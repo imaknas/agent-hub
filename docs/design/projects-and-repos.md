@@ -351,7 +351,8 @@ by which command:
   (r9; never a file in the project's folder, which can be a symlink or a FIFO): a **bundle** (`git bundle create`,
   built with the project's read rights, so it cannot contain objects the project cannot read) or **facts** as JSON
   (worktrees, last-commit times, clean or not, commit counts), with types checked. The platform fetches only from such
-  a bundle, into a repo it owns, with `transfer.fsckObjects` on.
+  a bundle, into a repo it owns, with `transfer.fsckObjects` on; a memory bundle's every new commit may hold only what a memory branch holds
+  (`bin/memory_paths.py`), since the job's own commit of notes says nothing about what plumbing put on the branch.
 - For a project without a sandbox the wrap is a no-op: it has the user's authority already, so there is nothing to
   cross. Cost: one wrapped job per sandboxed repo wherever the platform needs git facts (the status page, every tick).
 
