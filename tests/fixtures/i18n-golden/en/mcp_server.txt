@@ -23,7 +23,7 @@ This is work the platform started (mailbox-propose): write the letters to send a
 - [<ID>] from bare (info, <TS>)
   hello
 (demo: 1 open letter)
-Done with one: `brunna done <id>` (--note optional); to reply or ask: `brunna send --to <sender> --reply-to <id> --type <question|info|done> --text "…"`. `brunna ack <id>` as soon as you take one (a request/question with no ack, reply or done is given to someone else by the platform after 60 minutes); `brunna pass <id>` if it isn't yours and the platform routed it to you; someone else's ack ends the matter. Leave what has nothing to do with the current work.
+Done with one: `brunna done <id>` (--note optional); to reply or ask: `brunna send --to <sender> --reply-to <id> --type <question|info|done> --text "…"`. `brunna ack <id>` as soon as you take one (a request/question with no ack, reply or done is given to someone else by the platform after 60 minutes); `brunna pass <id>` if one held for this session (`brunna inbox` says so) isn't yours; someone else's ack ends the matter. Leave what has nothing to do with the current work.
 === instructions unknown
 P=(unrecognized) U=⚠️ why
 Outside a project, the tools here are status (what brunna has) and connect_project: when the user asks to connect this folder to brunna, call it with the folder's absolute path. T=60

@@ -154,6 +154,17 @@ class PassFromASandbox(tbs.Fixture):
         self.assertEqual(self.refusals(), [])
         self.assertEqual([json.loads(r["payload"])["session"] for r in self.rows("type='message.passed'")], ["s-box"])
 
+    def test_show_by_the_holder_tells_it_through_the_outbox(self):
+        mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "two", cwd=self.ws["open"]).stdout)
+        self.m.routed(self.c, self.m.get_message(self.c, mid), "s-box", "only")
+        with mock.patch.object(self.m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(self.m.hubconf, "workspace", lambda p: self.ws.get(p)):
+            self.m.write_view(self.c, "box", self.ws["box"])
+        self.run_in_box("show", mid)
+        self.take()
+        self.assertEqual([json.loads(r["payload"])["session"] for r in self.rows("type='message.delivered' AND ref=?", (mid,))],
+                         ["s-box"])
+
     def test_another_session_is_refused_by_its_view(self):
         with self.assertRaises(SystemExit):
             self.run_in_box("pass", self.mid, session="s-other")
@@ -998,7 +1009,7 @@ class Forged(Harness):
 
 
 class FromAnotherFolder(Harness):
-    def here(self, *args, session):
+    def here(self, *args, session):  # noqa: also called as FromAnotherFolder.here(test, …)
         """One mail command from a folder of the project called other."""
         import contextlib
         import io
@@ -1266,6 +1277,95 @@ class StatusOncePerTick(Harness):
         import runtime_ports
         self.assertFalse(hasattr(runtime_fake, "session_statuses"))
         self.assertEqual(runtime_ports.Sessions(["fake"]).session_statuses(["fake:x"]), {})
+
+
+class NoticeEdges(Harness):
+    def test_a_notice_doesnt_wake_a_session_with_a_dialog_open(self):
+        self.open("S1")
+        self.rt.statuses["S1"] = "waiting"
+        self.send("n1", "proj", "info", to_session="S1")
+        self.dispatch()
+        self.assertEqual(self.woken(), [])
+        self.assertEqual(self.m.wakes_today(self.c, "proj"), 0, "nor spends the budget")
+        self.rt.statuses["S1"] = "idle"
+        self.dispatch()
+        self.assertEqual(self.woken(), ["S1"])
+
+    def test_a_woken_session_reading_from_another_folder_is_told_the_notice(self):
+        self.open("S1", "S2")
+        self.send("n1", "proj", "info", to_session="S1")
+        self.dispatch()
+        self.assertEqual(self.woken(), ["S1"])
+        self.m.project_of = lambda cwd: "other"
+        self.assertIn("[n1]", FromAnotherFolder.here(self, "inbox", "--project", "proj", session="S1"))
+        self.assertEqual(len(self.rows("type='message.delivered' AND ref='n1'")), 1)
+        self.age_wake("n1", self.m.WAKE_PICKUP_MIN + 1)
+        self.c.execute("UPDATE events SET ts=? WHERE type='message.delivered' AND ref='n1'", (tms.ago(self.m.WAKE_PICKUP_MIN + 1),))
+        self.assertEqual(self.m.letter_path(self.c, self.m.get_message(self.c, "n1")), ["woken", "inbox"])
+        self.assertEqual(self.hook("prompt", "S2"), "", "the other sessions don't see it again")
+
+    def test_a_notice_not_woken_for_isnt_told_from_another_folder(self):
+        self.send("n1", "proj", "info")
+        self.m.project_of = lambda cwd: "other"
+        FromAnotherFolder.here(self, "inbox", "--project", "proj", session="S1")
+        self.assertEqual(self.rows("type='message.delivered' AND ref='n1'"), [])
+
+
+class ShowIsTold(Harness):
+    def test_show_by_the_session_it_is_routed_to_tells_it(self):
+        self.open("S1", "S2")
+        self.seen("S1", minutes_ago=1)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.cli("show", "m1", session="S1")
+        self.assertEqual(self.told("m1"), ["S1"])
+        self.age_wake("m1", self.m.WAKE_PICKUP_MIN + 1)
+        self.age_state("m1", self.m.WAKE_PICKUP_MIN + 1)
+        self.dispatch()
+        self.assertEqual(self.woken(), ["S1"], "past the pickup it holds: nobody else is woken")
+        self.assertEqual(self.state("m1").holder, "S1")
+
+    def test_show_by_anyone_else_holds_nothing(self):
+        self.open("S1")
+        self.send("m1", "proj", "request")
+        self.cli("show", "m1", session="S9")
+        self.assertEqual((self.told("m1"), self.by("m1")), ([], []))
+
+    def test_show_of_a_notice_it_was_woken_for(self):
+        self.open("S1")
+        self.send("n1", "proj", "info", to_session="S1")
+        self.dispatch()
+        self.cli("show", "n1", session="S1")
+        self.assertEqual(len(self.rows("type='message.delivered' AND ref='n1'")), 1)
+
+    def test_a_platform_runs_show_tells_nothing(self):
+        self.open("S1")
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.cli("show", "m1", session="S1", env=tmt.with_letters(tmt.ESCALATION, "m1"))
+        self.assertEqual(self.told("m1"), [])
+
+
+class Wording(Harness):
+    def test_pass_is_said_for_what_it_does(self):
+        """pass_refusal takes any holder, a hook's route too: the texts don't say the platform routed it."""
+        import i18n
+        with mock.patch.object(i18n, "lang", lambda: "en"):
+            texts = (self.m.footer(), self.m.wake_notice("proj", []))
+        for text in texts:
+            self.assertIn("held for this session", text)
+            self.assertNotIn("routed it to you", text)
+        self.rt.live.add("S1")
+        self.send("m1", "proj", "request")
+        self.hook("prompt", "S1")
+        self.assertEqual(self.by("m1"), [("S1", "hook")])
+        self.cli("pass", "m1", session="S1")
+        self.assertEqual(self.ended_why("m1"), ["passed"])
+
+    def test_the_notice_says_inbox_is_how_to_read(self):
+        import i18n
+        with mock.patch.object(i18n, "lang", lambda: "en"):
+            self.assertIn("that is how the platform knows you have them", self.m.wake_notice("proj", []))
 
 
 if __name__ == "__main__":

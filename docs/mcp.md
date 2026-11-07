@@ -9,7 +9,7 @@ that agent opens in a project folder can:
 | `show` / `thread` | Read one letter, or a whole thread |
 | `send` | Send a letter to another project, or reply (`reply_to`) |
 | `ack` | Claim: will handle it, but not now |
-| `pass` | Give back a letter routed to this session that isn't yours: the next session gets it |
+| `pass` | Give back a letter held for this session that isn't yours: the next session gets it |
 | `done` | Close (a note may be attached) |
 | `ask_owner` | Ask the owner something they have to decide |
 | `note` | Add an entry to this project's memory note for today |

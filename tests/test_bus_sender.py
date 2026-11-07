@@ -549,19 +549,29 @@ class Outbox(Fixture):
         self.assertEqual([json.loads(r["payload"])["session"] for r in self.rows("type='message.delivered' AND ref=?", (req,))],
                          ["s-box"])
 
-    def test_a_sandboxed_inbox_sends_only_requests_and_questions_in_told(self):
+    def test_a_sandboxed_inbox_tells_requests_and_questions_and_only_a_notice_it_was_woken_for(self):
+        """Its view has no wakes, so the file names what it read and the platform judges: a notice's or a record's flag stays its
+        hooks' unless this session was woken for it."""
         notice = self.letter_id(self.hubbus("send", "--to", "box", "--type", "info", "--text", "n", cwd=self.ws["open"]).stdout)
+        woke = self.letter_id(self.hubbus("send", "--to", "box", "--type", "info", "--text", "w", cwd=self.ws["open"]).stdout)
         req = self.letter_id(self.hubbus("send", "--to", "box", "--type", "question", "--text", "q", cwd=self.ws["open"]).stdout)
         m = self.on_bus()
         c = m.db()
         self.addCleanup(c.close)
-        self.a_record_to(m, c)
+        rec = self.a_record_to(m, c)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        m.publish(c, f"{woke}:woken:s-box", "message.woken", "box", "box", woke, {"session": "s-box", "ok": True, "batch": "b"})
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
             m.write_view(c, "box", self.ws["box"])
         out = self.in_box("inbox")
         self.assertIn(notice, out)
-        entries = [json.loads(f.read_text()) for f in self.outbox().iterdir()]
-        self.assertEqual([(e["op"], e["ids"]) for e in entries], [("told", [req])])
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(self.refusals(), [])
+        told = {r["ref"] for r in self.rows("type='message.delivered'")}
+        self.assertEqual(told, {req, woke})
+        self.assertNotIn(notice, told)
+        self.assertNotIn(rec, told)
 
     def test_any_failure_on_one_file_stops_neither_its_outbox_nor_the_next_project(self):
         docs = {**self.docs, "zbox": {"v": 1, "name": "zbox", "paths": {"workspace": str(self.tmp / "ws" / "zbox")},

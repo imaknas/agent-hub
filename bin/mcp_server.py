@@ -195,8 +195,8 @@ TOOLS = [
     {"name": "ack", "description": "Claim letters: you will handle them, but not now (a request/question nobody claims "
                                    "or handles is given to someone else by the platform after a while).",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": _ids()}}},
-    {"name": "pass", "description": "Give back letters the platform routed to this session that aren't yours: the next "
-                                    "session gets them. Refused for a letter routed to anyone else.",
+    {"name": "pass", "description": "Give back letters held for this session (inbox marks them) that aren't yours: the next "
+                                    "session gets them. Refused for a letter held for anyone else, or for nobody.",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": _ids()}}},
     {"name": "done", "description": "Handled: close the letters.",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {

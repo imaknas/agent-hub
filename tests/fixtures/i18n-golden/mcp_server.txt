@@ -23,7 +23,7 @@ brunna mcp: 專案:(認不出來)
 - [<ID>] 來自 bare(info,<TS>)
   hello
 (demo:1 封沒結案)
-處理完:`brunna done <id>`(可加 --note);要回覆或問問題:`brunna send --to <寄件人> --reply-to <id> --type <question|info|done> --text "…"`。接手了就馬上 `brunna ack <id>`(沒 ack、沒回信也沒 done 的 request/question,60 分鐘後平台會派別人處理);平台派給你但不是你的:`brunna pass <id>`;別人 ack 了就不用管。跟目前工作無關的不用動。
+處理完:`brunna done <id>`(可加 --note);要回覆或問問題:`brunna send --to <寄件人> --reply-to <id> --type <question|info|done> --text "…"`。接手了就馬上 `brunna ack <id>`(沒 ack、沒回信也沒 done 的 request/question,60 分鐘後平台會派別人處理);為這個 session 保留的信(`brunna inbox` 會標出)不是你的:`brunna pass <id>`;別人 ack 了就不用管。跟目前工作無關的不用動。
 === instructions unknown
 P=(認不出來) U=⚠️ why
 在專案外面,這裡的工具是 status(brunna 有什麼)和 connect_project:使用者要把這個資料夾接上 brunna 時,用資料夾的絕對路徑呼叫它。 T=60

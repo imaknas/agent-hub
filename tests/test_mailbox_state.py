@@ -78,7 +78,7 @@ class Harness(unittest.TestCase):
     def told(self, mid):
         return [json.loads(r["payload"]).get("session") for r in self.rows(
             "type='message.delivered' AND ref=? AND json_extract(payload,'$.via') IN "
-            "('session-start','prompt','post-tool','inbox')", mid)]
+            "('session-start','prompt','post-tool','inbox','show')", mid)]
 
     def state(self, mid):
         return self.m.letter_state(self.c, self.m.get_message(self.c, mid),
