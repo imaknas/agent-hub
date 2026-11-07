@@ -454,9 +454,10 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
     work at all, so nothing of another sandboxed project is printed into this session.
   - **Git, or a script that runs it, goes as the user only in a registered project that isn't sandboxed, the hub's checkout, or a confirmed
     worktree of one of those** (`user_git_ok`). Everything else is no, not a list of bad cases: `hub-event`'s `NOT_IN_FOLDER` names what
-    runs no git, and any other handler, a new one too, doesn't run elsewhere. A worktree out in a folder others can write gets git only in its
-    main checkout's memory, by name (`memory_dir`, `MEMORY_ONLY`, `$main/.agent-memory`), never in the folder (`folder_git_ok`): what sits there
-    can change between a look and the git. `memory-nudge.py` asks the same, for hooks installed before `hub-event`.
+    runs no git, and any other handler, a new one too, doesn't run elsewhere. Git in a worktree's own folder is allowed, not denied (`folder_git_ok`): under its main checkout's folder or
+    under `workspace_root`, and in nothing a sandboxed project can write (`policy.py`: its own folders, `allow_write`, the temp area; no sandbox writes elsewhere under
+    `workspace_root`, checked on this machine 11-08). Anywhere else, the temp folder included, it gets git only in its main checkout's memory, by name (`memory_dir`,
+    `MEMORY_ONLY`, `$main/.agent-memory`): what sits there can change between a look and the git. `memory-nudge.py` asks the same, for hooks installed before `hub-event`.
   - `gitdirs.confirmed` alone is worth nothing: a repo a stranger made confirms itself, and `git init box/nested; git worktree add <outside>`
     needs no forging. Being registered is what counts. What it still gives: a pointer naming a registered repo, which a stranger can't
     write, is believed only if that repo lists the folder.
@@ -538,6 +539,5 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 
 What step 4 must know: `Sessions.open_sessions()` gives each session's record with `project`, `can_wake`, `session_status` and
 `session_summary` are there and nothing reads them yet. A record with no `project` lasts until a hook can name its folder's project.
-A real worktree out in the temp folder gets its main checkout's memory and no reminder or local setup.
 Live check of the 14 days: right after merge, from a real session. Step 4 shouldn't count on a session idle over a day until it has
 been done.
