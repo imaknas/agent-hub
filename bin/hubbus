@@ -63,7 +63,8 @@ Usage (in a project directory; the sender defaults to the current directory's pr
                                       days, send a request asking the asking project whether it still needs them
                                       (then again every 7 days); questions from discuss-lease handovers (lease-…) are
                                       managed by the personal assistant itself, not asked
-  hubbus inbox [--project P]          letters to this project not done yet (also records delivered)
+  hubbus inbox [--project P]          letters to this project not done yet (tells this session; a free request or
+                                      question is then held for it)
   hubbus show <id>
   hubbus ack <id>...                  record delivered
   hubbus done <id>... [--note "…"]    handled; for handoffs from the personal assistant, the bridge reports back to

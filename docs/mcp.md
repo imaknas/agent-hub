@@ -5,7 +5,7 @@ that agent opens in a project folder can:
 
 | Tool | What it does |
 |---|---|
-| `inbox` | This project's letters that are not closed yet (and marks them as seen) |
+| `inbox` | This project's letters that are not closed yet, with who holds each (reading a free request or question holds it for you for a while) |
 | `show` / `thread` | Read one letter, or a whole thread |
 | `send` | Send a letter to another project, or reply (`reply_to`) |
 | `ack` | Claim: will handle it, but not now |

@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r7, step 1 built (record at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, steps 1 and 2 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -318,3 +318,63 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
   this project.
 - **A fork that dies still gets one handler**, as `stale_resumes` gave it: forks 1, handler at most 1. Step 2 makes that run a
   triage.
+
+### Step 2: where it differs from the text above, and why
+
+- **A fork is under the rules too, not "today's rules".** "Its own rules" says the fork keeps today's rules; "It reads only its
+  letters" and the step's brief give it its own letter in `MAILBOX_LETTERS`, and the rules go by that variable. So a fork
+  replies `--type done` (`info` only to an `asks` letter), closes only its letter, has no `ack` and no `open-questions`.
+  The reading: a fork is reached by anyone who can write the bus exactly as a handler is, and it has a whole session's context
+  to quote. `mailbox-resume.md` and `mailbox-delegate.md` say so. Event and clock jobs carry no letters and are unchanged. A fork
+  can no longer ask the sender a question back: it asks the owner, or leaves it for the session.
+- **`MAILBOX_LETTERS` is a JSON list**, not comma-separated: `--id` is free text for an unsandboxed sender, so `a,b` would hand
+  a run the letter `b`. A value that can't be read is no letters: refused, never unlimited. Propose's agent gets it too, for its
+  reads (its writes are refused already).
+- **The rules live in `run_refusal`, called from `mail_command`, not `confined_refusal`**: they need the bus (or the view), and
+  `confined_refusal` runs before either is open. `confined_refusal` stays as it was, for every confined run. They apply
+  wherever the variable is set, with or without `CONFINED`.
+- **"Taken by another" leaves out the run's own acts** (`taken_by_another`), or `send` then `done` would refuse the second. A
+  letter is triaged once and forked once, so a reply or close with this run's point is its own. From an outbox there is no
+  point: there, one with no session is its own. A sandboxed run's view can be a minute old, so it can miss a take; the
+  worst case is the double answer this rule cuts down, not a wrong sender. The check isn't made again when an outbox file is
+  taken in: a file can't prove it came from a confined run.
+- **The view gains `fork_only`**, so a sandboxed project's fork isn't refused for its own `resume` row.
+- **The `delivered` flag leaves out `triage` and `held` rows** (`INBOX_SQL`): it says a session has seen the letter, which they
+  don't. So today's wake and MCP hold apply to a triaged letter too, the status page's "not yet in a session" counts it, and a
+  discuss lease sees it.
+- **`hold()` moved behind the waits**, with the 7-day limit and the `held` guard: a letter just come, past its rounds, with
+  a session in use, waits and wakes as any other, and `hold()` comes only when the platform would start something. A triaged
+  letter with nothing left to start isn't held, or a letter triaged as a thread's last round would ask the owner about a loop
+  when nothing is looping.
+- **A fork can come after triage** (tick steps 5-6 are before 7, and the tests list "before and after triage"). In step 2 that
+  is today's fork paths; a transcript is read once a tick per session, since open letters now stay in the loop.
+- **One sender per tick per project**: `status.json` says `running` only after `run-agent-job.sh` has detached, so a second start
+  in the same tick would race it. `run_handler` takes the first sender's letters; the next goes next tick. This spends more of
+  `daily_runs_per_project` than one batch did (live replay below).
+- **The budget line goes out now**: when `run_handler` is stopped by `daily_runs_per_project` the sender gets the fixed line, and
+  the log goes through `log_once` (it fired every minute). Step 4's wake budget should reuse `received_line`.
+- **The fixed line is an `info` from the hub.** "The hub's own letters" reads as sent by the hub; a letter *to* the hub from
+  a project gets the line. A project's letter to itself gets none. A malformed id shows as `?`. It stays open in the sender's
+  inbox like any notice until someone closes it.
+- **The own job folder is carved out only when the run's working directory is it** (`own_state_dir`, as for writes). A handler's
+  working directory is the hub root, so all of `.state` is denied to it: it never reads its job folder (`llm.py` reads the prompt,
+  `run-agent-job.sh` writes the report). `mailbox-propose` isn't `settings: platform`, so the deny isn't there; its working
+  directory is a throwaway copy that holds no `.state`.
+- **A notes folder that is a link, or holds one at `memory`, gets no absolute rule** (`policy.notes_dir`): a project's links don't
+  decide what a platform run may write. `_linked_rules` still follows `.agent-memory` for a worktree, and it would follow a
+  `memory` link too; it did before this step, and needs its own fix.
+- **The prompt names the notes by absolute path** (`{{notes}}`), or a fork in a worktree with no link would write beside itself.
+- **Propose and a plain notes folder**: a project whose `.agent-memory` has no checkout (the hub, `memory: false`) has nothing
+  in the throwaway copy that lists a note, so what the agent wrote would vanish while its answer said it was written. `run()`
+  now looks there directly, through the same allow rules.
+- **`close_failed_questions` is a step of `dispatch_locked`, not of the `done` paths**: a letter closes through the CLI, an
+  outbox, propose or the librarian. A reply closes it too (`answered`), as it takes the letter for good. A loop question stays.
+- **`mailbox-propose`'s schema drops `question` from reply types**: it goes in `ask_owner`.
+- **e3 sets `MAILBOX_PROJECT` as well**: the mailbox scenarios had none, and the runtime refuses to run without it.
+
+Found while here, not changed: `worktree-memory.sh` in a sandboxed project's worktree re-runs itself as the project, where the bus
+isn't reachable, so its `hubbus hook` tells nothing, silently (checked in the fixture: the letter stays untold, the same hook
+tells it in an unsandboxed project). `hub-event` does tell it there, from the settings `render-project-settings --worktree`
+writes during that session's start hook; whether a session already starting picks up hooks from that file wasn't checked live.
+So a worktree session of a sandboxed project may get no mail until it restarts or the file is read. The fix is the mail
+through `hub-event worktree`, before the re-run. Step 4 needs this settled, since telling is what ends a wake's window.
