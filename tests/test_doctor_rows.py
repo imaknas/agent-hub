@@ -54,6 +54,8 @@ def T(msgid: str, **kw) -> str:
 
 
 class Doctor(unittest.TestCase):
+    PORTS = "the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads nothing they said"
+
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
@@ -107,6 +109,32 @@ class Doctor(unittest.TestCase):
                 p.stop()
         self.assertEqual(self.unexpected, [], "doctor started a command this test does not answer")
         return rows
+
+    # ---------- the session ports a runtime lacks ----------
+
+    def port_rows(self, rows):
+        tail = T(self.PORTS, runtime="\0", missing="\0").split("\0")[-1]
+        return [r for r in rows if r[1].endswith(tail)]
+
+    def test_a_runtime_with_them_has_no_row(self):
+        self.assertEqual(self.port_rows(self.doctor()), [])
+
+    def test_a_runtime_without_them_has_an_info_row_saying_which(self):
+        self.cfg["runtime"] = {"default": "acp"}
+        [(level, what, fix)] = self.port_rows(self.doctor())
+        self.assertEqual((level, fix), ("info", ""))
+        import runtime_ports
+        for port in ("session_status", "session_summary"):
+            self.assertIn(runtime_ports.PORT_LABELS[port], what)
+
+    def test_each_installed_runtime_says_for_itself(self):
+        self.cfg["runtime"] = {"default": "fake", "installed": ["fake", "acp"]}
+        [row] = self.port_rows(self.doctor())
+        self.assertIn("acp", row[1])
+
+    def test_no_coding_agent_stays_one_plain_row(self):
+        self.cfg["runtime"] = {"default": "none"}
+        self.assertEqual(self.port_rows(self.doctor()), [])
 
     # ---------- the isolation row ----------
 

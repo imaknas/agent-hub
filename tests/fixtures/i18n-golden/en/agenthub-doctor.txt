@@ -29,7 +29,7 @@ $ agenthub doctor    # launchd, problems
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
-✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
+✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended, while it has been idle under 14 days; a background session from the agent view can stop after about an hour unless pinned, and then can't be)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✗ agent login (headless token): missing
@@ -75,7 +75,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ mailbox follow-up (replying with an idle session's context): available
 ✓ channel leasing (also needs the assistant module): available
 ✓ letters seen live in the session, reminders to write notes: available
-✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended)
+✓ an idle open session is woken when a letter arrives for it: available (a session can be woken once its first turn has ended, while it has been idle under 14 days; a background session from the agent view can stop after about an hour unless pinned, and then can't be)
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ! 2 letters in the last 7 days woke a session that then didn't take them (the latest: <ID> to beta); the coding agent may have changed how it handles the wake
@@ -153,4 +153,50 @@ $ agenthub doctor    # no service manager, unnamed assistant
 ✓ background services, project settings: match the config
 
 2 problems, 4 reminders
+--- stderr
+
+$ agenthub doctor    # two coding agents
+[exit 1]
+--- stdout
+✓ python ok
+✓ config: all valid
+✓ language: interface en, notes and project state en (change: brunna init --lang <interface>[,<notes>])
+✓ owner side: assistant (owner_side: assistant)
+! brunna is not on PATH (project sessions cannot reach the mailbox commands)
+    → bin/brunna install-cli
+✓ MCP server: brunna mcp (any agent with MCP can use the mailbox and write notes; while it works in a project, the platform holds requests to that project instead of dispatching an agent, for up to 120 minutes; registering it in the tool's settings is up to you)
+    → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
+· memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine; looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder)
+    → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
+✓ coding agents: claude, acp (the platform starts claude; hub.json runtime.installed)
+✓ judgment points (librarian, index, consolidate, weekly report analysis): available
+! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no session state)
+    → a runtime that is off for a feature only lacks it for its own sessions
+! unattended agent jobs with allow:, and event-triggered agent jobs: claude available; acp off (has no confined runs (declared permissions only))
+    → a runtime that is off for a feature only lacks it for its own sessions
+! mailbox follow-up (replying with an idle session's context): claude available; acp off (has no session state)
+    → a runtime that is off for a feature only lacks it for its own sessions
+! channel leasing (also needs the assistant module): claude available; acp off (has no long-running streaming sessions or session state)
+    → a runtime that is off for a feature only lacks it for its own sessions
+! letters seen live in the session, reminders to write notes: claude available; acp off (has no session events (hooks))
+    → a runtime that is off for a feature only lacks it for its own sessions
+· an idle open session is woken when a letter arrives for it: claude available; acp off (has no session state or way to wake an idle session)
+! platform rules written into the project's rules file: claude available; acp off (has no rules file)
+    → a runtime that is off for a feature only lacks it for its own sessions
+! a sandboxed project can't write what its sessions load hooks and settings from: claude available; acp off (has no map of where sessions load settings and hooks from)
+    → a runtime that is off for a feature only lacks it for its own sessions
+✓ claude: the platform's rules go into CLAUDE.local.md
+· acp: no rules file; its sessions get the platform's rules from the MCP server's instructions (brunna mcp) or their session-start hook
+· the runtime acp has no way to tell whether a session is busy, idle or waiting on a dialog or way to read how a session's last reply ended: routing a letter takes its sessions as idle, and reads nothing they said
+✓ agent login (headless token): present
+! agent login (~/.claude/.credentials.json): missing
+    → run claude once in a terminal on the hub machine so it refreshes, or /login again
+✓ judgment points go to the runtime claude (no llm.providers; schedulectl models shows each point's model)
+✗ scheduler, watchdog: HOME (<TMP>/home) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one)
+    → schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
+✓ sandboxed projects' own services and jobs: run isolated (seatbelt: own-writes-only, isolated-reads, declared-port-only)
+! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
+✓ background services, project settings: match the config
+
+1 problem, 10 reminders
 --- stderr

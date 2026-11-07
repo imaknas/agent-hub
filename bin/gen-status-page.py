@@ -296,6 +296,23 @@ def path_labels() -> dict[str, str]:
             "triage": _("agent triaged it"), "held": _("held (loop guard)")}
 
 
+def wake_gap_label(gap: str) -> str:
+    """Why an open session can't be woken (runtime_ports.WAKE_GAPS), for people."""
+    return {"no_port": _("its coding agent has no way to wake a session"),
+            "not_armed": _("nothing is armed to wake it: no turn has ended since it opened, or it has been idle past the limit"),
+            "stopped": _("what waited to wake it was stopped: a hook installed with a shorter timeout, or the coding agent "
+                         "itself")}.get(gap, gap)
+
+
+def no_wake_line(nw: dict | None) -> str:
+    """How many open sessions a letter couldn't wake now, and why; nothing when every one can, or it can't be told."""
+    if not nw or not nw.get("n"):
+        return ""
+    why = _("; ").join(_("{n}: {why}", n=k, why=wake_gap_label(g)) for g, k in nw["why"].items())
+    return "<div class=sub>" + esc(_("{n} of {open} open {open:session|sessions} can't be woken by a letter ({why})",
+                                     n=nw["n"], open=nw["open"], why=why)) + "</div>"
+
+
 def waiting_label(w: dict) -> str:
     """Why a request/question in hubbus status's waiting list waits, for people."""
     if w.get("why") == "routed":
@@ -608,6 +625,7 @@ def main() -> None:
                      + "".join("<div class=sub>" + esc(_("Waiting: {id} ({project}: {why})", id=w["id"], project=w["to"],
                                                          why=waiting_label(w))) + "</div>"
                                for w in bus.get("waiting", []))
+                     + no_wake_line(bus.get("no_wake"))
                      + letter_paths(bus.get("letters") or []))
 
     # worktrees of parallel sessions / the merge gate (bin/worktrees.py, bin/merge-branch)

@@ -288,8 +288,8 @@ class Records(SecretsDir):
                          {os.getpid(): hb.proc_start(os.getpid()), p.pid: hb.proc_start(p.pid)})
 
 
-class HookPath(SecretsDir):
-    """hub-event records the session through the real Claude adapter, for a plain and a sandboxed project."""
+class HookFixture(SecretsDir):
+    """hub-event's handlers that touch no bus and no git, through the real Claude adapter."""
 
     def setUp(self):
         super().setUp()
@@ -314,6 +314,10 @@ class HookPath(SecretsDir):
     def hook(self, event, sid, **extra):
         raw = json.dumps({"session_id": sid, "cwd": str(self.tmp), **extra})
         return self.m.handle(event, raw, runtime_claude, "claude")
+
+
+class HookPath(HookFixture):
+    """hub-event records the session through the real Claude adapter, for a plain and a sandboxed project."""
 
     def test_every_hook_in_a_project_records_and_the_end_removes(self):
         for event in ("session_start", "prompt", "tool_used"):

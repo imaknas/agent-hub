@@ -22,6 +22,10 @@ this doesn't import registry/policy and only takes the dict policy.policy() comp
                          Stop hook (`hub-event --runtime claude wait` → wait()) that exits 2 with the notice; True only
                          while a waiter heartbeats. Details in the "waking a live session" section below
                          (docs/design/mailbox-runtimes.md B1)
+  can_wake(sid)          whether wake would be handed over now: the waiter's heartbeat is fresh; wake_gap(sid) why not
+  session_status(sid)    busy, idle, waiting or unknown, from `claude agents --json` (it lists Desktop's sessions too, and
+                         only the listing: without --json the command is the agent view, which can start things)
+  session_summary(sid)   how its last reply ended (<session>.last): what wait() kept, for a project whose label lets it
 
 Settings (neutral policy → Claude Code's settings; the policy's fields are in policy.py):
   settings(pol)          → (sandbox, deny, allow): the platform-managed part of the project's
@@ -258,6 +262,9 @@ def session_process(command: str) -> bool:
 # Live spike 11-02 (Desktop, CLI 2.1.309): the wake comes about 1 s after the exit; a timeout of 86400 holds (a waiter
 # armed for 12 minutes still woke); a waiter on SessionStart holds the session's first reply until it ends, so it is
 # armed only on Stop; a request matched again after it was taken woke the session ~10 times for one letter.
+# The timeout is 14 days since step 3 of docs/design/mailbox-session-first.md. The docs state no maximum and the CLI's limit
+# is unverified (14 days in milliseconds does fit a 32-bit timer, the usual way a large timeout fires at once); a hook
+# installed earlier keeps the timeout it was installed with, and is killed at it, the waiter's record left to go stale.
 #
 # So: every Stop (the end of every turn) arms one waiter, `hub-event --runtime claude wait` (wait() below), which
 #   - records itself in <sessions>/<session>.waiter (hubconf.session_file; the secrets directory, in no sandbox), the
@@ -269,24 +276,29 @@ def session_process(command: str) -> bool:
 #     before its own timeout.
 # wake(sid, text) writes a request (tmp + rename) only while that session's waiter heartbeats; otherwise False, and
 # dispatch's usual routing goes on. A session is wakeable once its first turn has ended, until it is idle for longer
-# than the hook timeout. Not armed: platform runs (HUB_LLM_POINT, HUBBUS_LEASE: checked by hub-event), -p runs (the
+# than the hook timeout. Agent-view background sessions can stop after about an hour unpinned (the docs), which no timeout
+# reaches. Not armed: platform runs (HUB_LLM_POINT, HUBBUS_LEASE: checked by hub-event), -p runs (the
 # session process's own arguments; the docs say -p kills background hooks at teardown, but on 2.1.316 (11-02) `claude
 # -p` waited for the waiter to exit, so a waiter there hangs the run), SDK runs (CLAUDE_CODE_ENTRYPOINT, a second signal:
 # a -p run inside another session inherits that session's), and a session whose process can't be read (fail safe).
 # The inbox socket (cross-session-messaging) is not used: its message format is still undocumented (checked 11-01).
 
-WAIT_TIMEOUT_S = 86400       # the Stop hook's timeout (enforced for asyncRewake); the waiter leaves before it
+WAIT_TIMEOUT_S = 14 * 86400  # the Stop hook's timeout (enforced for asyncRewake); the waiter leaves before it
 WAIT_MARGIN_S = 60
 WAIT_POLL_S = 2.0
 WAITER_FRESH_S = 10          # a waiter whose heartbeat is older is taken as gone
 REQUEST_TTL_S = 600          # a request no waiter took within this is dropped unshown (its letter is routed by then)
 HEADLESS_ENTRYPOINTS = {"sdk-cli", "sdk-ts", "sdk-py"}   # -p (the CLI turns "cli" into sdk-cli), Agent SDK programs
+LAST_CHARS = 500             # how much of a session's last reply wait() keeps
+AGENTS_TIMEOUT_S = 5         # the agents listing: about 0.1 s when measured; past this the status is unknown
 
 
 def note(port: str) -> str | None:
     """What to know about a port this runtime has, for doctor's feature table."""
     if port == "wake":
-        return _("a session can be woken once its first turn has ended")
+        return _("a session can be woken once its first turn has ended, while it has been idle under {days} days; a "
+                 "background session from the agent view can stop after about an hour unless pinned, and then can't be",
+                 days=WAIT_TIMEOUT_S // 86400)
     return None
 
 
@@ -305,11 +317,9 @@ def _fresh(path, now: float) -> bool:
 def wake(sid: str, text: str, now=None) -> bool:
     """Leave a wake request for this session's waiter: True when a live one will take it."""
     import secrets
-    import time
     import hubconf
     key = _session_key(sid)
-    waiter = hubconf.session_file(key, "waiter")
-    if not waiter or not _fresh(waiter, time.time() if now is None else now):
+    if not can_wake(sid, now):
         return False
     nonce = secrets.token_hex(8)
     dest = hubconf.session_file(key, f"wake-{nonce}")
@@ -319,6 +329,75 @@ def wake(sid: str, text: str, now=None) -> bool:
         fh.write(text)
     os.replace(tmp, dest)
     return True
+
+
+def can_wake(sid: str, now=None) -> bool:
+    """Whether this session's waiter heartbeats: a wake would be handed over."""
+    import time
+    import hubconf
+    waiter = hubconf.session_file(_session_key(sid), "waiter")
+    return bool(waiter) and _fresh(waiter, time.time() if now is None else now)
+
+
+def wake_gap(sid: str, now=None) -> str | None:
+    """Why can_wake is false (runtime_ports.WAKE_GAPS): no waiter's record, or one whose heartbeat stopped: killed with no
+    chance to leave, by a timeout installed earlier or the CLI itself."""
+    import hubconf
+    if can_wake(sid, now):
+        return None
+    waiter = hubconf.session_file(_session_key(sid), "waiter")
+    return "stopped" if waiter and waiter.exists() else "not_armed"
+
+
+def session_status(sid: str) -> str:
+    """From the CLI's listing of active sessions. Only with --json: bare, the command is the agent view. Anything that goes
+    wrong, or a session it doesn't list, is unknown (runtime_ports.SESSION_STATUSES)."""
+    from types import SimpleNamespace
+    try:
+        r = subprocess.run([_exe(), "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
+                           stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None)))
+        rows = json.loads(r.stdout) if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return "unknown"
+    for row in rows if isinstance(rows, list) else ():
+        if isinstance(row, dict) and row.get("sessionId") == sid:
+            status = row.get("status")
+            return status if status in ("busy", "idle", "waiting") else "unknown"
+    return "unknown"
+
+
+def _keep_last(key: str, text) -> None:
+    """<session>.last: the end of the session's last reply, mode 600, in the sessions folder (in no sandbox, the bus, the logs
+    or the backup). Nothing to keep (no such field, or its project's label doesn't let it) removes what an earlier turn
+    left: it would read as this turn's, or outlive the label. Never in the way of the wait."""
+    import hubconf
+    import runtime_ports
+    f = hubconf.session_file(key, runtime_ports.SESSION_SUMMARY)
+    if not f:
+        return
+    try:
+        if not isinstance(text, str) or not text:
+            f.unlink(missing_ok=True)
+            return
+        f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", errors="backslashreplace") as fh:   # a lone surrogate from a JSON escape
+            fh.write(text[-LAST_CHARS:])
+        os.replace(tmp, f)
+    except OSError:
+        pass
+
+
+def session_summary(sid: str) -> str | None:
+    """How the session's last reply ended; None: nothing is kept for it."""
+    import hubconf
+    import runtime_ports
+    f = hubconf.session_file(_session_key(sid), runtime_ports.SESSION_SUMMARY)
+    try:
+        return f.read_text(encoding="utf-8", errors="replace") if f else None
+    except OSError:
+        return None
 
 
 def _alive(pid: int) -> bool:
@@ -374,7 +453,7 @@ def _argv(pid: int) -> list[str] | None:
 
 def _printing(argv: list[str]) -> bool:
     """Whether the session runs with -p / --print: such a run waits for an asyncRewake Stop hook to exit before it
-    exits itself (seen 11-02 on 2.1.316, not what the docs say), so a waiter there would hold it for up to a day."""
+    exits itself (seen 11-02 on 2.1.316, not what the docs say), so a waiter there would hold it for its whole timeout."""
     return any(a in ("-p", "--print") or a.startswith("--print=") for a in argv[1:])
 
 
@@ -389,19 +468,22 @@ def person_session(pid: int, env) -> bool:
     return argv is not None and not _printing(argv)
 
 
-def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, argv_of=None) -> tuple[int, str, str]:
+def wait(raw: str, env, *, keep_last: bool = False, clock=None, sleep=None, poll: float = WAIT_POLL_S,
+         argv_of=None) -> tuple[int, str, str]:
     """The Stop hook's waiter (see above): (exit code, stderr, how it ended). Exit 2 with the notices wakes the
     session; 0 ends quietly. It arms only when the session's process is known (CLAUDE_PID) and isn't a -p run: a
     print-mode claude (-p) started inside another session inherits that session's CLAUDE_CODE_ENTRYPOINT (claude-desktop, cli),
-    so the entrypoint alone doesn't tell. argv_of: how to read a process's arguments (tests)."""
+    so the entrypoint alone doesn't tell. keep_last: this session's project lets it keep the end of its last reply; a run it
+    doesn't arm for keeps nothing either. argv_of: how to read a process's arguments (tests)."""
     import secrets
     import time
     import hubconf
     clock, sleep = clock or time.time, sleep or time.sleep
     try:
-        sid = (json.loads(raw or "{}") or {}).get("session_id")
+        data = json.loads(raw or "{}") or {}
+        sid = data.get("session_id")
     except (ValueError, AttributeError):
-        sid = None
+        data, sid = {}, None
     if not sid or not isinstance(sid, str):
         return 0, "", "no-session"
     if env.get("CLAUDE_CODE_ENTRYPOINT") in HEADLESS_ENTRYPOINTS:
@@ -416,6 +498,7 @@ def wait(raw: str, env, *, clock=None, sleep=None, poll: float = WAIT_POLL_S, ar
         return 0, "", "no-session-process"   # can't tell it isn't -p: a missed wake, never a hung run
     if _printing(argv):
         return 0, "", "headless"
+    _keep_last(key, data.get("last_assistant_message") if keep_last else None)
     token = f"{os.getpid()}-{secrets.token_hex(8)}"
     waiter.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     tmp = waiter.with_name(f".{waiter.name}.{token}.tmp")

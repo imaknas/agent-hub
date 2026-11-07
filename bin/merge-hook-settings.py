@@ -107,6 +107,8 @@ def main():
             if matcher:
                 entry = {"matcher": matcher, **entry}
             entries.append(entry)
+        for h in (h for e in entries for h in e.get("hooks", []) if h.get("command") == command):
+            h.update(hook_fields(command))   # the same command with the fields of an earlier version (the waiter's timeout)
 
     out = json.dumps(settings, indent=2) + "\n"
     if not path.exists() or path.read_text() != out:

@@ -172,20 +172,29 @@ def _hub(ws) -> bool:
         return False
 
 
+def _project_name(ws) -> str | None:
+    """The project this folder is in: the registry's, or the hub's own, which the registry index leaves out."""
+    proj = project_git.project_at(ws)
+    return proj[0] if proj else hubconf.hub_project() if _hub(ws) else None
+
+
 def session_record(ev, ws):
     """Record the process this session runs in (runtime_ports.record_session; docs/design/mailbox-runtimes.md B1,
     "forked sessions"), so dispatch counts it live even when its id is on no command line. At the session's start it is
-    written again (a resumed session has a new process); after that only when the process differs. Only for a session
+    written again (a resumed session has a new process); after that only when the process differs. It also says which
+    project the process is in (mailbox-session-first.md, "Candidates"), which later hooks don't move. Only for a session
     in a project (the only sessions dispatch looks for), never for the platform's own runs (they record no presence)
     nor for a headless one the runtime tells apart (person_session: a -p or SDK run, which a person isn't in).
     Not run as the project: it writes only the secrets directory, which no sandbox can reach."""
     fn = getattr(_RT, "session_pid", None)
-    if not callable(fn) or not ws or platform_run(os.environ) or not (project_git.project_at(ws) or _hub(ws)):
+    project = _project_name(ws) if ws else None
+    if not callable(fn) or platform_run(os.environ) or not project:
         return None
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     if pid:
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
-                                     wanted=(lambda p: person(p, os.environ)) if callable(person) else None)
+                                     wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
+                                     project=project)
     return None
 
 
@@ -202,6 +211,20 @@ def platform_run(env) -> bool:
     return bool(env.get("HUB_LLM_POINT") or env.get("HUBBUS_LEASE"))
 
 
+def keep_last(rt, raw: str) -> bool:
+    """Whether this session's last reply may be kept (mailbox-session-first.md, "The last reply"): privacy.reflection is
+    include for the project at its folder. A registry that can't be read, or a folder in no project, is no."""
+    try:
+        parse = getattr(rt, "parse_event", None)
+        ev = parse("prompt", raw) if callable(parse) else None   # any plain event: only its folder is read
+        ws = _workspace(ev.cwd) if ev else None
+        project = _project_name(ws) if ws else None
+        private = hubconf.reflection_private()
+        return bool(project) and private is not None and project not in private
+    except Exception:
+        return False
+
+
 def wait(name: str | None, raw: str) -> int:
     """`hub-event [--runtime <name>] wait`: the runtime's waiter for a wake (docs/design/mailbox-runtimes.md B1), the
     one entry point that doesn't always exit 0: it returns the waiter's exit code (the runtime's way of waking the
@@ -216,7 +239,7 @@ def wait(name: str | None, raw: str) -> int:
     fn = getattr(rt, "wait", None)
     if not callable(fn):
         return 0
-    code, text, how = fn(raw, os.environ)
+    code, text, how = fn(raw, os.environ, keep_last=keep_last(rt, raw))
     if how != "no-session":   # each waiter's end, headless runs included (they arm none)
         _log("wait", None, [how], [])
     if text:

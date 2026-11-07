@@ -1,6 +1,7 @@
 {
  "bus_busy": {
   "stuck": [{"id": "m20261030-ab12", "to": "alpha"}],
+  "no_wake": {"open": 5, "n": 4, "why": {"no_port": 1, "not_armed": 2, "stopped": 1}},
   "to_muninn": {"n": 2, "oldest": "2026-10-30T07:00:00"},
   "job_failed_24h": [{"job": "hubbus-bridge", "detail": "bridge timed out"}, {"job": "other", "detail": "ignored"}, {"job": "mailbox-start:beta", "detail": "workdir missing"}],
   "corrupt": ["bus.db.corrupt-20261029"],

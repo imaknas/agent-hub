@@ -72,10 +72,18 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          delivers it); True = handed over, False = it could not be. A
                                                          runtime without it is Unsupported: letters wait for the next
                                                          hook as before
+    can_wake(sid) -> bool                                whether a wake would be handed over now, without asking for one
+  session_status (optional; docs/design/mailbox-session-first.md): what a session is doing, for routing a letter
+    session_status(sid) -> str                           one of SESSION_STATUSES. Cheap, and it fails safe: anything it
+                                                         can't read or find is "unknown", which counts as idle
+  session_summary (optional; same design, "The last reply"): how a session's last reply ended
+    session_summary(sid) -> str | None                   what wait kept (below); None: nothing is kept
     Outside the port, a runtime may also provide wake_address(env) -> dict | None: what a session's hook environment
     says about reaching that session, which the platform keeps in secrets_dir()/sessions/<sid>.json (mode 600; in no
-    sandbox, the bus, .state or the backup) for wake to use; wait(raw, env) -> (exit code, stderr, how): a hook that
-    waits for a wake (`hub-event wait`; its files go in the same folder, hubconf.session_file); unsupported(port) ->
+    sandbox, the bus, .state or the backup) for wake to use; wait(raw, env, keep_last=False) -> (exit code, stderr, how):
+    a hook that waits for a wake (`hub-event wait`; its files go in the same folder, hubconf.session_file), keep_last
+    saying whether this session's project lets it keep the end of the last reply (its privacy label);
+    wake_gap(sid) -> str | None: why can_wake is false, one of WAKE_GAPS (the status page says it); unsupported(port) ->
     str | None: why it lacks a port (doctor shows it in the feature table instead of only the port's name);
     note(port) -> str | None: what to know about a port it has (doctor shows it after "available"); and
     session_pid(env) -> int | None: the session's own process, from a hook's environment, which the platform records
@@ -172,6 +180,8 @@ def port_labels() -> dict[str, str]:
             # each reads after "has no …" (doctor, Unsupported reasons)
             "control": _("map of where sessions load settings and hooks from"),
             "wake": _("way to wake an idle session"),
+            "session_status": _("way to tell whether a session is busy, idle or waiting on a dialog"),
+            "session_summary": _("way to read how a session's last reply ended"),
             "tool_servers": _("way to tell which tool servers a run loads")}
 
 
@@ -237,6 +247,13 @@ def optional_features() -> set[str]:
     return {f for f, need in features() if set(need) & set(OPTIONAL)}
 
 
+def missing_session_ports(name: str | None = None) -> list[str]:
+    """The optional ports this runtime lacks that no feature row names, for people (doctor's row for them)."""
+    named = {p for _f, need in features() for p in need}
+    have = capabilities(name)
+    return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named]
+
+
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
     """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names (missing_label)."""
     have = capabilities(name)
@@ -258,11 +275,18 @@ PORTS = {
     # A point that declares them refuses to run on a runtime without it (llm.py)
     "confine": ("platform_settings",),
     "tool_servers": ("ambient_servers", "servers_named"),
-    "wake": ("wake",),
+    "wake": ("wake", "can_wake"),
+    "session_status": ("session_status",),
+    "session_summary": ("session_summary",),
 }
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
-OPTIONAL = ("wake",)
+OPTIONAL = ("wake", "session_status", "session_summary")
+# session_status's answers: running a turn; idle; a dialog is open, for a person; can't tell (counts as idle)
+SESSION_STATUSES = ("busy", "idle", "waiting", "unknown")
+# Why a session can't be woken (Sessions.wake_gap): its runtime has no wake port; nothing is armed to wake it (no turn has
+# ended since it opened, or it waited out its time); what was armed stopped without leaving
+WAKE_GAPS = ("no_port", "not_armed", "stopped")
 
 # Neutral "kinds of action": what the agent did in a conversation record, without any runtime's tool names.
 
@@ -581,6 +605,39 @@ class Sessions:
             raise Unsupported(missing_label(runtime_of(sid)[0], "wake") if m else sid)
         return fn(native, text)
 
+    def can_wake(self, sid) -> bool:
+        """False for a runtime with no wake port: nothing could wake it."""
+        m, native = self._mod(sid)
+        fn = getattr(m, "can_wake", None) if m else None
+        return bool(callable(fn) and fn(native))
+
+    def wake_gap(self, sid) -> str | None:
+        """Why this session can't be woken (WAKE_GAPS); None when it can."""
+        if self.can_wake(sid):
+            return None
+        m, native = self._mod(sid)
+        if not callable(getattr(m, "can_wake", None)):
+            return "no_port"
+        fn = getattr(m, "wake_gap", None)
+        return fn(native) if callable(fn) else "not_armed"
+
+    def session_status(self, sid) -> str:
+        """The session's status; a runtime with no such port can't tell, and neither can an answer outside the list."""
+        m, native = self._mod(sid)
+        fn = getattr(m, "session_status", None) if m else None
+        status = fn(native) if callable(fn) else "unknown"
+        return status if status in SESSION_STATUSES else "unknown"
+
+    def session_summary(self, sid) -> str | None:
+        m, native = self._mod(sid)
+        fn = getattr(m, "session_summary", None) if m else None
+        return fn(native) if callable(fn) else None
+
+    def open_sessions(self) -> dict:
+        """{session: its process record} for the sessions on record whose process runs, of these runtimes (open_sessions
+        below). Raises SessionsUnknown when that can't be looked up."""
+        return {s: r for s, r in open_sessions().items() if r["runtime"] in self.mods}
+
 
 def _parent_and_command(pid: int) -> tuple[int | None, str]:
     """A process's parent pid and command line (/proc on Linux, ps elsewhere); (None, "") when it can't be read."""
@@ -674,11 +731,15 @@ def process_start(pid: int) -> str | None:
 # which the process table alone doesn't pair up: a session started as a fork of another runs under a new id that is on
 # no command line. So every hook in a project records <session>.live in hubconf.session_addresses_dir() (the secrets
 # directory: written by the hook outside any sandbox, in every sandbox's deny_read, not backed up, removed at the
-# session's end with its other files): {runtime, pid, start, cwd}. A record counts while that pid runs with that start
-# time, so a reused pid never fakes it. One process runs one session at a time: writing a record drops the others
+# session's end with its other files): {runtime, pid, start, cwd, project}. A record counts while that pid runs with that
+# start time, so a reused pid never fakes it. One process runs one session at a time: writing a record drops the others
 # naming the same process (a /clear, a fork whose first hook still carried the parent's id).
+# project is the project the process was first recorded in, and it stays with the process whichever session id or folder
+# later hooks carry: a compaction after wandering into another folder doesn't move it. A record with none (written before
+# this field) gets it at its next hook. It is the name at that time: a reader goes through the project's current name.
 
 SESSION_RECORD = "live"
+SESSION_SUMMARY = "last"   # <session>.last: a runtime's, read through its session_summary
 
 
 def _read_record(path) -> dict | None:
@@ -692,10 +753,27 @@ def _read_record(path) -> dict | None:
     return rec if ok else None
 
 
-def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None) -> bool:
+def _write_record(f, rec: dict) -> None:
+    import json
+    f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as fh:
+        json.dump(rec, fh)
+    os.replace(tmp, f)
+
+
+def _project_named(rec) -> str | None:
+    p = rec.get("project") if rec else None
+    return p if isinstance(p, str) and p else None
+
+
+def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project=None) -> bool:
     """Record that this session (a platform id) runs in process pid. refresh=False (the hooks after a session's start)
-    leaves a record naming the same process as it is, so a tool call costs no process lookup. wanted(pid): asked only
-    when it would write (the runtime's person_session: a headless run gets none). Whether it wrote."""
+    leaves a record naming the same process as it is, so a tool call costs no process lookup, except that one with no
+    project gets it. wanted(pid): asked only when it would write a new record (the runtime's person_session: a headless
+    run gets none). project: the project this hook is in; a process already on record keeps the one it has. Whether it
+    wrote."""
     import hubconf
     f = hubconf.session_file(session, SESSION_RECORD)
     if not f or not isinstance(pid, int) or pid <= 1:
@@ -703,22 +781,23 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     if not refresh:
         old = _read_record(f)
         if old and old["pid"] == pid and old["runtime"] == runtime:
-            return False
+            if _project_named(old) or not project:
+                return False
+            _write_record(f, {**old, "project": project})
+            return True
     if wanted is not None and not wanted(pid):
         return False
     start = process_start(pid)
     if not start:
         return False
-    import json
-    f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    with os.fdopen(fd, "w") as fh:
-        json.dump({"runtime": runtime, "pid": pid, "start": start, "cwd": cwd}, fh)
-    os.replace(tmp, f)
-    for other in f.parent.glob(f"*.{SESSION_RECORD}"):
-        rec = _read_record(other) if other != f else None
-        if rec and rec["pid"] == pid and rec["start"] == start:
+    same = [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
+            if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
+    # its own record's first: a /clear's new id takes the project of the record it replaces
+    kept = next((_project_named(rec) for other, rec in sorted(same, key=lambda x: x[0] != f) if _project_named(rec)), None)
+    project = kept or project
+    _write_record(f, {"runtime": runtime, "pid": pid, "start": start, "cwd": cwd, **({"project": project} if project else {})})
+    for other, _rec in same:
+        if other != f:
             other.unlink(missing_ok=True)
     return True
 
@@ -731,21 +810,26 @@ def running_records(paths, strict: bool = False) -> dict:
     return {p: r for p, r in recs.items() if starts.get(r["pid"]) == r["start"]}
 
 
-def recorded_sessions(runtime: str) -> set[str]:
-    """This runtime's sessions (its own ids) whose recorded process still runs. Raises SessionsUnknown when that can't
-    be looked up."""
+def open_sessions() -> dict:
+    """{session (a platform id): its record} for the sessions on record whose process still runs: what a person has open
+    in a project (a headless run gets no record). Raises SessionsUnknown when that can't be looked up."""
     import hubconf
     try:
         files = list(hubconf.session_addresses_dir().glob(f"*.{SESSION_RECORD}"))
     except OSError:
-        return set()
-    out = set()
+        return {}
+    out = {}
     for f, rec in running_records(files, strict=True).items():
         session = hubconf.session_of_file(f.name)
-        name, native = runtime_of(session) if session else (None, None)
-        if rec["runtime"] == runtime and name == runtime:
-            out.add(native)
+        if session and runtime_of(session)[0] == rec["runtime"]:
+            out[session] = rec
     return out
+
+
+def recorded_sessions(runtime: str) -> set[str]:
+    """This runtime's sessions (its own ids) whose recorded process still runs. Raises SessionsUnknown when that can't
+    be looked up."""
+    return {runtime_of(s)[1] for s, rec in open_sessions().items() if rec["runtime"] == runtime}
 
 
 def current_session(env=None) -> str | None:

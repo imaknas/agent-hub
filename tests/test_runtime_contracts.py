@@ -16,6 +16,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -396,6 +397,30 @@ class WakeContract(unittest.TestCase):
                         self.assertIs(m.wake("00000000-0000-4000-8000-000000000000", "📬 1 letter"), False)
                     finally:
                         fx.teardown()
+
+    def test_a_runtime_with_wake_has_can_wake(self):
+        """Routing asks can_wake before it counts a session as a candidate: a wake it can't foresee is a letter routed to
+        nobody. Whichever is declared alone, of every runtime registered."""
+        for name in runtime_ports.RUNTIMES:
+            with self.subTest(runtime=name):
+                m = runtime_ports._module(name)
+                self.assertEqual(callable(getattr(m, "wake", None)), callable(getattr(m, "can_wake", None)))
+        half = types.ModuleType("runtime_half")
+        half.wake = lambda sid, text: True
+        with mock.patch.dict(runtime_ports.RUNTIMES, {"half": "runtime_half"}), mock.patch.dict(sys.modules, {"runtime_half": half}), \
+                self.assertRaises(runtime_ports.MissingFunctions):
+            runtime_ports.load("half", ports=("wake",))
+
+    def test_the_session_ports_are_optional_and_answer_within_their_vocabulary(self):
+        self.assertLessEqual({"wake", "session_status", "session_summary"}, set(runtime_ports.OPTIONAL))
+        for name in ("acp", "command", "none"):
+            with self.subTest(runtime=name):
+                self.assertNotIn("session_status", runtime_ports.capabilities(name))
+        import hubconf
+        for name in having("session_status"):
+            with self.subTest(runtime=name), mock.patch.object(hubconf, "tool", lambda t: "/nonexistent/agent"):
+                self.assertIn(runtime_ports._module(name).session_status("00000000-0000-4000-8000-000000000000"),
+                              runtime_ports.SESSION_STATUSES)
 
     def test_without_wake_it_is_unsupported_with_the_runtimes_reason(self):
         self.assertNotIn("wake", runtime_ports.capabilities("acp"))

@@ -2952,8 +2952,9 @@ def prune_wake_addresses(live=None) -> list[str]:
     session no longer runs (live: the sessions running now, the runtime's live_sessions; a runtime without session
     state keeps none). A session's process record (<session>.live) goes when that process no longer runs with the
     start time it recorded, however long the session has been idle (live_sessions reads these records, so they are
-    never judged by live). A waiter's record goes when its heartbeat stopped, and a wake request or a dot file (one
-    being written or taken) when it is old. Returns the sessions whose files went."""
+    never judged by live), and its last reply (<session>.last) goes with that record, whatever its age. A waiter's record
+    goes when its heartbeat stopped, and a wake request or a dot file (one being written or taken) when it is old.
+    Returns the sessions whose files went."""
     d = hubconf.session_addresses_dir()
     if not d.is_dir():
         return []
@@ -2974,6 +2975,9 @@ def prune_wake_addresses(live=None) -> list[str]:
             if session and f.name.endswith(f".{runtime_ports.SESSION_RECORD}"):
                 if f in running:
                     continue
+            elif session and f.name.endswith(f".{runtime_ports.SESSION_SUMMARY}") \
+                    and hubconf.session_file(session, runtime_ports.SESSION_RECORD) in running:
+                continue
             elif time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
                 continue
             if f.name.endswith(".json") and session in (live or set()):
@@ -3110,6 +3114,20 @@ def cmd_wake_misses(as_json: bool) -> None:
         print(f"{x['ts'][:16].replace('T', ' ')}  {x['id']}  {x['to']}")
 
 
+def wake_gaps() -> dict | None:
+    """Open sessions a letter couldn't wake now, and why (runtime_ports.WAKE_GAPS): {open, n, why: {gap: count}}. None: it
+    can't be told (the process lookup failed, or the runtime port isn't the usual one)."""
+    try:
+        rt = sessions_port()
+        opened = rt.open_sessions() if callable(getattr(rt, "open_sessions", None)) else None
+        if opened is None:
+            return None
+        gaps = [g for s in opened if (g := rt.wake_gap(s))]
+    except Exception:
+        return None
+    return {"open": len(opened), "n": len(gaps), "why": {g: gaps.count(g) for g in sorted(set(gaps))}}
+
+
 def cmd_status(as_json: bool) -> None:
     c = db()
     per: dict[str, dict] = {}
@@ -3154,7 +3172,7 @@ def cmd_status(as_json: bool) -> None:
     conflicts = record_conflicts(c, iso(now() - datetime.timedelta(days=CONFLICT_DAYS)))
     out = {"projects": per, "stuck": stuck, "held": held, "waiting": waiting, "letters": delivery_paths(c),
            "to_muninn": {"n": len(items), "oldest": items[0]["ts"] if items else None},
-           "job_failed_24h": failed, "corrupt": corrupt, "record_conflicts": conflicts}
+           "job_failed_24h": failed, "corrupt": corrupt, "record_conflicts": conflicts, "no_wake": wake_gaps()}
     if as_json:
         print(json.dumps(out, ensure_ascii=False))
         return
@@ -3171,6 +3189,10 @@ def cmd_status(as_json: bool) -> None:
     if waiting:
         print(_("Waiting for a session (a session holds them, or the platform has no run left to start): {items}",
                 items=_(", ").join(f"{s['id']}→{s['to']} ({s['why']})" for s in waiting)))
+    if out["no_wake"] and out["no_wake"]["n"]:
+        nw = out["no_wake"]
+        print(_("Open sessions a letter can't wake: {n} of {open} ({why})", n=nw["n"], open=nw["open"],
+                why=_(", ").join(f"{g} {k}" for g, k in nw["why"].items())))
     if items:
         print(_("Waiting to go to the assistant: {n} (oldest {oldest})", n=len(items), oldest=items[0]["ts"][5:16]))
     for f in failed:

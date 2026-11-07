@@ -34,6 +34,8 @@ def reset() -> None:
     _asked.clear()
     _ran.clear()
     _live.clear()
+    _status.clear()
+    _summary.clear()
     _woken.clear()
     _context.clear()
     _ambient.clear()
@@ -99,6 +101,24 @@ def wake(sid: str, text: str) -> bool:
         return False
     _woken.append((sid, text))
     return True
+
+
+def can_wake(sid: str) -> bool:
+    return sid in _live
+
+
+# ---------- what a session is doing, how its last reply ended (optional ports) ----------
+
+_status: dict[str, str] = {}
+_summary: dict[str, str] = {}
+
+
+def session_status(sid: str) -> str:
+    return _status.get(sid, "unknown")
+
+
+def session_summary(sid: str) -> str | None:
+    return _summary.get(sid)
 
 
 # ---------- lifecycle (its own format, not Claude's: proves the interface has no Claude shape) ----------

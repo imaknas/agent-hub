@@ -587,11 +587,11 @@ class ClaudeWake(ClaudeSessionsDir):
         self.assertIsNone(self.rc.unsupported("wake"))
         self.assertTrue(self.rc.note("wake"))
 
-    def test_the_stop_hook_runs_in_the_background_with_a_days_timeout_and_nothing_waits_on_session_start(self):
+    def test_the_stop_hook_runs_in_the_background_with_its_timeout_and_nothing_waits_on_session_start(self):
         hooks = self.rc.install_hooks({})["hooks"]
         self.assertEqual(hooks["Stop"], [{"hooks": [self.rc.wait_hook()]}])
         h = self.rc.wait_hook()
-        self.assertEqual((h["asyncRewake"], h["timeout"]), (True, 86400))
+        self.assertEqual((h["asyncRewake"], h["timeout"]), (True, 14 * 86400))
         self.assertNotIn("|| true", h["command"], "a wake's exit code 2 must not be swallowed")
         for name, entries in hooks.items():
             for e in entries:

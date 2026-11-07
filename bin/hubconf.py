@@ -187,8 +187,9 @@ def session_address_file(session: str) -> pathlib.Path | None:
 
 # A session's files there: <session>.json (an address a runtime keeps), <session>.waiter (the runtime's process waiting
 # to wake it), <session>.wake-<nonce> (a wake request for it), <session>.live (the process its hooks saw it run in:
-# runtime_ports.record_session). Dot files are a writer's or a claimer's in passing.
-_SUFFIXES = r"(?:json|waiter|live|wake-[A-Za-z0-9_]{1,64})"
+# runtime_ports.record_session), <session>.last (the end of its last reply, a runtime's session_summary). Dot files are a
+# writer's or a claimer's in passing.
+_SUFFIXES = r"(?:json|waiter|live|last|wake-[A-Za-z0-9_]{1,64})"
 _SESSION_SUFFIX = re.compile(rf"^{_SUFFIXES}$")
 _SESSION_OF = re.compile(rf"^(?P<session>[A-Za-z0-9][A-Za-z0-9._:-]{{0,199}})\.{_SUFFIXES}$")
 
@@ -206,7 +207,8 @@ def session_of_file(name: str) -> str | None:
 
 
 def session_files(session: str) -> list[pathlib.Path]:
-    """Every file of this session there (its address, waiter, wake requests, process record): what its end removes."""
+    """Every file of this session there (its address, waiter, wake requests, process record, last reply): what its end
+    removes."""
     d = session_addresses_dir()
     try:
         with os.scandir(d) as it:

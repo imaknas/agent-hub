@@ -73,10 +73,10 @@ class AtHomeToday(unittest.TestCase):
             "UserPromptSubmit": [entry("prompt")],
             "PostToolUse": [entry("tool_used", "Bash")],
             "PreToolUse": [entry("open_session_attempt", "mcp__ccd_session__start_session")],
-            # the wake waiter: in the background, its exit code passed on (no `|| true`), a day's timeout
+            # the wake waiter: in the background, its exit code passed on (no `|| true`), its timeout
             "Stop": [{"hooks": [{"type": "command", "command": "[ -x ~/agent-hub/bin/hub-event ] && exec "
                                  f"{py('~/agent-hub/bin/hub-event')} --runtime claude wait; exit 0",
-                                 "asyncRewake": True, "timeout": 86400}]}],
+                                 "asyncRewake": True, "timeout": 14 * 86400}]}],
         }})
 
     def test_worktree_hooks(self):
@@ -167,6 +167,19 @@ class Elsewhere(unittest.TestCase):
         self.assertEqual(len([c for c in cmds if "worktree-memory.sh" in c]), 6, cmds)
         [stop] = [h for e in d["hooks"]["Stop"] for h in e["hooks"]]
         self.assertEqual((stop["asyncRewake"], stop["timeout"]), (True, runtime_claude.WAIT_TIMEOUT_S))
+
+    def test_worktree_hooks_bring_an_installed_waiter_up_to_its_timeout(self):
+        """The same command, installed with an earlier timeout: running it again must not leave that one."""
+        mhs = BIN / "merge-hook-settings.py"
+        f = self.tmp / "settings.json"
+        env = {**os.environ, "AGENT_HUB_ROOT": str(self.hub)}
+        subprocess.run([sys.executable, str(mhs), "--worktree", str(f)], check=True, env=env, timeout=60, capture_output=True)
+        d = json.loads(f.read_text())
+        d["hooks"]["Stop"][0]["hooks"][0]["timeout"] = 86400
+        f.write_text(json.dumps(d))
+        subprocess.run([sys.executable, str(mhs), "--worktree", str(f)], check=True, env=env, timeout=60, capture_output=True)
+        [stop] = [h for e in json.loads(f.read_text())["hooks"]["Stop"] for h in e["hooks"]]
+        self.assertEqual(stop["timeout"], runtime_claude.WAIT_TIMEOUT_S)
 
     def test_backup_placeholders(self):
         with mock.patch.object(hubconf, "STATE", self.hub / ".state"):
