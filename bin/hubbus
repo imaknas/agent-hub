@@ -2351,9 +2351,11 @@ def take_outboxes(c) -> None:
                     c.execute("ROLLBACK")
                     raise
                 c.execute("COMMIT")
-            except sqlite3.Error:
+            except sqlite3.OperationalError:   # the bus is busy: this file, and every other, waits for the next run
                 raise
-            except (OSError, ValueError, TypeError, Refused) as e:
+            except Exception as e:   # whatever one file does stops neither its outbox nor the next project
+                if c.in_transaction:
+                    c.execute("ROLLBACK")
                 outbox_refused(c, proj, name, str(e) or type(e).__name__)
             try:
                 nofollow.remove(ws, rel)
@@ -2411,7 +2413,8 @@ def take(c, proj: str, entry) -> None:
                         {"note": entry.get("note") or _("handled"), "session": session})
     elif op == "told":
         # a session's `brunna inbox`: told only for that session (one the hooks saw in this project), judged against the
-        # bus now, since the view it read can be a minute old
+        # bus now, since the view it read can be a minute old. Requests and questions only: a notice's or a record's flag
+        # is its hooks', and a file naming one is just read past (these rows have no delivered column to read)
         ids = entry.get("ids")
         if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
             refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
@@ -2421,7 +2424,8 @@ def take(c, proj: str, entry) -> None:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=proj))
         if session:
             live = Live(me=session)
-            tell(c, untold(c, [r for r in rows if not is_done(c, r["id"])], session, live), session, "inbox", live)
+            open_ones = [r for r in rows if actionable(r) and not is_done(c, r["id"])]
+            tell(c, untold(c, open_ones, session, live), session, "inbox", live)
     elif op == "publish":
         if entry.get("type") not in OUTBOX_PUBLISH or not isinstance(entry.get("id"), str) \
                 or not EVENT_ID.match(entry["id"]) or not isinstance(entry.get("payload"), dict):
@@ -2955,7 +2959,7 @@ def mail_command(a) -> None:
         if project == here and not platform_run():   # reading a letter tells this session, and holds it if free
             tellable = untold(c, rows, session, live)
             if box:   # through its outbox, under the sandbox; with no session named there is no one to tell
-                ids = [r["id"] for r in tellable]
+                ids = [r["id"] for r in tellable if actionable(r)]   # a notice's flag stays its hooks', as before
                 for at in range(0, len(ids) if session else 0, 50):
                     outbox_put(box, {"op": "told", "ids": ids[at:at + 50], "session": session})
             else:

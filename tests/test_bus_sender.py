@@ -421,6 +421,92 @@ class Outbox(Fixture):
         self.assertEqual([json.loads(r["payload"]) for r in self.rows("type='message.routed' AND ref=?", (mid,))],
                          [{"v": 1, "session": "s-box", "by": "hook"}])
 
+    def a_record_to(self, m, c, project="box"):
+        m.publish(c, "rec:acts:box:r1", "record", "open", project, None, {"record": {
+            "ph": "0.6", "ext": "acts/0.6", "id": "r1", "type": "settled", "project": project, "key": "k1"}})
+        return "rec:acts:box:r1"
+
+    def test_a_told_file_naming_a_notice_or_a_record_does_not_jam_the_outbox(self):
+        """get_event's rows have no delivered column: a told file with a notice raised past the per-file except, the file
+        was never deleted, and every letter after it, and every project after this one, stayed where it was."""
+        notice = self.letter_id(self.hubbus("send", "--to", "box", "--type", "info", "--text", "n", cwd=self.ws["open"]).stdout)
+        req = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "r", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        rec = self.a_record_to(m, c)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        self.drop({"v": 1, "op": "told", "ids": [notice, rec, req], "session": "s-box"}, name="1.json")
+        self.drop({"v": 1, "op": "send", "id": "m11011200-000000000009", "to": "open", "type": "info", "text": "after"},
+                  name="2.json")
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(list(self.outbox().iterdir()), [], "both files taken in and deleted")
+        self.assertEqual(self.refusals(), [])
+        self.assertEqual(len(self.rows("id='m11011200-000000000009'")), 1, "the letter after it went out")
+        self.assertEqual(self.rows("type='message.delivered' AND ref IN (?,?)", (notice, rec)), [],
+                         "a notice's flag is its hooks', as before")
+        self.assertEqual([json.loads(r["payload"])["session"] for r in self.rows("type='message.delivered' AND ref=?", (req,))],
+                         ["s-box"])
+
+    def test_a_sandboxed_inbox_sends_only_requests_and_questions_in_told(self):
+        notice = self.letter_id(self.hubbus("send", "--to", "box", "--type", "info", "--text", "n", cwd=self.ws["open"]).stdout)
+        req = self.letter_id(self.hubbus("send", "--to", "box", "--type", "question", "--text", "q", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        self.a_record_to(m, c)
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.write_view(c, "box", self.ws["box"])
+        out = self.in_box("inbox")
+        self.assertIn(notice, out)
+        entries = [json.loads(f.read_text()) for f in self.outbox().iterdir()]
+        self.assertEqual([(e["op"], e["ids"]) for e in entries], [("told", [req])])
+
+    def test_any_failure_on_one_file_stops_neither_its_outbox_nor_the_next_project(self):
+        docs = {**self.docs, "zbox": {"v": 1, "name": "zbox", "paths": {"workspace": str(self.tmp / "ws" / "zbox")},
+                                      "enforce": {"sandbox": True}}}
+        (self.tmp / "ws" / "zbox").mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main", str(self.tmp / "ws" / "zbox")], check=True, env={**os.environ, **GIT_ENV})
+        self.ws["zbox"] = self.tmp / "ws" / "zbox"
+        self.drop({"v": 1, "op": "send", "id": "m11011200-00000000000a", "to": "open", "type": "info", "text": "bad"}, name="1.json")
+        self.drop({"v": 1, "op": "send", "id": "m11011200-00000000000b", "to": "open", "type": "info", "text": "good"}, name="2.json")
+        self.drop({"v": 1, "op": "send", "id": "m11011200-00000000000c", "to": "open", "type": "info", "text": "next"},
+                  name="1.json", project="zbox")
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        real = m.take
+
+        def take(c_, proj, entry, *a):
+            if entry.get("text") == "bad":
+                raise IndexError("No item with that key")
+            return real(c_, proj, entry, *a)
+
+        m.take = take
+        with mock.patch.object(m.hubconf, "projects", lambda: docs), \
+                mock.patch.object(m.hubconf, "workspace", lambda p: self.ws.get(p)):
+            m.take_outboxes(c)
+        self.assertEqual(self.rows("id='m11011200-00000000000a'"), [])
+        self.assertEqual(len(self.rows("id='m11011200-00000000000b'")), 1)
+        self.assertEqual(len(self.rows("id='m11011200-00000000000c'")), 1)
+        self.assertEqual(list(self.outbox().iterdir()), [], "the bad file is deleted too")
+        self.assertEqual(len(self.refusals()), 1, "and reported to the project")
+        self.assertFalse(c.in_transaction)
+
+    def test_a_busy_bus_leaves_the_file_for_the_next_run(self):
+        import sqlite3
+        self.drop({"v": 1, "op": "send", "id": "m11011200-00000000000d", "to": "open", "type": "info", "text": "wait"})
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs), \
+                mock.patch.object(m, "take", mock.Mock(side_effect=sqlite3.OperationalError("database is locked"))):
+            with self.assertRaises(sqlite3.OperationalError):
+                m.take_outboxes(c)
+        self.assertEqual(len(list(self.outbox().iterdir())), 1)
+        self.assertFalse(c.in_transaction)
+
     def test_a_platform_run_in_a_sandboxed_project_writes_no_told(self):
         self.letter_to("box", "ping", typ="request")
         self.dispatch()
