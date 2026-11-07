@@ -118,9 +118,9 @@ class StandIn(unittest.TestCase):
 
     def test_a_point_that_says_restricted_gets_it(self):
         import yaml
-        spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["login-check"]
-        self.assertIs(spec.get("restricted"), True, "the check after an update: complete passes this flag, so it has to work")
-        cmd = runtime_claude.describe(runtime_ports.Task(point="login-check", prompt="p", spec=spec, env={"PATH": ""}))
+        spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["mailbox-propose"]
+        self.assertIs(spec.get("restricted"), True, "its prompt comes from a letter")
+        cmd = runtime_claude.describe(runtime_ports.Task(point="mailbox-propose", prompt="p", spec=spec, env={"PATH": ""}))
         self.assertIn("--restricted", cmd)
 
     def test_a_read_only_secrets_folder_is_a_failed_result_not_a_crash(self):
@@ -134,6 +134,10 @@ class StandIn(unittest.TestCase):
             got = runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
         self.assertFalse(got.ok)
         self.assertTrue(got.error)
+        # only making the folder reads that way: anything else keeps its own name
+        with mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")), \
+                mock.patch.object(runtime_claude.subprocess, "run", side_effect=PermissionError("the tool")), self.assertRaises(PermissionError):
+            runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
         import propose_apply
         import runtime_command
         with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(hubconf, "projects", lambda: {"p": {}}), \
@@ -164,6 +168,9 @@ class Probe(unittest.TestCase):
         p = mock.patch.object(hubconf, "private_tmp", lambda: self.private)
         p.start()
         self.addCleanup(p.stop)
+        c = mock.patch.object(self.m, "restricted_check", return_value=None)
+        c.start()
+        self.addCleanup(c.stop)
 
     @staticmethod
     def status(repo):
@@ -256,6 +263,18 @@ class Probe(unittest.TestCase):
             self.m.probe_new_version()
             self.assertEqual(probe.call_count, 2, "not marked as probed")
 
+    def test_a_completion_that_fails_alerts_and_is_tried_again(self):
+        """Claude's own auto-update brings versions the update never asked."""
+        with tempfile.TemporaryDirectory() as tmp, self.state(tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: pathlib.Path(tmp)), \
+                mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
+                mock.patch.object(self.m, "filter_probe", return_value=None) as probe, mock.patch.object(self.m, "restricted_check", return_value="unknown option"):
+            self.m.probe_new_version()
+            said = {c[0][0]: c[0][1] for c in once.call_args_list}
+            self.assertIn("unknown option", said["claude-restricted"][0])
+            self.assertEqual(said["claude-git-filter"], [])
+            self.m.probe_new_version()
+            self.assertEqual(probe.call_count, 2, "not marked as probed")
+
     def test_the_job_runs_it_and_a_dry_run_doesnt(self):
         with mock.patch.object(self.m, "update", lambda dry: (True, "x")), mock.patch.object(self.m.alert, "once"), \
                 mock.patch.object(self.m, "probe_new_version") as probe:
@@ -290,16 +309,16 @@ class PrivateTmpPrune(unittest.TestCase):
     def test_an_old_leftover_goes_and_a_fresh_one_stays(self):
         old, fresh = self.leftover("old"), self.d / "fresh"
         fresh.mkdir()
-        self.assertEqual(hubconf.prune_private_tmp(dry_run=True), ["old"])
+        self.assertEqual(hubconf.prune_private_tmp(dry_run=True)["removed"], ["old"])
         self.assertTrue(old.exists(), "a dry run touches nothing")
-        self.assertEqual(hubconf.prune_private_tmp(), ["old"])
+        self.assertEqual(hubconf.prune_private_tmp()["removed"], ["old"])
         self.assertFalse(old.exists())
         self.assertTrue(fresh.exists())
 
     def test_something_written_deep_inside_keeps_it(self):
         d = self.leftover("busy")
         (d / "repo" / "f").write_text("y")
-        self.assertEqual(hubconf.prune_private_tmp(), [])
+        self.assertEqual(hubconf.prune_private_tmp()["removed"], [])
         self.assertTrue(d.exists())
 
     def test_a_process_working_in_it_keeps_it_however_old(self):
@@ -313,8 +332,41 @@ class PrivateTmpPrune(unittest.TestCase):
             __import__("time").sleep(0.1)
         self.assertTrue(hubconf.cwd_users(d), "this machine can tell who is in a folder")
         self.old(d / "repo" / "f", d / "repo", d)
-        self.assertEqual(hubconf.prune_private_tmp(), [])
+        self.assertEqual(hubconf.prune_private_tmp()["removed"], [])
         self.assertTrue((d / "repo" / "f").exists())
+
+    def test_when_it_cant_find_out_who_is_there_it_keeps_it_and_says_so(self):
+        d = self.leftover("unknown")
+        with mock.patch.object(hubconf, "process_cwds", lambda: []):
+            got = hubconf.prune_private_tmp()
+        self.assertEqual((got["removed"], got["cant_tell"]), ([], ["unknown"]))
+        self.assertTrue((d / "repo" / "f").exists())
+
+    def test_what_it_cant_empty_is_kept_whole_and_not_offered(self):
+        if os.geteuid() == 0:
+            self.skipTest("root writes anywhere")
+        d = self.leftover("stuck")
+        (d / "repo" / "g").write_text("x")
+        self.old(d / "repo" / "g", d / "repo", d)
+        (d / "repo").chmod(0o500)
+        self.addCleanup((d / "repo").chmod, 0o700)
+        for dry in (True, False):
+            got = hubconf.prune_private_tmp(dry_run=dry)
+            self.assertEqual((got["removed"], got["not_removable"]), ([], ["stuck"]), dry)
+        self.assertTrue((d / "repo" / "f").exists() and (d / "repo" / "g").exists())
+
+    def test_a_folder_it_cant_read_is_said_not_a_crash(self):
+        if os.geteuid() == 0:
+            self.skipTest("root reads anywhere")
+        self.d.chmod(0)
+        self.addCleanup(self.d.chmod, 0o700)
+        got = hubconf.prune_private_tmp()
+        self.assertTrue(got["unreadable"])
+        env = {**os.environ, "AGENT_HUB_SECRETS": str(self.tmp), "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_LANG_UI": "en", "HOME": str(self.tmp), "AGENT_HUB_CONFIG": str(self.tmp / "none"),
+               "AGENT_HUB_DATA": str(self.tmp / "none"), "AGENT_HUB_STATE": str(self.tmp / "state")}
+        r = subprocess.run([sys.executable, str(BIN / "prune-worktrees"), "--auto", "--dry-run"], capture_output=True, text=True, timeout=60, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("could not be read", r.stdout)
 
     def test_a_link_is_removed_not_followed(self):
         target = self.tmp / "keep"
@@ -323,9 +375,56 @@ class PrivateTmpPrune(unittest.TestCase):
         link = self.d / "link"
         link.symlink_to(target)
         self.old(link)
-        self.assertEqual(hubconf.prune_private_tmp(), ["link"])
+        self.assertEqual(hubconf.prune_private_tmp()["removed"], ["link"])
         self.assertFalse(link.is_symlink())
         self.assertTrue((target / "f").exists())
+
+
+class CheckAfterAnUpdate(unittest.TestCase):
+    """What every completion passes is asked of the version being installed, not of the one being replaced."""
+
+    def setUp(self):
+        self.m = load("update_claude_flag", BIN / "update-claude.py")
+        self.bin = pathlib.Path(tempfile.mkdtemp()) / "v1" / "bin"
+        self.bin.mkdir(parents=True)
+        (self.bin / "claude").write_text("")
+
+    def update(self, versions, checks, smokes, runs=None):
+        calls = []
+
+        def run(*args, **kw):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, "2.0.0\n" if "view" in args else "", "")
+        with mock.patch.object(self.m.hubconf, "nvm_bin", return_value=self.bin), mock.patch.object(self.m, "run", run), \
+                mock.patch.object(self.m, "version", side_effect=list(versions)), mock.patch.object(self.m, "smoke", side_effect=list(smokes)), \
+                mock.patch.object(self.m, "restricted_check", side_effect=list(checks)) as check:
+            res = self.m.update(False)
+        return res, calls, check
+
+    def test_an_old_version_without_the_flag_upgrades_and_the_new_one_is_asked(self):
+        (ok, _msg), calls, check = self.update(["1.0.0", "2.0.0"], [None], [None, None])
+        self.assertTrue(ok)
+        self.assertEqual(check.call_count, 1, "once, after the install")
+        self.assertTrue(any("@anthropic-ai/claude-code@2.0.0" in c for c in calls))
+
+    def test_a_new_version_that_fails_it_goes_back_and_doesnt_say_it_wouldnt_install(self):
+        (ok, msg), calls, _check = self.update(["1.0.0", "2.0.0", "1.0.0"], ["unknown option --restricted"], [None, None])
+        self.assertFalse(ok)
+        self.assertIn("--restricted", msg)
+        self.assertTrue(any("@anthropic-ai/claude-code@1.0.0" in c for c in calls), "put back")
+
+    def test_it_runs_the_way_a_completion_does(self):
+        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        seen = secrets / "argv.json"
+        exe = secrets / "claude"
+        exe.write_text(f"#!{sys.executable}\nimport json, sys\njson.dump(sys.argv[1:], open({str(seen)!r}, 'w'))\n"
+                       "print('unknown option --restricted', file=sys.stderr)\nsys.exit(1)\n")
+        exe.chmod(0o755)
+        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(runtime_claude, "_exe", lambda: str(exe)), \
+                mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")):
+            why = self.m.restricted_check()
+        self.assertIn("--restricted", why)
+        self.assertIn("--restricted", json.loads(seen.read_text()))
 
 
 class CommandRuntimeFolder(unittest.TestCase):
@@ -381,7 +480,7 @@ class ProbeThroughTheRealPath(tbs.Fixture):
             self.assertEqual((got["var"], got["cwd"]), (want, str(repo)), how)
             seen_argv[how] = got["argv"]
         self.assertEqual(seen_argv["guarded"], seen_argv["bare"], "the same flags")
-        self.assertIn("--restricted", seen_argv["guarded"], "and the flag every completion depends on")
+        self.assertNotIn("--restricted", seen_argv["guarded"], "a version too old for the flag must still pass the check before an update")
         # an answer it can't count: ended in an error with exit 0, or nothing it can read
         for said in ("json.dumps({'type': 'result', 'result': 'boom', 'is_error': True, 'session_id': 's', 'num_turns': 1})", "'not an answer'"):
             (fake / "claude").write_text(f"#!{sys.executable}\nimport json\nprint({said})\n")
@@ -391,17 +490,44 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                     self.assertNotEqual(r.stdout.strip(), "None", "not a pass")
                     self.assertTrue(r.stdout.strip(), r.stderr)
 
-    def test_a_restricted_point_on_a_runtime_that_cant_says_so(self):
+    def on_command(self):
+        self.ran = self.tmp / "ran"
+        agent = [sys.executable, "-c", f"open({str(self.ran)!r}, 'a').write('x'); print('{{}}')"]
         (self.tmp / "config" / "hub.json").write_text(json.dumps({**json.loads((self.tmp / "config" / "hub.json").read_text()),
-                                                                  "runtime": {"default": "command", "command": {"run": [sys.executable, "-c", "print('ran')"]}}}))
+                                                                  "runtime": {"default": "command", "command": {"run": agent}}}))
+        return {**self.env, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable}
+
+    def propose_at(self, folder, env):
+        return subprocess.run([sys.executable, str(BIN / "llm.py"), "run", "mailbox-propose", "--cwd", str(folder)], input="ok", cwd=folder,
+                              capture_output=True, text=True, timeout=60, env=env)
+
+    def test_a_restricted_point_on_a_runtime_that_cant_runs_only_in_the_marked_copy(self):
+        env = self.on_command()
         repo = self.tmp / "repo"
         repo.mkdir()
-        env = {**self.env, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable}
+        for label, folder, e in (("a folder", repo, env), ("a folder marked", repo, {**env, "HUB_THROWAWAY_COPY": str(repo)})):
+            with self.subTest(label):
+                r = self.propose_at(folder, e)
+                self.assertNotEqual(r.returncode, 0, r.stdout)
+                self.assertFalse(self.ran.exists(), "the agent never started")
+                self.assertIn("mailbox-propose", r.stdout + r.stderr, "what, and why")
+        copy = self.tmp / "secrets" / "tmp" / "hub-propose-x-abc" / "ws"
+        copy.mkdir(parents=True)
+        unmarked = self.propose_at(copy, env)
+        self.assertNotEqual(unmarked.returncode, 0, "the place without the mark")
+        self.assertFalse(self.ran.exists())
+        marked = self.propose_at(copy, {**env, "HUB_THROWAWAY_COPY": str(copy)})
+        self.assertTrue(self.ran.exists(), marked.stdout + marked.stderr)
+
+    def test_login_check_runs_on_a_default_command_runtime(self):
+        """Its point doesn't ask for the flag: the check before an update doesn't fail for lack of confined runs."""
+        env = self.on_command()
+        repo = self.tmp / "repo"
+        repo.mkdir()
         r = subprocess.run([sys.executable, str(BIN / "llm.py"), "run", "login-check", "--cwd", str(repo)], input="ok", cwd=repo,
                            capture_output=True, text=True, timeout=60, env=env)
-        self.assertNotEqual(r.returncode, 0)
-        self.assertNotIn("ran", r.stdout.split("llm_error")[0], r.stdout)
-        self.assertIn("command", r.stdout + r.stderr, "which runtime, and why")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(self.ran.exists())
 
 
 class ARuntimeThatDoesntSay(unittest.TestCase):
