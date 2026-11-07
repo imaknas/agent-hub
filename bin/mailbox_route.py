@@ -89,7 +89,9 @@ def calls_today(names) -> int:
 
 
 def mark(letter_id: str, project: str, done: bool = False) -> None:
-    """The call for this letter has started (or couldn't: done). Old entries go here, KEEP_DAYS after their start."""
+    """The call for this letter has started (or couldn't: done). Old entries go here, KEEP_DAYS after their start: the file is
+    written only by dispatch, under its lock, so nothing else prunes it. An answer file goes with the sessions folder's own
+    prune, ten minutes after it was written."""
     cut = time.time() - KEEP_DAYS * 86400
     calls = {k: v for k, v in _calls().items() if isinstance(v, dict) and isinstance(v.get("ts"), (int, float)) and v["ts"] > cut}
     calls[key(letter_id)] = {"project": project, "ts": time.time(), "done": done}
@@ -106,16 +108,6 @@ def consume(letter_id: str) -> None:
     f = answer_file(letter_id)
     if f:
         f.unlink(missing_ok=True)
-
-
-def prune() -> None:
-    """What calls left for letters older than routing goes (dispatch's prune); an answer file goes with the sessions
-    folder's own prune, ten minutes after it was written."""
-    cut = time.time() - KEEP_DAYS * 86400
-    calls = _calls()
-    keep = {k: v for k, v in calls.items() if isinstance(v, dict) and isinstance(v.get("ts"), (int, float)) and v["ts"] > cut}
-    if keep != calls:
-        _save(keep)
 
 
 def answer_file(letter_id: str) -> pathlib.Path | None:
@@ -191,13 +183,14 @@ def prompt(project: str, letter: dict, cands: list[dict]) -> str:
 
 
 def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
-    """Start the call for this letter in the background; whether it started. Either way the letter has had its one call: a
-    start that failed is done at once, and recency picks."""
+    """Start the call for this letter in the background; whether it started. Either way the letter has had its one call: it
+    is marked before the start, so a dispatch killed in between leaves a letter asked with no answer (recency after WAIT_S),
+    never a second call; a start that failed is done at once, and recency picks."""
     k = key(letter_id)
     if not hubconf.session_file(k, ANSWER):
         return False
-    stale = answer_file(letter_id)
-    stale.unlink(missing_ok=True)
+    answer_file(letter_id).unlink(missing_ok=True)
+    mark(letter_id, project)
     try:
         p = subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve())], stdin=subprocess.PIPE,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, text=True)
@@ -206,7 +199,6 @@ def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
     except (OSError, ValueError):
         mark(letter_id, project, done=True)
         return False
-    mark(letter_id, project)
     return True
 
 

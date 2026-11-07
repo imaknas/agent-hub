@@ -216,13 +216,27 @@ class Pick(Harness):
         self.assertEqual(f.stat().st_mode & 0o777, 0o600)
         self.assertEqual(f.read_text(), "S1")
 
-    def test_pruned_with_the_bus(self):
+    def test_an_old_call_goes_at_the_next_one(self):
+        """Pruned only by dispatch, under its lock, when it marks another: the bridge's prune doesn't hold that lock."""
         self.two()
         self.dispatch()
         self.age_call("m1", mr.KEEP_DAYS * 86400 + 1)
-        with mock.patch.object(self.m, "cursor", lambda c, consumer: 1 << 40):
-            self.m.prune(self.c)
+        self.assertIsNotNone(mr.call_of("m1"))
+        self.rt.live.clear()
+        self.two("m2")
+        self.dispatch()
         self.assertIsNone(mr.call_of("m1"))
+        self.assertIsNotNone(mr.call_of("m2"))
+
+    def test_a_letter_marked_with_no_answer_gets_no_second_call(self):
+        """What a dispatch killed between the mark and the start leaves (Background: the mark comes first)."""
+        mr.mark("m1", "proj")
+        self.two()
+        self.dispatch()
+        self.assertEqual(self.starts, [], "asked already")
+        self.age_call("m1", mr.WAIT_S + 1)
+        self.dispatch()
+        self.assertEqual(self.by("m1"), [("S2", "recent")])
 
 
 class Prompt(Harness):
@@ -380,7 +394,7 @@ class Background(Files):
 
         class P:
             def __init__(self, cmd, **kw):
-                seen.update(cmd=cmd, **kw)
+                seen.update(cmd=cmd, marked=mr.call_of("m1"), **kw)
                 self.stdin = io.StringIO()
                 self.stdin.close = lambda: seen.update(sent=self.stdin.getvalue())
 
@@ -391,6 +405,7 @@ class Background(Files):
         with mock.patch.object(mr.subprocess, "Popen", P):
             self.assertTrue(mr.start("m1", "proj", "the prompt", ["S1", "S2"]))
         self.assertEqual(seen["cmd"], [sys.executable, str(BIN / "mailbox_route.py")])
+        self.assertIsNotNone(seen["marked"], "marked before the start: a dispatch killed between them can't make a second call")
         self.assertTrue(seen["start_new_session"])
         self.assertEqual((seen["stdout"], seen["stderr"]), (subprocess.DEVNULL, subprocess.DEVNULL))
         self.assertEqual(json.loads(seen["sent"]), {"key": mr.key("m1"), "prompt": "the prompt", "cands": ["S1", "S2"]})
@@ -419,8 +434,13 @@ class Background(Files):
         self.assertLess(time.monotonic() - started, 20)
         self.assertNotEqual(p.returncode, 0, "it ended itself")
         self.assertEqual(mr.read_answer("m1"), ("none", None))
-        hung = int(pidfile.read_text())
-        time.sleep(0.2)
+        hung, deadline = int(pidfile.read_text()), time.monotonic() + 5
+        while time.monotonic() < deadline:   # killed at once; reaped by whoever adopts it, which may take a moment
+            try:
+                os.kill(hung, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.1)
         with self.assertRaises(ProcessLookupError):
             os.kill(hung, 0)
 

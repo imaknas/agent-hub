@@ -3375,8 +3375,6 @@ def prune(c) -> None:
               (iso(now() - datetime.timedelta(hours=MCP_PRUNE_H)),))
     c.execute("COMMIT")
     prune_wake_addresses()
-    import mailbox_route
-    mailbox_route.prune()   # what mailbox-route's calls left for letters past routing
     for f in (hubconf.STATE / "hubbus-post-tool").glob("*"):   # one per session, of use for seconds
         if time.time() - f.lstat().st_mtime > 86400:
             f.unlink(missing_ok=True)
