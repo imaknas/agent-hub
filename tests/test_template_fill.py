@@ -72,7 +72,7 @@ class Fill(unittest.TestCase):
         mcp = prompts.fill((ROOT / "templates" / "mcp-instructions.md").read_text(), project="demo", unread="-",
                            take_timeout=60)
         self.assertEqual(LEFT.findall(mcp), [])
-        self.assertEqual(LEFT.findall(prompts.render("mailbox")), [])
+        self.assertEqual(LEFT.findall(prompts.render("mailbox", notes="/abs/notes")), [])
 
     def test_agent_md_is_copied_as_is(self):
         """sync-local-setup.sh copies AGENT.md byte for byte onto every project's memory branch: no placeholders"""

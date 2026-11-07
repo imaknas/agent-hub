@@ -214,7 +214,9 @@ points:
     # Anyone who can write the bus can start it with their text: confined like agent-job-event (docs/design/
     # mailbox-routing.md, "11-02"). settings: platform = none of the project's saved permissions, the user's or the
     # project's hooks; dontAsk, so the rules below are the whole boundary. Bash only because the mail is a command:
-    # the platform settings and the rules allow nothing but `agenthub` mail subcommands (no raw hubbus).
+    # the platform settings and the rules allow nothing but `agenthub` mail subcommands (no raw hubbus), and those act only
+    # on the letters it was started for (MAILBOX_LETTERS, hubbus run_refusal; mailbox-session-first.md, "Triage"). It takes
+    # nothing: what it leaves stays open for sessions.
     permission_mode: dontAsk
     prompts: none
     tools: Read,Edit,Write,Glob,Grep,Bash

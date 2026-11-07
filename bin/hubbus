@@ -89,13 +89,17 @@ For hooks / the schedule / other scripts:
                                       while it does, up to MCP_HOLD_MAX_MIN; if someone else is using the project,
                                       wait CONVERSATION_WAIT minutes as for a conversation; then a live
                                       session with activity in this project within FORK_RECENT_H handles it in a
-                                      background fork with its context (trial since 10-26); only without one is a
-                                      headless agent dispatched (notes capability). brunna's letters too. When the
+                                      background fork with its context (trial since 10-26); only without one does a
+                                      headless agent triage it (one run per sender, its commands limited to its letters:
+                                      MAILBOX_LETTERS, run_refusal), and the sender gets one fixed line. brunna's letters
+                                      too. When the
                                       fork is done, the original session gets the fork's last reply and the letters it
                                       sent at its next activity (fork_result).
-                                      dispatched letters record message.delivered (via handler: for good; via resume:
-                                      for RESUME_TIMEOUT_MIN; via held = the loop guard, hold(): not taken, the platform
-                                      only stops running for it), and hooks no longer treat a taken one as work to do;
+                                      dispatched letters record message.delivered (via resume: taken for
+                                      RESUME_TIMEOUT_MIN; via triage = a headless agent went, once: not taken, it answers
+                                      what it can and the rest stays open for sessions; via held = the loop guard, hold():
+                                      not taken, the platform only stops running for it; via handler, from before triage:
+                                      for good), and hooks no longer treat a taken one as work to do;
                                       a letter held for an MCP session records nothing. While a letter not yet
                                       delivered waits for a live session, a runtime with the wake port nudges that
                                       session once (wake(), message.woken; docs/design/mailbox-runtimes.md B1); a
@@ -843,7 +847,8 @@ def is_done(c, mid) -> bool:
 
 
 INBOX_SQL = """
-SELECT m.*, EXISTS(SELECT 1 FROM events d WHERE d.type='message.delivered' AND d.ref=m.id) AS delivered
+SELECT m.*, EXISTS(SELECT 1 FROM events d WHERE d.type='message.delivered' AND d.ref=m.id
+                  AND COALESCE(json_extract(d.payload,'$.via'),'') NOT IN ('triage','held')) AS delivered
 FROM events m
 WHERE m.type IN ('message','record') AND m.to_project IN ({marks})
   AND NOT EXISTS(SELECT 1 FROM events x WHERE x.type='message.done' AND x.ref=m.id)
@@ -987,8 +992,12 @@ def taken_how(c, r, live) -> str:
     """Whether someone has taken this letter on, and for how long ("" no, "good", "now"). Only an ack, a reply or a done
     by a session counts as acting on it, plus a platform run that is under way or one from before the handler stopped
     taking letters. Held and triage rows never (docs/design/mailbox-session-first.md)."""
-    if answered(c, r):
-        return "good"
+    return "good" if answered(c, r) else being_handled(c, r, live)
+
+
+def being_handled(c, r, live, forks: bool = True) -> str:
+    """Taken with no reply or close yet: an old handler row, an ack, a fork within its time (forks: unless the one asking
+    is that fork, a letter being forked once)."""
     if has_via(c, r["id"], "handler"):
         return "good"
     cut, how = iso(now() - datetime.timedelta(minutes=RESUME_TIMEOUT_MIN)), ""
@@ -996,12 +1005,30 @@ def taken_how(c, r, live) -> str:
                        " json_extract(payload,'$.via') IN ('resume','ack')", (r["id"],)).fetchall():
         p = payload(e)
         if p["via"] == "resume":
-            how = "now" if e["ts"] >= cut else how
+            how = "now" if forks and e["ts"] >= cut else how
         elif not p.get("session") or p["session"].startswith("mcp:"):
             return "good"   # no session to outlive (an MCP client, a person at a terminal)
         elif live(p["session"]):
             how = "now"
     return how
+
+
+def taken_by_another(c, r, live, point: str | None = None) -> bool:
+    """Whether someone other than this platform run has this letter: a session and a handler don't both answer. point:
+    this run's judgment point. Its own reply or close isn't another's: a letter is triaged once and forked once, so a
+    point names one run; what came through an outbox carries no point, nor the session a session's does."""
+    derived = getattr(c, "derived", None)
+    acts = [payload(m) for m in answers(c, r)] + [payload(d) for d in c.execute(
+        "SELECT payload FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchall()]
+    own = [p for p in acts if (point and p.get("point") == point)
+           or (derived is not None and not (p.get("session") or p.get("from_session")))]
+    if len(own) < len(acts):
+        return True
+    fork = point == FORK_POINT
+    if derived is not None:
+        d = derived.get(r["id"]) or {}
+        return not own and bool(d.get("taken")) and not (fork and d.get("fork_only"))
+    return bool(being_handled(c, r, live, forks=not fork))
 
 
 def told_at(c, mid, session) -> str | None:
@@ -1944,14 +1971,14 @@ def platform_rounds(c, chain) -> int:
     ids = [m["id"] for m in chain]
     q = ",".join("?" * len(ids))
     return c.execute(f"SELECT COUNT(DISTINCT ref) FROM events WHERE type='message.delivered' AND ref IN ({q})"
-                     " AND json_extract(payload,'$.via') IN ('handler','resume')", ids).fetchone()[0]
+                     " AND json_extract(payload,'$.via') IN ('handler','resume','triage')", ids).fetchone()[0]
 
 
 def runs_today(c, proj) -> int:
     mine = own_names(proj)
     return c.execute("SELECT COUNT(DISTINCT json_extract(payload,'$.run')) FROM events WHERE type='message.delivered'"
                      f" AND to_project IN ({','.join('?' * len(mine))}) AND ts >= ?"
-                     " AND json_extract(payload,'$.via') IN ('handler','resume')", (*mine, iso()[:10])).fetchone()[0]
+                     " AND json_extract(payload,'$.via') IN ('handler','resume','triage')", (*mine, iso()[:10])).fetchone()[0]
 
 
 def lease_ids() -> set[str]:
@@ -2030,9 +2057,15 @@ RESUME_PROMPT, DELEGATE_PROMPT = "mailbox-resume", "mailbox-delegate"
 FORK_POINT = "mailbox-conversation"   # the judgment point both run under (resume)
 
 
+def notes_of(project: str) -> str:
+    """Where a platform run of this project writes its memory notes, as the prompt says it: an absolute path, since a
+    fork may run in a linked worktree with no link to it."""
+    return str(policy.notes_dir(now_named(project)) or ".agent-memory/memory")
+
+
 def branch_prompt(r, prompt=None) -> str:
     """The prompt a background branch copy gets for letter r, filled when it is sent (the content language of now)."""
-    return prompts.render(prompt or RESUME_PROMPT, letter=fmt(r), id=r["id"])
+    return prompts.render(prompt or RESUME_PROMPT, letter=fmt(r), id=r["id"], notes=notes_of(r["to_project"]))
 
 
 def can_resume(rt, sid) -> bool:
@@ -2086,6 +2119,78 @@ def fork_result(c, r) -> tuple[bool, str]:
 
 
 CONFINED_TYPES = ("manifest.update", "task", "drop")
+# The letters a mailbox run was started for, a JSON list (an id is free text for an unsandboxed sender, a comma included)
+LETTERS_ENV = "MAILBOX_LETTERS"
+
+
+def run_letters() -> list[str] | None:
+    """The letters this run was started for; None: not such a run. A value that can't be read is no letters: refused,
+    never unlimited."""
+    raw = os.environ.get(LETTERS_ENV)
+    if raw is None:
+        return None
+    try:
+        ids = json.loads(raw)
+    except ValueError:
+        return []
+    return [i for i in ids if isinstance(i, str)] if isinstance(ids, list) else []
+
+
+def letter_scope(c, letters, here) -> set[str]:
+    """What a run with these letters reads: them and their threads, as far as they are its project's own (a crafted
+    reply_to can point anywhere)."""
+    mine, out = set(own_names(here)) if here else set(), set()
+    for i in letters:
+        r = get_message(c, i)
+        if r is not None:
+            out.add(i)
+            out |= {m["id"] for m in thread_chain(c, r) if {m["to_project"], m["source"]} & mine}
+    return out
+
+
+def run_refusal(c, a, letters, here, live) -> str | None:
+    """A run started for these letters (the mailbox handlers, propose's agent, a fork for its one; design
+    mailbox-session-first.md, "Its own rules"): it reads them and their threads, replies done to them (info too to an asks
+    letter, which tells it to), closes them, asks the owner, and closes with the owner a question one of them names
+    (reconciliation). No other notice, no other recipient, no ack. What another session has taken it leaves."""
+    if a.cmd == "open-questions":
+        return _("hubbus: this run reads only the letters it was started for ({cmd} is not one of them)", cmd=a.cmd)
+    if a.cmd in ("show", "thread"):
+        if a.id not in letter_scope(c, letters, here):
+            return _("hubbus: this run reads only the letters it was started for and their threads")
+        return None
+    mine = {i: get_message(c, i) for i in letters}
+    if a.cmd == "done":
+        for i in a.ids:
+            if mine.get(i) is None:
+                return _("hubbus: this run closes only the letters it was started for ({id} is not one)", id=i)
+            if taken_by_another(c, mine[i], live, run_point()):
+                return _("hubbus: {id} has been taken by another session: leave it", id=i)
+        return None
+    if a.cmd != "send":
+        return None if a.cmd == "inbox" else _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
+    to = canon(a.to)
+    to = to if to in OWNERS else now_named(to)
+    target = None
+    if a.question:
+        target = next((r for r in mine.values() if r is not None and payload(r).get("question_check") == a.question), None)
+        if target is None or to != OWNER_ADDRESS or a.type not in ("done", "drop"):
+            return _("hubbus: this run closes with {alias} only a question one of its letters names", alias=OWNER_ALIAS)
+    elif a.reply_to:
+        target = mine.get(a.reply_to)
+        if target is None:
+            return _("hubbus: this run replies only to the letters it was started for ({id} is not one)", id=a.reply_to)
+        to_owner = to == OWNER_ADDRESS and a.type == "question"
+        reply = to in party_names(sender_of(target)) and (
+            a.type == "done" or (a.type == "info" and payload(target).get("effect") == "asks"))
+        if not to_owner and not reply:
+            return _("hubbus: this run sends a reply to the letter's sender with --type done (--type info only when the "
+                     "letter asks for it), or a question to {alias}", alias=OWNER_ALIAS)
+    elif to != OWNER_ADDRESS or a.type != "question":
+        return _("hubbus: this run sends only replies to its letters and questions to {alias}", alias=OWNER_ALIAS)
+    if target is not None and taken_by_another(c, target, live, run_point()):
+        return _("hubbus: {id} has been taken by another session: leave it", id=target["id"])
+    return None
 
 
 def confined_refusal(a, here) -> str | None:
@@ -2135,9 +2240,36 @@ def chain_env(rows) -> dict:
     return env
 
 
+def sender_of(r) -> str:
+    return now_named(canon(r["source"]))
+
+
+def received_line(c, r) -> None:
+    """The sender hears once that its letter arrived and waits for a session, from the platform (inside the caller's
+    transaction). No ref and no to_session, so it neither takes the letter nor wakes anyone; it carries the letter's
+    chain, so an event job can't loop on it. None for the owner side, the hub's own letters, reconciliation letters or a
+    project's letter to itself. An id isn't free text here: --id is, for an unsandboxed sender."""
+    p, sender = payload(r), sender_of(r)
+    hub = hubconf.hub_project()
+    if sender in OWNERS or sender == hub or sender == now_named(r["to_project"]) or p.get("question_check") \
+            or not valid_address(sender):
+        return
+    chain = {k: p[k] for k in ("chain", "depth") if k in p}
+    publish(c, f"{r['id']}:received", "message", hub, sender, None,
+            {"type": "info", "received": r["id"], **chain, "text": _(
+                "{project} received your letter {id}. No session has it yet; it stays open, and a session will see it.",
+                project=now_named(r["to_project"]), id=r["id"] if EVENT_ID.match(r["id"]) else "?")})
+
+
 def run_handler(c, proj, ws, rows) -> None:
-    """Delegation: dispatch a headless agent in that project (templates/prompts/mailbox.md, filled by prompts.render;
-    judgment point mailbox-escalation)."""
+    """Triage, the last resort: a headless agent in that project (templates/prompts/mailbox.md, filled by prompts.render;
+    judgment point mailbox-escalation) answers what it can and asks the owner the rest. It takes nothing: via triage, once
+    per letter, and what it leaves stays open for sessions. One run per sender, so a crafted letter can't close another
+    sender's in the same run; the other senders' letters go next tick. Its commands are limited to its letters
+    (MAILBOX_LETTERS: run_refusal). The budget stops the run, not the word to the sender."""
+    rows = [r for r in rows if not has_via(c, r["id"], "triage")]
+    if not rows:
+        return
     # one at a time per project, whichever of its names a handler still running was started under
     for name in own_names(proj):
         try:
@@ -2146,14 +2278,23 @@ def run_handler(c, proj, ws, rows) -> None:
         except (OSError, ValueError):
             pass
     if runs_today(c, proj) >= DAILY_RUNS:
-        log(_("{project}: already dispatched {max} {max:time|times} today; {n} {n:letter waits|letters wait} (visible "
-              "on the status page)",
-              project=proj, max=DAILY_RUNS, n=len(rows)))
+        c.execute("BEGIN IMMEDIATE")
+        for r in rows:
+            received_line(c, r)
+        c.execute("COMMIT")
+        log_once(f"daily-runs-{proj}", _("{project}: already dispatched {max} {max:time|times} today; {n} {n:letter waits|letters "
+                                         "wait} (visible on the status page)", project=proj, max=DAILY_RUNS, n=len(rows)))
         return
+    log_once(f"daily-runs-{proj}", "")
+    sender = sender_of(rows[0])
+    rows = [r for r in rows if sender_of(r) == sender]
     run = f"h{now():%m%d%H%M%S}-{secrets.token_hex(2)}"
     c.execute("BEGIN IMMEDIATE")
-    claim(c, rows, "handler", run=run)
+    claim(c, rows, "triage", run=run)
+    for r in rows:
+        received_line(c, r)
     c.execute("COMMIT")
+    letters = json.dumps([r["id"] for r in rows], ensure_ascii=False)
     if (hubconf.get("mailbox") or {}).get("handler") == "propose":
         # agent proposes, platform applies (bin/propose_apply.py; docs/design/tool-agnostic.md): any agent can run it,
         # in a throwaway worktree; the platform only takes the memory notes and sends the letters on its behalf. Runs
@@ -2162,17 +2303,18 @@ def run_handler(c, proj, ws, rows) -> None:
         log_f.parent.mkdir(parents=True, exist_ok=True)
         with log_f.open("a") as f:
             subprocess.Popen([sys.executable, str(HUB / "bin" / "propose_apply.py"), "mailbox", proj, *[r["id"] for r in rows]],
-                             stdout=f, stderr=f, start_new_session=True, env=chain_env(rows))
+                             stdout=f, stderr=f, start_new_session=True, env={**chain_env(rows), LETTERS_ENV: letters})
         log(_("{project}: dispatched an agent (propose) for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
               ids=", ".join(r["id"] for r in rows), run=run))
         return
     # the platform's template (no personal names) with this machine's names and content language filled in
     prompt = AGENT_JOBS / f"mailbox-{proj}" / "prompt.md"
     prompt.parent.mkdir(parents=True, exist_ok=True)
-    prompt.write_text(prompts.render("mailbox") + "\n")
+    prompt.write_text(prompts.render("mailbox", notes=notes_of(proj)) + "\n")
     res = subprocess.run([str(HUB / "bin" / "run-agent-job.sh"), f"mailbox-{proj}", str(ws), str(prompt)],
                          capture_output=True, text=True,
-                         env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj})
+                         env={**chain_env(rows), "AGENT_JOB_POINT": "mailbox-escalation", "MAILBOX_PROJECT": proj,
+                              LETTERS_ENV: letters})
     log(_("{project}: dispatched a headless agent for {n} {n:letter|letters} ({ids}, {run})", project=proj, n=len(rows),
           ids=", ".join(r["id"] for r in rows), run=run)
         if res.returncode == 0 else
@@ -2194,7 +2336,8 @@ def resume(c, r, sid, cwd, rt, ws=None, prompt=None) -> None:
             p = subprocess.Popen([sys.executable, str(HUB / "bin" / "llm.py"), "run", "mailbox-conversation",
                                   "--cwd", str(cwd), "--", *rt.resume_args(sid)],
                                  stdin=subprocess.PIPE, stdout=fh, stderr=subprocess.STDOUT, cwd=str(cwd), text=True,
-                                 start_new_session=True, env={**chain_env([r]), "MAILBOX_PROJECT": r["to_project"]})
+                                 start_new_session=True, env={**chain_env([r]), "MAILBOX_PROJECT": r["to_project"],
+                                                              LETTERS_ENV: json.dumps([r["id"]], ensure_ascii=False)})
             p.stdin.write(text)
             p.stdin.close()
     except OSError as e:
@@ -2244,19 +2387,34 @@ def wake_target(c, proj, live) -> str | None:
 
 
 def hold(c, r) -> None:
-    """The platform has already handled too many rounds of this thread: stop handling it, ask the owner."""
+    """The platform has already handled too many rounds of this thread: it starts nothing more for this letter and asks
+    the owner, once (the event id makes it once, and it logs once). It takes nothing: the letter stays open for
+    sessions."""
     c.execute("BEGIN IMMEDIATE")
     claim(c, [r], "held")
     text = payload(r).get("text", "")
-    publish(c, f"{r['id']}:loop", "message", hubconf.hub_project(), OWNER_ADDRESS, r["id"],
-            {"type": "question", "text": _(
-                "The platform has already handled {rounds} rounds of the thread between {a} and {b}; going on may be "
-                "the two answering each other without end, so it stops here. Latest letter ({id}): {text}\n"
-                "To go on, open a session in one of the projects.",
-                a=r["to_project"], b=r["source"], rounds=THREAD_MAX_ROUNDS, id=r["id"], text=text[:300])})
+    new = publish(c, f"{r['id']}:loop", "message", hubconf.hub_project(), OWNER_ADDRESS, r["id"],
+                  {"type": "question", "text": _(
+                      "The platform has already handled {rounds} rounds of the thread between {a} and {b}; going on may be "
+                      "the two answering each other without end, so it stops here. Latest letter ({id}): {text}\n"
+                      "To go on, open a session in one of the projects.",
+                      a=r["to_project"], b=r["source"], rounds=THREAD_MAX_ROUNDS, id=r["id"], text=text[:300])})
     c.execute("COMMIT")
-    log(_("{project}: {id}: this thread has already had {rounds} rounds handled; stopping to ask {owner}",
-          project=r["to_project"], id=r["id"], rounds=THREAD_MAX_ROUNDS, owner=OWNER))
+    if new:
+        log(_("{project}: {id}: this thread has already had {rounds} rounds handled; stopping to ask {owner}",
+              project=r["to_project"], id=r["id"], rounds=THREAD_MAX_ROUNDS, owner=OWNER))
+
+
+def close_failed_questions(c) -> None:
+    """A propose run that failed asked the owner about a letter (<id>:propose-failed): the question closes with the
+    letter, as done --question would, once someone has closed or answered it. Sent by the hub, which asked. A letter gone
+    from the bus was closed long ago."""
+    for q in c.execute("SELECT id, ref FROM events q WHERE type='message' AND id LIKE '%:propose-failed' AND NOT EXISTS("
+                       "SELECT 1 FROM events x WHERE x.id = q.id || ':closed')").fetchall():
+        r = get_message(c, q["ref"]) if q["ref"] else None
+        if r is None or answered(c, r):
+            publish(c, f"{q['id']}:closed", "message", hubconf.hub_project(), OWNER_ADDRESS, None,
+                    {"type": "done", "question": q["id"], "text": _("Letter {id} has been handled.", id=q["ref"])})
 
 
 def end_route(c, r, st, proj) -> bool:
@@ -2305,7 +2463,7 @@ def dispatch(c, rt=None) -> int:
     wait_cut = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     hold_cut = iso(now() - datetime.timedelta(minutes=MCP_HOLD_MAX_MIN))
     run_cut = iso(now() - datetime.timedelta(days=PLATFORM_RUN_DAYS))
-    waiting = 0
+    waiting, sizes = 0, {}
     for proj, ws in projects().items():
         if not ws.is_dir():
             continue
@@ -2340,32 +2498,15 @@ def dispatch(c, rt=None) -> int:
             if st.held:   # a session has it: give it time to ack, reply or done
                 waiting += 1
                 continue
-            # the platform runs nothing more for these; they wait for a session's hook. Held: asked the owner once
-            # already (hold(), bin/propose_apply.py); hold() itself is step 2's (mailbox-session-first.md), and this
-            # keeps it from running, and logging, every tick now that held isn't taken
-            if has_via(c, r["id"], "held") or r["ts"] < run_cut:
-                waiting += 1
-                continue
-            if platform_rounds(c, thread_chain(c, r)) >= THREAD_MAX_ROUNDS:
-                hold(c, r)
-                continue
-            # one fork per letter, on both paths: claim's fixed id means runs_today and platform_rounds don't rise for a
-            # second one, so a fork that ended without closing it would otherwise start again every tick
-            forked = has_via(c, r["id"], "resume")
             to_s = p.get("to_session")
             # conversation: a reply to some session (lease sessions aren't resumed; treated as a delegation)
-            if to_s and to_s not in leases:
+            conversation = bool(to_s) and to_s not in leases
+            if conversation:
                 if to_s in live and r["ts"] >= wait_cut:
                     if not r["delivered"]:
                         wake(c, rt, r, to_s)
                     waiting += 1
                     continue
-                tokens = rt.context_size(to_s) if not forked and can_resume(rt, to_s) else None
-                if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
-                    resume(c, r, to_s, session_cwd(c, to_s) or ws, rt, ws)
-                    continue
-                # context too large or no transcript found → treat it as a delegation (the handler reads the whole
-                # thread with hubbus thread)
             elif not r["delivered"] and (mcp := mcp_sessions(c, proj) if mcp is None else mcp) \
                     and r["ts"] >= hold_cut:
                 # an MCP session uses the project: held while it does (it is told at each agenthub tool call), up to
@@ -2377,18 +2518,37 @@ def dispatch(c, rt=None) -> int:
                     wake(c, rt, r, wake_target(c, proj, live))
                 waiting += 1
                 continue
-            else:
-                if not r["delivered"] and mcp:
-                    log(_("{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the "
-                          "project; dispatching it now", project=proj, id=r["id"], minutes=MCP_HOLD_MAX_MIN))
-                # delegation: a live session with recent activity in this project → handled in a background fork with
-                # its context (owner's trial since 10-26, m10261706), which can answer about what that session has on
-                # hand; none, context too large, or today's quota used up → headless agent
-                sid = None if forked else recent_session(c, proj, live, rt)
-                tokens = rt.context_size(sid) if sid else None
-                if tokens is not None and tokens <= RESUME_MAX_TOKENS and runs_today(c, proj) < DAILY_RUNS:
-                    resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=DELEGATE_PROMPT)
-                    continue
+            # From here on the platform would start something; a session can still come. Too old, or held (the loop guard
+            # or a failed propose run asked the owner once already): it starts nothing more
+            if r["ts"] < run_cut or has_via(c, r["id"], "held"):
+                waiting += 1
+                continue
+            # One fork per letter, on both paths: claim's fixed id means runs_today and platform_rounds don't rise for a
+            # second one, so a fork that ended without closing it would otherwise start again every tick.
+            # A delegation: a live session with recent activity in this project → handled in a background fork with its
+            # context (owner's trial since 10-26, m10261706), which can answer about what that session has on hand.
+            # None, context too large (or no transcript), or today's quota used up → triage, once
+            sid = None
+            if not has_via(c, r["id"], "resume"):
+                sid = (to_s if can_resume(rt, to_s) else None) if conversation else recent_session(c, proj, live, rt)
+            if sid and sid not in sizes:   # a letter stays open now, and a transcript isn't read per letter per tick
+                sizes[sid] = rt.context_size(sid)
+            fork = sid is not None and sizes[sid] is not None and sizes[sid] <= RESUME_MAX_TOKENS \
+                and runs_today(c, proj) < DAILY_RUNS
+            triaged = has_via(c, r["id"], "triage")
+            if triaged and not fork:   # nothing left to start: it waits for a hook or for a fork's chance
+                waiting += 1
+                continue
+            if platform_rounds(c, thread_chain(c, r)) >= THREAD_MAX_ROUNDS:
+                hold(c, r)
+                waiting += 1
+                continue
+            if fork:
+                resume(c, r, sid, session_cwd(c, sid) or ws, rt, ws, prompt=None if conversation else DELEGATE_PROMPT)
+                continue
+            if not r["delivered"] and mcp:
+                log(_("{project}: {id} was held {minutes} {minutes:minute|minutes} while an MCP session used the "
+                      "project; dispatching it now", project=proj, id=r["id"], minutes=MCP_HOLD_MAX_MIN))
             delegate.append(r)
         # agent-hub's letters too (they used to be left for its dedicated session; with nobody typing, nobody took
         # them, m10261706)
@@ -2610,6 +2770,8 @@ def view(c, proj: str, live=None) -> dict:
             st = letter_state(c, r, live)
             if st.taken or st.held:
                 state[r["id"]] = {"taken": bool(st.taken), "held": st.held, "holder": st.holder}
+                if st.taken and not answered(c, r) and not being_handled(c, r, live, forks=False):
+                    state[r["id"]]["fork_only"] = True   # that fork's own commands aren't refused for it
     return {"v": 1, "project": proj, "events": events, "state": state}
 
 
@@ -2682,6 +2844,7 @@ def dispatch_locked(c, pull=False) -> None:
                         if c.in_transaction:
                             c.execute("ROLLBACK")
                         log(_("dispatch {step} failed: {e!r}", step=step.__name__, e=e))
+        mailbox_step(c, close_failed_questions)
         try:
             dispatch(c)
         finally:
@@ -2814,7 +2977,7 @@ def cmd_open_handoffs() -> None:
 # how a letter went, for the status page (docs/design/mailbox-runtimes.md B1): a message.delivered's via, or a
 # message.woken
 PATH_OF = {"session-start": "hook", "prompt": "hook", "post-tool": "hook", "inbox": "inbox", "ack": "ack",
-           "resume": "resume", "handler": "handler", "held": "held"}
+           "resume": "resume", "handler": "handler", "triage": "triage", "held": "held"}
 PATHS_HOURS = 24
 PICKED_UP = {"hook", "inbox", "ack"}   # the letter went into a session
 WAKE_PICKUP_MIN = CONVERSATION_WAIT_MIN   # a woken session that hasn't taken the letter by then: woken-missed
@@ -2824,7 +2987,8 @@ WAKE_MISS_DAYS = 7
 def letter_path(c, r) -> list[str]:
     """How letter r went, in order: woken (wake reached a live session; woken-missed when that session then didn't
     take it within WAKE_PICKUP_MIN; wake-failed when wake didn't reach it), hook / inbox (delivered into a session),
-    ack, resume (a background copy of a session), handler (an agent dispatched), held (the loop guard)."""
+    ack, resume (a background copy of a session), triage (an agent dispatched, the letter stays open), handler (the
+    same, from before it stopped taking letters), held (the loop guard, or a propose run that failed)."""
     path, woken = [], None
     for e in c.execute("SELECT type, ts, payload FROM events WHERE ref=? AND type IN ('message.delivered',"
                        " 'message.woken') ORDER BY seq", (r["id"],)):
@@ -3047,11 +3211,16 @@ def mail_command(a) -> None:
     box = mail_box(a, here)
     if box:
         here = box
+    letters = run_letters()
+    if a.cmd == "ack" and letters is not None:
+        refuse(_("hubbus: this run can't ack a letter: an ack says a session has it"))
     if a.cmd == "ack" and platform_run():
         # an ack says a session has it for as long as it lives; a platform run's says nothing
         print(_("(a platform run's ack is not recorded)"), file=sys.stderr)
         return
     c = view_db(box) if box else db()
+    if letters is not None and (why := run_refusal(c, a, letters, here, Live(me=session, c=c))):
+        refuse(why)
     if a.cmd == "publish":
         pl = json.loads(a.payload)
         if box:
@@ -3080,7 +3249,9 @@ def mail_command(a) -> None:
         project = now_named(a.project) if a.project else here
         if not project:
             refuse(_("hubbus: not in a project folder, add --project <name>"))
-        rows, live = inbox(c, project, session), Live(me=session, c=c)
+        # a run with letters sees them, whoever a reply first waits for (or it gets an empty mailbox for a reply)
+        rows = inbox(c, project, session) if letters is None else [r for r in addressed_to(c, project) if r["id"] in letters]
+        live = Live(me=session, c=c)
         for r in rows:
             print(fmt(r))
             if (mark := state_mark(c, r, session, live)):
@@ -3106,8 +3277,10 @@ def mail_command(a) -> None:
     elif a.cmd == "thread":
         r = must_message(c, a.id)
         confined_letter(r, here)
+        scope = None if letters is None else letter_scope(c, letters, here)
         for r in thread_chain(c, r):
-            print(fmt(r))
+            if scope is None or r["id"] in scope:
+                print(fmt(r))
     elif a.cmd == "open-questions":
         project = canon(a.project) if a.project else None
         if names.env("CONFINED"):   # only its own project's questions

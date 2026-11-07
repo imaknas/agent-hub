@@ -82,7 +82,7 @@ class Dispatch(unittest.TestCase):
 
         def run_handler(c, proj, ws, rows):
             c.execute("BEGIN IMMEDIATE")
-            m.claim(c, rows, "handler", run=f"h{len(self.handled)}")
+            m.claim(c, rows, "triage", run=f"h{len(self.handled)}")
             c.execute("COMMIT")
             self.handled.append((proj, [r["id"] for r in rows]))
 
@@ -418,11 +418,17 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(st["held"], [])
 
     # --- hook ---
-    def test_hook_does_not_hand_claimed_letter_to_session(self):
+    def test_hook_does_not_hand_a_fork_a_letter_while_it_runs(self):
+        self.send("m1", "proj", "request")
+        self.m.claim(self.c, [self.m.get_message(self.c, "m1")], "resume", session="S1", run="r0")
+        rows = self.m.inbox(self.c, "proj", "S9", only_new=True)
+        self.assertEqual(rows, [])
+
+    def test_hook_hands_a_triaged_letter_to_a_session(self):
         self.send("m1", "proj", "request")
         self.dispatch()
         rows = self.m.inbox(self.c, "proj", "S9", only_new=True)
-        self.assertEqual(rows, [])
+        self.assertEqual([r["id"] for r in rows], ["m1"])
 
 
 class ForkMerge(unittest.TestCase):

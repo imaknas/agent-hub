@@ -183,15 +183,23 @@ def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib
     index = registry.refresh()
     doc = index["projects"][project]
     pol = policy.policy(project, doc, index)
+    hidden = policy.run_state_denied(project, keep)
+    pol = {**pol, "deny_read": [*pol["deny_read"], *hidden]}
     sandbox = settings(pol)[0]
-    if keep:
-        carved = policy.write_except(pol["deny_write"], keep)
-        pol = {**pol, "deny_write": carved}
+    # a runtime's deny can't be narrowed by an allow: the job's own folder and the project's notes come off the list here,
+    # and only the run's allow rules decide whether it writes them
+    carved = pol["deny_write"]
+    for place in (keep, policy.notes_dir(project)):
+        if place:
+            carved = policy.write_except(carved, place)
+    changed = carved != pol["deny_write"]
+    pol = {**pol, "deny_write": carved}
     # only the mail commands (read, send, close letters): not raw hubbus, merging or running code through the platform
     allow = _cli_rules(policy.platform_cli(mail_only=True))
     deny = lease_settings(pol)["permissions"]["deny"]
-    if keep:   # a file beside the path (not only a folder's contents)
+    if changed:   # a file beside the path (not only a folder's contents)
         deny += [f"Edit({_tilde(x)})" for x in carved if not x.is_dir()]
+    deny += [f"Read({_tilde(x)})" for x in hidden if not x.is_dir()]
     out = {"permissions": {"deny": deny, "allow": allow}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
@@ -571,6 +579,24 @@ def _linked_rules(allowed, cwd) -> tuple[list[str], list[str]]:
     return dirs, rules
 
 
+MEMORY_RULE = "Edit(./.agent-memory/memory/**)"
+
+
+def _notes_rules(allowed, project, cwd) -> list[str]:
+    """A run whose rules write notes writes them where the project's are, by absolute path, wherever it runs: a fork of a
+    hub session may run in a linked worktree with no link to them. Adds the rule to allowed; → the working directories it
+    needs (--restricted confines the file tools to them), its .agent-memory so it can read the project's state too."""
+    import policy
+    notes = policy.notes_dir(project) if MEMORY_RULE in allowed else None
+    if not notes:
+        return []
+    rule = f"Edit(/{notes}/**)"
+    if rule not in allowed:
+        allowed.append(rule)
+    base = pathlib.Path(cwd or os.getcwd()).resolve()
+    return [] if base in notes.parents else [str(notes.parent)]
+
+
 def _flags(task) -> list:
     spec = task.spec
     cmd = [_exe(), "-p", task.prompt]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
@@ -602,6 +628,7 @@ def _flags(task) -> list:
                 "--tools", ",".join(sorted(tools))]
         dirs, extra = _linked_rules(allowed, task.cwd)
         allowed += extra
+        dirs += [d for d in _notes_rules(allowed, project, task.cwd) if d not in dirs]
         for d in dirs:
             cmd += ["--add-dir", d]
     elif "tools" in spec:

@@ -156,6 +156,29 @@ def write_except(deny_write: list, keep: pathlib.Path) -> list[pathlib.Path]:
     return out
 
 
+def notes_dir(project: str) -> pathlib.Path | None:
+    """Where a project's memory notes are, by absolute path: what a mailbox handler or a fork may write, wherever it runs
+    (the hub's are in its main checkout, not committed: memory: false). None when it has none, or when the folder is a
+    link: a project's links don't decide what the platform's runs may write."""
+    ws = hubconf.MAIN if project == hubconf.hub_project() else hubconf.workspace(project)
+    if not ws:
+        return None
+    mem = ws / ".agent-memory"
+    if mem.is_symlink() or not mem.is_dir() or (mem / "memory").is_symlink():
+        return None
+    return mem.resolve() / "memory"
+
+
+def run_state_denied(project: str, keep: pathlib.Path | None = None) -> list[pathlib.Path]:
+    """What a confined run of the hub may not read: its working directory is the hub root, where other projects' runs left
+    fork logs and reports, and it could quote them to a sandboxed sender. keep: the run's own job folder. Other projects'
+    runs have no such place in their working directory."""
+    if project != hubconf.hub_project():
+        return []
+    places = [hubconf.STATE, hubconf.LOGS]
+    return write_except(places, keep) if keep else places
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)

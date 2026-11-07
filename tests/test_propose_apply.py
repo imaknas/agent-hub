@@ -150,6 +150,20 @@ class ProposeApply(unittest.TestCase):
         self.assertEqual([p for p in out["applied"] if p.startswith(".agent-memory/memory/")], [
             f".agent-memory/memory/{datetime.date.today().isoformat()}.md"], out)
 
+    def test_a_note_in_a_plain_notes_folder_is_adopted(self):
+        """The hub's notes are a folder of no repo of their own (memory: false): nothing in the copy lists them, and
+        the agent's note must not vanish while its answer says it was written."""
+        shutil.rmtree(self.ws / ".agent-memory" / ".git")
+        r = self.run_("hubbus", "send", "--from", "agent-hub", "--to", "demo", "--type", "question", "--text", "which cache?")
+        mid = r.stdout.strip().split()[-1]
+        r = self.run_("propose_apply.py", "mailbox", "demo", mid)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        notes = [p for p in out["applied"] if p.startswith(".agent-memory/memory/")]
+        self.assertEqual(len(notes), 1, out)
+        self.assertIn("use SQLite", (self.ws / notes[0]).read_text())
+        self.assertEqual((self.ws / "README.md").read_text(), "the original README\n")
+
     def test_a_failed_run_holds_the_letter_and_asks_the_owner(self):
         """claimed by dispatch, failed: held, the owner asked, never dispatched again (nothing loops)"""
         (self.tmp / "agent.py").write_text("import sys\nsys.exit(2)\n")

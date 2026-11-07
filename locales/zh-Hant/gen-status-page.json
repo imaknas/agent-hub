@@ -195,5 +195,6 @@
  "triaged, waiting for a session": "已初步處理,等 session",
  "the loop guard asked the owner": "循環防護已問過本人",
  "too old for a platform run": "太舊,平台不再派人處理",
- "today's runs are used up": "今天的處理次數用完了"
+ "today's runs are used up": "今天的處理次數用完了",
+ "agent triaged it": "agent 看過了"
 }

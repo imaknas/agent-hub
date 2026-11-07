@@ -62,9 +62,10 @@ change, don't touch that project's files directly: write to that project's mailb
 
 The recipient is a **project**, not a session. Once it is sent the platform takes care of it; you don't need to wake the
 other side's session or wait for it to be open: a reply to a letter from one of their sessions goes to that session
-first (if it is idle, the platform continues with its context in the background); for other requests, when nobody is
-using the other project an agent handles it right away. Cross-project matters always go through `brunna send`; don't
-use direct messages between sessions instead.
+first (if it is idle, the platform continues with its context in the background); for other requests, when no session
+picks it up, an agent triages it: it answers what it can from reading the project, or asks {{owner}}, and the rest stays
+open for the next session there; you get one line saying your letter arrived and waits. Cross-project matters always go
+through `brunna send`; don't use direct messages between sessions instead.
 `{{owner_alias}}` = delivered to {{owner}}'s {{assistant}}; {{owner}}'s answer is mailed back to this project later.
 **To have the other side do something (change files, answer, decide), always use `request` or `question`**;
 `info`/`progress`/`done` are notices: the platform dispatches no one for them, and if the other side has no session open

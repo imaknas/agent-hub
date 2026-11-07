@@ -287,7 +287,7 @@ def path_labels() -> dict[str, str]:
     return {"woken": _("woken"), "woken-missed": _("woken, not picked up"), "wake-failed": _("wake failed"),
             "hook": _("hook"), "inbox": _("inbox"),
             "ack": _("acked"), "resume": _("background copy"), "handler": _("agent dispatched"),
-            "held": _("held (loop guard)")}
+            "triage": _("agent triaged it"), "held": _("held (loop guard)")}
 
 
 def waiting_label(w: dict) -> str:

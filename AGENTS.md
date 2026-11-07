@@ -150,10 +150,12 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   minutes first; if it is idle, the reply continues in the background with its context (a branched copy, the runtime
   must support it; a context too large is dispatched fresh instead). For a request, if someone is using the project it
   waits 5 minutes, then a live session of this project with activity in the last 24 hours handles it on a background
-  branch (it can answer about what it has in hand); only when there is no such session is a headless agent dispatched
-  (`templates/prompts/mailbox.md`: it only writes notes/replies/asks the owner, never changes code; with
-  `mailbox.handler: propose` it runs in a throwaway worktree instead and the platform sends for it,
-  `bin/propose_apply.py`). brunna's own letters work the same way. Anyone who can write the bus can start these
+  branch (it can answer about what it has in hand); only when there is no such session does a headless agent triage it
+  (`templates/prompts/mailbox.md`, once per letter, one run per sender: it only writes notes, replies `done` to its
+  letters and asks the owner, never changes code, and what it leaves stays open for sessions; its commands are limited
+  to its letters, `MAILBOX_LETTERS`; the sender gets one fixed line that it arrived; with `mailbox.handler: propose` it
+  runs in a throwaway worktree instead and the platform sends for it, `bin/propose_apply.py`). brunna's own letters work
+  the same way. Anyone who can write the bus can start these
   handlers, so the background branch and the headless agent load only the platform's settings for the project, never
   its saved permissions (`settings: platform`, as event agent jobs; per point in mailbox-routing.md "11-02").
   When the branch is done, the original session receives the branch's reply and the letters it sent on its next
@@ -162,8 +164,9 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   closing, or 60 minutes from the telling; then the next session's hook gets it (design `docs/design/mailbox-session-first.md`,
   "The letter's state"). A session's ack lasts while the session runs. Platform runs start only for letters under 7 days old,
   and a letter is forked once.
-  A dispatched letter is recorded as "the platform is handling it", so an open session does not redo it; at most 4
-  rounds per thread and 6 dispatches per project per day (brunna.json `mailbox`). Everything specific to Claude Code is
+  A fork under way is recorded as "the platform is handling it", so an open session does not redo it; a triaged letter
+  is not: sessions still see it. At most 4 rounds per thread (then the owner is asked once and the platform starts nothing
+  more for it, the letter stays open) and 6 dispatches per project per day (brunna.json `mailbox`). Everything specific to Claude Code is
   only in `bin/runtime_claude.py`. Handoffs do not go through this.
   When a project's question to the owner is resolved inside the project session:
   `brunna send --to owner --type done|drop --question <id>`, and the owner side closes it; opening a session lists the

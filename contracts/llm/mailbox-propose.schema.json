@@ -3,7 +3,7 @@
  "description": "the propose version of a mailbox assignment (bin/propose_apply.py): the agent writes only memory notes in a throwaway worktree; the letters to send and the ones to close go here, and the platform sends them",
  "properties": {
   "replies": {"type": "array", "items": {"type": "object", "required": ["reply_to", "type", "text"],
-   "properties": {"reply_to": {"type": "string", "description": "the id of one of this assignment's letters"}, "type": {"enum": ["info", "done", "question"]},
+   "properties": {"reply_to": {"type": "string", "description": "the id of one of this assignment's letters"}, "type": {"enum": ["done", "info"], "description": "done; info only when the letter tells you to reply that way"},
                   "text": {"type": "string", "description": "in the content language named in the prompt"}}}},
   "done": {"type": "array", "items": {"type": "object", "required": ["id"],
    "properties": {"id": {"type": "string"}, "note": {"type": "string", "description": "in the content language named in the prompt"}}}},

@@ -39,7 +39,8 @@ class FakeConn:
 def fake_hubbus(row, published):
     return types.SimpleNamespace(
         db=lambda: FakeConn(row), payload=lambda r: {"type": "request", "text": "letter"}, new_id=lambda: "m-new",
-        canon=lambda s: s, OWNER_ADDRESS="owner",
+        canon=lambda s: s, OWNER_ADDRESS="owner", Live=lambda c: types.SimpleNamespace(load=lambda: None),
+        taken_by_another=lambda c, r, live: False,
         publish=lambda c, mid, typ, src, to, ref, payload: published.append((typ, payload)))
 
 

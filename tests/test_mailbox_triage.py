@@ -1,23 +1,35 @@
-"""The headless handler as last resort (docs/design/mailbox-session-first.md, "Triage"). A temporary bus, log and state
-folder (tests.test_mailbox_dispatch's setUp); processes are stubbed, no agent is started.
+"""The headless handler as last resort (docs/design/mailbox-session-first.md, "Triage"), tick by tick with hooks in
+between. A temporary bus, log and state folder (tests.test_mailbox_dispatch's setUp); processes are stubbed, no agent is
+started.
 
     bin/py -m unittest tests.test_mailbox_triage
 """
 import importlib.util
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
+import hubconf  # noqa: E402
+import test_handler_confinement as thc  # noqa: E402
 import test_mailbox_state as tms  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ESCALATION = {"HUB_LLM_POINT": "mailbox-escalation", "AGENT_HUB_CONFINED": "1"}
-EVENT_JOB = {"HUB_LLM_POINT": "agent-job-event", "AGENT_HUB_CONFINED": "1"}
+CONFINED = {"AGENT_HUB_CONFINED": "1"}
+ESCALATION = {"HUB_LLM_POINT": "mailbox-escalation", **CONFINED}
+FORK = {"HUB_LLM_POINT": "mailbox-conversation", **CONFINED}
+EVENT_JOB = {"HUB_LLM_POINT": "agent-job-event", **CONFINED}
+CLOCK_JOB = {"HUB_LLM_POINT": "agent-job-confined", **CONFINED}
+
+
+def with_letters(env, *ids):
+    return {**env, "MAILBOX_LETTERS": json.dumps(ids)}
 
 
 def load_propose():
@@ -31,12 +43,18 @@ class Base(tms.Harness):
     def setUp(self):
         tms.tmd.Dispatch.setUp(self)
         self.started = []
+        self.hub = self.m.hubconf.hub_project()
+        self.owner = self.m.OWNER_ADDRESS
 
     def real_handler(self):
         """The real run_handler, with its process stubbed."""
         self.m.run_handler = self.m.real_run_handler
 
+        real = subprocess.run
+
         def run(cmd, **kw):
+            if "run-agent-job.sh" not in str(cmd[0]):   # ps, and the like
+                return real(cmd, **kw)
             self.started.append({"cmd": cmd, "env": kw.get("env") or {}})
             return subprocess.CompletedProcess(cmd, 0, "", "")
         patch = mock.patch.object(self.m.subprocess, "run", run)
@@ -52,98 +70,185 @@ class Base(tms.Harness):
     def vias(self, mid):
         return [p.get("via") for p in self.payloads("type='message.delivered' AND ref=?", mid)]
 
+    def refused(self, *args, env=None, session=None):
+        """The command is refused, and its reason given."""
+        with self.assertRaises(SystemExit) as e:
+            self.cli(*args, env=env, session=session)
+        self.assertIsInstance(e.exception.code, str, args)
+        return e.exception.code
 
-class Today(Base):
-    """What the handler paths do before this step, pinned first."""
+    def letters_of(self, run):
+        return json.loads(run["env"]["MAILBOX_LETTERS"])
 
-    def test_a_dispatched_letter_is_taken_for_good_and_hooks_stop_showing_it(self):
+
+class Triage(Base):
+    def test_it_leaves_the_letter_new_for_hooks_and_is_not_repeated(self):
         self.real_handler()
         self.send("m1", "proj", "request")
         self.dispatch()
         self.assertEqual(len(self.started), 1)
-        self.assertEqual(self.vias("m1"), ["handler"])
+        self.assertEqual(self.vias("m1"), ["triage"])
         self.assertEqual(self.started[0]["env"]["AGENT_JOB_POINT"], "mailbox-escalation")
-        self.assertEqual(self.state("m1").taken, "good")
-        self.assertEqual(self.hook("prompt", "S1"), "")
-        self.dispatch()
-        self.assertEqual(len(self.started), 1)
+        self.assertEqual(self.state("m1").taken, "", "it takes nothing")
+        self.assertEqual(self.m.claimed(self.c, ["m1"]), set())
+        self.assertEqual(self.dispatch(), 1, "it waits")
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual(len(self.started), 1, "once per letter")
+        self.rt.live.add("S1")
+        self.assertIn("[m1]", self.hook("prompt", "S1"), "the next session is told it in full")
+        self.assertEqual(self.told("m1"), ["S1"])
+        self.assertNotIn(self.m._(" (the platform is handling it, nothing to do)"), self.hook("session-start", "S2"))
 
-    def test_the_propose_handler_claims_too(self):
+    def test_run_handler_itself_does_it_once(self):
         self.real_handler()
         self.send("m1", "proj", "request")
-        started = []
-
-        class P:
-            def __init__(self, cmd, **kw):
-                started.append(cmd)
-        with mock.patch.object(self.m.subprocess, "Popen", P), \
-                mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
-            self.dispatch()
-        self.assertIn("propose_apply.py", started[0][1])
-        self.assertEqual(started[0][2:], ["mailbox", "proj", "m1"])
-        self.assertEqual(self.vias("m1"), ["handler"])
-
-    def test_several_senders_go_in_one_run(self):
-        self.real_handler()
-        self.send("m1", "proj", "request", src="other")
-        self.send("m2", "proj", "request", src=self.m.hubconf.hub_project())
-        self.dispatch()
+        r = self.m.get_message(self.c, "m1")
+        self.m.run_handler(self.c, "proj", self.ws, [r])
+        self.m.run_handler(self.c, "proj", self.ws, [r])
         self.assertEqual(len(self.started), 1)
-        self.assertEqual((self.vias("m1"), self.vias("m2")), (["handler"], ["handler"]))
 
-    def test_the_run_budget_claims_nothing_and_logs_every_tick(self):
+    def test_the_readers_of_via_count_and_name_it(self):
+        self.real_handler()
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual(self.m.runs_today(self.c, "proj"), 1)
+        self.assertEqual(self.m.platform_rounds(self.c, [self.m.get_message(self.c, "m1")]), 1)
+        self.assertEqual(self.m.letter_path(self.c, self.m.get_message(self.c, "m1")), ["triage"])
+        spec = importlib.util.spec_from_file_location("status_page_triage", ROOT / "bin" / "gen-status-page.py")
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        self.assertIn("triage", page.path_labels())
+
+    def test_the_budget_stops_the_run_says_so_once_and_the_sender_still_hears(self):
         self.real_handler()
         self.m.DAILY_RUNS = 0
         self.send("m1", "proj", "request")
         self.dispatch()
         self.dispatch()
         self.assertEqual((self.started, self.vias("m1")), ([], []))
-        self.assertEqual(len([x for x in self.logged if "m1" in x or "0" in x]), 2)
+        self.assertEqual(len(self.rows("id='m1:received'")), 1)
+        self.assertEqual(len([x for x in self.logged if self.m.DAILY_RUNS == 0 and "proj" in x]), 1, self.logged)
+        self.m.DAILY_RUNS = 6
+        self.dispatch()
+        self.assertEqual(self.vias("m1"), ["triage"], "with room again it goes")
+        self.assertEqual(len(self.rows("id='m1:received'")), 1, "the line goes once")
 
-    def test_hold_records_once_but_logs_at_each_call(self):
+    def test_a_letter_a_session_sees_after_triage_goes_on_like_any_other(self):
+        self.real_handler()
         self.send("m1", "proj", "request")
-        r = self.m.get_message(self.c, "m1")
-        self.m.hold(self.c, r)
-        self.m.hold(self.c, r)
-        self.assertEqual(self.vias("m1"), ["held"])
-        self.assertEqual(len(self.rows("id='m1:loop'")), 1)
-        self.assertEqual(len(self.logged), 2)
-
-    def test_a_held_letter_stops_everything_in_dispatch_even_a_wake(self):
-        woke = []
-        self.m.wake = lambda c, rt, r, sid: woke.append(sid)
+        self.dispatch()
         self.rt.live.add("S1")
-        self.seen("S1")
+        self.hook("prompt", "S1")
+        self.cli("ack", "m1", session="S1")
+        self.assertTrue(self.state("m1").taken)
+        self.cli("done", "m1", session="S1")
+        self.assertEqual(self.state("m1").taken, "good")
+        self.assertEqual(len(self.started), 1)
+
+    def test_a_fork_comes_after_triage_when_a_session_can_be_forked_and_only_once(self):
+        self.real_handler()
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.dispatch()
+        self.assertEqual(len(self.started), 1)
+        self.rt.live.add("S1")
+        self.rt.tokens["S1"] = 1000
+        self.seen("S1", minutes_ago=30)
+        self.dispatch()
+        self.assertEqual(self.resumed, [("m1", "S1")])
+        self.age("m1:delivered:resume", self.m.RESUME_TIMEOUT_MIN + 1)  # that fork ended and didn't close it
+        self.assertEqual(self.state("m1").taken, "", "open again")
+        self.dispatch()
+        self.assertEqual((len(self.resumed), len(self.started)), (1, 1), "nothing starts again")
+
+    def test_a_fork_that_dies_before_triage_gets_one_triage(self):
+        self.real_handler()
+        self.rt.live.add("S1")
+        self.rt.tokens["S1"] = 1000
+        self.seen("S1", minutes_ago=30)
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.dispatch()
+        self.assertEqual((self.resumed, self.started), ([("m1", "S1")], []))
+        self.age("m1:delivered:resume", self.m.RESUME_TIMEOUT_MIN + 1)
+        self.dispatch()
+        self.dispatch()
+        self.assertEqual((len(self.resumed), len(self.started)), (1, 1))
+
+    def test_a_transcript_is_read_once_a_tick_however_many_letters_stay_open(self):
+        calls = []
+        self.rt.context_size = lambda sid: calls.append(sid) or 900_000
+        self.rt.live.add("S1")
+        self.seen("S1", minutes_ago=30)
+        for i in range(5):
+            self.send(f"m{i}", "proj", "request", minutes_ago=30)
+        self.dispatch()
+        self.assertEqual(calls, ["S1"])
+
+    def test_an_mcp_hold_is_said_once(self):
+        self.real_handler()
+        self.running.add("mcp:1:2")
+        self.seen("mcp:1:2", via="tool", runtime="mcp:codex")
+        self.send("m1", "proj", "request", minutes_ago=self.m.MCP_HOLD_MAX_MIN + 1)
+        for _ in range(3):
+            self.dispatch()
+        self.assertEqual(len([x for x in self.logged if "m1" in x and "MCP" in x]), 1, self.logged)
+
+    def test_status_says_triaged_is_waiting(self):
+        self.real_handler()
+        self.send("m1", "proj", "request", minutes_ago=200)
+        self.dispatch()
+        st = self.status()
+        self.assertEqual([(w["id"], w["why"]) for w in st["waiting"]], [("m1", "triaged")])
+        self.assertEqual(st["stuck"], [])
+        self.assertEqual(st["projects"]["proj"]["undelivered"], 1, "a triage isn't a session having seen it")
+
+    def test_a_propose_run_is_started_the_same_way(self):
+        self.real_handler()
         self.send("m1", "proj", "request")
-        self.claim("m1", "held")
-        self.assertEqual(self.dispatch(), 1)
-        self.assertEqual(woke, [])
+        started = []
 
-    def test_a_confined_run_sends_anything_to_anyone(self):
+        class P:
+            def __init__(self, cmd, **kw):
+                started.append((cmd, kw["env"]))
+        with mock.patch.object(self.m.subprocess, "Popen", P), \
+                mock.patch.object(self.m.hubconf, "get", lambda k, d=None: {"handler": "propose"} if k == "mailbox" else d):
+            self.dispatch()
+        cmd, env = started[0]
+        self.assertIn("propose_apply.py", cmd[1])
+        self.assertEqual(cmd[2:], ["mailbox", "proj", "m1"])
+        self.assertEqual(self.vias("m1"), ["triage"], "no claim")
+        self.assertEqual(json.loads(env["MAILBOX_LETTERS"]), ["m1"])
+
+
+class OnePerSender(Base):
+    def test_one_run_per_sender(self):
+        self.real_handler()
+        self.send("m1", "proj", "request", src="other")
+        self.send("m2", "proj", "request", src=self.hub)
+        self.send("m3", "proj", "question", src="other")
+        self.dispatch()
+        self.assertEqual([self.letters_of(r) for r in self.started], [["m1", "m3"]])
+        self.assertEqual(self.vias("m2"), [], "the next sender goes next tick")
+        self.dispatch()
+        self.assertEqual([self.letters_of(r) for r in self.started], [["m1", "m3"], ["m2"]])
+        self.dispatch()
+        self.assertEqual(len(self.started), 2)
+
+    def test_one_at_a_time_per_project_still(self):
+        self.real_handler()
         self.send("m1", "proj", "request")
-        self.cli("send", "--to", "other", "--type", "info", "--text", "not a reply", env=ESCALATION)
-        self.cli("send", "--to", "other", "--type", "question", "--text", "a question", env=ESCALATION)
-        self.assertEqual(len(self.rows("type='message' AND source='proj'")), 2)
+        job = self.m.AGENT_JOBS / "mailbox-proj"
+        job.mkdir(parents=True)
+        (job / "status.json").write_text('{"state": "running"}')
+        self.dispatch()
+        self.assertEqual((self.started, self.vias("m1")), ([], []))
 
-    def test_a_confined_run_reads_and_closes_every_letter_of_its_project(self):
-        self.send("m1", "proj", "request")
-        self.send("m2", "proj", "request", src=self.m.hubconf.hub_project())
-        out = self.cli("inbox", env=ESCALATION)
-        self.assertIn("[m1]", out)
-        self.assertIn("[m2]", out)
-        self.cli("done", "m2", env=ESCALATION)
-        self.assertTrue(self.m.is_done(self.c, "m2"))
+    def test_an_id_with_a_comma_is_one_letter(self):
+        self.real_handler()
+        self.send("m1,victim", "proj", "request")
+        self.dispatch()
+        self.assertEqual(self.letters_of(self.started[0]), ["m1,victim"])
 
-    def test_a_handlers_inbox_misses_a_reply_waiting_for_its_session(self):
-        self.send("m1", "proj", "question", to_session="S1", minutes_ago=2)
-        self.assertNotIn("[m1]", self.cli("inbox", env=ESCALATION))
-
-    def test_a_handlers_ack_is_quietly_not_recorded(self):
-        self.send("m1", "proj", "request")
-        self.cli("ack", "m1", env=ESCALATION)
-        self.assertEqual(self.vias("m1"), [])
-
-    def test_a_fork_runs_with_no_list_of_letters(self):
+    def test_a_fork_gets_its_own_letter(self):
         seen = {}
         self.m.resume = self.m.real_resume
 
@@ -155,14 +260,413 @@ class Today(Base):
         self.rt.tokens["S1"] = 1000
         self.seen("S1", minutes_ago=30)
         self.send("m1", "proj", "request")
-        with mock.patch.object(self.m.subprocess, "Popen", P):
+        self.send("m2", "proj", "request", src=self.hub)
+        with mock.patch.object(self.m.subprocess, "Popen", P), \
+                mock.patch.object(self.m, "branch_prompt", lambda r, p: "t"):
+            self.m.resume(self.c, self.m.get_message(self.c, "m1"), "S1", self.ws, self.rt)
+        self.assertEqual(json.loads(seen["MAILBOX_LETTERS"]), ["m1"])
+
+
+class Hold(Base):
+    def thread(self, last="next"):
+        prev = None
+        for i in range(self.m.THREAD_MAX_ROUNDS):
+            self.send(f"t{i}", "proj", "question", reply_to=prev)
+            self.claim(f"t{i}", "triage", run=f"x{i}")
+            prev = f"t{i}"
+        self.send(last, "proj", "question", reply_to=prev)
+
+    def test_held_leaves_it_open_and_hold_does_not_repeat(self):
+        self.thread()
+        self.logged.clear()
+        for _ in range(3):
             self.dispatch()
-        self.assertEqual(seen["MAILBOX_PROJECT"], "proj")
-        self.assertNotIn("MAILBOX_LETTERS", seen)
+        self.assertEqual(self.vias("next"), ["held"])
+        self.assertEqual(len(self.rows("id='next:loop'")), 1)
+        self.assertEqual(len([x for x in self.logged if "next" in x]), 1, self.logged)
+        self.assertEqual(self.state("next").taken, "")
+        self.assertEqual(self.handled + self.resumed, [])
+        self.rt.live.add("S1")
+        self.assertIn("[next]", self.hook("prompt", "S1"))
+
+    def test_hold_called_again_says_nothing_more(self):
+        self.send("m1", "proj", "request")
+        r = self.m.get_message(self.c, "m1")
+        self.m.hold(self.c, r)
+        self.m.hold(self.c, r)
+        self.assertEqual(self.vias("m1"), ["held"])
+        self.assertEqual(len(self.rows("id='m1:loop'")), 1)
+        self.assertEqual(len(self.logged), 1)
+
+    def test_it_stops_platform_runs_not_a_session(self):
+        """A letter just come, in a thread past its rounds, with a session in use: the session's wait and its wake go on
+        as for any letter; hold() comes only when the platform would start something."""
+        woke = []
+        self.m.wake = lambda c, rt, r, sid: woke.append((r["id"], sid))
+        self.rt.live.add("S1")
+        self.seen("S1")
+        self.thread()
+        self.dispatch()
+        self.assertIn(("next", "S1"), woke)
+        self.assertEqual(self.vias("next"), [], "not held yet")
+        self.age("next", self.m.CONVERSATION_WAIT_MIN + 1)
+        self.dispatch()
+        self.assertEqual(self.vias("next"), ["held"])
+        self.dispatch()
+        self.assertEqual(len(self.rows("id='next:loop'")), 1)
+        self.assertEqual(self.handled + self.resumed, [])
+
+    def test_a_letter_triaged_as_the_last_round_asks_nothing(self):
+        """Its own triage row counts as a round: with nothing left to start, the loop guard has nothing to stop."""
+        for i in range(self.m.THREAD_MAX_ROUNDS - 1):
+            self.send(f"t{i}", "proj", "question", reply_to=f"t{i - 1}" if i else None)
+            self.claim(f"t{i}", "triage", run=f"x{i}")
+        self.send("last", "proj", "question", reply_to=f"t{self.m.THREAD_MAX_ROUNDS - 2}")
+        self.dispatch()
+        self.assertEqual(self.handled, [("proj", ["last"])])
+        self.dispatch()
+        self.assertEqual(self.vias("last"), ["triage"])
+        self.assertEqual(self.rows("id='last:loop'"), [])
+
+    def test_a_held_letter_from_before_keeps_starting_nothing(self):
+        self.send("m1", "proj", "request", minutes_ago=30)
+        self.claim("m1", "held")
+        self.assertEqual(self.dispatch(), 1)
+        self.assertEqual(self.handled + self.resumed, [])
+
+    def test_a_letter_with_an_old_handler_row_never_comes_back(self):
+        self.send("m1", "proj", "request", minutes_ago=500)
+        self.claim("m1", "handler", run="h0")
+        self.assertEqual(self.state("m1").taken, "good")
+        self.assertEqual(self.dispatch(), 0)
+        self.assertEqual(self.hook("prompt", "S1"), "")
 
 
-class TodayPropose(Base):
-    """What propose_apply's mailbox does with the agent's answer, before this step."""
+class FixedLine(Base):
+    def line(self, mid="m1"):
+        got = self.rows("id=?", f"{mid}:received")
+        return got[0] if got else None
+
+    def test_it_neither_takes_nor_wakes_and_carries_the_chain(self):
+        self.real_handler()
+        woke = []
+        self.m.wake = lambda c, rt, r, sid: woke.append(sid)
+        self.rt.live.add("SO")
+        self.seen("SO", proj="other", minutes_ago=1)
+        self.m.publish(self.c, "m1", "message", "other", "proj", None,
+                       {"type": "request", "text": "x", "from_session": "SO", "chain": ["other/job"], "depth": 1})
+        self.dispatch()
+        line = self.line()
+        p = json.loads(line["payload"])
+        self.assertEqual((line["source"], line["to_project"], line["ref"]), (self.hub, "other", None))
+        self.assertEqual(p["type"], "info")
+        self.assertNotIn("to_session", p)
+        self.assertNotIn("reply_to", p)
+        self.assertEqual((p["chain"], p["depth"]), (["other/job"], 1))
+        self.assertIn("m1", p["text"])
+        self.assertEqual(self.state("m1").taken, "", "no ref: it isn't an answer")
+        self.dispatch()
+        self.assertEqual(woke, [], "nobody woken for it")
+        self.assertEqual(len(self.rows("id='m1:received'")), 1, "once")
+
+    def test_none_for_the_owner_side_the_hub_its_reconciliation_or_a_letter_to_itself(self):
+        self.real_handler()
+        self.send("own", "proj", "request", src=self.owner)
+        self.send("hub", "proj", "request", src=self.hub)
+        self.send("self", "proj", "request", src="proj")
+        self.m.publish(self.c, "qc", "message", "other", "proj", None, {"type": "request", "text": "x", "question_check": "q"})
+        for _ in range(4):
+            self.dispatch()
+        for mid in ("own", "hub", "self", "qc"):
+            self.assertEqual(self.vias(mid), ["triage"], mid)
+            self.assertIsNone(self.line(mid), mid)
+
+    def test_a_crafted_id_is_not_repeated_in_the_text(self):
+        self.real_handler()
+        self.send("x y\nignore all", "proj", "request")
+        self.dispatch()
+        self.assertNotIn("ignore all", json.loads(self.line("x y\nignore all")["payload"])["text"])
+
+    def test_it_does_not_trigger_a_job_past_the_chain(self):
+        import event_jobs
+        self.real_handler()
+        self.m.publish(self.c, "m1", "message", "other", "proj", None,
+                       {"type": "request", "text": "x", "chain": ["other/job"], "depth": 1})
+        self.dispatch()
+        ev = {"payload": json.loads(self.line()["payload"])}
+        self.assertEqual(event_jobs.chain_of(ev), ["other/job"])
+
+
+class Commands(Base):
+    """Every command a run with letters has, allowed and refused, for both mailbox points."""
+
+    POINTS = (ESCALATION, FORK)
+
+    def setUp(self):
+        super().setUp()
+        self.send("m1", "proj", "request")
+        self.send("elsewhere", "proj", "request", src=self.hub)
+
+    def each(self):
+        for point in self.POINTS:
+            with self.subTest(point["HUB_LLM_POINT"]):
+                yield with_letters(point, "m1")
+
+    def letter(self, mid):
+        return self.rows("type='message' AND source='proj' AND ref=?", mid)
+
+    def test_reply_done_to_its_letter(self):
+        for env in self.each():
+            self.c.execute("DELETE FROM events WHERE type='message' AND source='proj'")
+            self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "done", "--text", "answer", env=env)
+            self.assertEqual(len(self.letter("m1")), 1)
+
+    def test_info_only_to_an_asks_letter(self):
+        for i, env in enumerate(self.each()):
+            self.refused("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "x", env=env)
+            asks = f"asks{i}"
+            self.m.publish(self.c, asks, "message", self.owner, "proj", None,
+                           {"type": "question", "text": "x", "effect": "asks", "handoff_id": i})
+            self.cli("send", "--to", self.owner, "--reply-to", asks, "--type", "info", "--text", "the answer",
+                     env=with_letters(env, asks))
+            self.assertEqual(len(self.letter(asks)), 1)
+
+    def test_a_question_to_the_owner(self):
+        for env in self.each():
+            before = len(self.rows("type='message' AND to_project=?", self.owner))
+            self.cli("send", "--to", self.owner, "--type", "question", "--text", "which?", env=env)
+            self.assertEqual(len(self.rows("type='message' AND to_project=?", self.owner)), before + 1)
+
+    def test_close_its_letter_and_no_other(self):
+        for env in self.each():
+            self.refused("done", "elsewhere", env=env)
+            self.assertFalse(self.m.is_done(self.c, "elsewhere"))
+        self.cli("done", "m1", env=with_letters(ESCALATION, "m1"))
+        self.assertTrue(self.m.is_done(self.c, "m1"))
+
+    def test_no_other_recipient_type_or_reply(self):
+        for env in self.each():
+            for args in (("--to", "other", "--type", "info"),                        # no notice
+                         ("--to", "other", "--type", "question"),
+                         ("--to", "other", "--type", "request"),
+                         ("--to", "other", "--type", "done"),                        # a done with no letter
+                         ("--to", self.hub, "--reply-to", "m1", "--type", "done"),   # not its sender
+                         ("--to", "other", "--reply-to", "m1", "--type", "question"),
+                         ("--to", "other", "--reply-to", "m1", "--type", "request"),
+                         ("--to", self.hub, "--reply-to", "elsewhere", "--type", "done"),
+                         ("--to", self.owner, "--type", "info"),
+                         ("--to", self.owner, "--type", "progress")):
+                self.refused("send", *args, "--text", "x", env=env)
+            self.assertEqual(self.letter("m1"), [])
+            self.assertEqual(self.rows("type='message' AND source='proj'"), [])
+
+    def test_no_ack_no_task_no_registry_no_publish(self):
+        for env in self.each():
+            self.refused("ack", "m1", env=env)
+            self.assertEqual(self.vias("m1"), [])
+            self.refused("send", "--to", self.owner, "--type", "task", "--text", "x", env=env)
+            self.refused("send", "--to", self.owner, "--type", "done", "--task", "k", "--text", "x", env=env)
+            self.refused("send", "--to", self.hub, "--type", "manifest.update", "--text", "x", env=env)
+            self.refused("publish", "job.failed", "--source", "proj", env=env)
+            self.refused("send", "--to", "other", "--reply-to", "m1", "--type", "done", "--text", "x", "--id", "mine", env=env)
+            self.refused("send", "--from", self.hub, "--to", self.owner, "--type", "question", "--text", "x", env=env)
+
+    def test_it_reads_only_its_letters_and_their_threads(self):
+        self.send("before", "proj", "request")
+        self.send("m2", "proj", "question", reply_to="before")
+        self.m.publish(self.c, "z", "message", "other", self.hub, None, {"type": "request", "text": "another's secret"})
+        self.send("crafted", "proj", "request", reply_to="z")
+        for point in self.POINTS:
+            with self.subTest(point["HUB_LLM_POINT"]):
+                env = with_letters(point, "m2", "crafted")
+                out = self.cli("inbox", env=env)
+                self.assertIn("[m2]", out)
+                self.assertIn("[crafted]", out)
+                self.assertNotIn("[m1]", out)
+                self.assertNotIn("[elsewhere]", out)
+                self.assertIn("[m2]", self.cli("show", "m2", env=env))
+                self.assertIn("[before]", self.cli("show", "before", env=env), "its thread")
+                self.assertIn("[before]", self.cli("thread", "m2", env=env))
+                self.assertNotIn("another's secret", self.cli("thread", "crafted", env=env), "a crafted reply_to")
+                self.refused("show", "m1", env=env)
+                self.refused("thread", "elsewhere", env=env)
+                self.refused("show", "z", env=env)
+                self.refused("open-questions", env=env)
+                self.refused("open-questions", "--json", env=env)
+
+    def test_its_inbox_marks_nothing_and_sees_a_reply_despite_the_wait(self):
+        self.send("r1", "proj", "question", to_session="S1", minutes_ago=2)
+        for env in (with_letters(ESCALATION, "r1"), with_letters(FORK, "r1")):
+            self.assertIn("[r1]", self.cli("inbox", env=env), "or it gets an empty mailbox for a reply")
+        self.assertEqual(self.vias("r1"), [])
+        self.assertEqual(self.routes("r1"), [])
+        self.assertNotIn("[r1]", self.cli("inbox", env=ESCALATION), "an event job's inbox keeps the wait")
+        self.assertEqual(self.vias("r1"), [])
+        self.rt.live.add("S1")
+        self.assertIn("[r1]", self.hook("prompt", "S1"), "the handler's reading counted for nothing")
+
+    def test_an_unreadable_list_is_no_letters(self):
+        for raw in ("m1", "{", '{"m1": 1}', "", "[1]"):
+            env = {**ESCALATION, "MAILBOX_LETTERS": raw}
+            self.assertNotIn("[m1]", self.cli("inbox", env=env), raw)
+            self.refused("done", "m1", env=env)
+
+    def test_a_list_is_not_split(self):
+        self.send("m1,elsewhere", "proj", "request")
+        env = with_letters(ESCALATION, "m1,elsewhere")
+        self.refused("done", "elsewhere", env=env)
+        self.refused("done", "m1", env=env)
+        self.cli("done", "m1,elsewhere", env=env)
+
+
+class Taken(Base):
+    """A session and a handler don't both answer."""
+
+    def setUp(self):
+        super().setUp()
+        self.send("m1", "proj", "request")
+        self.reply = ("send", "--to", "other", "--reply-to", "m1", "--type", "done", "--text", "mine")
+        self.env = with_letters(ESCALATION, "m1")
+        self.rt.live.add("S1")
+
+    def test_a_sessions_ack(self):
+        self.cli("ack", "m1", session="S1")
+        self.refused(*self.reply, env=self.env)
+        self.refused("done", "m1", env=self.env)
+        self.assertFalse(self.m.is_done(self.c, "m1"))
+
+    def test_once_that_sessions_ack_ends_it_is_free_again(self):
+        self.cli("ack", "m1", session="S1")
+        self.close("S1")
+        self.cli(*self.reply, env=self.env)
+
+    def test_a_sessions_reply_or_close(self):
+        self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "a session's", session="S1")
+        self.refused(*self.reply, env=self.env)
+        self.refused("done", "m1", env=self.env)
+        self.send("m2", "proj", "request")
+        self.cli("done", "m2", session="S1")
+        self.refused("send", "--to", "other", "--reply-to", "m2", "--type", "done", "--text", "x",
+                     env=with_letters(ESCALATION, "m2"))
+
+    def test_its_own_reply_and_close_in_either_order(self):
+        self.cli(*self.reply, env=self.env)
+        self.cli("done", "m1", env=self.env)
+        self.send("m2", "proj", "request")
+        env = with_letters(ESCALATION, "m2")
+        self.cli("done", "m2", env=env)
+        self.cli("send", "--to", "other", "--reply-to", "m2", "--type", "done", "--text", "and a word", env=env)
+
+    def test_a_fork_is_another_for_the_handler_and_itself_for_a_fork(self):
+        self.claim("m1", "resume", session="S1", run="r0")
+        self.refused(*self.reply, env=self.env)
+        fork = with_letters(FORK, "m1")
+        self.cli(*self.reply, env=fork)
+        self.cli("done", "m1", env=fork)
+
+    def test_a_held_or_triaged_letter_is_free(self):
+        self.claim("m1", "triage", run="h0")
+        self.claim("m1", "held")
+        self.cli(*self.reply, env=self.env)
+
+    def test_a_reply_by_another_run_counts(self):
+        self.m.publish(self.c, "f1", "message", "proj", "other", "m1",
+                       {"type": "done", "text": "a fork", "reply_to": "m1", "point": "mailbox-conversation"})
+        self.refused(*self.reply, env=self.env)
+
+
+class OtherPoints(Base):
+    """A confined run with no letters keeps today's rules: event and clock jobs."""
+
+    def setUp(self):
+        super().setUp()
+        self.send("m1", "proj", "request")
+        self.send("m2", "proj", "request", src=self.hub)
+
+    def test_it_sends_to_anyone_reads_and_closes_every_letter_of_its_project(self):
+        for env in (EVENT_JOB, CLOCK_JOB):
+            with self.subTest(env["HUB_LLM_POINT"]):
+                self.c.execute("DELETE FROM events WHERE type='message' AND source='proj'")
+                self.cli("send", "--to", "other", "--type", "info", "--text", "not a reply", env=env)
+                self.cli("send", "--to", "other", "--type", "question", "--text", "a question", env=env)
+                self.assertEqual(len(self.rows("type='message' AND source='proj'")), 2)
+                out = self.cli("inbox", env=env)
+                self.assertIn("[m1]", out)
+                self.assertIn("[m2]", out)
+                self.assertIn("[m2]", self.cli("show", "m2", env=env))
+                self.cli("open-questions", env=env)
+        self.cli("done", "m2", env=EVENT_JOB)
+        self.assertTrue(self.m.is_done(self.c, "m2"))
+
+    def test_an_ack_is_quietly_not_recorded(self):
+        self.cli("ack", "m1", env=EVENT_JOB)
+        self.assertEqual(self.vias("m1"), [])
+
+    def test_a_person_at_a_terminal_is_not_limited(self):
+        self.assertIn("[m2]", self.cli("inbox"))
+        self.cli("send", "--to", "other", "--type", "info", "--text", "hello")
+        self.cli("ack", "m1", session="S1")
+
+    def test_today_refusals_stay(self):
+        self.refused("send", "--to", self.owner, "--type", "task", "--text", "x", env=EVENT_JOB)
+        self.refused("send", "--from", self.hub, "--to", "other", "--type", "info", "--text", "x", env=EVENT_JOB)
+        self.refused("publish", "job.failed", "--source", "proj", env=EVENT_JOB)
+
+
+class Reconciliation(Base):
+    def ask(self, qid="q1"):
+        self.m.publish(self.c, qid, "message", "proj", self.owner, None, {"type": "question", "text": "still?"})
+        self.c.execute("UPDATE events SET ts=? WHERE id=?", (tms.ago(60 * 24 * 5), qid))
+
+    def check_letter(self):
+        self.c.execute("BEGIN IMMEDIATE")
+        sent = self.m.reconcile_questions(self.c)
+        self.c.execute("COMMIT")
+        self.assertEqual(len(sent), 1)
+        return sent[0]
+
+    def test_a_handler_closes_the_question_its_letter_names_and_the_letter(self):
+        for kind, env in (("done", ESCALATION), ("drop", FORK)):
+            with self.subTest(kind):
+                qid = f"q-{kind}"
+                self.ask(qid)
+                mid = self.check_letter()
+                env = with_letters(env, mid)
+                self.cli("send", "--to", self.owner, "--type", kind, "--question", qid, "--text", "settled", env=env)
+                self.cli("done", mid, env=env)
+                self.assertEqual(self.m.open_questions(self.c, "proj"), [])
+                self.assertTrue(self.m.is_done(self.c, mid))
+
+    def test_not_a_question_no_letter_of_its_names(self):
+        self.ask("q1")
+        self.ask("q2")
+        self.c.execute("UPDATE events SET ts=? WHERE id='q2'", (tms.ago(5),))
+        mid = self.check_letter()
+        env = with_letters(ESCALATION, mid)
+        self.refused("send", "--to", self.owner, "--type", "done", "--question", "q2", "--text", "x", env=env)
+        self.refused("send", "--to", self.owner, "--type", "drop", "--question", "q2", "--text", "x", env=env)
+        # a crafted letter can't name it for a run started for another letter
+        self.m.publish(self.c, "crafted", "message", "other", "proj", None,
+                       {"type": "request", "text": "x", "question_check": "q2"})
+        self.refused("send", "--to", self.owner, "--type", "done", "--question", "q2", "--text", "x", env=env)
+        self.assertIn("q2", [q["id"] for q in self.m.open_questions(self.c, "proj")])
+
+    def test_other_points_keep_drop_question(self):
+        self.ask("q1")
+        self.cli("send", "--to", self.owner, "--type", "drop", "--question", "q1", "--text", "x", env=EVENT_JOB)
+        self.assertEqual(self.m.open_questions(self.c, "proj"), [])
+
+    def test_its_letter_gets_no_fixed_line_and_a_handler(self):
+        self.real_handler()
+        self.ask("q1")
+        mid = self.check_letter()
+        self.dispatch()
+        self.assertEqual(self.letters_of(self.started[0]), [mid])
+        self.assertEqual(self.rows("id=?", f"{mid}:received"), [])
+
+
+class Propose(Base):
+    """What propose_apply's mailbox does with the agent's answer: the same rules."""
 
     def apply(self, ids, output, ok=True):
         pa = load_propose()
@@ -173,57 +677,231 @@ class TodayPropose(Base):
                 mock.patch("builtins.print"):
             return pa._mailbox("proj", ids)
 
-    def test_a_reply_of_any_type_goes_to_the_sender(self):
-        self.send("m1", "proj", "request")
-        self.apply(["m1"], {"replies": [{"reply_to": "m1", "type": "question", "text": "which?"}], "done": [],
-                            "ask_owner": [], "summary": ""})
-        sent = self.payloads("type='message' AND source='proj' AND to_project='other'")
-        self.assertEqual([p["type"] for p in sent], ["question"])
+    def out(self, replies=(), done=(), ask=(), deferred=()):
+        return {"replies": list(replies), "done": list(done), "ask_owner": list(ask), "deferred": list(deferred), "summary": ""}
 
-    def test_a_letter_someone_else_took_meanwhile_is_answered_all_the_same(self):
+    def sent(self, to="other"):
+        return self.payloads("type='message' AND source='proj' AND to_project=?", to)
+
+    def test_it_accepts_done_and_owner_questions_only(self):
         self.send("m1", "proj", "request")
+        self.apply(["m1"], self.out(
+            replies=[{"reply_to": "m1", "type": "question", "text": "which?"},
+                     {"reply_to": "m1", "type": "info", "text": "fyi"},
+                     {"reply_to": "m1", "type": "done", "text": "answer"},
+                     {"reply_to": "other-letter", "type": "done", "text": "no"}],
+            ask=[{"text": "owner?"}]))
+        self.assertEqual([p["type"] for p in self.sent()], ["done"])
+        self.assertEqual([p["type"] for p in self.sent(self.owner)], ["question"])
+
+    def test_info_to_an_asks_letter(self):
+        self.m.publish(self.c, "asks", "message", self.owner, "proj", None,
+                       {"type": "question", "text": "x", "effect": "asks", "handoff_id": 1})
+        self.apply(["asks"], self.out(replies=[{"reply_to": "asks", "type": "info", "text": "the answer"}], done=[{"id": "asks"}]))
+        self.assertEqual([p["type"] for p in self.sent(self.owner)], ["info"])
+
+    def test_a_letter_a_session_took_meanwhile_is_rechecked_at_apply_time(self):
+        self.send("m1", "proj", "request")
+        self.send("m2", "proj", "request")
+        self.rt.live.add("S1")
+        self.ack("m2", "S1")
         self.m.publish(self.c, "s1", "message", "proj", "other", "m1", {"type": "done", "text": "a session did", "reply_to": "m1"})
-        self.apply(["m1"], {"replies": [{"reply_to": "m1", "type": "done", "text": "me too"}], "done": [{"id": "m1"}],
-                            "ask_owner": [], "summary": ""})
-        self.assertEqual(len(self.rows("type='message' AND source='proj' AND ref='m1'")), 2)
-        self.assertTrue(self.m.is_done(self.c, "m1"))
+        self.apply(["m1", "m2"], self.out(replies=[{"reply_to": "m1", "type": "done", "text": "me too"},
+                                                   {"reply_to": "m2", "type": "done", "text": "me too"}],
+                                          done=[{"id": "m1"}, {"id": "m2"}]))
+        self.assertEqual([p["text"] for p in self.sent()], ["a session did"])
+        self.assertFalse(self.m.is_done(self.c, "m1"))
+        self.assertFalse(self.m.is_done(self.c, "m2"))
+        self.assertEqual(self.rows("id LIKE '%:propose-failed'"), [], "not asked about: a session has it")
 
-    def test_a_failed_run_is_held_and_asks_and_the_question_stays_when_the_letter_closes(self):
+    def test_a_deferred_letter_stays_open_for_sessions(self):
+        self.real_handler()
         self.send("m1", "proj", "request")
+        self.dispatch()
+        self.apply(["m1"], self.out(deferred=[{"id": "m1", "why": "needs a code change"}]))
+        self.assertEqual(self.state("m1").taken, "")
+        self.rt.live.add("S1")
+        self.assertIn("[m1]", self.hook("prompt", "S1"))
+        self.dispatch()
+        self.assertEqual(len(self.started), 1)
+
+    def test_a_failed_run_is_held_stays_open_and_its_question_closes_with_the_letter(self):
+        self.send("m1", "proj", "request")
+        self.claim("m1", "triage", run="h0")
         self.apply(["m1"], None, ok=False)
-        self.assertEqual(self.vias("m1"), ["held"])
-        self.assertEqual(len(self.rows("id='m1:propose-failed'")), 1)
-        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "a session did"})
+        self.assertEqual(self.vias("m1"), ["triage", "held"])
+        self.assertEqual(self.state("m1").taken, "", "a question to the owner is no answer")
         self.assertIn("m1:propose-failed", [q["id"] for q in self.m.open_questions(self.c)])
+        self.assertEqual(self.dispatch(), 1, "no run starts for it again")
+        self.m.close_failed_questions(self.c)
+        self.assertIn("m1:propose-failed", [q["id"] for q in self.m.open_questions(self.c)], "the letter is still open")
+        self.rt.live.add("S1")
+        self.assertIn("[m1]", self.hook("prompt", "S1"))
+        self.cli("done", "m1", session="S1")
+        self.m.close_failed_questions(self.c)
+        self.m.close_failed_questions(self.c)
+        self.assertNotIn("m1:propose-failed", [q["id"] for q in self.m.open_questions(self.c)])
+        closes = self.rows("id='m1:propose-failed:closed'")
+        self.assertEqual(len(closes), 1)
+        self.assertEqual((closes[0]["source"], closes[0]["to_project"]), (self.hub, self.owner))
+
+    def test_a_loop_question_stays_as_it_was(self):
+        self.send("m1", "proj", "request")
+        self.m.hold(self.c, self.m.get_message(self.c, "m1"))
+        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "a session did"})
+        self.m.close_failed_questions(self.c)
+        self.assertIn("m1:loop", [q["id"] for q in self.m.open_questions(self.c)])
 
 
-class TodaySettings(unittest.TestCase):
-    """What a confined run of the hub may write and read, before this step: the whole hub is denied, notes included."""
+class Prompts(unittest.TestCase):
+    NAMES = ("mailbox", "mailbox-resume", "mailbox-delegate")
+
+    def text(self, name):
+        import prompts
+        return prompts.render(name, letter="L", id="m1", notes="/abs/notes", letters="L", today="2026-11-07")
+
+    def test_notes_are_named_by_absolute_path_and_nothing_says_the_platform_commits_them(self):
+        for name in self.NAMES:
+            with self.subTest(name):
+                self.assertIn("/abs/notes/", self.text(name))
+                self.assertNotIn("the platform commits", self.text(name))
+
+    def test_an_action_is_stated_only_after_its_tool_succeeded(self):
+        for name in (*self.NAMES, "mailbox-propose"):
+            with self.subTest(name):
+                self.assertIn("State an action only", " ".join(self.text(name).split()))
+
+    def test_the_replies_they_ask_for_are_the_ones_allowed(self):
+        for name in self.NAMES:
+            with self.subTest(name):
+                self.assertIn("--type done", self.text(name))
+        self.assertNotIn("--type done|info", self.text("mailbox"))
+        self.assertIn("(type done; info only", " ".join(self.text("mailbox-propose").split()))
+
+
+class Settings(unittest.TestCase):
+    """What a confined run of the hub, or of a project, may write and read."""
 
     def setUp(self):
-        import tempfile
         self.hub = pathlib.Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(__import__("shutil").rmtree, self.hub, True)
-        (self.hub / ".state" / "agent-jobs").mkdir(parents=True)
-        (self.hub / ".logs").mkdir()
-        (self.hub / ".agent-memory" / "memory").mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.hub, True)
+        self.state = self.hub / ".state"
+        self.logs = self.hub / ".logs"
+        for d in (self.state / "agent-jobs" / "mailbox-other", self.state / "mailbox", self.logs, self.hub / "bin",
+                  self.hub / ".claude" / "worktrees" / "wt", self.hub / ".agent-memory" / "memory"):
+            d.mkdir(parents=True)
+        (self.state / "scheduler-state.json").write_text("{}")
+        (self.hub / ".agent-memory" / "AGENT.md").write_text("x")
+        self.name = hubconf.hub_project()
+        for attr, value in (("MAIN", self.hub), ("STATE", self.state), ("LOGS", self.logs)):
+            p = mock.patch.object(hubconf, attr, value)
+            p.start()
+            self.addCleanup(p.stop)
 
-    def deny(self, project="hub-name"):
-        import hubconf
+    def settings(self, project=None, keep=None, workspace=None):
         import runtime_claude
+        project = project or self.name
+        ws = workspace or self.hub
         pol = {"other_projects": [], "deny_write": [self.hub], "deny_read": [], "platform_commands": [],
                "platform_cli": ["brunna send"], "write": [], "network": [], "credential_files": [], "credentials": [],
-               "workspace": str(self.hub)}
-        doc = {"name": project, "paths": {"workspace": str(self.hub)}}
-        with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.hub / ".state"), \
-                mock.patch("registry.refresh", lambda: {"projects": {project: doc}}):
-            return json.loads(runtime_claude.platform_settings(project).read_text())["permissions"]["deny"]
+               "workspace": str(ws)}
+        doc = {"name": project, "paths": {"workspace": str(ws)}}
+        with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch("registry.refresh", lambda: {"projects": {project: doc}}):
+            return json.loads(runtime_claude.platform_settings(project, keep).read_text())["permissions"]["deny"]
 
-    def test_the_hub_is_denied_whole_and_nothing_stops_a_read(self):
+    def tilde(self, p):
         import runtime_claude
-        deny = self.deny()
-        self.assertIn(f"Edit({runtime_claude._tilde(self.hub)}/**)", deny)
+        return runtime_claude._tilde(p)
+
+    def test_notes_are_writable_and_nothing_else_of_the_hub_is(self):
+        deny = self.settings()
+        self.assertNotIn(f"Edit({self.tilde(self.hub)}/**)", deny)
+        self.assertNotIn(f"Edit({self.tilde(self.hub / '.agent-memory' / 'memory')}/**)", deny)
+        self.assertNotIn(f"Edit({self.tilde(self.hub / '.agent-memory')}/**)", deny)
+        self.assertIn(f"Edit({self.tilde(self.hub / '.agent-memory' / 'AGENT.md')})", deny)
+        for kept in (self.hub / "bin", self.hub / ".claude", self.state, self.logs):
+            self.assertIn(f"Edit({self.tilde(kept)}/**)", deny)
+
+    def test_state_and_logs_are_denied_to_read(self):
+        deny = self.settings()
+        self.assertIn(f"Read({self.tilde(self.state)}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.logs)}/**)", deny)
+
+    def test_except_the_runs_own_job_folder(self):
+        job = self.state / "agent-jobs" / "brunna-check"
+        job.mkdir()
+        deny = self.settings(keep=job)
+        self.assertNotIn(f"Read({self.tilde(self.state)}/**)", deny)
+        self.assertNotIn(f"Read({self.tilde(job)}/**)", deny)
+        self.assertNotIn(f"Edit({self.tilde(job)}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.logs)}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.state / 'mailbox')}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.state / 'agent-jobs' / 'mailbox-other')}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.state / 'scheduler-state.json')})", deny)
+
+    def test_another_projects_run_keeps_todays_reads(self):
+        other = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, other, True)
+        (other / ".agent-memory" / "memory").mkdir(parents=True)
+        with mock.patch.object(hubconf, "workspace", lambda n: other):
+            deny = self.settings("other", workspace=other)
         self.assertFalse([r for r in deny if r.startswith("Read(") and ".state" in r])
+        self.assertIn(f"Edit({self.tilde(self.hub)}/**)", deny)
+
+    def flags(self, cwd):
+        return thc.flags("mailbox-escalation", cwd, {"MAILBOX_PROJECT": self.name})
+
+    def test_a_run_gets_the_absolute_rule_and_no_extra_folder_at_the_hub_root(self):
+        cmd = self.flags(self.hub)
+        self.assertIn(f"Edit(/{self.hub}/.agent-memory/memory/**)", thc.allowed(cmd))
+        self.assertNotIn("--add-dir", cmd)
+
+    def test_a_fork_in_a_linked_worktree_with_no_link_gets_the_folder_too(self):
+        wt = self.hub / ".claude" / "worktrees" / "wt"
+        cmd = thc.flags("mailbox-conversation", wt, {"MAILBOX_PROJECT": self.name})
+        self.assertIn(f"Edit(/{self.hub}/.agent-memory/memory/**)", thc.allowed(cmd))
+        self.assertEqual(cmd[cmd.index("--add-dir") + 1], str(self.hub / ".agent-memory"))
+
+    def test_with_a_link_the_folder_is_added_once(self):
+        wt = self.hub / ".claude" / "worktrees" / "wt"
+        (wt / ".agent-memory").symlink_to(self.hub / ".agent-memory")
+        cmd = thc.flags("mailbox-conversation", wt, {"MAILBOX_PROJECT": self.name})
+        self.assertEqual(cmd.count("--add-dir"), 1)
+        rules = thc.allowed(cmd)
+        self.assertEqual(rules.count(f"Edit(/{self.hub}/.agent-memory/memory/**)"), 1)
+
+    def test_a_point_with_no_notes_rule_gets_none(self):
+        import runtime_claude
+        import runtime_ports
+        spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read",
+                "allowed_tools": ["Read(./**)"]}
+        task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.hub), env={"P": self.name})
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path("/platform/p.json")):
+            cmd = runtime_claude._flags(task)
+        self.assertFalse([r for r in thc.allowed(cmd) if ".agent-memory" in r])
+
+    def test_a_link_for_notes_is_not_followed(self):
+        import policy
+        victim = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, victim, True)
+        ws = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, ws, True)
+        (ws / ".agent-memory").mkdir()
+        (ws / ".agent-memory" / "memory").symlink_to(victim)
+        with mock.patch.object(hubconf, "workspace", lambda n: ws):
+            self.assertIsNone(policy.notes_dir("other"))
+        shutil.rmtree(ws / ".agent-memory")
+        (ws / ".agent-memory").symlink_to(victim)
+        with mock.patch.object(hubconf, "workspace", lambda n: ws):
+            self.assertIsNone(policy.notes_dir("other"))
+
+
+class Eval(unittest.TestCase):
+    def test_e3_runs_the_handler_with_its_letters(self):
+        src = (ROOT / "bin" / "evals" / "e3.py").read_text()
+        self.assertIn('"MAILBOX_LETTERS": json.dumps(list(letters.values()))', src)
+        self.assertIn('"MAILBOX_LETTERS": json.dumps([letters["letter"]])', src)
+        self.assertIn('via: str = "triage"', src)
 
 
 if __name__ == "__main__":

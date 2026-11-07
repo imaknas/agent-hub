@@ -731,6 +731,66 @@ class Outbox(Fixture):
             self.in_box("inbox")
         self.assertFalse(self.outbox().exists() and list(self.outbox().iterdir()))
 
+    def as_run(self, *args, point="mailbox-escalation", letters=()):
+        """One mail command as a platform run of the sandboxed project started for these letters."""
+        env = {"HUB_LLM_POINT": point, "AGENT_HUB_CONFINED": "1", "MAILBOX_LETTERS": json.dumps(list(letters))}
+        with mock.patch.dict(os.environ, env):
+            return self.in_box(*args, session=None)
+
+    def a_request(self):
+        mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"]).stdout)
+        self.dispatch()
+        return mid
+
+    def test_a_handler_replies_and_closes_through_its_outbox_in_either_order(self):
+        """Its own reply comes back in the view as taken for good, with no point (never from an outbox): not another's."""
+        mid = self.a_request()
+        self.as_run("send", "--to", "open", "--reply-to", mid, "--type", "done", "--text", "answer", letters=[mid])
+        self.dispatch()
+        self.assertTrue(self.view()["state"][mid]["taken"])
+        self.as_run("done", mid, letters=[mid])
+        self.dispatch()
+        self.assertEqual(len(self.rows("type='message.done' AND ref=?", (mid,))), 1)
+        self.assertEqual(len(self.rows("type='message' AND source='box' AND ref=?", (mid,))), 1)
+
+    def test_a_handler_is_refused_what_a_session_of_the_project_took(self):
+        mid = self.a_request()
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        self.in_box("ack", mid)
+        self.dispatch()
+        self.assertTrue(self.view()["state"][mid]["taken"])
+        with self.assertRaises(SystemExit):
+            self.as_run("done", mid, letters=[mid])
+        with self.assertRaises(SystemExit):
+            self.as_run("send", "--to", "open", "--reply-to", mid, "--type", "done", "--text", "x", letters=[mid])
+
+    def test_the_rules_hold_on_the_view_too(self):
+        mid, other = self.a_request(), self.a_request()
+        for args in (("done", other), ("ack", mid), ("show", other), ("thread", other), ("open-questions",),
+                     ("send", "--to", "open", "--reply-to", mid, "--type", "info", "--text", "x"),
+                     ("send", "--to", "open", "--type", "done", "--text", "x")):
+            with self.subTest(args[0]), self.assertRaises(SystemExit):
+                self.as_run(*args, letters=[mid])
+        out = self.as_run("inbox", letters=[mid])
+        self.assertIn(mid, out)
+        self.assertNotIn(other, out)
+        self.assertFalse(self.outbox().exists() and list(self.outbox().iterdir()), "nothing was queued")
+
+    def test_a_fork_is_not_refused_for_its_own_row_in_the_view(self):
+        mid = self.a_request()
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        m.claim(c, [m.get_message(c, mid)], "resume", session="s-box", run="r0")
+        self.dispatch()
+        self.assertTrue(self.view()["state"][mid]["fork_only"])
+        with self.assertRaises(SystemExit):
+            self.as_run("done", mid, letters=[mid])
+        self.as_run("done", mid, point="mailbox-conversation", letters=[mid])
+
     def test_a_told_entry_is_checked_like_the_command(self):
         mine = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "a", cwd=self.ws["open"]).stdout)
         theirs = self.letter_id(self.hubbus("send", "--to", "open", "--type", "request", "--text", "b", cwd=self.ws["open"]).stdout)

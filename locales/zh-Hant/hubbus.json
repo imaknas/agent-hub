@@ -171,5 +171,16 @@
  "(a platform run's ack is not recorded)": "(平台啟動的處理,ack 不記錄)",
  "{project}: {name} in its outbox: {e!r}": "{project}:寄件匣裡的 {name}:{e!r}",
  "{project}: ignoring {n} {n:folder|folders} in its outbox: {names}": "{project}:略過寄件匣裡的 {n} 個資料夾:{names}",
- "{project}: cannot report {name} from its outbox: {e!r}": "{project}:無法回報寄件匣裡的 {name}:{e!r}"
+ "{project}: cannot report {name} from its outbox: {e!r}": "{project}:無法回報寄件匣裡的 {name}:{e!r}",
+ "{project} received your letter {id}. No session has it yet; it stays open, and a session will see it.": "{project} 收到你的信 {id} 了。還沒有 session 接手;信會留著,session 會看到。",
+ "Letter {id} has been handled.": "信 {id} 已經處理了。",
+ "hubbus: this run can't ack a letter: an ack says a session has it": "hubbus:這個執行不能 ack:ack 表示有 session 接手",
+ "hubbus: this run reads only the letters it was started for ({cmd} is not one of them)": "hubbus:這個執行只能讀派它來處理的信(不能用 {cmd})",
+ "hubbus: this run reads only the letters it was started for and their threads": "hubbus:這個執行只能讀派它來處理的信和它們的討論串",
+ "hubbus: this run closes only the letters it was started for ({id} is not one)": "hubbus:這個執行只能結掉派它來處理的信({id} 不是)",
+ "hubbus: {id} has been taken by another session: leave it": "hubbus:{id} 已經有別的 session 接手了,不要動它",
+ "hubbus: this run closes with {alias} only a question one of its letters names": "hubbus:這個執行只能向 {alias} 結掉它的信裡指名的問題",
+ "hubbus: this run replies only to the letters it was started for ({id} is not one)": "hubbus:這個執行只能回派它來處理的信({id} 不是)",
+ "hubbus: this run sends a reply to the letter's sender with --type done (--type info only when the letter asks for it), or a question to {alias}": "hubbus:這個執行只能用 --type done 回信給寄件人(信裡要求時才用 --type info),或問 {alias}",
+ "hubbus: this run sends only replies to its letters and questions to {alias}": "hubbus:這個執行只能回它的信、問 {alias}"
 }

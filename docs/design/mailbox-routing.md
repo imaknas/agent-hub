@@ -1,5 +1,8 @@
 # Project mailbox: routed and handled mechanically by the platform
 
+The headless handler's part is replaced by `docs/design/mailbox-session-first.md` ("Triage"): it takes nothing and acts only on
+its letters. What this document says about it taking a letter describes letters from before that.
+
 > **Status**: confirmed by the owner and implemented on 10-24 (first step: the notes capability).
 > `mailbox.handle: work` is not done yet. (10-31: the setting is now `mailbox.handler: agent | propose`, in hub.json;
 > neither lets the handler change code, so a work mode is still not done.)

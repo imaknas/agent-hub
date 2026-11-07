@@ -11,8 +11,8 @@ the login profile.) Scenario inputs are per content language in `locales/<lang>.
 
 Two scenarios reach other templates the way production does:
   mailbox  templates/prompts/mailbox.md: letters in the project's mailbox, claimed for the platform the way `hubbus
-           dispatch` claims them, and the rendered prompt run as the `mailbox-escalation` point (its permission mode,
-           its tools), as run-agent-job.sh runs it for hubbus
+           dispatch` triages them, and the rendered prompt run as the `mailbox-escalation` point (its permission mode,
+           its tools, its commands limited to those letters: MAILBOX_LETTERS), as run-agent-job.sh runs it for hubbus
   mcp      templates/mcp-instructions.md: no rules file in the project, only the platform's MCP server (`brunna mcp`
            = bin/mcp_server.py of the arm's tree, the run's config) given to the agent with --mcp-config; asked to
            check the mail
@@ -94,8 +94,8 @@ def template(rel: str, arm: str) -> str:
                           check=True).stdout
 
 
-def fill(text: str, arm: str) -> str:
-    return prompts.fill(text, lang=lang_of(arm))
+def fill(text: str, arm: str, **values) -> str:
+    return prompts.fill(text, lang=lang_of(arm), **values)
 
 
 def managed_block(arm: str) -> str:
@@ -185,10 +185,9 @@ def sent_from_session(renv: dict, letter: dict, session: str) -> str:
     return r.stdout.strip()
 
 
-def claim_for_handler(renv: dict, ids: list[str], via: str = "handler", session: str | None = None) -> None:
-    """what `hubbus dispatch` does before it starts the headless agent (via handler) or a background branch copy (via
-    resume, with the session it branches): the letters are recorded as taken by the platform (the agent's inbox marks
-    them "the platform is handling it")"""
+def claim_for_handler(renv: dict, ids: list[str], via: str = "triage", session: str | None = None) -> None:
+    """what `hubbus dispatch` does before it starts the headless agent (via triage) or a background branch copy (via
+    resume, with the session it branches): the letters are recorded for the platform's run"""
     subprocess.run([str(BIN / "py"), str(pathlib.Path(__file__).resolve()), "claim", "--via", via,
                     *(("--session", session) if session else ()), *ids], env=renv, check=True, capture_output=True)
 
@@ -310,6 +309,7 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
                 letters["letter"] = send(hb, renv, d["mailbox_letters"][scenario.removeprefix("delegate_")])
             claim_for_handler(renv, [letters["letter"]], via="resume", session=FAKE_SESSION)
             point = "mailbox-conversation"
+            renv = {**renv, "MAILBOX_PROJECT": PROJECT, "MAILBOX_LETTERS": json.dumps([letters["letter"]])}
             (out / "prompt.txt").write_text(render_as(tree, BRANCH[scenario], renv, id=letters["letter"]))
         elif scenario in LEASE:
             point = "lease-session"
@@ -327,8 +327,11 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
                 letters[key] = send(hb, renv, letter)
             claim_for_handler(renv, list(letters.values()))
             point = "mailbox-escalation"
+            # what hubbus run_handler hands down: without the letters it would stop testing the rules that matter
+            renv = {**renv, "MAILBOX_PROJECT": PROJECT, "MAILBOX_LETTERS": json.dumps(list(letters.values()))}
             # what hubbus run_handler writes (prompts.render("mailbox") + the newline it strips)
-            (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm).removesuffix("\n"), arm) + "\n")
+            (out / "prompt.txt").write_text(fill(template("templates/prompts/mailbox.md", arm).removesuffix("\n"), arm,
+                                                 notes=proj.resolve() / ".agent-memory" / "memory") + "\n")
         elif scenario not in BRANCH and scenario not in LEASE:
             (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         before = snapshot(proj)
@@ -561,7 +564,7 @@ def main(argv: list[str]) -> int:
     for k in ("--session", "--source", "--to", "--type", "--text"):
         f.add_argument(k, required=True)
     c = sub.add_parser("claim", help="(internal) record letters as taken by the platform, in the run's bus")
-    c.add_argument("--via", default="handler")
+    c.add_argument("--via", default="triage")
     c.add_argument("--session")
     c.add_argument("ids", nargs="+")
     a = ap.parse_args(argv)

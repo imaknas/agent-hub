@@ -123,13 +123,16 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
         if ok and not isinstance(res.get("structured_output"), dict):   # the platform acts only on the structured answer
             ok, error = False, _("the agent gave no structured answer: {text}", text=str(res.get("result") or "")[:200])
         applied, refused = [], []
+        # a project whose notes are a plain folder (the hub's, memory: false): no checkout of them in the copy, and git
+        # lists nothing there, so what the agent wrote there is looked for directly
+        plain = wt / ".agent-memory" / "memory" if len(added) == 1 and mem.is_dir() and not mem.is_symlink() else None
         for repo, prefix in ((wt, ""), *([(wt / ".agent-memory", ".agent-memory/")] if len(added) > 1 else [])):
             take = []
             try:
-                listed = changed(project, repo, bases[repo], sigs[repo])
+                listed = [p for p, _exists in changed(project, repo, bases[repo], sigs[repo])]
             except RuntimeError as e:
                 return failed(_("could not read the agent's changes: {e}", e=e))
-            for path, _exists in listed:
+            for path in listed:
                 rel = prefix + path
                 if prefix == "" and rel.startswith(".agent-memory/"):
                     continue
@@ -138,6 +141,16 @@ def run(project: str, ws: pathlib.Path, point: str, prompt: str, allow: list[str
                     refused.append(rel)
                     continue
                 take.append(path)
+            if plain is not None and plain.is_dir() and not plain.is_symlink():
+                for f in sorted(plain.rglob("*")):
+                    rel = str(f.relative_to(wt))
+                    hidden = any(part.startswith(".") for part in rel.removeprefix(".agent-memory/").split("/"))
+                    if f.is_dir() and not f.is_symlink():
+                        continue
+                    if not ok or hidden or not any(fnmatch.fnmatch(rel, g) for g in allow):
+                        refused.append(rel)
+                    else:
+                        take.append(rel)
             if take:
                 try:
                     done = project_git.data(project, ws, "copy-back", repo, ws / prefix, *take)
@@ -212,10 +225,10 @@ def mailbox(project: str, ids: list[str]) -> int:
 
 def hold_and_ask(hb, c, project: str, rows, why: str, applied=()) -> None:
     """The run did not complete (the runtime failed, it stopped incomplete or without a structured answer, its changes
-    conflict with the workspace, something broke while applying, or it left a letter unanswered): record job.failed, hold the letters (not dispatched again: run_handler's handler row,
-    written first, has them taken for good until the handler stops taking letters, so nothing is done twice and nothing
-    loops) and ask the owner about each, saying why and what, if anything, was
-    already applied. Never silent."""
+    conflict with the workspace, something broke while applying, or it left a letter unanswered): record job.failed, hold
+    the letters (no platform run starts for them again, so nothing loops; they stay open for sessions) and ask the owner
+    about each, saying why and what, if anything, was already applied. The question closes with its letter
+    (hubbus.close_failed_questions). Never silent."""
     hb.publish(c, hb.new_id(), "job.failed", project, None, None,
                {"job": f"mailbox-propose:{project}", "detail": why[:500]})
     done_part = _(" Already applied: {paths}.", paths=", ".join(applied)) if applied else ""
@@ -242,20 +255,26 @@ def _mailbox(project: str, ids: list[str]) -> int:
             raise RuntimeError(_("{project} has no workspace in the registry", project=project))
         prompt = mailbox_prompt(letters_text(hb, c, rows), datetime.date.today().isoformat())
         res = run(project, ws, "mailbox-propose", prompt, [".agent-memory/memory/**"])
-    except Exception as e:   # the letters were claimed for this run: never left claimed without a word
+    except Exception as e:   # the letters were triaged for this run: never left without a word
         c.execute("BEGIN IMMEDIATE")
         hold_and_ask(hb, c, project, rows, _("the propose run broke: {e!r}", e=e))
         c.execute("COMMIT")
         raise
     sent, done = [], []
     out = res["output"] if isinstance(res.get("output"), dict) else {}
-    handled = {r["id"]: r for r in rows}
+    live = hb.Live(c=c)
+    live.load()   # the process table, before the write lock
     try:
         c.execute("BEGIN IMMEDIATE")
+        # the same rules as a handler's commands (hubbus.run_refusal), judged now: the run can take half an hour, and what
+        # a session has taken meanwhile is the session's. What the agent wrote for such a letter is dropped
+        handled = {r["id"]: r for r in rows if not hb.taken_by_another(c, r, live)}
         for rep in out.get("replies") or []:
             orig = handled.get(rep.get("reply_to"))
-            if orig is None or rep.get("type") not in ("info", "done", "question") or not rep.get("text"):
+            if orig is None or not rep.get("text"):
                 continue   # replies only to the letters of this request, to the original sender
+            if not (rep.get("type") == "done" or (rep.get("type") == "info" and hb.payload(orig).get("effect") == "asks")):
+                continue   # a question goes to the owner (ask_owner); info only to a letter that tells it to
             mid = hb.new_id()
             hb.publish(c, mid, "message", project, hb.canon(orig["source"]), orig["id"],
                        {"type": rep["type"], "text": rep["text"], "from_session": None, "via": "propose"})
@@ -271,20 +290,21 @@ def _mailbox(project: str, ids: list[str]) -> int:
                 hb.publish(c, f"{d['id']}:done", "message.done", project, project, d["id"],
                            {"note": d.get("note") or _("handled by an agent the platform sent (propose)")})
                 done.append(d["id"])
+        free = [r for r in rows if r["id"] in handled]
         if not res["ok"]:
-            hold_and_ask(hb, c, project, rows, res["error"], res["applied"])
+            hold_and_ask(hb, c, project, free, res["error"], res["applied"])
         else:
             replied = {ref for ref in (c.execute("SELECT ref FROM events WHERE id=?", (m,)).fetchone()[0] for m in sent)
                        if ref}
-            # deferred on purpose (waits for a code change or for the owner): stays open in the project's inbox, still
-            # claimed, as before; only a letter the agent did not account for at all is held and asked about
+            # deferred on purpose (waits for a code change or for the owner): stays open for sessions; only a letter the
+            # agent did not account for at all is held and asked about
             deferred = {d.get("id") for d in out.get("deferred") or [] if isinstance(d, dict)}
-            unanswered = [r for r in rows if r["id"] not in done and r["id"] not in replied and r["id"] not in deferred]
+            unanswered = [r for r in free if r["id"] not in done and r["id"] not in replied and r["id"] not in deferred]
             if unanswered:
                 hold_and_ask(hb, c, project, unanswered, _("the agent neither answered, closed nor deferred it"),
                              res["applied"])
         c.execute("COMMIT")
-    except Exception as e:   # nothing of the above stands; the letters were claimed for this run: hold them, say why
+    except Exception as e:   # nothing of the above stands; the letters were triaged for this run: hold them, say why
         if c.in_transaction:
             c.execute("ROLLBACK")
         c.execute("BEGIN IMMEDIATE")
@@ -298,7 +318,8 @@ def _mailbox(project: str, ids: list[str]) -> int:
     deferred = [{"id": d.get("id"), "why": str(d.get("why") or "")[:300]} for d in out.get("deferred") or []
                 if isinstance(d, dict) and d.get("id") in handled]   # why a letter waits, in the run's log
     print(json.dumps({"project": project, "ok": res["ok"], "applied": res["applied"], "refused": res["refused"],
-                      "sent": sent, "done": done, "deferred": deferred, "error": res["error"]}, ensure_ascii=False))
+                      "sent": sent, "done": done, "deferred": deferred, "taken": [r["id"] for r in rows if r["id"] not in handled],
+                      "error": res["error"]}, ensure_ascii=False))
     return 0 if res["ok"] else 1
 
 
