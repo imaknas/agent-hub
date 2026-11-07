@@ -376,7 +376,8 @@ implements it, port by port, saying the rest is unsupported. What the reviews fo
      by age or by `live` (which reads the records).
 
    Left: whether Claude Code picks up hooks from a settings file that appears mid-session (the worktree link); whether
-   a woken session in a permission-skipping mode behaves the same; a session idle longer than the timeout (a day) isn't
+   a woken session in a permission-skipping mode behaves the same; a session idle longer than the timeout (a day, 14 days
+   since docs/design/mailbox-session-first.md step 3) isn't
    wakeable until its next turn; a fork is live only from its first hook (a session that ran none since this shipped
    is still missed); a fork's command line still reads as its parent (`--resume=<old> --fork-session` puts the old id
    in `live`, as before: that process runs another id; left as it was because the platform's own background resumes

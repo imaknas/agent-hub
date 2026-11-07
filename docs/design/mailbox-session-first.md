@@ -1,6 +1,6 @@
 # Mail goes to a session first
 
-Status: design r7, steps 1 and 2 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
+Status: design r7, steps 1 to 3 built (records at the end). The cold reviews' blocking findings are closed; should-fix items go to each step's own review. Each revision fixes the previous one's cold review, on top of the owner's decision. The main
 change since r2: delivery is per session, and a route, an ack and a fork all have an end. Replaces the delegation part of the routing in
 `docs/design/mailbox-routing.md`; builds on the wake in `docs/design/mailbox-runtimes.md` (B1).
 
@@ -389,9 +389,57 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
 - **`mailbox-propose`'s schema drops `question` from reply types**: it goes in `ask_owner`.
 - **e3 sets `MAILBOX_PROJECT` as well**: the mailbox scenarios had none, and the runtime refuses to run without it.
 
-Found while here, not changed: `worktree-memory.sh` in a sandboxed project's worktree re-runs itself as the project, where the bus
-isn't reachable, so its `hubbus hook` tells nothing, silently (checked in the fixture: the letter stays untold, the same hook
-tells it in an unsandboxed project). `hub-event` does tell it there, from the settings `render-project-settings --worktree`
-writes during that session's start hook; whether a session already starting picks up hooks from that file wasn't checked live.
-So a worktree session of a sandboxed project may get no mail until it restarts or the file is read. The fix is the mail
-through `hub-event worktree`, before the re-run. Step 4 needs this settled, since telling is what ends a wake's window.
+Found while here, not changed then, fixed in step 3: `worktree-memory.sh` in a sandboxed project's worktree re-ran itself as the
+project, where the bus isn't reachable, so its `hubbus hook` told nothing, silently.
+
+### Step 3: where it differs from the text above, and why
+
+- **`can_wake` is part of the `wake` port** (`PORTS["wake"]`), so `load` refuses a runtime with one of the two, besides the contract
+  test. `session_status` and `session_summary` are optional ports of their own. Through `Sessions`, a runtime with none answers
+  `unknown` and `None`, and `can_wake` false: the feature off, as the design's "`unknown` counts as idle" wants.
+- **A project carried over goes with the process, not the id** (`record_session`): a `/clear`, or a fork whose first hook carried the
+  parent's id, takes the project of the record it replaces. A pid with another start time is a new process. Filling in an old
+  record costs no process lookup and leaves its other fields.
+- **The name in `.live` is the name at that time.** A rename doesn't rewrite it: step 4 reads it through `now_named`.
+- **`.last` goes when a turn leaves nothing to keep** (no field, an empty one, or a label that doesn't let it): the design says when
+  it's written, not what happens to an earlier turn's. It would read as this turn's, or outlive the label. The label is read at each
+  Stop, so a session that wandered into a project that isn't `include` loses it there.
+- **Nothing is kept for a run the waiter doesn't arm for** (`-p`, SDK, no readable process): the write comes after those checks.
+- **The label comes from `hubconf.reflection_private()`**, whose `None` (no registry index) means no. `hubconf.projects()` would not
+  do: its fallback with no index has no `privacy`, and that reads as `include`. **The hub's own sessions get `.last`**: the index
+  leaves the hub out, so its label reads as the registry's default, `include`, unless the index ever names it otherwise.
+- **`session_status` is one process per call**, about 0.1 s measured with 20 sessions (2.1.319), `AGENTS_TIMEOUT_S` 5. Step 4 should
+  ask once per candidate, and only for a letter it may wake for. A `sessionId` it doesn't list is `unknown`.
+- **The status count is of sessions with a process record** (`Sessions.open_sessions`, `runtime_ports.WAKE_GAPS`): those are the ones
+  a person has open in a project, the same set candidates come from. `live_sessions` also has `-p` runs on their command lines, which
+  never arm. Three reasons: `no_port`, `not_armed` (no waiter's record: no turn has ended, or it waited out its time) and `stopped`
+  (a record with a stale heartbeat: killed with no chance to leave). A failed lookup gives no line, not a zero.
+- **Doctor's row names only the ports no feature row names** (`missing_session_ports`), as an `info`. Wake already has its feature
+  row, with the agent-view note on it. `runtime.default: none` stays one plain row.
+- **Installed hooks keep the timeout they were installed with.** A project's settings are rewritten at its next session start. A
+  linked worktree's Stop hook is in the user-level settings, which change only with the owner: until then those sessions' waiters
+  are killed at a day and show as `stopped`. `merge-hook-settings.py --worktree` kept an existing command's old fields, so running
+  it again would have changed nothing; it now brings them up to date. What a kill at the timeout does to the session hasn't been
+  seen: until now the waiter always left first.
+- **The worktree mail** goes through `hub-event worktree`, for every project, not just sandboxed ones, and `worktree-memory.sh` no
+  longer calls `hubbus hook` (that entry point stays, for hooks installed long ago). A prompt or a tool call no longer starts a
+  sandbox unless a command commits. **The after-commit reminder moved with it:** a hook's output is one JSON or none, so a letter and
+  a reminder printed apart would both be lost, with the letter counted as told. So at `start` a session's letters now come before
+  the rules file, in the same text. If the session also has `hub-event`'s hooks from the settings its start hook writes, it is told
+  once: `hook_shows` judges under the write lock. Whether a starting session picks up those hooks hasn't been checked live; the
+  docs say edits are "normally picked up automatically by the file watcher". Mail no longer depends on it.
+- **A failed detach is a failed start, past its fork too**: a pipe the exec closes tells the first process whether the run got that
+  far. A run that dies after its exec is what `status.json` is for, as before.
+- **Dispatch breaks per project on two levels.** `start_handler` takes any exception as a start that failed, with its retries and
+  `job.failed`. Anything else breaking on a project (`dispatch_failed`) rolls back, logs while it lasts, and shows once a day as a
+  `job.failed` with the exception's type only: what an exception says can quote a letter.
+- **A confined run's question to the owner on a letter that carries a handoff goes as a question of its own** (`not_the_answer`;
+  stripped, not refused): a run told no may not ask again, and then the owner is never asked. `--reply-to` is dropped before the
+  letter is built, so it holds for an outbox's file too, as a Decisions record when records are on. Any confined run, with letters or
+  not. A letter with no handoff keeps its thread. As in step 2, a file in an outbox can't prove it came from such a run, so a
+  hand-written one isn't caught, and an ordinary session's reply is unchanged.
+
+What step 4 must know: `Sessions.open_sessions()` gives each session's record with `project`, `can_wake`, `session_status` and
+`session_summary` are there and nothing reads them yet. A record with no `project` lasts until that session's next hook.
+Live check of the 14 days: not done before merge; a waiter must be watched from a real session. Step 4 shouldn't count on a session
+idle over a day until it has been.
