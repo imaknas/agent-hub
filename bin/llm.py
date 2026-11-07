@@ -244,9 +244,17 @@ def run(a) -> int:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
+    # works_in: memory: the folder is a copy of a project's memory branch, so an agent started there loads what the project wrote. What
+    # holds it is this look at the files, on every runtime: only notes, or no run
+    in_memory = spec.get("works_in") == "memory"
+    if in_memory and not getattr(a, "dry_run", False):
+        import memory_paths
+        if (bad := memory_paths.folder_problems(a.cwd or os.getcwd())):
+            return fail(a.point, spec, _("{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No "
+                                         "agent starts there until a commit on that branch removes it", point=a.point, paths="; ".join(bad)))
     # restricted: a runtime that can't be told to load no settings file runs it only in the platform's throwaway copy (doctor says what
-    # that leaves), never anywhere else with the ask dropped
-    if spec.get("restricted") and "confine" not in runtime_ports.capabilities(point_runtime(a.point, spec)) \
+    # that leaves), never anywhere else with the ask dropped. A memory copy just checked is fine too: there the flag only reinforces
+    if spec.get("restricted") and not in_memory and "confine" not in runtime_ports.capabilities(point_runtime(a.point, spec)) \
             and not hubconf.is_throwaway_copy(a.cwd or os.getcwd(), marked=os.environ.get("HUB_THROWAWAY_COPY") or ""):
         return fail(a.point, spec, _("{point} asks that no settings file be loaded, and this runtime can't be told that: it runs only in the "
                                      "platform's throwaway copy, and {cwd} is not one", point=a.point, cwd=a.cwd or os.getcwd()))

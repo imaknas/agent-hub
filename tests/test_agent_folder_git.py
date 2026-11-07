@@ -519,6 +519,68 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         marked = self.propose_at(copy, {**env, "HUB_THROWAWAY_COPY": str(copy)})
         self.assertTrue(self.ran.exists(), marked.stdout + marked.stderr)
 
+    MEMORY_POINTS = ("consolidate", "librarian-state", "librarian-todo-format")
+
+    def memory_point_at(self, point, folder, env):
+        return subprocess.run([sys.executable, str(BIN / "llm.py"), "run", point], input="ok", cwd=folder, capture_output=True, text=True, timeout=60, env=env)
+
+    def memory_copy(self):
+        d = self.tmp / "copy"
+        (d / "memory" / "reference").mkdir(parents=True)
+        (d / ".git").mkdir()   # the platform's own: not read
+        (d / ".git" / "config").write_text("")
+        for f in ("AGENT.md", "RULES", "STATE.md", "memory/2026-11-08.md", "memory/.gitkeep", "memory/reference/a.md"):
+            (d / f).write_text("x\n")
+        return d
+
+    def test_an_agent_in_a_copy_of_a_memory_branch_starts_only_if_it_holds_only_notes(self):
+        """On a runtime that can't be told to load no settings file too: the platform's own look at the files is what holds, and the core
+        points go on running on it (AGENTS.md, Tool neutrality). The flag reinforces where a runtime has it."""
+        env = self.on_command()
+        d = self.memory_copy()
+        for point in self.MEMORY_POINTS:
+            with self.subTest(point):
+                self.ran.unlink(missing_ok=True)
+                r = self.memory_point_at(point, d, env)
+                self.assertTrue(self.ran.exists(), r.stdout + r.stderr)
+        (d / ".claude").mkdir()
+        (d / ".claude" / "settings.json").write_text("{}")
+        for point in self.MEMORY_POINTS:
+            with self.subTest(point, planted=True):
+                self.ran.unlink(missing_ok=True)
+                r = self.memory_point_at(point, d, env)
+                self.assertFalse(self.ran.exists(), "the agent never started")
+                self.assertIn(".claude/settings.json", r.stdout + r.stderr, "what, and why")
+
+    def test_those_points_ask_for_the_flag_and_the_look(self):
+        import yaml
+        points = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
+        self.assertEqual({p for p, spec in points.items() if spec.get("works_in") == "memory"}, set(self.MEMORY_POINTS))
+        for p in self.MEMORY_POINTS:
+            self.assertIs(points[p].get("restricted"), True, p)
+            self.assertIn("--restricted", runtime_claude.describe(runtime_ports.Task(point=p, prompt="p", spec=points[p], env={"PATH": ""})), p)
+
+    def test_the_look_at_a_memory_copy(self):
+        import memory_paths
+        import shutil
+        d = self.memory_copy()
+        self.assertEqual(memory_paths.folder_problems(d), [])
+        for label, make, says in (
+                ("settings", lambda: ((d / ".claude").mkdir(), (d / ".claude" / "settings.json").write_text("{}")), ".claude/settings.json"),
+                ("a hidden folder alone", lambda: (d / ".claude").mkdir(), ".claude"),
+                ("nested", lambda: ((d / "memory" / ".claude").mkdir(), (d / "memory" / ".claude" / "x").write_text("{}")), "memory/.claude"),
+                ("a rules file", lambda: (d / "CLAUDE.md").write_text("x"), "CLAUDE.md"),
+                ("a link", lambda: (d / "memory" / "l.md").symlink_to("/etc/hosts"), "memory/l.md"),
+                ("a folder link", lambda: (d / "memory" / "ld").symlink_to("/etc"), "memory/ld"),
+                ("executable", lambda: ((d / "memory" / "x.md").write_text("x"), (d / "memory" / "x.md").chmod(0o755)), "memory/x.md"),
+                ("a FIFO", lambda: os.mkfifo(d / "memory" / "f"), "memory/f")):
+            with self.subTest(label):
+                shutil.rmtree(d)
+                d = self.memory_copy()
+                make()
+                bad = memory_paths.folder_problems(d)
+                self.assertTrue(any(says in x for x in bad), bad)
+
     def test_login_check_runs_on_a_default_command_runtime(self):
         """Its point doesn't ask for the flag: the check before an update doesn't fail for lack of confined runs."""
         env = self.on_command()

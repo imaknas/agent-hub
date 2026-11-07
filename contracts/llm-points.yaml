@@ -32,6 +32,9 @@
 #   only this way).
 #   The caller's LLM_AUTH environment variable takes precedence (a registry job's connectors: true sets
 #   LLM_AUTH=subscription).
+# restricted: no settings file is loaded (a runtime without confined runs: only in the throwaway copy, or it fails).
+# works_in: memory: its folder is a copy of a project's memory branch: llm.py checks the files first, on every runtime (bin/memory_paths.py), and
+#   a folder that passes doesn't need the throwaway copy; there restricted only reinforces.
 # tool_servers: allowed_only: when the run loads the tool servers configured in its environment (a registry job's
 #   connectors: true; the platform holds every other run of these points to its own servers), each server whose tools
 #   its allow list doesn't name is denied whole. Which servers it would load is found by the runtime for that run
@@ -46,6 +49,9 @@ points:
     # them, 10-27 experiment)
     extra_args: ["--strict-mcp-config"]
     purpose: nightly, from memory changes and the assistant's handoffs, decide whether and how to update a project's STATE.md (may only change ./STATE.md)
+    # it runs as the user in a copy of the branch, and a hook in a settings file there would run too
+    restricted: true
+    works_in: memory
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./STATE.md)"]
@@ -60,6 +66,8 @@ points:
     # them, 10-27 experiment)
     extra_args: ["--strict-mcp-config"]
     purpose: when the to-do section of STATE.md (state-todo contract) is malformed, fix only the format, leaving the content unchanged
+    restricted: true
+    works_in: memory
     permission_mode: dontAsk
     tools: Read,Edit
     allowed_tools: ["Edit(./STATE.md)"]
@@ -114,6 +122,8 @@ points:
     shape: agent
     model_group: strong
     purpose: fold memory date files older than 14 days into reference/ and correct statements that were overturned (may only change memory/reference/ and STATE.md)
+    restricted: true
+    works_in: memory
     permission_mode: dontAsk
     tools: Read,Write,Edit,Glob,Grep
     allowed_tools: ["Edit(./memory/reference/**)", "Edit(./STATE.md)"]

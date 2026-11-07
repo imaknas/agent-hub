@@ -268,7 +268,11 @@ class RuntimeGolden(unittest.TestCase):
         self.cli("no agent", ["run", "agent-job"], none)
         self.cli("token missing", ["run", "agent-job"], claude)
         runtime_fake.set_reply("consolidate", TaskResult(True, text="", structured_output={"bad": 1}))
-        self.cli("schema", ["run", "consolidate"], fake)
+        copy = self.tmp / "memory-copy"   # it works in a copy of a memory branch, and starts nowhere else (llm.py: works_in)
+        (copy / "memory").mkdir(parents=True)
+        (copy / "STATE.md").write_text("x\n")
+        with contextlib.chdir(copy):
+            self.cli("schema", ["run", "consolidate"], fake)
         runtime_fake.set_reply("agent-job", TaskResult(False, error="it broke"))
         self.cli("run failed", ["run", "agent-job"], fake)
         with mock.patch.object(completion, "settings", lambda: {"providers": {
