@@ -91,8 +91,8 @@ def nudge_text(root, command: str | None = None) -> str | None:
 
 
 def main() -> None:
-    """The old entry point: worktrees' user-level hooks and projects not yet on the new settings still call it (it must
-    keep working until the owner changes the user-level settings).
+    """The old entry point. --session-start: worktree-memory.sh's start. --post-tool: only a project whose hooks were installed
+    before hub-event (worktree-memory.sh's reminder now goes through `hub-event worktree`).
     --post-tool reads the hook input and outputs through the runtime's inject, word for word as before; --session-start
     prints text directly."""
     import runtime_ports

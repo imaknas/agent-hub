@@ -138,9 +138,12 @@ woken, not counted as tried. `unknown` counts as idle. A runtime with `wake` mus
 
 ## How long a session can wait
 
-The waiter's hook timeout goes from 1 day to 14 days (`WAIT_TIMEOUT_S`). The docs state no maximum, and the CLI's timer limit
-is unverified, so the first armed waiter is watched before this ships: that shows it doesn't fire early, not that it holds
-14 days. A session idle longer isn't a candidate. The status page counts open sessions with no waiter, with the reason, and
+The waiter's hook timeout goes from 1 day to 14 days (`WAIT_TIMEOUT_S`). The docs state no maximum. Read from the 2.1.319 CLI's
+code by the cold review, not watched live: the timeout is only checked to be positive, 14 days in milliseconds is below 2^31,
+and an `asyncRewake` hook wakes the model only on exit code 2, so one killed at an older timeout doesn't wake its session. The
+first armed waiter is watched right after merge: that shows it doesn't fire early, not that it holds 14 days. Landing depends on
+that check for trust, not for safety: nothing routes on the waiter until step 4, and one that fired early would leave its
+session unwakeable, as a day's timeout does today, with the reason on the status page. A session idle longer isn't a candidate. The status page counts open sessions with no waiter, with the reason, and
 doctor gets a row for ports a runtime lacks. Agent-view background sessions can stop after about an hour unpinned (docs), so this
 doesn't reach them; doctor says so.
 
@@ -407,7 +410,8 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
 - **Nothing is kept for a run the waiter doesn't arm for** (`-p`, SDK, no readable process): the write comes after those checks.
 - **The label comes from `hubconf.reflection_private()`**, whose `None` (no registry index) means no. `hubconf.projects()` would not
   do: its fallback with no index has no `privacy`, and that reads as `include`. **The hub's own sessions get `.last`**: the index
-  leaves the hub out, so its label reads as the registry's default, `include`, unless the index ever names it otherwise.
+  lists the hub with `type: platform`, no `paths` and no `privacy`. `project_at` skips it for having no workspace, so hub-event names
+  it by its path, and `reflection_private()` reads its entry and gets `include` for having no label. A label on that entry counts.
 - **`session_status` is one process per call**, about 0.1 s measured with 20 sessions (2.1.319), `AGENTS_TIMEOUT_S` 5. Step 4 should
   ask once per candidate, and only for a letter it may wake for. A `sessionId` it doesn't list is `unknown`.
 - **The status count is of sessions with a process record** (`Sessions.open_sessions`, `runtime_ports.WAKE_GAPS`): those are the ones
@@ -418,9 +422,11 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   row, with the agent-view note on it. `runtime.default: none` stays one plain row.
 - **Installed hooks keep the timeout they were installed with.** A project's settings are rewritten at its next session start. A
   linked worktree's Stop hook is in the user-level settings, which change only with the owner: until then those sessions' waiters
-  are killed at a day and show as `stopped`. `merge-hook-settings.py --worktree` kept an existing command's old fields, so running
+  are killed at a day and show as `stopped`, for as long as the session stays open or until its next turn arms a new one: a waiter's
+  record whose session's process runs isn't pruned (`WITH_RECORD`), since at 10 minutes it read as `not_armed`, which blames
+  something else. `merge-hook-settings.py --worktree` kept an existing command's old fields, so running
   it again would have changed nothing; it now brings them up to date. What a kill at the timeout does to the session hasn't been
-  seen: until now the waiter always left first.
+  watched: until now the waiter always left first. By the CLI's code (above) it doesn't wake the session.
 - **The worktree mail** goes through `hub-event worktree`, for every project, not just sandboxed ones, and `worktree-memory.sh` no
   longer calls `hubbus hook` (that entry point stays, for hooks installed long ago). A prompt or a tool call no longer starts a
   sandbox unless a command commits. **The after-commit reminder moved with it:** a hook's output is one JSON or none, so a letter and
@@ -439,7 +445,34 @@ project, where the bus isn't reachable, so its `hubbus hook` told nothing, silen
   not. A letter with no handoff keeps its thread. As in step 2, a file in an outbox can't prove it came from such a run, so a
   hand-written one isn't caught, and an ordinary session's reply is unchanged.
 
+- **A pointer under a session's folder is a claim, not a fact** (found by the cold review, on main before this step).
+  `worktree-memory.sh` decided "sandboxed" from `$main`, read from `.git` pointer files the project can write, so a sandboxed
+  project could name an unsandboxed project's repo and get a planted memory repo's config run as the user, at a start and at an end,
+  and a line written into that repo's `info/exclude`. Now `project_git.py worktree-scope` decides: the folder's own path first, and the
+  memory synced is the one the registry entry names. A repo a sandboxed project writes is never run as the user, whoever names it. In
+  no project at all (its service can write the temp folder), a pointer counts only if the repo it names has this worktree in
+  `worktrees/` with a back pointer (`gitdirs.confirmed`). `project_of` (which project's mail a session gets) and the guard (which sessions it
+  may open) read pointers the same way; the guard also goes by path first, or a sandboxed project could open a session in the project
+  it names, outside its sandbox. A worktree moved by hand outside its project's folder, whose back pointer is stale, gets no hooks
+  until `git worktree repair`.
+- **Not closed, no pointer in it:** `hub-event`'s own handlers, in a folder in no project that holds `.agent-memory/.git`, run git as the
+  user (`memory_pull`, `memory_sync`, `local_setup`, `nudge`; run in a fixture). It takes a sandboxed session whose hook reports a
+  working folder outside its project, and a sandboxed session's cwd leaving its project wasn't checked live. Refusing such a folder would
+  also lose the moved-folder reminder on a laptop's old copy, which may not be in the registry there, so it wants its own decision.
+- **How far to trust `project`.** The record can say where a process began as far as its hooks showed. It can't settle more, and the
+  send-time gate should read it that way:
+  - It says nothing about what the session has read: one that wandered through a private project holds that text whatever the field says.
+  - An old record's folder (`old["cwd"]`) is the last start's, which before this field a compaction could already have moved. So a
+    session from before the upgrade that wandered and compacted gets the folder it wandered to. Those records die with their processes.
+  - A session first seen after wandering is recorded there: started in no project, resumed in another folder, or forked while its parent
+    was in another folder.
+  - A fork whose first hook carries its parent's id no longer takes a running parent's record: the record stays, the fork is on record
+    from its next hook, under its own id. A resume while the first process still runs waits the same way. **Whether 2.1.319's first hook
+    really carries the parent's id isn't known**: it rests on a code comment, not on a run. If it doesn't, nothing here is reached.
+    Either way a parent with no record of its own at that moment has nothing to protect, and its next hook records where it is. A
+    lookup that fails writes the record, as before: a session with no record is the worse mistake.
+
 What step 4 must know: `Sessions.open_sessions()` gives each session's record with `project`, `can_wake`, `session_status` and
-`session_summary` are there and nothing reads them yet. A record with no `project` lasts until that session's next hook.
-Live check of the 14 days: not done before merge; a waiter must be watched from a real session. Step 4 shouldn't count on a session
-idle over a day until it has been.
+`session_summary` are there and nothing reads them yet. A record with no `project` lasts until a hook can name its folder's project.
+Live check of the 14 days: right after merge, from a real session. Step 4 shouldn't count on a session idle over a day until it has
+been done.
