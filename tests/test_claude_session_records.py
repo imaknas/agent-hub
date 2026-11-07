@@ -263,7 +263,8 @@ class Records(SecretsDir):
         with mock.patch.object(runtime_ports, "process_starts", side_effect=AssertionError("looked up")):
             self.assertFalse(self.record(B, p.pid, refresh=False), "a tool call costs no process lookup")
         q = session_process(self)
-        self.assertTrue(self.record(B, q.pid, refresh=False), "another process: written again")
+        end(p)
+        self.assertTrue(self.record(B, q.pid, refresh=False), "another process, the old one gone: written again")
         self.assertEqual(json.loads((self.dir / f"{B}.live").read_text())["pid"], q.pid)
 
     def test_nothing_recorded_for_what_names_no_process_or_no_file(self):
@@ -329,8 +330,8 @@ class HookPath(HookFixture):
         self.assertNotIn(B, runtime_claude.live_sessions())
 
     def test_agent_hubs_own_sessions_are_recorded(self):
-        """The hub is a project to dispatch (hubbus.projects) though the registry index leaves it out: its main checkout
-        and its linked worktrees record like any project's."""
+        """The hub is a project to dispatch (hubbus.projects) though project_at finds nothing for it (its entry has no
+        workspace): its main checkout and its linked worktrees record like any project's."""
         self.proj = None
         for ws in (hubconf.MAIN, hubconf.MAIN / ".claude" / "worktrees" / "w"):
             self.m._workspace = lambda cwd, ws=ws: ws

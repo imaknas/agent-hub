@@ -56,86 +56,224 @@ class CharacterizeRecord(tcsr.SecretsDir):
         self.assertEqual(json.loads(hubconf.session_file(B, "live").read_text())["cwd"], "/elsewhere")
 
 
+# which project each folder is in, as hub-event says it
+FOLDERS = {"/ws/alpha": "alpha", "/ws/beta": "beta"}
+
+
 class Project(tcsr.SecretsDir):
     """`project` in the record: set when the process is first recorded, carried over whenever it is rewritten."""
 
-    def record(self, sid, pid, cwd="/here", **kw):
-        return runtime_ports.record_session(sid, "claude", pid, cwd, **kw)
+    def record(self, sid, pid, cwd="/ws/alpha", **kw):
+        return runtime_ports.record_session(sid, "claude", pid, cwd, project_of=FOLDERS.get, **kw)
 
     def read(self, sid):
         return json.loads(hubconf.session_file(sid, "live").read_text())
 
+    def old_record(self, sid, pid, cwd="/ws/alpha"):
+        """As the hooks wrote it before this field."""
+        f = hubconf.session_file(sid, "live")
+        f.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        f.write_text(json.dumps({"runtime": "claude", "pid": pid, "start": runtime_ports.process_start(pid), "cwd": cwd}))
+        f.chmod(0o600)
+
     def test_set_when_first_recorded(self):
         p = tcsr.session_process(self)
-        self.record(B, p.pid, project="alpha")
+        self.record(B, p.pid)
         self.assertEqual(self.read(B)["project"], "alpha")
+
+    def test_a_folder_in_no_project_gives_none(self):
+        p = tcsr.session_process(self)
+        self.record(B, p.pid, cwd="/nowhere")
+        self.assertNotIn("project", self.read(B))
 
     def test_a_compaction_after_wandering_doesnt_move_it(self):
         p = tcsr.session_process(self)
-        self.record(B, p.pid, project="alpha")
-        self.assertTrue(self.record(B, p.pid, cwd="/there", project="beta"))   # refresh: the session_start of a compaction
+        self.record(B, p.pid)
+        self.assertTrue(self.record(B, p.pid, cwd="/ws/beta"))   # refresh: the session_start of a compaction
         rec = self.read(B)
-        self.assertEqual((rec["project"], rec["cwd"]), ("alpha", "/there"))
-        self.assertFalse(self.record(B, p.pid, cwd="/there", refresh=False, project="beta"), "a tool call: nothing to do")
+        self.assertEqual((rec["project"], rec["cwd"]), ("alpha", "/ws/beta"))
+        self.assertFalse(self.record(B, p.pid, cwd="/ws/beta", refresh=False), "a tool call: nothing to do")
         self.assertEqual(self.read(B)["project"], "alpha")
 
     def test_a_new_id_in_the_same_process_keeps_it(self):
         """A /clear, or a fork whose first hook still carried the parent's id."""
         p = tcsr.session_process(self)
-        self.record(A, p.pid, project="alpha")
-        self.record(B, p.pid, cwd="/there", refresh=False, project="beta")
+        self.record(A, p.pid)
+        self.record(B, p.pid, cwd="/ws/beta", refresh=False)
         self.assertEqual(self.read(B)["project"], "alpha")
         self.assertFalse(hubconf.session_file(A, "live").exists())
 
-    def test_a_new_process_is_recorded_where_it_is(self):
+    def test_a_new_process_after_the_old_has_gone_is_recorded_where_it_is(self):
         """A resumed session has a new process, with the same id."""
         p, q = tcsr.session_process(self), tcsr.session_process(self)
-        self.record(B, p.pid, project="alpha")
-        self.record(B, q.pid, project="beta")
+        self.record(B, p.pid)
+        tcsr.end(p)
+        self.record(B, q.pid, cwd="/ws/beta")
         self.assertEqual(self.read(B)["project"], "beta")
 
     def test_a_reused_pid_is_a_new_process(self):
         p = tcsr.session_process(self)
-        self.record(B, p.pid, project="alpha")
+        self.record(B, p.pid)
         f = hubconf.session_file(B, "live")
         f.write_text(json.dumps({**self.read(B), "start": "1"}))
-        self.record(B, p.pid, project="beta")
+        self.record(B, p.pid, cwd="/ws/beta")
         self.assertEqual(self.read(B)["project"], "beta")
 
     def test_an_old_record_gets_it_at_its_next_hook_at_no_cost(self):
         p = tcsr.session_process(self)
-        self.record(B, p.pid)
-        self.assertNotIn("project", self.read(B))
+        self.old_record(B, p.pid)
         with mock.patch.object(runtime_ports, "process_starts", side_effect=AssertionError("looked up")):
-            self.assertTrue(self.record(B, p.pid, cwd="/there", refresh=False, project="alpha",
-                                        wanted=lambda pid: self.fail("asked again")))
+            self.assertTrue(runtime_ports.record_session(B, "claude", p.pid, "/ws/alpha", refresh=False, project_of=FOLDERS.get,
+                                                         wanted=lambda pid: self.fail("asked again")))
         rec = self.read(B)
-        self.assertEqual((rec["project"], rec["cwd"], rec["pid"]), ("alpha", "/here", p.pid), "the rest as it was")
+        self.assertEqual((rec["project"], rec["cwd"], rec["pid"]), ("alpha", "/ws/alpha", p.pid), "the rest as it was")
         self.assertEqual(hubconf.session_file(B, "live").stat().st_mode & 0o777, 0o600)
 
-    def test_an_old_record_gets_it_from_a_start_too(self):
+    def test_an_old_record_takes_it_from_its_own_folder_not_the_hooks(self):
+        """A session from before this field, wandered into beta: it began in alpha, and the send-time gate reads this field."""
         p = tcsr.session_process(self)
-        self.record(B, p.pid)
-        self.record(B, p.pid, project="alpha")
-        self.assertEqual(self.read(B)["project"], "alpha")
+        self.old_record(B, p.pid)
+        self.assertTrue(self.record(B, p.pid, cwd="/ws/beta", refresh=False))
+        rec = self.read(B)
+        self.assertEqual((rec["cwd"], rec["project"]), ("/ws/alpha", "alpha"))
+
+    def test_an_old_record_at_a_start_too(self):
+        p = tcsr.session_process(self)
+        self.old_record(B, p.pid)
+        self.assertTrue(self.record(B, p.pid, cwd="/ws/beta"))
+        rec = self.read(B)
+        self.assertEqual((rec["cwd"], rec["project"]), ("/ws/beta", "alpha"))
+
+    def test_an_old_record_whose_folder_is_in_no_project_waits(self):
+        p = tcsr.session_process(self)
+        self.old_record(B, p.pid, cwd="/gone")
+        self.assertFalse(self.record(B, p.pid, cwd="/ws/beta", refresh=False), "the hook's folder says nothing about it")
+        self.assertNotIn("project", self.read(B))
 
     def test_a_project_of_the_wrong_shape_is_no_project(self):
         p = tcsr.session_process(self)
-        self.record(B, p.pid)
+        self.old_record(B, p.pid)
         f = hubconf.session_file(B, "live")
         f.write_text(json.dumps({**self.read(B), "project": 7}))
         self.assertIn(B, runtime_ports.recorded_sessions("claude"), "the record still counts")
-        self.assertTrue(self.record(B, p.pid, refresh=False, project="alpha"))
+        self.assertTrue(self.record(B, p.pid, refresh=False))
         self.assertEqual(self.read(B)["project"], "alpha")
 
     def test_open_sessions_carry_it(self):
         p, q = tcsr.session_process(self), tcsr.session_process(self)
-        self.record(A, p.pid, project="alpha")
-        self.record(B, q.pid, project="beta")
+        self.record(A, p.pid)
+        self.record(B, q.pid, cwd="/ws/beta")
         got = runtime_ports.Sessions(["claude"]).open_sessions()
         self.assertEqual({s: r["project"] for s, r in got.items()}, {A: "alpha", B: "beta"})
         tcsr.end(q)
         self.assertEqual(set(runtime_ports.open_sessions()), {A})
+
+
+class AFork(tcsr.SecretsDir):
+    """A session started as a fork, if its first hook carries the parent's id (a comment's word: not checked on a current CLI)."""
+
+    def record(self, sid, pid, cwd="/ws/alpha", **kw):
+        return runtime_ports.record_session(sid, "claude", pid, cwd, project_of=FOLDERS.get, **kw)
+
+    def read(self, sid):
+        return json.loads(hubconf.session_file(sid, "live").read_text())
+
+    def test_it_doesnt_take_a_running_parents_record(self):
+        parent, fork = tcsr.session_process(self), tcsr.session_process(self)
+        self.record(A, parent.pid)
+        self.assertFalse(self.record(A, fork.pid), "its first hook, under the parent's id")
+        self.assertEqual(self.read(A)["pid"], parent.pid)
+
+    def test_its_next_hook_is_on_record_under_its_own_id(self):
+        parent, fork = tcsr.session_process(self), tcsr.session_process(self)
+        self.record(A, parent.pid)
+        self.record(A, fork.pid)
+        self.assertTrue(self.record(B, fork.pid, refresh=False))
+        self.assertEqual((self.read(B)["pid"], self.read(A)["pid"]), (fork.pid, parent.pid))
+        self.assertEqual(runtime_ports.recorded_sessions("claude"), {A, B})
+
+    def test_the_parent_wandering_keeps_its_project(self):
+        """The review's sequence."""
+        parent, fork = tcsr.session_process(self), tcsr.session_process(self)
+        self.record(A, parent.pid)
+        self.record(A, fork.pid)
+        self.record(B, fork.pid, refresh=False)
+        self.record(A, parent.pid, cwd="/ws/beta", refresh=False)
+        self.assertEqual(self.read(A)["project"], "alpha")
+
+    def test_a_process_that_has_gone_leaves_its_record_to_the_next(self):
+        parent, fork = tcsr.session_process(self), tcsr.session_process(self)
+        self.record(A, parent.pid)
+        tcsr.end(parent)
+        self.assertTrue(self.record(A, fork.pid, cwd="/ws/beta"))
+        self.assertEqual((self.read(A)["pid"], self.read(A)["project"]), (fork.pid, "beta"))
+
+    def test_a_lookup_that_fails_doesnt_lose_the_session(self):
+        """As before: written, since a session with no record is worse than one with the other process's."""
+        parent, fork = tcsr.session_process(self), tcsr.session_process(self)
+        self.record(A, parent.pid)
+        starts = runtime_ports.process_starts
+
+        def only_the_new(pids, strict=False):
+            return {p: v for p, v in starts(pids, strict=strict).items() if p == fork.pid}
+        with mock.patch.object(runtime_ports, "process_starts", only_the_new):
+            self.assertTrue(self.record(A, fork.pid))
+
+    def test_what_the_record_cant_tell_stays_as_the_design_says(self):
+        """With no record of the parent to protect, its next hook is where it is. The step record says so."""
+        parent = tcsr.session_process(self)
+        self.record(A, parent.pid, cwd="/ws/beta", refresh=False)
+        self.assertEqual(self.read(A)["project"], "beta")
+
+
+class StaleWaiter(tcsr.SecretsDir):
+    """A waiter killed with no chance to leave (a hook still installed with a shorter timeout): the true reason stays visible
+    for as long as the session is open."""
+
+    def setUp(self):
+        super().setUp()
+        self.hb = tcsr.tmd.load_hubbus()
+        self.rt = runtime_ports.Sessions(["claude"])
+
+    def stale(self, sid, age=None):
+        f = hubconf.session_file(sid, "waiter")
+        f.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        f.write_text("1-x")
+        t = time.time() - (self.hb.ADDRESS_GRACE_S + 3600 if age is None else age)
+        os.utime(f, (t, t))
+        return f
+
+    def test_it_says_stopped_past_every_prune_while_the_session_runs(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(A, "claude", p.pid, str(self.tmp))
+        f = self.stale(A)
+        for _i in range(3):
+            self.assertEqual(self.hb.prune_wake_addresses(live=set()), [])
+        self.assertTrue(f.exists())
+        self.assertEqual(self.rt.wake_gap(A), "stopped")
+        self.assertFalse(self.rt.can_wake(A))
+
+    def test_it_goes_with_the_sessions_process(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(A, "claude", p.pid, str(self.tmp))
+        f = self.stale(A)
+        tcsr.end(p)
+        self.assertEqual(self.hb.prune_wake_addresses(live=set()), [A])
+        self.assertFalse(f.exists())
+        self.assertEqual(self.rt.wake_gap(A), "not_armed")
+
+    def test_one_with_no_session_on_record_goes_by_age_as_before(self):
+        f = self.stale(A)
+        self.assertEqual(self.hb.prune_wake_addresses(live=set()), [A])
+        self.assertFalse(f.exists())
+
+    def test_the_next_turns_waiter_replaces_it(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(A, "claude", p.pid, str(self.tmp))
+        f = self.stale(A)
+        f.write_text("2-y")
+        os.utime(f)
+        self.assertIsNone(self.rt.wake_gap(A))
 
 
 class ProjectThroughTheHook(tcsr.HookFixture):
@@ -323,6 +461,38 @@ class Last(tmw.ClaudeSessionsDir):
         self.stop(last_assistant_message="said this")
         self.assertFalse(backup.covers(self.last()))
         self.assertTrue(any(self.last().is_relative_to(d) for d in policy.secret_dirs()))
+
+
+class HubLabel(tcsr.SecretsDir):
+    """The hub's entry in the real index has no workspace, so project_at finds nothing for it, and no label, which is include.
+    A label on it counts."""
+
+    def setUp(self):
+        super().setUp()
+        self.m = tmw.load_file("hub_event_hublabel", BIN / "hub-event")
+        self.m._workspace = lambda cwd: hubconf.MAIN
+        self.index = self.tmp / "index.json"
+        p = mock.patch.object(hubconf, "REGISTRY_INDEX", self.index)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def keep(self, **entry):
+        import runtime_claude
+        hub = hubconf.hub_project()
+        self.index.write_text(json.dumps({"projects": {hub: {"name": hub, "type": "platform", **entry}}}))
+        return self.m.keep_last(runtime_claude, json.dumps({"session_id": B, "cwd": str(hubconf.MAIN)}))
+
+    def test_no_label_is_include(self):
+        self.assertTrue(self.keep())
+
+    def test_a_label_on_its_entry_is_honoured(self):
+        self.assertFalse(self.keep(privacy={"reflection": "stats_only"}))
+        self.assertTrue(self.keep(privacy={"reflection": "include"}))
+
+    def test_no_index_is_no(self):
+        self.assertIs(self.index.exists(), False)
+        import runtime_claude
+        self.assertFalse(self.m.keep_last(runtime_claude, json.dumps({"session_id": B, "cwd": str(hubconf.MAIN)})))
 
 
 class LastLabel(tcsr.SecretsDir):
@@ -923,7 +1093,7 @@ class StatusCount(tcsr.SecretsDir):
     def test_each_reason(self):
         p, q, r = [tcsr.session_process(self) for _i in range(3)]
         for sid, x in ((A, p), (B, q), (tcsr.C, r)):
-            runtime_ports.record_session(sid, "claude", x.pid, str(self.tmp), project="alpha")
+            runtime_ports.record_session(sid, "claude", x.pid, str(self.tmp))
         self.beat(A)
         self.beat(B, age=3600)
         self.assertEqual(self.hb.wake_gaps(), {"open": 3, "n": 2, "why": {"not_armed": 1, "stopped": 1}})

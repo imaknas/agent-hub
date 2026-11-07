@@ -166,7 +166,8 @@ def wake_address(ev, ws):
 
 def _hub(ws) -> bool:
     """agent-hub's own folder (its main checkout or a linked worktree of it): a project whose letters dispatch routes
-    like any other (hubbus.projects), though the registry index (project_at) leaves it out."""
+    like any other (hubbus.projects), though project_at finds nothing for it: its entry in the registry index has no
+    workspace."""
     try:
         return ws.resolve().is_relative_to(hubconf.MAIN.resolve())
     except (OSError, RuntimeError):
@@ -174,9 +175,14 @@ def _hub(ws) -> bool:
 
 
 def _project_name(ws) -> str | None:
-    """The project this folder is in: the registry's, or the hub's own, which the registry index leaves out."""
+    """The project this folder is in: the one whose workspace holds it, or the hub's own, by its path."""
     proj = project_git.project_at(ws)
     return proj[0] if proj else hubconf.hub_project() if _hub(ws) else None
+
+
+def _project_of_folder(cwd) -> str | None:
+    ws = _workspace(cwd)
+    return _project_name(ws) if ws else None
 
 
 def session_record(ev, ws):
@@ -188,14 +194,13 @@ def session_record(ev, ws):
     nor for a headless one the runtime tells apart (person_session: a -p or SDK run, which a person isn't in).
     Not run as the project: it writes only the secrets directory, which no sandbox can reach."""
     fn = getattr(_RT, "session_pid", None)
-    project = _project_name(ws) if ws else None
-    if not callable(fn) or platform_run(os.environ) or not project:
+    if not callable(fn) or not ws or platform_run(os.environ) or not _project_name(ws):
         return None
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     if pid:
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
                                      wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
-                                     project=project)
+                                     project_of=_project_of_folder)
     return None
 
 

@@ -734,12 +734,19 @@ def process_start(pid: int) -> str | None:
 # session's end with its other files): {runtime, pid, start, cwd, project}. A record counts while that pid runs with that
 # start time, so a reused pid never fakes it. One process runs one session at a time: writing a record drops the others
 # naming the same process (a /clear, a fork whose first hook still carried the parent's id).
-# project is the project the process was first recorded in, and it stays with the process whichever session id or folder
-# later hooks carry: a compaction after wandering into another folder doesn't move it. A record with none (written before
-# this field) gets it at its next hook. It is the name at that time: a reader goes through the project's current name.
+# project is the project of the folder the process was first recorded in, and it stays with the process whichever session
+# id or folder later hooks carry: a compaction after wandering into another folder doesn't move it. A record with none
+# (written before this field) gets it at its next hook, from the record's own folder. Two processes under one id (a fork whose
+# first hook carries its parent's id, a resume while the first still runs): the one on record keeps it until it exits, so a
+# parent's project isn't lost to its fork. It says where a process began as far as its hooks showed, not what the session
+# has read (docs/design/mailbox-session-first.md, step 3's record). It is the name at that time: a reader goes through the
+# project's current name.
 
 SESSION_RECORD = "live"
 SESSION_SUMMARY = "last"   # <session>.last: a runtime's, read through its session_summary
+# What stays while the session's process runs, whatever its age: its last reply, and a waiter's record, whose stale heartbeat
+# is the only word of why that session can't be woken (Sessions.wake_gap)
+WITH_RECORD = (SESSION_SUMMARY, "waiter")
 
 
 def _read_record(path) -> dict | None:
@@ -768,23 +775,34 @@ def _project_named(rec) -> str | None:
     return p if isinstance(p, str) and p else None
 
 
-def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project=None) -> bool:
+def _folder_project(rec, project_of) -> str | None:
+    """The project of the folder this record names. Before the field existed a start rewrote that folder, so it can already be
+    one the session wandered into: the nearest thing there is, and nearer than the hook's."""
+    folder = rec.get("cwd")
+    return project_of(folder) if callable(project_of) and isinstance(folder, str) else None
+
+
+def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project_of=None) -> bool:
     """Record that this session (a platform id) runs in process pid. refresh=False (the hooks after a session's start)
     leaves a record naming the same process as it is, so a tool call costs no process lookup, except that one with no
-    project gets it. wanted(pid): asked only when it would write a new record (the runtime's person_session: a headless
-    run gets none). project: the project this hook is in; a process already on record keeps the one it has. Whether it
+    project gets it. A record naming another process that still runs stays. wanted(pid): asked only when it would write a
+    new record (the runtime's person_session: a headless run gets none). project_of(folder): which project a folder is in; a
+    process already on record keeps the one it has, or takes it from its record's folder, never this hook's. Whether it
     wrote."""
     import hubconf
     f = hubconf.session_file(session, SESSION_RECORD)
     if not f or not isinstance(pid, int) or pid <= 1:
         return False
-    if not refresh:
-        old = _read_record(f)
-        if old and old["pid"] == pid and old["runtime"] == runtime:
-            if _project_named(old) or not project:
+    old = _read_record(f)
+    if old and old["runtime"] == runtime:
+        if old["pid"] != pid:
+            if process_starts([old["pid"]]).get(old["pid"]) == old["start"]:
                 return False
-            _write_record(f, {**old, "project": project})
-            return True
+        elif not refresh:
+            project = None if _project_named(old) else _folder_project(old, project_of)
+            if project:
+                _write_record(f, {**old, "project": project})
+            return bool(project)
     if wanted is not None and not wanted(pid):
         return False
     start = process_start(pid)
@@ -793,8 +811,10 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     same = [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
             if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
     # its own record's first: a /clear's new id takes the project of the record it replaces
-    kept = next((_project_named(rec) for other, rec in sorted(same, key=lambda x: x[0] != f) if _project_named(rec)), None)
-    project = kept or project
+    same.sort(key=lambda x: x[0] != f)
+    project = next((_project_named(rec) for _other, rec in same if _project_named(rec)), None) \
+        or (_folder_project(same[0][1], project_of) if same else None) \
+        or (project_of(cwd) if callable(project_of) else None)
     _write_record(f, {"runtime": runtime, "pid": pid, "start": start, "cwd": cwd, **({"project": project} if project else {})})
     for other, _rec in same:
         if other != f:

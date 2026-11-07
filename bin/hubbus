@@ -1200,8 +1200,8 @@ HOOK_EVENTS = {"session-start": "session_start", "prompt": "prompt", "post-tool"
 
 
 def cmd_hook(event: str, runtime: str | None = None) -> None:
-    """The old `hubbus hook <event>` entry point: worktrees' user-level hooks and projects without the new settings
-    still call it (it must keep working until the owner changes the user-level settings). The logic is in mail_text;
+    """The old `hubbus hook <event>` entry point: a project whose hooks were installed before hub-event may still call it
+    (worktree-memory.sh no longer does; its mail goes through `hub-event worktree`). The logic is in mail_text;
     output goes through the runtime's inject, word for word as before. runtime: whose hook (--runtime; default
     runtime.default, as these hooks were written): its lifecycle parses the input and formats the output, and the
     session is recorded in the platform's ids (docs/design/mailbox-runtimes.md A1)."""
@@ -2954,9 +2954,10 @@ def prune_wake_addresses(live=None) -> list[str]:
     session no longer runs (live: the sessions running now, the runtime's live_sessions; a runtime without session
     state keeps none). A session's process record (<session>.live) goes when that process no longer runs with the
     start time it recorded, however long the session has been idle (live_sessions reads these records, so they are
-    never judged by live), and its last reply (<session>.last) goes with that record, whatever its age. A waiter's record
-    goes when its heartbeat stopped, and a wake request or a dot file (one being written or taken) when it is old.
-    Returns the sessions whose files went."""
+    never judged by live). What's in runtime_ports.WITH_RECORD goes with that record, whatever its age: the last reply, and a
+    waiter's record, whose stale heartbeat is what says the session's waiter was killed (Sessions.wake_gap). With no
+    record running those go when they are old, as a wake request or a dot file (one being written or taken) does. Returns
+    the sessions whose files went."""
     d = hubconf.session_addresses_dir()
     if not d.is_dir():
         return []
@@ -2977,7 +2978,7 @@ def prune_wake_addresses(live=None) -> list[str]:
             if session and f.name.endswith(f".{runtime_ports.SESSION_RECORD}"):
                 if f in running:
                     continue
-            elif session and f.name.endswith(f".{runtime_ports.SESSION_SUMMARY}") \
+            elif session and f.name.endswith(tuple(f".{k}" for k in runtime_ports.WITH_RECORD)) \
                     and hubconf.session_file(session, runtime_ports.SESSION_RECORD) in running:
                 continue
             elif time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
