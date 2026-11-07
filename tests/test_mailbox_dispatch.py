@@ -324,7 +324,8 @@ class Dispatch(unittest.TestCase):
         self.send("m1", "proj", "question", to_session="A", minutes_ago=60)
         self.dispatch()
         # the branch is done
-        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "the branch handled it"})
+        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "the branch handled it",
+                                                                                  "point": self.m.FORK_POINT})
         seen = []
         orig = self.m.mark_delivered
         self.m.mark_delivered = lambda c, rows, sess, via: (seen.extend(r["id"] for r in rows), orig(c, rows, sess, via))
@@ -448,7 +449,7 @@ class ForkMerge(unittest.TestCase):
         log.mkdir(parents=True)
         (log / "resume-m1.log").write_text('stderr noise\n{"type": "result", "result": "checked production, yesterday\'s import failed 3 rows"}\n')
         self.m.publish(self.c, "r1", "message", "proj", "other", "m1",
-                       {"type": "info", "text": "reply: 3 rows failed", "reply_to": "m1"})
+                       {"type": "info", "text": "reply: 3 rows failed", "reply_to": "m1", "point": self.m.FORK_POINT})
         text = self.hook()
         self.assertIn(zh("The branch's reply: {text}", text="checked production, yesterday's import failed 3 rows"), text)
         self.assertIn(zh("Letter the branch sent [{id}] → {to}: {text}", id="r1", to="other", text="reply: 3 rows failed"),

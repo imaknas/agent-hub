@@ -140,7 +140,11 @@ class Told(Harness):
         self.cli("inbox", session="S2")                             # another session reads it 50 minutes in
         self.assertEqual(self.told("m1"), ["S1", "S2"])
         self.assertEqual(self.routes("m1"), ["S1"], "reading doesn't pre-empt a holder")
-        self.age_state("m1", self.m.TAKE_TIMEOUT_MIN + 1)
+        self.c.execute("UPDATE events SET ts=? WHERE ref='m1' AND type IN ('message.delivered','message.routed')"
+                       " AND json_extract(payload,'$.session')='S1'", (ago(self.m.TAKE_TIMEOUT_MIN + 1),))
+        # S2's sight fell inside S1's window and its 60 minutes aren't up: a window restarted by it would still hold
+        self.c.execute("UPDATE events SET ts=? WHERE ref='m1' AND type='message.delivered'"
+                       " AND json_extract(payload,'$.session')='S2'", (ago(30),))
         self.dispatch()
         self.assertEqual(self.handled, [("proj", ["m1"])], "S2's sight gave it no more time")
 
@@ -511,16 +515,53 @@ class Forks(Harness):
         self.assertNotIn(self.m._("(While you were idle the platform handled this letter in a background branch with "
                                   "your context; nothing more to do.{result})", result=""), text)
 
-    def test_the_text_shows_when_it_closed_the_letter_after_its_time(self):
+    HANDLED = "(While you were idle the platform handled this letter in a background branch with your context; nothing " \
+              "more to do.{result})"
+
+    def handled_text(self):
+        return self.m._(self.HANDLED, result=self.m._(" The result is in the reply or the memory notes."))
+
+    def forked_and_lapsed(self):
         self.rt.live.add("S1")
         self.send("m1", "proj", "request")
         self.claim("m1", "resume", session="S1", run="r0")
         self.age("m1:delivered:resume", self.m.RESUME_TIMEOUT_MIN + 1)
-        self.m.publish(self.c, "m1:done", "message.done", "proj", "proj", "m1", {"note": "x"})
-        self.assertIn(self.m._("(While you were idle the platform handled this letter in a background branch with your "
-                               "context; nothing more to do.{result})", result=self.m._(
-                                   " The result is in the reply or the memory notes.")).split("{")[0],
-                      self.hook("prompt", "S1"))
+
+    def test_the_text_shows_when_the_fork_closed_the_letter_after_its_time(self):
+        self.forked_and_lapsed()
+        self.cli("done", "m1", session="F1", env={"HUB_LLM_POINT": self.m.FORK_POINT})
+        self.assertIn(self.handled_text(), self.hook("prompt", "S1"))
+
+    def test_the_text_shows_when_the_fork_replied(self):
+        self.forked_and_lapsed()
+        self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "the fork's answer", session="F1",
+                 env={"HUB_LLM_POINT": self.m.FORK_POINT})
+        text = self.hook("prompt", "S1")
+        self.assertIn(self.m._("Letter the branch sent [{id}] → {to}: {text}", id=self.rows("ref='m1' AND type='message'")[0]["id"],
+                               to="other", text="the fork's answer"), text)
+
+    def test_no_credit_for_a_close_by_someone_else(self):
+        self.forked_and_lapsed()
+        self.cli("done", "m1", session="S2")
+        self.assertEqual(self.hook("prompt", "S1"), "")
+
+    def test_no_credit_for_a_reply_by_someone_else_nor_a_handlers(self):
+        self.forked_and_lapsed()
+        self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "another session's", session="S2")
+        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):
+            self.assertEqual(self.m.fork_result(self.c, self.m.get_message(self.c, "m1")), (False, ""),
+                             "and that session's letter isn't called the branch's")
+        self.cli("send", "--to", "other", "--reply-to", "m1", "--type", "info", "--text", "a handler's", session="H1",
+                 env=HANDLER)
+        self.assertEqual(self.hook("prompt", "S1"), "")
+
+    def test_a_forks_question_to_the_owner_is_no_answer(self):
+        self.forked_and_lapsed()
+        self.m.publish(self.c, "q1", "message", "proj", self.m.OWNER_ADDRESS, "m1",
+                       {"type": "question", "text": "q", "reply_to": "m1", "point": self.m.FORK_POINT})
+        self.assertEqual(self.hook("prompt", "S1").count("While you"), 0)
+        with mock.patch.object(self.m.hubconf, "STATE", self.tmp / "state"):
+            self.assertFalse(self.m.fork_result(self.c, self.m.get_message(self.c, "m1"))[0])
 
 
 class SevenDays(Harness):
@@ -588,6 +629,25 @@ class PlatformRuns(Harness):
         self.assertEqual(self.routes("m1"), ["S1"])
         self.assertEqual(self.hook("prompt", "L1", LEASE), "", "and it respects a route")
         self.assertIn("[m1]", self.hook("session-start", "L1", LEASE), "in the list")
+
+    def test_a_lease_is_no_worse_than_on_main_a_letter_any_session_has_seen_is_quiet(self):
+        self.rt.live.add("S1")
+        self.send("told", "proj", "request")
+        self.hook("prompt", "S1")
+        self.close("S1")
+        self.age_state("told", self.m.TAKE_TIMEOUT_MIN + 1)
+        self.assertFalse(self.state("told").held, "the route has ended")
+        self.assertEqual(self.hook("prompt", "L1", LEASE), "", "free again for a session, but one has seen it")
+        self.assertNotIn("  text told", self.hook("session-start", "L1", LEASE))
+        self.send("ended", "proj", "request")
+        self.m.routed(self.c, self.m.get_message(self.c, "ended"), "S1", "recent")
+        self.m.routed(self.c, self.m.get_message(self.c, "ended"), None, None, ended="window")
+        self.assertEqual(self.hook("prompt", "L1", LEASE), "", "a route that ended")
+        self.send("answered", "proj", "request")
+        self.m.publish(self.c, "r1", "message", "proj", "other", "answered", {"type": "info", "text": "y"})
+        self.assertEqual(self.hook("prompt", "L1", LEASE), "", "an answered letter")
+        self.send("free", "proj", "request")
+        self.assertIn("[free]", self.hook("prompt", "L1", LEASE), "one nobody has seen, as on main")
 
     def test_a_platform_hook_is_silent(self):
         self.send("m1", "proj", "request")
@@ -764,13 +824,22 @@ class Status(Harness):
         self.assertEqual([s["id"] for s in st["stuck"]], ["m1"])
         self.assertEqual(st["waiting"], [])
 
+    def test_a_letter_nobody_has_seen_keeps_alerting_however_old(self):
+        self.send("o1", "proj", "request", minutes_ago=60 * 24 * 30)
+        with mock.patch.object(self.m, "DAILY_RUNS", 0):       # no budget either: it was never tried at all
+            st = self.status()
+        self.assertEqual([s["id"] for s in st["stuck"]], ["o1"])
+        self.assertEqual(st["waiting"], [])
+
     def test_budget_held_triaged_and_too_old_are_waiting(self):
         self.send("b1", "proj", "request", minutes_ago=90)
         self.send("h1", "proj", "request", minutes_ago=90)
         self.claim("h1", "held")
         self.send("t1", "proj", "request", minutes_ago=90)
         self.claim("t1", "triage", run="t")
-        self.send("o1", "proj", "request", minutes_ago=60 * 24 * 8)
+        self.send("o1", "proj", "request", minutes_ago=60 * 24 * 8)   # told once, and that went nowhere
+        self.m.mark_delivered(self.c, [self.m.get_message(self.c, "o1")], "S1", "prompt")
+        self.age_state("o1", 60 * 24 * 7)
         with mock.patch.object(self.m, "DAILY_RUNS", 0):
             st = self.status()
         self.assertEqual(sorted((w["id"], w["why"]) for w in st["waiting"]),

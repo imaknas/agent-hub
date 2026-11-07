@@ -508,6 +508,22 @@ class Outbox(Fixture):
         self.assertEqual(len(list(self.outbox().iterdir())), 1)
         self.assertFalse(c.in_transaction)
 
+    def test_a_forks_reply_and_close_through_the_outbox_say_it_was_the_fork(self):
+        mid = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "ping", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        c = m.db()
+        self.addCleanup(c.close)
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.write_view(c, "box", self.ws["box"])
+        with mock.patch.dict(os.environ, {"HUB_LLM_POINT": m.FORK_POINT}):
+            self.in_box("send", "--to", "open", "--reply-to", mid, "--type", "done", "--text", "pong", session="F1")
+            self.in_box("done", mid, session="F1")
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(self.refusals(), [])
+        self.assertEqual([json.loads(r["payload"]).get("point") for r in self.rows("ref=? AND type IN ('message','message.done')", (mid,))],
+                         [m.FORK_POINT, m.FORK_POINT])
+
     def test_a_platform_run_in_a_sandboxed_project_writes_no_told(self):
         self.letter_to("box", "ping", typ="request")
         self.dispatch()

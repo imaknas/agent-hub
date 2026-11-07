@@ -286,14 +286,31 @@ The separate work on sandboxed reads (`denyRead`) is independent and goes on its
   is the feature being off, not the session gone: its route ends by the window, its ack holds.
 - **`held` until step 2**: `hold()` is unchanged and writes its row and question as before. Dispatch skips a letter with a
   `held` row (no platform run, nothing logged, counted as waiting), which keeps hold() from running every tick now that the row
-  doesn't take the letter. Hooks show it. `bin/propose_apply.py`'s held row reads the same way.
+  doesn't take the letter. Hooks show it. `bin/propose_apply.py`'s held row isn't that case: `run_handler` writes a `handler`
+  row first, so its letter is taken for good until step 2, as it was.
 - **The 7-day check comes before the loop guard** as well as the forks and the handler, so an old thread doesn't get a new
   `<id>:loop` question.
 - **The end of a route for a letter taken for good isn't recorded**: it can't come back, and it would write a row for every
   answered letter still open. Taken for now (an ack, a fork) is recorded, so the route doesn't revive when that take ends.
-- **`waiting` also says `held` and `old`** (`why`: routed, triaged, held, old, budget). Neither is stuck: the platform has
-  nothing left to start for them. A route that ended with nothing started and no such reason is stuck after `STUCK_HOURS`.
-- **The outbox op is `told`.** It re-judges against the bus when taken in, since the view can be a minute old, and it does
-  nothing for a session the hooks haven't seen in this project.
+- **`waiting` also says `held` and `old`** (`why`: routed, triaged, held, old, budget). `old` is only for a letter past 7 days
+  that something already tried (a telling, a fork, an ack). One nobody has seen stays `stuck` however old, with or without
+  budget: the first version of this step quieted it, and an alert that stops at 7 days loses the letter. A route that ended
+  with nothing started and no such reason is stuck after `STUCK_HOURS`.
+- **A hook within 30 minutes (`SEEN_ALIVE_MIN`) counts as evidence of life, unless that session's end hook has run.** The
+  design says live is `live_sessions()`, but a headless session a person started has no process record and its id is on no
+  command line, so its ack would drop on the next tick while it worked. The price: a holder killed without its end hook keeps
+  a letter up to 30 minutes longer; one that exits normally frees it at once.
+- **A failed process lookup isn't "no sessions"**: `live_sessions` raises `SessionsUnknown` and has a timeout. Dispatch then
+  starts and ends nothing that tick, hooks treat every session as can't-tell, the wake-address prune removes nothing.
+- **Before an end is recorded as `closed`, dispatch looks at the process table again**, and hooks record the session before
+  telling it: the tick's one look can predate a session's first hook.
+- **A lease sees only what no session has seen and no route has had.** It is never told, so per-session state can't quiet a
+  letter for it; a letter free again for sessions stays quiet for it, as on main.
+- **What a platform run sends carries its `point`**, in a letter's payload and a done's (through the outbox too), so
+  `fork_result` credits a fork only with its own reply or close. A fork from before this step has no mark: its session isn't
+  told the "handled" text. The letter is closed or answered all the same.
+- **The outbox op is `told`.** It carries requests and questions only (a notice's flag stays its hooks', as before), re-judges
+  against the bus when taken in, since the view can be a minute old, and does nothing for a session the hooks haven't seen in
+  this project.
 - **A fork that dies still gets one handler**, as `stale_resumes` gave it: forks 1, handler at most 1. Step 2 makes that run a
   triage.

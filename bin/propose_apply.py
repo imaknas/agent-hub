@@ -212,8 +212,9 @@ def mailbox(project: str, ids: list[str]) -> int:
 
 def hold_and_ask(hb, c, project: str, rows, why: str, applied=()) -> None:
     """The run did not complete (the runtime failed, it stopped incomplete or without a structured answer, its changes
-    conflict with the workspace, something broke while applying, or it left a letter unanswered): record job.failed, hold the letters (the platform runs nothing more for them, so
-    nothing is done twice and nothing loops; they stay open for a session) and ask the owner about each, saying why and what, if anything, was
+    conflict with the workspace, something broke while applying, or it left a letter unanswered): record job.failed, hold the letters (not dispatched again: run_handler's handler row,
+    written first, has them taken for good until the handler stops taking letters, so nothing is done twice and nothing
+    loops) and ask the owner about each, saying why and what, if anything, was
     already applied. Never silent."""
     hb.publish(c, hb.new_id(), "job.failed", project, None, None,
                {"job": f"mailbox-propose:{project}", "detail": why[:500]})

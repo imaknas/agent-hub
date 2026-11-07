@@ -875,6 +875,11 @@ def inbox(c, project, session=None, only_new=False, live=None):
     return rows
 
 
+def run_point() -> str | None:
+    """The judgment point of the platform run this process belongs to, if any: what it sends says so (fork_result)."""
+    return os.environ.get("HUB_LLM_POINT") or None
+
+
 def platform_run() -> bool:
     """A run the platform started (llm.py sets HUB_LLM_POINT; a lease session too): it marks nothing and holds nothing."""
     return bool(os.environ.get("HUB_LLM_POINT") or os.environ.get("HUBBUS_LEASE"))
@@ -958,18 +963,19 @@ def party_names(addr: str) -> list[str]:
     return [OWNER_ADDRESS] if canon(addr) == OWNER_ADDRESS else [addr, *own_names(addr)]
 
 
-def answered(c, r) -> bool:
-    """Taken for good: closed, or a reply from the receiving project to the sender, under any of their names. A
-    question to the owner with ref to the letter (<id>:loop, <id>:propose-failed, a handler's question) isn't an answer,
-    even for the hub's own letters or a letter the owner side sent."""
-    if is_done(c, r["id"]):
-        return True
+def answers(c, r) -> list:
+    """The replies from the receiving project to the sender of this letter, under any of their names. A question to the
+    owner with ref to the letter (<id>:loop, <id>:propose-failed, a handler's question) isn't one, even for the hub's own
+    letters or a letter the owner side sent."""
     mine, theirs = [r["to_project"], *own_names(r["to_project"])], party_names(r["source"])
-    for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=?", (r["id"],)).fetchall():
-        if m["source"] in mine and canon(m["to_project"]) in theirs \
-                and not (m["to_project"] in OWNERS and payload(m).get("type") == "question"):
-            return True
-    return False
+    return [m for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=? ORDER BY seq", (r["id"],)).fetchall()
+            if m["source"] in mine and canon(m["to_project"]) in theirs
+            and not (m["to_project"] in OWNERS and payload(m).get("type") == "question")]
+
+
+def answered(c, r) -> bool:
+    """Taken for good: closed or replied to (answers)."""
+    return is_done(c, r["id"]) or bool(answers(c, r))
 
 
 def has_via(c, mid, via) -> bool:
@@ -1058,9 +1064,13 @@ def own_letter(r, session) -> bool:
 def hook_shows(c, r, session, live) -> bool:
     """Whether a hook shows this letter in full to this session: a notice while nobody has seen it; a request or question
     when it is open and not taken, this session hasn't been told, and no route points at another session. A lease
-    session is never told, so it sees what is open each time, as before."""
+    session is never told, so it can't count on that: it sees only what no session has seen and no route has had, which
+    it does see again at each prompt until a session is told it (on main too; it marks nothing)."""
     if not actionable(r):
         return not r["delivered"]
+    if os.environ.get("HUBBUS_LEASE"):
+        return not r["delivered"] and not letter_state(c, r, live).taken and c.execute(
+            "SELECT 1 FROM events WHERE type='message.routed' AND ref=? LIMIT 1", (r["id"],)).fetchone() is None
     if own_letter(r, session) or told_at(c, r["id"], session):
         return False
     st = letter_state(c, r, live)
@@ -1995,6 +2005,7 @@ def session_cwd(c, sid):
 # The prompts of the background branch copies (templates/prompts/<name>.md): a reply reaching an idle session (resume)
 # and a request handed to the session that used the project last (delegate)
 RESUME_PROMPT, DELEGATE_PROMPT = "mailbox-resume", "mailbox-delegate"
+FORK_POINT = "mailbox-conversation"   # the judgment point both run under (resume)
 
 
 def branch_prompt(r, prompt=None) -> str:
@@ -2025,8 +2036,9 @@ def recent_session(c, proj, live, rt=None) -> str | None:
 
 def fork_result(c, r) -> tuple[bool, str]:
     """The outcome of a background fork handling this letter: (handled or not, the fork's last reply + the letters it
-    sent for this one). Handled = it replied or the letter is closed; a fork that ended without either hasn't handled
-    it, and the letter is open again once its time is up."""
+    sent for this one). Handled = the fork itself replied or closed it (what a platform run sends carries its point);
+    someone else's answer is no credit to the fork, and a fork that ended without either hasn't handled it: the letter
+    is open again once its time is up."""
     out = hubconf.STATE / "mailbox" / f"resume-{r['id']}.log"
     text = ""
     try:
@@ -2037,13 +2049,16 @@ def fork_result(c, r) -> tuple[bool, str]:
     except (OSError, ValueError):
         pass
     replies = [m for m in c.execute("SELECT * FROM events WHERE type='message' AND ref=? ORDER BY seq", (r["id"],))
-               if payload(m).get("reply_to") == r["id"]]
+               if payload(m).get("reply_to") == r["id"] and payload(m).get("point") == FORK_POINT]
+    closed = c.execute("SELECT payload FROM events WHERE type='message.done' AND ref=?", (r["id"],)).fetchone()
     parts = []
     if text:
         parts.append(_("The branch's reply: {text}", text=text[:800]))
     parts += [_("Letter the branch sent [{id}] → {to}: {text}", id=m["id"], to=m["to_project"],
                 text=payload(m).get("text", "")[:300]) for m in replies]
-    return answered(c, r), "\n  ".join(parts)
+    handled = (closed is not None and payload(closed).get("point") == FORK_POINT) \
+        or any(payload(m).get("point") == FORK_POINT for m in answers(c, r))
+    return handled, "\n  ".join(parts)
 
 
 CONFINED_TYPES = ("manifest.update", "task", "drop")
@@ -2425,7 +2440,7 @@ def take(c, proj: str, entry) -> None:
     session = own_session(c, proj, entry.get("session"))
     op = entry.get("op")
     if op == "send":
-        _strings(entry, ("id", *(k for k in SEND_FIELDS if k != "inferred")))
+        _strings(entry, ("id", "point", *(k for k in SEND_FIELDS if k != "inferred")))
         if not OUTBOX_ID.match(entry.get("id") or ""):
             refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
         if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
@@ -2433,12 +2448,12 @@ def take(c, proj: str, entry) -> None:
         a = argparse.Namespace(cmd="send", sender=proj, id=None,
                                **{k: entry.get(k) for k in SEND_FIELDS if k != "inferred"},
                                inferred=entry.get("inferred") is True)
-        send_letter(c, a, proj, session, proj, boxed=True, mid=entry["id"])
+        send_letter(c, a, proj, session, proj, boxed=True, mid=entry["id"], point=entry.get("point"))
     elif op in ("ack", "done"):
         ids = entry.get("ids")
         if not isinstance(ids, list) or not 0 < len(ids) <= 50 or not all(isinstance(i, str) for i in ids):
             refuse(_("hubbus: ids must be a list of 1 to 50 letter ids"))
-        _strings(entry, ("note",))
+        _strings(entry, ("note", "point"))
         for i in ids:
             r = get_event(c, i) if op == "done" else get_message(c, i)
             if r is None or r["to_project"] != proj:
@@ -2448,7 +2463,8 @@ def take(c, proj: str, entry) -> None:
                         {"session": session, "via": "ack"})
             else:
                 publish(c, f"{i}:done", "message.done", proj, proj, i,
-                        {"note": entry.get("note") or _("handled"), "session": session})
+                        {"note": entry.get("note") or _("handled"), "session": session,
+                         **({"point": entry["point"]} if entry.get("point") else {})})
     elif op == "told":
         # a session's `brunna inbox`: told only for that session (one the hooks saw in this project), judged against the
         # bus now, since the view it read can be a minute old. Requests and questions only: a notice's or a record's flag
@@ -2820,9 +2836,11 @@ def cmd_status(as_json: bool) -> None:
                 if mcp and not r["delivered"] and r["ts"] >= hold_cut:
                     held.append({**one, "by": by})
                 elif (why := "routed" if st.held else "triaged" if has_via(c, r["id"], "triage")
-                        else "held" if has_via(c, r["id"], "held") else "old" if r["ts"] < run_cut
+                        else "held" if has_via(c, r["id"], "held")
+                        else ("old" if r["delivered"] else None) if r["ts"] < run_cut
                         else "budget" if spent else None):
-                    # someone has it, or the platform has no run left to start: it waits, nothing is wrong
+                    # someone has it, or the platform has tried what it can: it waits, nothing is wrong. A letter too old
+                    # for a run that nothing ever tried, nobody seen it, is not quiet: it stays stuck
                     waiting.append({**one, "why": why, **({"session": st.holder} if st.holder else {})})
                 elif r["ts"] < cutoff:
                     stuck.append(one)
@@ -2897,7 +2915,7 @@ def queued(project: str) -> None:
     print(_("(in {project}'s outbox: the platform sends it within a minute)", project=project), file=sys.stderr)
 
 
-def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None) -> str:
+def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str | None = None, point: str | None = None) -> str:
     """send's checks and write, for the CLI and for a letter taken from a sandboxed project's outbox (boxed: sender =
     that project, never a name in the file; a reply only in its own threads). mid: the letter id (else --id, else a
     new one); --id stays what it is to a task, its key. Returns the id to print."""
@@ -2912,6 +2930,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
     if isinstance(session, str) and session.startswith("mcp:"):
         session = None   # an MCP server's id is no session to reply to
     p = {"type": a.type, "text": a.text, "from_session": session}
+    if (point := point or run_point()):
+        p["point"] = point
     if a.type in OWNER_ONLY and a.to != OWNER_ADDRESS:
         refuse(_("hubbus: {type} can only be sent to {alias}", type=a.type, alias=OWNER_ALIAS))
     if a.type == "drop" and not (a.task or a.question):
@@ -2983,7 +3003,8 @@ def mail_command(a) -> None:
             mid, a.id = a.id or outbox_id(), None
         out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box), mid=mid)
         if box:
-            outbox_put(box, {"op": "send", "id": mid, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS}})
+            outbox_put(box, {"op": "send", "id": mid, "session": session, **{k: getattr(a, k) for k in SEND_FIELDS},
+                             **({"point": run_point()} if run_point() else {})})
             queued(box)
             out = mid
         print(out)
@@ -3037,7 +3058,8 @@ def mail_command(a) -> None:
             if r is None or r["to_project"] != box:
                 refuse(_("hubbus: {id} is not a letter to {project}", id=i, project=box))
         outbox_put(box, {"op": a.cmd, "ids": a.ids, "session": session,
-                         **({"note": a.note} if a.cmd == "done" and a.note else {})})
+                         **({"note": a.note} if a.cmd == "done" and a.note else {}),
+                         **({"point": run_point()} if a.cmd == "done" and run_point() else {})})
         queued(box)
         if a.cmd == "done":
             for i in a.ids:
@@ -3058,7 +3080,8 @@ def mail_command(a) -> None:
             r = get_event(c, i) or must_message(c, i)
             confined_letter(r, here)
             publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
-                    {"note": a.note or _("handled"), "session": session})
+                    {"note": a.note or _("handled"), "session": session,
+                     **({"point": run_point()} if run_point() else {})})
             print(f"{i} done")
 
 
