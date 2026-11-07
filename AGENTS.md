@@ -466,7 +466,8 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   new problem is sent at once, an unresolved one is re-sent every 24 hours, and a recovery is sent when it is resolved;
   **an alert that cannot be sent is recorded in `.state/alerts-failed.json` and the status page shows red**. The
   secrets job first checks every day that the alert channels still work (without sending a message). The scheduler
-  watchdog deliberately uses its own copy and does not depend on this script
+  watchdog deliberately uses its own copy and does not depend on this script. The assistant's channel can't report its
+  own silence, so `assistant/push-reach` (hourly, `bin/check-push-reach.py`) asks it whether its pushes reach the phone
 - How projects handle it (where values live, how code reads them, no silent degradation, revoking whatever entered the
   history before open-sourcing) is in the "Credentials" section of `templates/agent-instructions.md`, which is in every
   project's rules file

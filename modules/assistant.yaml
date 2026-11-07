@@ -17,6 +17,10 @@ jobs:
   after: [agent-hub/librarian]
   max_attempts_per_day: 1
   run: bin/py bin/hubbus reconcile-questions
+# whether the assistant's pushes still reach the owner's phone (it can't say so itself when they don't)
+- name: push-reach
+  every: 1h
+  run: bin/py bin/check-push-reach.py
 services:
 # channel leases (bin/lease-runner.py): 127.0.0.1:18797, Bearer token in .secrets/runner-token
 - name: lease-runner
