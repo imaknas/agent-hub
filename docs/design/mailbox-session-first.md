@@ -644,6 +644,7 @@ been done.
   - A flood that stays open is routed again after each midnight, when the budget is new, until it is 7 days old: one day's flood can use up the target
     project's wakes for a week. Hooks and triage go on all the same.
   - A wake's `batch` has 2 random bytes beside the second it was made in. Two batches in one second that drew the same bytes would count as one wake.
+- **The live run comes right after merge, not before.** The text above asks for one in Desktop before merge, written without seeing that it can't be done: the scheduler's dispatch runs the main checkout, and a real session's hooks run main's `bin` too, so a branch's routing never meets a real session until it is main. The way back is one setting: `mailbox.wake: false` in the settings turns every wake and route off (a project's entry can't turn it back on). The run after merge picks a project from `.live` records that have `project` and a fresh waiter, since a record from before step 3 makes a letter go to triage and proves nothing.
 - **`mailbox-route` isn't built** (step 5). `pick` says where it goes, between the thread and recency.
 
 What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Tick.status` has read what the candidates are doing, once for the tick. `message.routed`'s `by: model` is in the contract.
