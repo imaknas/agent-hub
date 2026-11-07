@@ -176,14 +176,20 @@ def tier_tmp(run: pathlib.Path, doc: dict) -> str:
     ceiling too) from what they start, and then a folder inside a checkout makes git find the enclosing repo (the rehearsal). No folder
     there is a failed run, not a run in the system's.
     A sandboxed project's run (its sandbox can't reach the private folder): the run folder, in its own workspace, where no other
-    project's sandbox writes. That one is inside its repo: GIT_CEILING_DIRECTORIES holds for what doesn't strip it."""
-    if (doc.get("enforce") or {}).get("sandbox") is True:
-        tmp = run / "tmp"
-        tmp.mkdir()
-        return str(tmp)
+    project's sandbox writes. That one is inside its repo: GIT_CEILING_DIRECTORIES holds for what doesn't strip it. A project whose jobs
+    are exempt from the sandbox (service_sandbox_exempt) runs its nightly tiers as the user, where its own sessions must not reach: the
+    private folder; its sessions, sandboxed, can't have that one and take the run folder."""
+    import isolation
+    own = run / "tmp"
+    if isolation.sandboxed(doc):
+        own.mkdir()
+        return str(own)
     try:
         return str(hubconf.test_tmp(f"{names.current('cli')}-test."))
     except OSError as e:
+        if (doc.get("enforce") or {}).get("sandbox") is True:   # its own session, inside its sandbox
+            own.mkdir()
+            return str(own)
         raise SetupError(_("no private temp folder for the tests ({error}); they don't run in the system's, which every sandboxed project "
                            "can write. A hub in the old layout moves with {command}", error=e.strerror or e,
                            command=f"{names.current('cli')} move-instance")) from e
@@ -403,7 +409,7 @@ def main(argv: list[str]) -> int:
             print(_("brunna test: nothing to run for {project} ({when}): no declared tier is affected",
                     project=name, when=a.when))
             return 0
-        env, identity = base_env(main_dir, run, name == hubconf.hub_project(), doc)
+        env, identity = base_env(main_dir, run, name == hubconf.hub_project(), {**doc, "name": name})
         values, extra = inputs(decl, tree, env)
         store = tiers.Store(common)
         runlog = tiers.RunLog(common)

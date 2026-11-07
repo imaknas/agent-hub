@@ -99,7 +99,8 @@ class Runner(unittest.TestCase):
         """The run, and the TMPDIR its tier saw (None: no tier ran)."""
         out = self.tmp / "tmpdir-was"
         self.declare(v=2, inputs=["env:OUT"], tests=[{"tier": "t", "when": ["merge"], "run": 'echo "$TMPDIR" > "$OUT" && echo x > "$TMPDIR/f"'}], **doc)
-        r = self.run_("--tier", "t", OUT=str(out), **(env or {}))
+        out.unlink(missing_ok=True)
+        r = self.run_("--tier", "t", "--force", OUT=str(out), **(env or {}))
         return r, pathlib.Path(out.read_text().strip()) if out.exists() else None
 
     def test_a_tiers_temp_folder_is_private_and_goes_with_the_run(self):
@@ -130,6 +131,20 @@ class Runner(unittest.TestCase):
         self.assertTrue(tmp.is_relative_to(names.resolve(self.ws, "product", ".{}") / "test"), tmp)
         self.assertFalse(tmp.exists(), "removed with the run")
         self.assertFalse((self.tmp / "secrets").exists(), "the private folder isn't asked for")
+
+    def test_a_project_whose_jobs_are_exempt_runs_as_the_user_in_the_private_folder(self):
+        """service_sandbox_exempt: its nightly tiers run as the user, so not in a folder its own sandboxed sessions write; a session of it,
+        sandboxed, can't have the private folder and takes the run folder."""
+        cfg = self.tmp / "config" / "hub.json"
+        cfg.write_text(json.dumps({**json.loads(cfg.read_text()), "service_sandbox_exempt": ["demo"]}))
+        r, tmp = self.tier_tmpdir(enforce={"sandbox": True})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(tmp.is_relative_to(self.tmp / "secrets" / "tmp"), tmp)
+        (self.tmp / "secrets").rename(self.tmp / "secrets-gone")
+        (self.tmp / "secrets").write_text("as a sandbox finds it: no way in")
+        r, tmp = self.tier_tmpdir(enforce={"sandbox": True})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(tmp.is_relative_to(names.resolve(self.ws, "product", ".{}") / "test"), tmp)
 
     def test_failure_keeps_the_complete_output(self):
         self.declare(v=2, tests=[{"tier": "full", "run": "echo first-line; i=0; while [ $i -lt 100 ]; do echo $i; "
