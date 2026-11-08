@@ -420,20 +420,93 @@ RENAMES_FILE = "project-renames.json"                 # finished and half-done r
 TEST_SLOTS_DIR = "test-slots"                         # brunna test's worker slots (bin/test-runner.py): test_slots()
 
 
+def _migrates() -> bool:
+    """Whether this process may move the live layout's state: only the main checkout's own code (a linked worktree's
+    main checkout may still run the code reading the old place), and only its own state (never with an explicit
+    STATE override, never a throwaway or test state, whichever way it was set)."""
+    return ROOT == MAIN and not names.env("STATE") and STATE == MAIN / ".state"
+
+
+def _same(a: pathlib.Path, b: pathlib.Path) -> bool:
+    try:
+        return a.is_file() and b.is_file() and not a.is_symlink() and not b.is_symlink() and a.read_bytes() == b.read_bytes()
+    except OSError:
+        return False
+
+
+def _move(old: pathlib.Path, new: pathlib.Path) -> None:
+    """old → new, never leaving a half-written new: a rename on one filesystem; across two (EXDEV), a copy beside new,
+    synced, renamed into place, then old removed."""
+    import errno
+    import shutil
+    new.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.replace(old, new)
+        return
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            raise
+    tmp = new.with_name(f".{new.name}.{os.getpid()}.moving")   # beside new, on its filesystem
+    if os.path.lexists(tmp):
+        shutil.rmtree(tmp) if tmp.is_dir() and not tmp.is_symlink() else tmp.unlink()
+    if old.is_dir() and not old.is_symlink():
+        shutil.copytree(old, tmp, symlinks=True)
+    else:
+        shutil.copy2(old, tmp, follow_symlinks=False)
+        with open(tmp, "rb") as fh:
+            os.fsync(fh.fileno())
+    os.replace(tmp, new)
+    fd = os.open(new.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    shutil.rmtree(old) if old.is_dir() and not old.is_symlink() else old.unlink()
+
+
 def moved_from_state(new: pathlib.Path) -> pathlib.Path:
-    """new, after a one-time move of what was at the same name in .state before shared() existed (11-08): done by the
-    first unsandboxed process of the live layout that looks, never from a linked worktree (whose main checkout may still
-    run the code reading the old place) or in a throwaway state. A sandboxed one can't see the old place: it reads new
-    only. No reading of both: once moved, the old name is gone, and a later copy there is never taken over it."""
+    """new, after a one-time move of what was at the same name in .state before shared() existed (11-08), done by the
+    first process that may (_migrates) and looks. A sandboxed one can't see the old place: it reads new only. Never read
+    in both places. Both there: the same file → the old one goes; a rebuilt cache folder (the registry's, the slots) →
+    the old one goes; anything else, or a move that fails, stays where it is and is said (stderr here, and doctor while
+    shared_leftovers() names it): the renames record is the one thing in it that can't be rebuilt."""
     old = STATE / new.name
-    if worktree_lookup() or STATE != MAIN / ".state" or os.path.lexists(new) or not os.path.lexists(old):
+    if not _migrates() or not os.path.lexists(old):
         return new
     try:
-        new.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(old, new)   # atomic on one filesystem; a second process racing it finds old gone
-    except OSError:
-        pass
+        if not os.path.lexists(new):
+            _move(old, new)
+        elif _same(old, new):
+            old.unlink()
+        elif new.is_dir() and old.is_dir() and not old.is_symlink() and new.name != RENAMES_FILE:
+            import shutil
+            shutil.rmtree(old)   # derived: the registry rebuilds its cache, the slots are empty lock files
+        else:
+            print(_("{old} and {new} both exist and differ: keep the right one, remove the other", old=old, new=new),
+                  file=sys.stderr)
+    except OSError as e:
+        print(_("{old} could not be moved to {new}: {why}", old=old, new=new, why=e), file=sys.stderr)
     return new
+
+
+def shared_items() -> list[pathlib.Path]:
+    """What moved out of .state into shared(): the registry cache, the renames record, brunna test's slots."""
+    return [REGISTRY_INDEX.parent, shared() / RENAMES_FILE, shared() / TEST_SLOTS_DIR]
+
+
+def move_shared() -> list[pathlib.Path]:
+    """Every one moved now (brunna land, right after a merge), not on first look: what still sits in .state afterwards."""
+    for p in shared_items():
+        moved_from_state(p)
+    return shared_leftovers()
+
+
+def shared_leftovers() -> list[pathlib.Path]:
+    """The old places in the live .state that still exist although shared() is in use (a move that failed, or two
+    copies that differ): doctor shows them red. Nothing outside the live layout counts."""
+    if not _migrates():
+        return []
+    return [STATE / p.name for p in shared_items() if os.path.lexists(STATE / p.name)]
 
 
 def renames() -> pathlib.Path:

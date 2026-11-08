@@ -258,6 +258,18 @@ class Doctor(unittest.TestCase):
         self.projects["boxed"] = {"name": "boxed", "enforce": {"sandbox": True}}
         self.assertEqual([r for r in self.doctor() if r[1] == T(self.KEYCHAIN)], [("info", T(self.KEYCHAIN), "")])
 
+    LEFT = "platform state still in .state after its move to {shared}: {paths}"
+
+    def test_a_copy_left_in_state_after_the_move_is_red(self):
+        head = T(self.LEFT, shared="\0", paths="\0").split("\0")[0]
+        self.assertFalse([r for r in self.doctor() if r[1].startswith(head)])
+        left = self.tmp / "state" / "project-renames.json"
+        with mock.patch.object(hubconf, "shared_leftovers", lambda: [left]):
+            [row] = [r for r in self.doctor() if r[1].startswith(head)]
+        self.assertEqual(row[0], "bad")
+        self.assertIn(str(left), row[1])
+        self.assertTrue(row[2])
+
     # ---------- agent logins: the default runtime, then each pinned one ----------
 
     def login_rows(self, rows):

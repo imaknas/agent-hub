@@ -1352,6 +1352,11 @@ def cmd_doctor(argv: list[str]) -> int:
             + (_("; affects: {projects}", projects=", ".join(held)) if held else ""),
             _("what each system needs: docs/design/capabilities.md (macOS: sandbox-exec; Linux: kernel 6.7 or later "
               "with Landlock enabled)"))
+    if (left := hubconf.shared_leftovers()):
+        add("bad", _("platform state still in .state after its move to {shared}: {paths}", shared=hubconf.shared(),
+                     paths=", ".join(str(p) for p in left)),
+            _("compare each with the one of the same name in {shared}, keep the right one and remove the other "
+              "(the renames record can't be rebuilt)", shared=hubconf.shared()))
     # their sessions get the same denies from the runtime's settings (docs/design/capabilities.md 11-08, A1), all but one
     if any((d.get("enforce") or {}).get("sandbox") is True for d in hubconf.projects().values()):
         add("info", _("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
@@ -1691,15 +1696,22 @@ def cmd_land(argv: list[str]) -> int:
     `upgrade` (docs/design/rename-brunna.md): the CLI wrappers (where install-cli put them; none written where there
     were none), the scheduler and watchdog (pairwise: the other spelling's units go), and the config applied (services
     re-rendered). Each leaves an unchanged thing alone. All run whatever the others said; the worst exit code is
-    returned."""
+    returned.
+    First, what sandboxed code reads moves out of .state at once (hubconf.move_shared; docs/design/capabilities.md 11-08),
+    so the services that keep the code they started with don't meet it half moved: cap-runner and lease-runner exit by
+    themselves once bin/ has changed and they are idle, and launchd or systemd starts them on the new code (code_stamp)."""
     import upgrade
+    left = hubconf.move_shared()
+    for p in left:
+        print(_("✗ {path} is still there after the move to {shared} (see above): brunna doctor shows it until it is resolved",
+                path=p, shared=hubconf.shared()), file=sys.stderr)
     steps = [[*hubconf.launch(BIN / "registry.py"), "check", *argv],
              [*hubconf.launch(BIN / "render-project-settings.py"), "--only", hubconf.hub_project()]]
     if (w := upgrade.cli_wrapper()):
         steps.append([*hubconf.launch(BIN / "agenthub"), "install-cli", "--dir", str(w.parent)])
     steps += [[*hubconf.launch(BIN / "agenthub"), "init", "--scheduler-only"],
               [*hubconf.launch(BIN / "agenthub"), "config", "apply"]]
-    return max(subprocess.run(s).returncode for s in steps)
+    return max([1 if left else 0, *(subprocess.run(s).returncode for s in steps)])
 
 
 def cmd_user_settings(argv: list[str]) -> int:

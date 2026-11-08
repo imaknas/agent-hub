@@ -475,10 +475,12 @@ tools can read other projects' transcripts there, as today.
    Empty for the hub (its sessions and leases read its own state; its confined runs already hide `.state` and `.logs`).
    `.state` is denied whole: the three things sandboxed code reads moved out of it into `hubconf.shared()` (`<hub>/.shared`, the
    main checkout's, gitignored, written only by the platform, nothing private), which is `read`: the registry cache and index
-   (`registry.CACHE`, `REGISTRY_INDEX`), brunna test's worker slots (`test_slots()`) and the renames record (`renames()`). Each
-   was moved once by the first unsandboxed process of the live layout that looks (`moved_from_state`: never from a worktree or a
-   throwaway state, never read in both places). Only a confined job's run settings list `.state` beside its own folder (`keep`,
-   in `.state/agent-jobs`), the way `write_except` lists the hub for writing (`beside`). No `allowRead` is relied on. The Seatbelt
+   (`registry.CACHE`, `REGISTRY_INDEX`), brunna test's worker slots (`test_slots()`) and the renames record (`renames()`).
+   `brunna land` moves all three at once after the merge (`move_shared`; cap-runner and lease-runner restart themselves on the
+   new code once idle, `code_stamp`); a later first look moves what is left. Only the main checkout's own code in its own state
+   moves (`ROOT == MAIN`, no STATE override), never read in both places; a copy that differs or a move that fails stays, is
+   said, and doctor shows it red (`shared_leftovers`). Only a confined job's run settings list `.state` beside its own
+   folder (`keep`, or its `cwd: state` folder with no rule writing it), the way `write_except` lists the hub (`beside`). No `allowRead` is relied on. The Seatbelt
    and Landlock renderers keep `.state` in their own fixed list as well, so a profile built from any policy still denies it.
 2. **Credentials**: the settings' `credentials`, plus a code default, plus what each installed runtime declares
    (`runtime_<name>.CREDENTIALS`: dirs and files; Claude's: its credential file `.credentials.json` in its home, not the home itself,

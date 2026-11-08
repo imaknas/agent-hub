@@ -6,6 +6,8 @@ renderer matches a path, on a tree whose instance dir is reached through a link 
 
     bin/py -m unittest tests.test_sandbox_deny_parity
 """
+import contextlib
+import io
 import os
 import pathlib
 import re
@@ -23,9 +25,6 @@ import names  # noqa: E402
 import policy  # noqa: E402
 import runtime_claude  # noqa: E402
 import seatbelt  # noqa: E402
-
-REAL = {"state": hubconf.STATE, "shared": hubconf.SHARED, "index": hubconf.REGISTRY_INDEX,
-        "slots": hubconf.shared() / hubconf.TEST_SLOTS_DIR, "renames": hubconf.shared() / hubconf.RENAMES_FILE}
 
 try:
     import yaml  # noqa: F401  (registry.dirs, which policy.policy uses)
@@ -86,8 +85,6 @@ class Tree(unittest.TestCase):
                   mock.patch.object(hubconf, "data_dir", lambda: link / "data"),
                   mock.patch.object(hubconf, "secrets_dir", lambda: link / "secrets"),
                   mock.patch.object(hubconf, "evals_dir", mock.Mock(side_effect=AssertionError("evals_dir() makes it"))),
-                  mock.patch.object(runtime_claude, "CREDENTIALS",
-                                    {"dirs": [], "files": [str(home / ".claude" / ".credentials.json")]}, create=True),
                   mock.patch.object(policy, "protect", lambda: [])):
             p.start()
             self.addCleanup(p.stop)
@@ -217,9 +214,9 @@ class PlatformState(Tree):
         self.assertIn(self.state, got)
         self.assertFalse([p for p in got if self.state in p.parents], "nothing listed inside it")
         self.assertEqual(self.pol()["read"], [self.shared])
-        for p in (REAL["index"], REAL["slots"], REAL["renames"]):   # the module's own, not this test's tree
-            self.assertIn(REAL["shared"], p.parents, p)
-        self.assertNotIn(REAL["state"], [REAL["shared"], *REAL["shared"].parents])
+        # the hub's own state (MAIN/.state, as patched here): shared() is beside it, not in it
+        self.assertEqual(hubconf.shared(), self.shared)
+        self.assertEqual([p.parent for p in hubconf.shared_items()[1:]], [self.shared, self.shared])
         sandbox, deny, _allow = runtime_claude.settings(self.pol())
         self.assertEqual([r for r in deny if ".state" in r],
                          [f"{t}(/{self.state}{s})" for t in ("Read", "Edit") for s in ("", "/**")])
@@ -312,8 +309,8 @@ class UserControl(Tree):
 
 
 class MovedOnce(unittest.TestCase):
-    """What sandboxed code reads left .state for hubconf.SHARED (11-08): moved once, by the live layout's first look, never
-    read in both places."""
+    """What sandboxed code reads left .state for hubconf.shared() (11-08): moved once, only by the main checkout's own
+    code in its own state, never read in both places, and never silently: the renames record can't be rebuilt."""
 
     def setUp(self):
         t = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -321,30 +318,93 @@ class MovedOnce(unittest.TestCase):
         self.state, self.shared, self.t = t / ".state", t / ".shared", t
         (self.state / "test-slots").mkdir(parents=True)
         (self.state / "test-slots" / "slot-00").write_text("")
-        (self.state / "project-renames.json").write_text('{"a": {"new": "b", "stage": "done"}}')
-        for p in (mock.patch.object(hubconf, "MAIN", t), mock.patch.object(hubconf, "STATE", self.state),
-                  mock.patch.object(hubconf, "worktree_lookup", lambda: False)):
+        (self.state / "registry").mkdir()
+        (self.state / "registry" / "index.json").write_text("{}")
+        self.old = self.state / "project-renames.json"
+        self.old.write_text('{"a": {"new": "b", "stage": "done"}}')
+        # the live layout as the main checkout's own code sees it: ROOT == MAIN, STATE its .state, no override
+        env = {k: v for k, v in os.environ.items() if k not in names.env_names("STATE")}
+        for p in (mock.patch.dict(os.environ, env, clear=True), mock.patch.object(hubconf, "ROOT", t),
+                  mock.patch.object(hubconf, "MAIN", t), mock.patch.object(hubconf, "STATE", self.state),
+                  mock.patch.object(hubconf, "REGISTRY_INDEX", self.shared / "registry" / "index.json")):
             p.start()
             self.addCleanup(p.stop)
 
     def test_a_file_and_a_folder_move_once(self):
         self.assertEqual(hubconf.renames(), self.shared / "project-renames.json")
-        self.assertFalse((self.state / "project-renames.json").exists())
+        self.assertFalse(self.old.exists())
         self.assertEqual(hubconf.former_names("b"), ["a"])
         self.assertEqual(hubconf.test_slots(), self.shared / "test-slots")
         self.assertTrue((self.shared / "test-slots" / "slot-00").exists())
         self.assertFalse((self.state / "test-slots").exists())
-        (self.state / "project-renames.json").write_text("{}")   # a stale copy is never taken over the moved one
-        hubconf.renames()
-        self.assertIn("stage", (self.shared / "project-renames.json").read_text())
+        self.assertEqual(hubconf.shared_leftovers(), [self.state / "registry"])
 
-    def test_not_from_a_worktree_or_a_throwaway_state(self):
-        with mock.patch.object(hubconf, "worktree_lookup", lambda: True):
+    def test_land_moves_all_three_at_once(self):
+        self.assertEqual(hubconf.move_shared(), [])
+        for name in ("registry", "project-renames.json", "test-slots"):
+            self.assertTrue((self.shared / name).exists(), name)
+            self.assertFalse((self.state / name).exists(), name)
+
+    def test_not_from_a_linked_worktree(self):
+        """The 11-08 slip: a worktree's process with AGENT_HUB_STATE set reached the live .state, because the guard
+        asked worktree_lookup(), which is False whenever STATE is set. Its inputs are what is patched here."""
+        with mock.patch.object(hubconf, "ROOT", self.t / "worktree"):
+            hubconf.renames()
+            with mock.patch.dict(os.environ, {names.env_names("STATE")[0]: str(self.t / "elsewhere")}):
+                hubconf.renames()
+        self.assertTrue(self.old.exists())
+        self.assertFalse(self.shared.exists())
+
+    def test_not_with_a_state_override_even_one_set_after_import(self):
+        with mock.patch.dict(os.environ, {names.env_names("STATE")[0]: str(self.t / "elsewhere")}):
             hubconf.renames()
         with mock.patch.object(hubconf, "MAIN", self.t / "elsewhere"):   # a state other than the hub's own
             self.assertEqual(hubconf.renames(), self.state / "shared" / "project-renames.json")
-        self.assertTrue((self.state / "project-renames.json").exists())
+        self.assertTrue(self.old.exists())
         self.assertFalse(self.shared.exists())
+        self.assertEqual(hubconf.move_shared(), [])   # and the live layout then does move it
+        self.assertFalse(self.old.exists())
+
+    def test_two_copies_that_differ_are_both_kept_and_said(self):
+        self.shared.mkdir()
+        (self.shared / "project-renames.json").write_text("{}")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            hubconf.renames()
+        self.assertTrue(self.old.exists())
+        self.assertIn(str(self.old), err.getvalue())
+        self.assertIn(self.old, hubconf.shared_leftovers())
+
+    def test_the_same_copy_twice_is_one(self):
+        self.shared.mkdir()
+        (self.shared / "project-renames.json").write_text(self.old.read_text())
+        hubconf.renames()
+        self.assertFalse(self.old.exists())
+
+    def test_a_failed_move_is_said_and_stays(self):
+        err = io.StringIO()
+        with mock.patch.object(hubconf.os, "replace", mock.Mock(side_effect=PermissionError(1, "denied"))), \
+                contextlib.redirect_stderr(err):
+            hubconf.renames()
+        self.assertTrue(self.old.exists())
+        self.assertIn("denied", err.getvalue())
+        self.assertIn(self.old, hubconf.shared_leftovers())
+
+    def test_across_filesystems_it_is_copied_synced_and_then_removed(self):
+        import errno
+        real = os.replace
+        calls = []
+
+        def replace(a, b):
+            calls.append((a, b))
+            if len(calls) == 1:
+                raise OSError(errno.EXDEV, "cross-device link")
+            return real(a, b)
+        with mock.patch.object(hubconf.os, "replace", replace):
+            self.assertEqual(hubconf.renames(), self.shared / "project-renames.json")
+        self.assertIn("stage", (self.shared / "project-renames.json").read_text())
+        self.assertFalse(self.old.exists())
+        self.assertEqual([p.name for p in self.shared.iterdir()], ["project-renames.json"], "no copy left beside it")
 
 
 if __name__ == "__main__":
