@@ -25,10 +25,19 @@ A and B also meet: some calls the platform makes with its own binary read what t
 the user's sessions, a fork of a user's transcript, the linked Codex login). Those are the **session-side calls** (section 5).
 
 So the answer is not "pin the version". It is: **the platform's runs use a copy that passed a check and can't change after; what the
-server can change is re-checked as runs go; every version the user's sessions run is checked when first seen, and until it passes,
-what the platform starts in those sessions is limited as for a runtime without the port.** And one rule over all of it: **a missing
-or failed check never removes a protection; it only withholds work.** Deny rules, control paths and the guard stay whatever a
-check says. This is the tool-neutrality rule
+server can change is re-checked as runs go; every version the user's sessions run is checked when first seen and said by version,
+and a sandboxed project's session on a version that failed a safety check gets no work from the platform.** Three rules over all of
+it:
+- **A missing or failed check never removes a protection; it only withholds work.** Deny rules, control paths, the hooks the platform
+  keeps and the guard stay whatever a check says.
+- **A check has three outcomes: pass, fail, not-checkable.** A port whose check can't be built yet (it waits on a measurement) is
+  `not-checkable`: treated as today (gated per runtime, as `CAGED_NEEDS` does), never per version, never a promotion blocker, shown in
+  doctor as an info row naming the measurement that would make it checkable.
+- **Per-version gating is narrow**: only a sandboxed project's sessions, only on a **failed safety** check (never pending, never
+  not-checkable, never a function check), only the handlers that start work. Everything else about a version is recorded, shown and
+  alerted on, not gated.
+
+This is the tool-neutrality rule
 (AGENTS.md: work the platform starts is guaranteed by the platform; "when a capability is missing, turn the feature off explicitly
 and say why") applied over time.
 
@@ -76,7 +85,9 @@ confinement property) or a **function** check.
 How every check runs:
 - **In a throwaway world**: a throwaway project folder, tool home and config dir, and the platform's own state, data, secrets and bus
   pointed at temp folders (`AGENT_HUB_STATE`, `bus_dir`…), so a real `hub-event` firing in a lifecycle check can't touch the live
-  bus or mark a letter told. Hooks are installed the way the platform installs them (`install_lifecycle` into the throwaway
+  bus or mark a letter told. All of it under `hubconf.private_tmp()` (hubconf.py:195), never the system temp folder, which every
+  sandboxed project can write as the same user (a planted `.claude/settings.json` there would run as the user; update-claude.py:136
+  learned this). Hooks are installed the way the platform installs them (`install_lifecycle` into the throwaway
   project, the worktree set into the throwaway home), not through `--settings`.
 - **Safety checks have a positive control**, as the folder-git probe does: the same case without the guard must show the effect (the
   unguarded run reads the canary; a run with tools does use one), or the check fails as "tests nothing". **Model-free where it can
@@ -93,22 +104,23 @@ The checks (Claude's now, Codex's from runtime-codex.md):
 | completion | one completion per schema in `contracts/llm/` returns schema-valid output; the run has no tools (Claude: a positive-control run with tools shows the signal V-M7 names, the `--tools ""` run doesn't; Codex: the tool list equals the pinned one) | function + safety |
 | agent | a run's result fields parse (`result`, `is_error`, usage, `permission_denials`); `MODELS` aliases resolve | function |
 | confine | the sandbox denies the canaries the policy denies: read, write, `.git`, links, rename, a new file; folder git off (`NO_FOLDER_GIT`, today's probe) | safety |
-| control | the control paths a sandboxed session is denied are written as one rule over the tool's folder in the project (section 7), and a canary write there is denied | safety |
+| control | a canary write at each enumerated control path (`CONTROL`, `USER_CONTROL`, in a throwaway project and home), through the real policy → settings translation, is denied; positive control: the same write with that rule left out succeeds. (The one-rule form, section 7, replaces it in step 4.) | safety |
 | lifecycle | each installed event fires with the fields `parse_event` reads; additionalContext reaches the model; a PreToolUse deny stops the tool | function (deny: safety) |
 | instructions | a marker in the rules file the adapter writes (`CLAUDE.local.md`) reaches the model | function |
 | sessions | the run's transcript / rollout parses with no skipped lines and its version read | function |
-| session_status | `claude agents --json` lists a live throwaway session with a status (V-M6) | function |
+| session_status | `claude agents --json` lists a live throwaway interactive session with a status; `not-checkable` until V-M6 names a driver | function |
 | session_summary | the last reply is read from the throwaway session | function |
-| wake | an idle throwaway session takes a turn after `wake()` (V-M6) | function |
+| wake | an idle throwaway interactive session takes a turn after `wake()`; `not-checkable` until V-M6 (a `-p` or stream-json session never arms the waiter: `wait()` returns `headless` for print processes, runtime_claude.py:546-549, :588-592) | function |
 | stream | a short stream-json exchange parses (leases) | function |
 | tool_servers | `claude mcp list` parses with no server and with one | function |
 | auth | the login check | function |
 | distribution | `version()` of the installed binary is the version asked for; the install's lockfile has an integrity hash for every tarball it resolved (the wrapper and the platform package holding the executable, `optionalDependencies` included), each verified on install | function |
 
-`tests/test_conformance_cover.py` fails when an adapter implements a port with no check, so a new port can't ship unguarded.
+`tests/test_conformance_cover.py` fails when an adapter implements a port with neither a check nor a named `not-checkable` entry
+with its measurement, so a new port can't ship unguarded or unaccounted for.
 
-Results: `.state/runtime-conformance/<runtime>/<version>.json`: per check pass / fail / error with the reason, the binary's path and
-digest, the time. A function check that fails is run once more before it counts (a model's answer can miss a schema once); a safety
+Results: `.state/runtime-conformance/<runtime>/<version>.json`: per check pass / fail / not-checkable / error with the reason, the
+binary's path and digest, the time. A function check that fails is run once more before it counts (a model's answer can miss a schema once); a safety
 check counts at once.
 
 ## 3. The platform's runs: their own copy, promoted only after a pass, fixed after
@@ -119,7 +131,8 @@ check counts at once.
   process runs from it (the store keeps a lock per version a run holds); a held-back candidate is removed after 14 days.
 - **Fixed after promotion**: every platform run of the copy carries `pin_env()` / `pin_config()` (its updater off), and `binary()`
   compares the executable with the digest recorded at promotion before the run (size and mtime each run, the full digest once a
-  day), refusing on a mismatch with "the platform's Claude Code changed after it was checked". The digest check is the safety
+  day), refusing on a mismatch with "the platform's Claude Code changed after it was checked". The same holds for every store copy a
+  platform run executes, not only `current` (the copies of user versions that run forks and `lease-resume`, section 5). The digest check is the safety
   mechanism, not a conformance check: a pinned updater can't be shown to stay off without a newer version to update to, but any
   change it made is caught before the next run.
 - **No checked copy, no run**: when there is no `current` (a fresh install, the vendor unreachable on first install, a version that
@@ -127,7 +140,10 @@ check counts at once.
   own runs use it) are `Unsupported` with that reason and doctor is red; never a fallback to the PATH copy. The ports that **describe
   the user's sessions** stay: control (what `policy.protect()` denies, policy.py:134-139), lifecycle (the hooks
   render-project-settings keeps, :340-343) and the settings translation, so a sandboxed project keeps every deny with no copy in the
-  store. `runtime_ports.load` gets the split as a parameter, not a second meaning of `Unsupported`. `hubconf.tool` is no longer used
+  store. `runtime_ports.load` gets the split as a parameter, not a second meaning of `Unsupported`. Mailbox dispatch splits its gate
+  the same way: today it loads `("agent", "sessions")` and returns before any hold, route or wake when that fails (hubbus:2898-2906);
+  routing, holds and wakes need only `sessions` (and `wake`), and only forks, resumes and triage need `agent` from a checked copy, so
+  letters keep reaching live sessions with no copy in the store. `hubconf.tool` is no longer used
   for runtimes; `_env` puts the store copy's bin first on PATH and nvm's after it (plugin hooks need nvm's `node`,
   runtime_claude.py:666-680), so nothing a run starts finds the user's `claude` by name; `agenthub.agent_found` reports the store copy.
 - **First install** (init, `brunna llm setup`, a restore): install the latest version into the store, log in (section 3a), run the
@@ -151,10 +167,14 @@ The platform's copy needs a login, and a candidate is unchecked code. Rotating r
 logs the owner out everywhere (Codex 0.165.0 would have, M9).
 
 - **Claude**: platform runs already use the headless token (`CLAUDE_CODE_OAUTH_TOKEN`, `auth_env`), which doesn't refresh; a
-  candidate gets the same and nothing else. On macOS the subscription login is in the Keychain, which a throwaway config dir doesn't
-  hide, so candidate checks run under the platform's Seatbelt profile with the Keychain blocked (seatbelt.py, `keychain-blocked`);
-  on Linux the throwaway home has no `.credentials.json`. Residual: the promoted copy's refresh of the subscription login (jobs with
-  `connectors: true`) is not checked before promotion; `check-claude-login` (hourly, a real request) is what catches it after.
+  candidate gets the same and nothing else. On Linux the throwaway home has no `.credentials.json`. On macOS the subscription login
+  is in the Keychain, which a throwaway config dir doesn't hide, and the platform's Seatbelt profile can't wrap the checks: a second
+  Seatbelt layer can't start inside one (seatbelt.py:9-11), so Claude's own sandbox, which the confine checks exercise, wouldn't run,
+  and that profile also turns the network off. So no wrapping: V-M10 measures whether `claude` with `CLAUDE_CODE_OAUTH_TOKEN` reads
+  or writes the Keychain login item at all. If it doesn't, candidates run unwrapped with the token, and that is the answer. If it
+  does, DV5.
+  Residual either way: the promoted copy's refresh of the subscription login (jobs with `connectors: true`) is not checked before
+  promotion; `check-claude-login` (hourly, a real request) is what catches it after.
 - **Codex**: a Business / Enterprise workspace's access token when the instance has one (doesn't refresh). Otherwise the candidate's
   model checks run with the linked `auth.json` only after its model-free checks pass, including that its file store follows the link
   (`resolve_auth_file`), and only when the adapter's credential check (it reads the expiry and `last_refresh`, never the tokens) says
@@ -194,7 +214,7 @@ Calls the platform makes about the user's sessions run the user's version's beha
 - `lease-resume` resumes with the store's copy of the version that wrote the session, not `claude` on PATH; the resume hint
   `run-agent-job.sh` prints (:178) names that copy's path.
 
-## 6. The user's sessions: checked when first seen, limited until they pass
+## 6. The user's sessions: checked when first seen, said by version
 
 - **Record the version at session start.** The transcript isn't written before the first turn (runtime_claude.py:1503), so the
   hook reads it from the session process's executable: its path (Desktop's `ccd-cli/<version>/`, the daemon's
@@ -202,23 +222,26 @@ Calls the platform makes about the user's sessions run the user's version's beha
   that can't be read (no `CLAUDE_PID`, runtime_claude.py:80-82; an unknown layout) is recorded as `unreadable`, which counts as
   pending. It goes into the session's record, which `hub-event` writes in the platform's own state; the readers also return the
   version per session from the transcript.
-- **Check it then.** A platform job (event-triggered on the session records changing, not on a bus event any project could write)
-  takes each version with no result, validates it against the vendor's published list, installs **that exact version from the
-  vendor** into the store (never runs the binary in the user's folders, which a sandboxed session might have written) and runs the
-  session-side checks on it: lifecycle, instructions, sessions, session_status, wake, confine and control. Minutes, not a night. At
-  most 3 installs a day. A version the vendor doesn't publish (a build only Desktop ships) or can't be installed is
-  `not-installable`: limited as pending, a doctor row naming it, tried again once a week, not every night.
-- **Until it passes, the version is limited for the platform's work, and only that.** The hook's handlers split in two:
-  - **always run**, whatever the version's state: reading and recording the version, the session record and its end
-    (`session_record`, `mail_end`), memory sync, the deny handlers (`guard`, hub-event:291-293: "cross-project: letters only" must
-    hold most for the sessions trusted least), and the SessionStart notice below;
-  - **work-starting**, run only when the version passed the checks of the ports they use: letters shown into the session, wake,
-    routing to it, forks and resumes of it.
-  For a **sandboxed project's** session on a pending, failed or not-installable version, every work-starting handler is off and the
-  session is told once at start ("this Claude Code version isn't checked yet; the platform starts nothing in this session until it
-  is"); the owner gets an alert when a confine or control check **fails**. An unsandboxed project's session loses only what rides on
-  the failed port (a failed wake check: no wake; routed letters wait for the next hook). Today's `CAGED_NEEDS` gate returns before
-  every handler (hub-event:338-341), the guard included; it gets the same split.
+- **Check it then.** A platform job polls the session records each scheduler tick (15 minutes; event jobs trigger only on bus events,
+  which any unsandboxed project could write) and takes each version with no result: it validates it against the vendor's published
+  list, installs **that exact version from the vendor** into the store (never runs the binary in the user's folders, which a
+  sandboxed session might have written) and runs the session-side checks on it: lifecycle, instructions, sessions, confine and
+  control (session_status and wake are `not-checkable` until V-M6). They run under section 3a's login rule, since they too run
+  unchecked vendor code with a login. At most 3 installs a day. Desktop's builds are on npm (2.1.308, .309 and .317, the ones on
+  this machine, are all published) and so are the daemon's (0.166.0, 0.167.0); a version the vendor doesn't publish or can't be
+  installed is `not-installable`: treated as pending, a doctor row naming it, tried again once a week.
+- **Gating, narrow.** Only for a **sandboxed project's** session, and only when its version **failed a safety check** (confine,
+  control, a lifecycle deny): the handlers that start work are off for it (letters shown into the session, wake, routing to it,
+  forks and resumes of it), the session is told once at start ("this Claude Code version failed the platform's sandbox check; the
+  platform starts nothing in this session"), and the owner gets an alert. Everything else runs as today for it: reading and recording
+  the version, the session record and its end (`session_record`, `mail_end`), memory sync, the deny handlers (`guard`). Wake is
+  gated where it is decided, in hubbus, from the version in the session's process record (the `hub-event wait` entry point isn't a
+  handler). A **pending**, `not-installable` or `not-checkable` version is as today: no gate, a doctor row. An unsandboxed
+  project's session is never gated by version; a failed check there is a doctor row and an alert.
+- **`CAGED_NEEDS` stays as it is**: it returns before every handler (hub-event:338-341). For a runtime without `control` (Codex
+  before its Step 4) the hook files are writable by the sandboxed agent, so every payload in a sandboxed project may be forged, and
+  nothing may act on one (render-project-settings.py:362-368 already doesn't install hooks there). The always-run / work-starting
+  split is for the per-version gate only, which applies to runtimes that have `control`.
 - **Hooks stop failing silently.** `hub-event` logs every payload `parse_event` rejects as `unusable=<reason>` with runtime and
   version, empty stdin apart (`empty`, expected). An event the tool adds isn't seen here at all (hub-event runs only for the events it
   installed); the lifecycle check is what notices one. Unusable payloads of an event letters depend on, three times for a version,
@@ -237,7 +260,7 @@ with themselves. The aim is a rule the tool can't outgrow inside the project: a 
 nothing under the tool's folder in the project (`.claude/`, `.codex/`) except the worktrees the platform names writable.
 
 It can't be written as one deny today: a deny wins over any allow (runtime_claude.py:831) and the policy emits
-`Edit(/{ws}/**/{name}/**)` (policy.py:218-220), so denying `.claude/**` also denies every edit inside `.claude/worktrees/<x>/`, where
+`Edit(/{ws}/**/{name}/**)` (runtime_claude.py:216), so denying `.claude/**` also denies every edit inside `.claude/worktrees/<x>/`, where
 Desktop's worktree sessions work. How it can be expressed is V-M9: a deny on creating a new entry directly under the tool's folder
 (Seatbelt can say it for services; whether Claude's permission rules can for sessions is the question), or rendering a deny for every
 entry present except `worktrees` plus a deny on new top-level entries. Until V-M9 settles it, the enumerated lists stay, and doctor's
@@ -254,13 +277,13 @@ separate, the user's copy is the user's: decision DV2.
 
 1. **Distribution port + conformance runner + Claude's checks** (the folder-git probe and the completion check ported in; the
    rest added), the results store, `brunna runtimes`, the coverage test. `hub-event` logs unusable payloads; readers count skips and
-   read the version; `unknown` stops counting as idle. No change to which binary runs yet.
+   read the version; `unlisted` added (section 5; `unknown` keeps its meaning). No change to which binary runs yet.
 2. **The store + `update-runtimes`** for Claude: promotion, hold-back, the digest check, the updater pinned, no PATH fallback (with
    the ports split so protections stay), first install, rollback, `MIN_VERSION`; `update-claude` retired by `legacy_name`; callers of
    `hubconf.tool("claude")` move to `binary()`; DV3's platform config dir for the runs it covers, with `PROJECTS`, `transcript()`,
    `lease-resume` and the connectors login left on the shared dir until V-M8.
-3. **Session versions**: recorded at start, the job that checks a newly seen version, the handler split and per-version limits
-   (today's `CAGED_NEEDS` gate included), `unlisted`, session-side calls on matching
+3. **Session versions**: recorded at start, the job that checks a newly seen version, the narrow per-version gate (`CAGED_NEEDS`
+   unchanged), dispatch's split gate, session-side calls on matching
    versions, the SessionStart notice.
 4. **Control as one rule** (section 7), once V-M9 says how it can be written, with the sandbox-parity tests updated.
 5. **Codex Step 1** builds on all of it: `runtime_codex.CONFORMANCE` (M1, M8, M9's cases), its store and platform home, section 3a's
@@ -286,7 +309,14 @@ separate, the user's copy is the user's: decision DV2.
   V-M8 shows a run with its own config dir can resume a session stored in another one: `PROJECTS` is fixed to `~/.claude/projects`
   (runtime_claude.py:61), `transcript()` / `resumable()` look only there (:96-98, :1501-1504), `--resume` takes an id and looks in its
   own config dir, `lease-resume` runs a bare `claude --resume` against the user's dir, and the connectors jobs need the subscription
-  login, which a token can't stand in for. (b) Keep sharing for all of them.
+  login, which a token can't stand in for. The platform config dir goes only into the child run's environment, never the
+  platform's own: `_home()` reads `CLAUDE_CONFIG_DIR` from `os.environ` (runtime_claude.py:161-162) and feeds `credential_paths()`
+  and `user_control()`, which become every sandboxed project's denies; set in the platform's environment it would move them off the
+  real `~/.claude`. Session-side calls (section 5) keep the user's config dir. (b) Keep sharing for all of them.
+- **DV5, only if V-M10 shows a token run touches the Keychain login.** (a) Run candidate and session-version checks as a dedicated
+  macOS user made for them (its own Keychain; a one-time setup by the owner). (b) Accept the residual: a candidate is the vendor's
+  integrity-checked build, and the risk is a buggy refresh of the subscription login, which `check-claude-login` notices within the
+  hour.
 - **DV4, cost.** A full pass is ~40 model calls per new version (Claude Code ships a few a week: ~150 calls a week), the daily
   subset ~12 (one completion per schema), each version a user session runs ~10 more. On the subscription; nothing billed per use
   unless `metered_models` says so.
@@ -307,6 +337,10 @@ separate, the user's copy is the user's: decision DV2.
   path or a link into its own dir)? Until it can, DV3 leaves resumes and forks on the shared dir.
 - V-M9: how "create nothing new under `.claude/` but `worktrees`" is expressed: in Claude's permission rules for sessions, and in
   Seatbelt / Landlock for services.
+- V-M10: does `claude` run with `CLAUDE_CODE_OAUTH_TOKEN` read or write the Keychain's Claude Code login item (macOS)? Decides DV5.
+- V-M6 is now: a driver for an interactive (non-print) throwaway session, under a pty, that the wake and status checks can use.
+- V-M4 on macOS: a pid's executable path comes from `ps -o comm=` / `proc_pidpath`, not a file read; the package metadata beside
+  it is then read as a file.
 
 ## Found by the blind reviews (11-08), all taken
 
@@ -348,3 +382,25 @@ separate, the user's copy is the user's: decision DV2.
   `not-installable` state, versions taken from the platform's own session records (not a bus event), validated and capped, the
   distribution row made a function check with lockfile integrity for every tarball, the digest check named as the safety mechanism,
   nvm's bin kept after the store's, "unknown-event" dropped (not observable), the listing budget per version, the resume hint.
+
+## Found by the third blind review (11-08), all taken
+
+Two of its six blocking findings came from the second round's fixes, and two shared a root the design hadn't stated: every check was
+pass or fail, and one result drove promotion, per-version gating and the coverage test at once, so a check that can't be built yet
+became a permanent fail. Taken at the root:
+- **`not-checkable`**, a third outcome, and **narrow gating** (sandboxed projects only, failed safety checks only, work-starting
+  handlers only), stated up front.
+- The Steps list still said "`unknown` stops counting as idle": now "`unlisted` added".
+- The control check pointed at a rule that can't be written before V-M9, so nothing could be promoted: the interim check is a canary
+  write at each enumerated control path through the real translation, with a positive control; the one-rule form comes in step 4.
+- With no copy in the store, dispatch's `("agent", "sessions")` load returned before any hold, route or wake: dispatch splits its
+  gate (section 3).
+- The wake and status checks can't run on a `-p` / stream-json session (`wait()` returns `headless`): `not-checkable` until V-M6
+  names an interactive driver.
+- The Keychain block by an outer Seatbelt profile can't nest with Claude's own sandbox and kills the network: no wrapping; V-M10 and
+  DV5.
+- Splitting `CAGED_NEEDS` would have let forged payloads from a runtime without `control` drive `session_record` and `mail_end`:
+  `CAGED_NEEDS` stays; the split is for the per-version gate only.
+- Should-fix taken: throwaway worlds under `private_tmp()`, the login rule for session-version checks, the platform config dir only
+  in the child's environment, pin and digest for every store copy a run executes, pending as today and wake gated in hubbus, a poll
+  instead of an event trigger, Desktop's and the daemon's versions found on npm, the citation fixed.
