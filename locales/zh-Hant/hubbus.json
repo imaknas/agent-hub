@@ -202,5 +202,14 @@
  "mailbox-route gave no usable answer; the most recently active session got the letter": "mailbox-route 沒給出可用的答案;信給了最近活動的 session",
  "mailbox-route could not keep its record ({kind}); the most recently active session got the letter": "mailbox-route 存不了它的紀錄({kind});信給了最近活動的 session",
  "{project}: {max} {max:wake|wakes} today already; no more routes today (triage and hooks go on)": "{project}:今天已叫醒 {max} 次,今天不再派信(triage 和 hook 照常)",
- "{project}: {id}: the session woken for it wasn't told within {minutes} {minutes:minute|minutes}; going on": "{project}:{id}:叫醒的 session {minutes} 分鐘內沒讀到信,往下走"
+ "{project}: {id}: the session woken for it wasn't told within {minutes} {minutes:minute|minutes}; going on": "{project}:{id}:叫醒的 session {minutes} 分鐘內沒讀到信,往下走",
+ "hubbus: {id} is not a letter: only a letter is taken back": "hubbus: {id} 不是信件，只有信件可以收回",
+ "hubbus: only the project that sent {id} can take it back": "hubbus: 只有寄出 {id} 的專案能收回它",
+ "hubbus: a question to {alias} is taken back with `brunna send --to {alias} --type drop --question {id}`, which {alias}'s side hears": "hubbus: 寄給 {alias} 的問題要用 `brunna send --to {alias} --type drop --question {id}` 收回，{alias} 那邊才會知道",
+ "hubbus: --withdraw needs --note: say why the letter is taken back": "hubbus: --withdraw 要加 --note，說明為什麼收回這封信",
+ "hubbus: {id} is already closed": "hubbus: {id} 已經結案了",
+ "hubbus: {id} is a letter you sent to {to}: only its recipient closes it. To take it back (wrong recipient or type, no longer needed): `brunna done --withdraw {id} --note \"why\"`": "hubbus: {id} 是你寄給 {to} 的信，只有收件方能結案。要收回（寄錯對象或類型、已經不需要）：`brunna done --withdraw {id} --note \"原因\"`",
+ "hubbus: {id} is a letter to {to}, not to {project}: only its recipient closes it": "hubbus: {id} 是寄給 {to} 的信，不是給 {project} 的，只有收件方能結案",
+ "hubbus: a sandboxed project can't take back a letter it sent: write to its recipient instead": "hubbus: 沙箱裡的專案不能收回寄出的信，請改寫信給收件方",
+ "take back letters this project sent (wrong recipient or type, no longer needed); needs --note": "收回這個專案寄出的信（寄錯對象或類型、已經不需要），要加 --note"
 }

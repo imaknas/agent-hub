@@ -198,9 +198,11 @@ TOOLS = [
     {"name": "pass", "description": "Give back letters held for this session (inbox marks them) that aren't yours: the next "
                                     "session gets them. Refused for a letter held for anyone else, or for nobody.",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {"ids": _ids()}}},
-    {"name": "done", "description": "Handled: close the letters.",
+    {"name": "done", "description": "Handled: close the letters sent to this project. With withdraw, take back letters "
+                                     "this project sent instead (wrong recipient or type, no longer needed; note required).",
      "inputSchema": {"type": "object", "required": ["ids"], "properties": {
-         "ids": _ids(), "note": _str("how they were handled (optional)")}}},
+         "ids": _ids(), "note": _str("how they were handled, or why they are taken back"),
+         "withdraw": {"type": "boolean", "description": "take back letters this project sent"}}}},
     {"name": "ask_owner", "description": "Ask the owner (the person this platform belongs to) about something they need "
                                          "to decide: say which project, what needs deciding and what the options are.",
      "inputSchema": {"type": "object", "required": ["text"], "properties": {"text": _str("the question")}}},
@@ -287,8 +289,10 @@ def outside(name: str, args: dict, client: "Client") -> tuple[bool, str]:
 
 
 def hubbus_cli(project: str, *args: str) -> tuple[bool, str]:
-    # a sandboxed project's commands run in its folder, where hubbus takes its outbox and view instead of the bus
-    cwd = hubconf.workspace(project) if _hubbus().outboxed(project) else os.getcwd()
+    # in the project's folder, so hubbus knows which project asks whatever folder the server started in (names.env("PROJECT")):
+    # a sandboxed project's commands take its outbox and view there instead of the bus
+    ws = hubconf.workspace(project)
+    cwd = ws if _hubbus().outboxed(project) or (ws and pathlib.Path(ws).is_dir()) else os.getcwd()
     r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], capture_output=True, text=True, timeout=60,
                        cwd=cwd)
     out = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip()
@@ -337,7 +341,8 @@ def call(project: str | None, why: str, name: str, args: dict, client: "Client |
     if name == "pass":
         return hubbus_cli(project, "pass", *map(str, args["ids"]))
     if name == "done":
-        return hubbus_cli(project, "done", *map(str, args["ids"]), *(["--note", str(args["note"])] if args.get("note") else []))
+        return hubbus_cli(project, "done", *map(str, args["ids"]), *(["--note", str(args["note"])] if args.get("note") else []),
+                          *(["--withdraw"] if args.get("withdraw") is True else []))
     if name == "ask_owner":
         return hubbus_cli(project, "send", "--from", project, "--to", hubconf.owner_address(), "--type", "question",
                           "--text", str(args["text"]))

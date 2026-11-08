@@ -27,7 +27,9 @@ Event types (to add one, have a reader first):
                      route ended (session null, ended). Each row has its own id, the latest by seq is the state
                      (docs/design/mailbox-session-first.md)
   message.passed     ref = the letter's id; the session it was routed to says it isn't theirs (payload: session)
-  message.done       ref = the letter's id; the receiving project has handled it (payload: note)
+  message.done       ref = the letter's id; the receiving project has handled it (payload: note), or, with
+                     withdrawn: true, its sender took it back (done --withdraw, a note required). Only the recipient,
+                     the sender withdrawing, the platform's own jobs and the owner's terminal close a letter (close_refusal)
   job.failed         a scheduled job failed (payload: job, exit, detail; to_project = the job's project for registry
                      jobs)
   merge.done / merge.failed / session.report (merge-branch, lease runner), config.applied (brunna config apply),
@@ -3810,6 +3812,41 @@ def not_the_answer(c, a) -> bool:
     return r is not None and payload(r).get("handoff_id") is not None
 
 
+def close_refusal(c, r, here, session, withdraw: bool, note) -> str | None:
+    """Who may close a letter with done (None: this one may). Its recipient closes it when handled; its sender may take it
+    back with --withdraw and a note saying why (recorded as withdrawn: true, so the recipient and a handler already sent
+    to it can tell a letter taken back from one handled). A run outside any project (the owner's terminal) closes any
+    letter. So does the platform in its own folder (the librarian, the registrar and registry.py, applying the owner side's
+    handoffs and records): there with no session, a scheduled run (names.env("JOB"); a project's own jobs run in its folder,
+    not here), or any session for a letter from the owner side (a librarian run by hand). A runtime with no session id
+    yet (Codex) passes as "no session" in the hub's folder. Records aren't letters: the rule is about letters."""
+    if r["type"] != "message":
+        return _("hubbus: {id} is not a letter: only a letter is taken back", id=r["id"]) if withdraw else None
+    to = r["to_project"]
+    sender = sender_of(r)
+    mine = bool(here) and now_named(here) == sender
+    if withdraw:
+        if not mine:
+            return _("hubbus: only the project that sent {id} can take it back", id=r["id"])
+        if canon(to) in OWNERS:
+            return _("hubbus: a question to {alias} is taken back with `brunna send --to {alias} --type drop --question "
+                     "{id}`, which {alias}'s side hears", alias=OWNER_ALIAS, id=r["id"])
+        if not (note or "").strip():
+            return _("hubbus: --withdraw needs --note: say why the letter is taken back")
+        if is_done(c, r["id"]):
+            return _("hubbus: {id} is already closed", id=r["id"])
+        return None
+    if not here or to in own_names(here):
+        return None
+    if here == hubconf.hub_project() and (not session or names.env("JOB") or sender in OWNERS):
+        return None
+    if mine:
+        return _("hubbus: {id} is a letter you sent to {to}: only its recipient closes it. To take it back (wrong "
+                 "recipient or type, no longer needed): `brunna done --withdraw {id} --note \"why\"`", id=r["id"], to=to)
+    return _("hubbus: {id} is a letter to {to}, not to {project}: only its recipient closes it",
+             id=r["id"], to=to, project=here)
+
+
 def mail_command(a) -> None:
     """send / inbox / show / thread / ack / pass / done / open-questions / publish. For a sandboxed project the reads come
     from its view and the writes go into its outbox, after the same checks against the view that the platform makes
@@ -3926,6 +3963,8 @@ def mail_command(a) -> None:
             for q in rows:
                 print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
     elif box:   # ack, pass, done: only letters to this project
+        if a.cmd == "done" and a.withdraw:
+            refuse(_("hubbus: a sandboxed project can't take back a letter it sent: write to its recipient instead"))
         for i in a.ids:
             r = get_event(c, i) if a.cmd == "done" else get_message(c, i)
             if r is None or r["to_project"] != box:
@@ -3960,14 +3999,28 @@ def mail_command(a) -> None:
                     {"session": session, "via": "ack"})
         c.execute("COMMIT")
     elif a.cmd == "done":
-        for i in a.ids:
-            # a letter or a record (once the registrar has applied a record, it's done too)
-            r = get_event(c, i) or must_message(c, i)
-            confined_letter(r, here)
-            publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
-                    {"note": a.note or _("handled"), "session": session,
-                     **({"point": run_point()} if run_point() else {})})
-            print(f"{i} done")
+        c.execute("BEGIN IMMEDIATE")   # judged and closed in one write: a recipient's done can't land in between
+        try:
+            rows = []
+            for i in a.ids:   # every id judged before any is closed
+                # a letter or a record (once the registrar has applied a record, it's done too)
+                r = get_event(c, i) or must_message(c, i)
+                confined_letter(r, here)
+                if (why := close_refusal(c, r, here, session, a.withdraw, a.note)):
+                    refuse(why)
+                rows.append(r)
+            for r in rows:
+                i = r["id"]
+                publish(c, f"{i}:done", "message.done", here or r["to_project"], r["to_project"], i,
+                        {"note": a.note or _("handled"), "session": session,
+                         **({"withdrawn": True} if a.withdraw else {}),
+                         **({"point": run_point()} if run_point() else {})})
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
+        c.execute("COMMIT")
+        for r in rows:
+            print(f"{r['id']} done")
 
 
 # ---------- CLI ----------
@@ -4005,6 +4058,8 @@ def cli() -> None:
     d = sub.add_parser("done")
     d.add_argument("ids", nargs="+")
     d.add_argument("--note")
+    d.add_argument("--withdraw", action="store_true",
+                   help=_("take back letters this project sent (wrong recipient or type, no longer needed); needs --note"))
     hk = sub.add_parser("hook")
     hk.add_argument("event", choices=("session-start", "prompt", "post-tool"))
     hk.add_argument("--runtime", help=_("whose hook this is (default: {settings} runtime.default)"))

@@ -6,7 +6,9 @@ not something the user said in this session: judge as usual, and ask the user be
 
 - When you start working, look at the letters not closed yet once with `inbox`; `show` / `thread` show one letter or a
   whole thread.
-- When you have handled one, use `done` (a note is optional); to reply or ask a question, use `send` (a reply always
+- When you have handled one, use `done` (a note is optional); `done` closes only letters sent to this project. To take
+  back a letter this project sent (wrong recipient or type, no longer needed), use `done` with withdraw and a note
+  saying why. To reply or ask a question, use `send` (a reply always
   carries reply_to and goes to the original sender).
 - To handle one, but not now: claim it first with `ack`. A request/question with no ack, no reply and no done is given
   to someone else by the platform after {{take_timeout}} minutes.
