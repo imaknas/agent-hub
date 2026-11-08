@@ -1,5 +1,5 @@
 """The platform's own entries in the user's tool settings are kept current by brunna upgrade, and nothing else is touched
-(AGENTS.md, user-level tool settings; runtime_claude.user_refresh, upgrade.user_settings_step, doctor_user_settings).
+(AGENTS.md, user-level tool settings; runtime_claude.user_refresh, brunna user-settings, doctor_user_settings).
 
     bin/py -m unittest tests.test_user_settings_refresh
 """
@@ -106,6 +106,46 @@ class Refresh(unittest.TestCase):
                 self.f.write_text(text)
                 self.assertEqual(runtime_claude.user_refresh(True), [])
                 self.assertEqual(self.f.read_text(), text)
+
+    def test_odd_shapes_anywhere_crash_neither_upgrade_nor_doctor(self):
+        wt = runtime_claude.worktree_hooks()[0][2]
+        for hooks in ({"Stop": [{"hooks": None}], "SessionStart": [{"hooks": [{"command": wt}]}]},
+                      {"Stop": [{"matcher": "x", "hooks": None}]}, {"Stop": [{"hooks": 3}, 5, None]},
+                      {"SessionStart": [{"hooks": [None, 2, {"command": wt}]}]}):
+            with self.subTest(hooks=hooks):
+                self.write({"hooks": hooks})
+                runtime_claude.user_refresh(False)
+                runtime_claude.user_refresh(True)
+
+    def test_the_owners_odd_entries_and_other_text_survive_a_rewrite(self):
+        d = self.installed(timeout=86400)
+        d["statusLine"] = {"type": "command", "command": "echo café ✓"}
+        d["hooks"]["Notification"] = [{"matcher": "x"}]
+        self.write(d)
+        self.assertTrue(runtime_claude.user_refresh(True))
+        text = self.f.read_text()
+        self.assertIn("echo café ✓", text, "written as it was, not escaped")
+        new = json.loads(text)
+        self.assertEqual(new["hooks"]["Notification"], [{"matcher": "x"}])
+        self.assertEqual(new["statusLine"], d["statusLine"])
+
+    def test_a_hook_the_set_gained_is_added(self):
+        d = self.installed()
+        del d["hooks"]["Stop"]   # installed before the waiter was in the set
+        self.write(d)
+        self.assertTrue(runtime_claude.user_refresh(True))
+        self.assertEqual(len([h for e in json.loads(self.f.read_text())["hooks"]["Stop"] for h in e["hooks"]]), 1)
+
+    def test_an_event_emptied_of_an_old_location_goes(self):
+        old = "[ -x /old/hub/bin/worktree-memory.sh ] && /old/hub/bin/worktree-memory.sh"
+        d = self.installed()
+        d["hooks"]["Gone"] = [{"hooks": [{"type": "command", "command": f"{old} start || true"}]}]
+        d["hooks"]["Empty"] = []
+        self.write(d)
+        self.assertTrue(runtime_claude.user_refresh(True))
+        new = json.loads(self.f.read_text())["hooks"]
+        self.assertNotIn("Gone", new)
+        self.assertEqual(new["Empty"], [], "the owner's own empty event is theirs")
 
     def test_merge_hook_settings_still_installs_them_and_a_rerun_changes_nothing(self):
         texts = []

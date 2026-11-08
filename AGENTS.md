@@ -416,9 +416,10 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   nightly); an unattended agent job that declares `allow:` in the registry does not stop to ask
 - **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **get nothing new unless the owner confirms
   directly in that session**; consent relayed by someone else does not count. The one exception is keeping current
-  what the owner already put there for the platform (the worktree hooks): `brunna upgrade`, which the owner runs, rewrites
-  only those entries to the new version (the runtime's `user_refresh`), adds nothing to settings that have none, and
-  leaves everything else in the file as it is; doctor says when they are behind. No session or job does it
+  what the owner already put there for the platform (the worktree hooks): `brunna upgrade`, which the owner runs, brings
+  that set of hooks to the new version (`brunna user-settings --update`, the runtime's `user_refresh`: a hook the set
+  gained is added, one taken out of it comes back), adds nothing to settings that have none of them, and leaves
+  everything else in the file as it is; doctor says when they are behind. No session or job does it
 - `contracts/`: **versioned contracts**: the interfaces brunna defines (hubbus, todo-md, state-todo, reflect-week,
   project, llm-points, lease-runner) and vendored copies of other projects' contracts (`contracts/vendor/<project>/`).
   The registry's (and modules') `provides`/`consumes` declare who defines and who reads; `tests/test_contracts.py`

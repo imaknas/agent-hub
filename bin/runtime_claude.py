@@ -1122,27 +1122,53 @@ def _is_worktree_hook(command) -> bool:
 
 
 def merge_worktree_hooks(settings: dict) -> dict:
-    """settings with this version's worktree hooks: the user's own hooks and other settings stay; a worktree hook written
-    for another hub location, or no longer one of today's commands, goes (an entry left with nothing goes with it); the
-    same command is never added twice; an installed one gets today's fields (the waiter's timeout)."""
+    """settings with this version's set of worktree hooks: a hook the set has gained is added, one written for another hub
+    location or no longer in the set goes (an entry or event emptied by that goes with it), the same command is never
+    added twice, and an installed one gets today's fields (the waiter's timeout). The user's own hooks, entries in a shape
+    this doesn't know (no list of hooks) and every other setting stay as they are."""
     hooks = settings.setdefault("hooks", {})
     table = worktree_hooks()
     wanted = {command for _e, _m, command in table}
+
+    def inner(e):
+        return e["hooks"] if isinstance(e, dict) and isinstance(e.get("hooks"), list) else []
+
     for event in list(hooks):
-        kept = []
+        if not isinstance(hooks[event], list):
+            continue
+        kept, dropped = [], False
         for e in hooks[event]:
-            inner = [h for h in e.get("hooks", []) if not _is_worktree_hook(h.get("command")) or h.get("command") in wanted]
-            if inner:
-                kept.append({**e, "hooks": inner})
-        hooks[event] = kept
+            if not inner(e):
+                kept.append(e)
+                continue
+            left = [h for h in inner(e) if not (isinstance(h, dict) and _is_worktree_hook(h.get("command"))
+                                                and h.get("command") not in wanted)]
+            dropped |= len(left) < len(inner(e))
+            if left:
+                kept.append({**e, "hooks": left})
+        if kept or not dropped:
+            hooks[event] = kept
+        else:
+            del hooks[event]
     for event, matcher, command in table:
         entries = hooks.setdefault(event, [])
-        if not any(h.get("command") == command for e in entries for h in e.get("hooks", [])):
+        mine = [h for e in entries for h in inner(e) if isinstance(h, dict) and h.get("command") == command]
+        if not mine:
             entry = {"hooks": [{"type": "command", "command": command, **_worktree_fields(command)}]}
             entries.append({"matcher": matcher, **entry} if matcher else entry)
-        for h in (h for e in entries for h in e.get("hooks", []) if h.get("command") == command):
+        for h in mine:
             h.update(_worktree_fields(command))
     return settings
+
+
+def _has_worktree_hooks(settings) -> bool:
+    """Whether the owner installed the platform's worktree hooks here (any of them, for any hub location)."""
+    hooks = settings.get("hooks") if isinstance(settings, dict) else None
+    return isinstance(hooks, dict) and any(
+        isinstance(h, dict) and _is_worktree_hook(h.get("command"))
+        for es in hooks.values() if isinstance(es, list)
+        for e in es if isinstance(e, dict) and isinstance(e.get("hooks"), list)
+        for h in e["hooks"])
 
 
 def user_settings_file() -> pathlib.Path:
@@ -1150,10 +1176,12 @@ def user_settings_file() -> pathlib.Path:
 
 
 def user_refresh(apply: bool) -> list[str]:
-    """agenthub upgrade (the owner's own command; apply) and doctor (not): the platform's worktree hooks in the user's
-    settings brought to this version. Only where the owner installed them (a worktree hook is there), and only those
-    entries: nothing is added to settings that have none, nothing else in the file changes, a file that is a link or
-    isn't JSON is left alone. What is (or was) behind; written whole or not at all, with the file's mode kept."""
+    """agenthub user-settings (run by upgrade, the owner's own command; apply) and doctor (not): the platform's set of
+    worktree hooks in the user's settings brought to this version (merge_worktree_hooks: a hook the set gained is added,
+    one the owner took out of the set comes back). Only where the owner installed them (one of them is there): nothing
+    is added to settings that have none; nothing else in the file changes; a file that is a link, isn't JSON or has
+    hooks in a shape Claude Code wouldn't read is left alone. What is (or was) behind; written whole or not at all, with
+    the file's mode kept."""
     import os
     path = user_settings_file()
     if not path.is_file() or path.is_symlink():
@@ -1162,12 +1190,9 @@ def user_refresh(apply: bool) -> list[str]:
         before = json.loads(path.read_text())
     except (OSError, ValueError):
         return []
-    hooks = before.get("hooks") if isinstance(before, dict) else None
-    if not isinstance(hooks, dict) or not any(_is_worktree_hook(h.get("command")) for es in hooks.values()
-                                              if isinstance(es, list) for e in es if isinstance(e, dict)
-                                              for h in e.get("hooks", []) if isinstance(h, dict)):
-        return []
     try:
+        if not _has_worktree_hooks(before):
+            return []
         after = merge_worktree_hooks(json.loads(json.dumps(before)))
     except (AttributeError, TypeError):   # hooks in a shape Claude Code wouldn't read either: not the platform's to fix
         return []
@@ -1176,7 +1201,7 @@ def user_refresh(apply: bool) -> list[str]:
     if apply:
         tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
         try:
-            tmp.write_text(json.dumps(after, indent=2) + "\n")
+            tmp.write_text(json.dumps(after, indent=2, ensure_ascii=False) + "\n")
             os.chmod(tmp, path.stat().st_mode & 0o7777)
             os.replace(tmp, path)
         finally:
