@@ -1,6 +1,6 @@
 # Runtime versions and compatibility
 
-Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09, DV5 waits on V-M10.
+Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09; the measurements done 11-09, DV5 open with option (c).
 Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or the Codex app has a
 breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first, before Codex Step 1
 (`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
@@ -72,8 +72,9 @@ and say why") applied over time.
 Getting, installing and pinning a tool is tool syntax, so it lives in the adapter as a new port, `distribution`:
 `latest()` (the newest version the vendor publishes), `install(version, folder)` (the exact version from the vendor's source, its
 integrity checked as the vendor publishes it: npm's `dist.integrity`), `version(binary)`, `pin_env()` / `pin_config()` (what turns
-the tool's own updater off for a run of this copy: Claude `DISABLE_AUTOUPDATER=1`, Codex its update and daemon-auto-start settings in
-the platform home; V-M5), and `MIN_VERSION`. The neutral job and runner only call these. A runtime without the port (ACP, a
+the tool's own updater off for a run of this copy: Claude `DISABLE_AUTOUPDATER=1` plus `npm_config_prefix` at the copy's own folder,
+since its updater writes npm's global prefix, not the running copy; Codex `check_for_update_on_startup`, `features.daemon_auto_start`
+and `features.in_app_updates` off in the platform home; V-M5), and `MIN_VERSION`. The neutral job and runner only call these. A runtime without the port (ACP, a
 command template) keeps today's behaviour and doctor says it is unversioned.
 
 ## 2. Conformance checks, one or more per port
@@ -411,6 +412,29 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 - V-M5: the switch that keeps each tool's updater off for one run: Claude `DISABLE_AUTOUPDATER=1` under `-p` and in a stream session;
   Codex's update and daemon-auto-start settings in the platform home. The check: the binary's digest is unchanged after a run with a
   newer version published.
+  **Done 11-09.**
+  - **Claude:** 2.1.317 was installed into a scratch npm prefix while 2.1.319 was the latest.
+    - `-p` and stream-json sessions never start the CLI updater, with or without the flag: no `AutoUpdater` line, no npm call,
+      the digest unchanged.
+    - An interactive session under a pty did update itself about 25 s in, as the positive control: `Installation type:
+      npm-global`, then `npm install --global @anthropic-ai/claude-code@2.1.319`.
+    - With `DISABLE_AUTOUPDATER=1` the same session did nothing, and the digest and version held.
+    - **The updater installs into npm's global prefix, not into the running copy's folder.** It honoured `npm_config_prefix`.
+      Without that, a store copy run with nvm's npm on PATH would rewrite nvm's global packages.
+    - So `pin_env()` for Claude is `DISABLE_AUTOUPDATER=1` (`DISABLE_UPDATES` and
+      `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` also turn it off, untested) **and** `npm_config_prefix` set to the store copy's
+      own folder, so even an updater that ignores the flag can only write into that copy. The digest check then catches the
+      change.
+    - The flag matters for V-M6's interactive checks and leases, not for `-p`.
+  - **Codex 0.167.0:** `codex exec` runs the app-server in process.
+    - It wrote no `version.json`, made no update request, started no daemon, and left `packages/` absent.
+    - The settings that exist (from the binary's strings and `features list`) are `check_for_update_on_startup` (which an
+      administrator can also lock), `features.daemon_auto_start` and `features.in_app_updates`. `pin_config()` sets all three
+      off in the platform home.
+    - They can't be shown to hold until a newer Codex is published (no positive control today). Until then they are
+      `not-checkable`, with the digest check behind them.
+    - The interactive update path (`version.json`, the self-updating daemon) belongs to the TUI and the daemon, which the
+      platform doesn't run.
 - V-M6: a throwaway interactive session the checks can drive: Claude's stream-json session idles and takes a turn after `wake()`, and
   `claude agents --json` lists it; Codex's thread through its app-server.
   **Done 11-09 for Claude (2.1.319).** An interactive `claude` under a Python pty does all three steps with no human, in two full
