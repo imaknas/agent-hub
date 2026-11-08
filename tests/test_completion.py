@@ -411,6 +411,63 @@ class QuietAnswer(Base):
         self.assertEqual((runtime_fake._asked, self.published), ([], []))
 
 
+class ReadOnlySecrets(Base):
+    """A secrets folder the platform can't write (mode 0o500): the runtimes' complete() can't make the run's folder in
+    hubconf.private_tmp. That is a refusal with the reason, through completion.run to llm.py's run path (the point's
+    failure is published and printed), never an exception escaping to the caller, and nothing is run."""
+
+    def setUp(self):
+        super().setUp()
+        if os.geteuid() == 0:
+            self.skipTest("root writes anywhere")
+        import hubconf
+        import runtime_claude
+        self.secrets = self.tmp / "secrets"
+        self.secrets.mkdir(mode=0o500)
+        self.addCleanup(self.secrets.chmod, 0o700)
+        for obj, name, value in ((hubconf, "secrets_dir", lambda: self.secrets),
+                                 (runtime_claude, "auth_env", lambda mode, env: (dict(env), "")),
+                                 (hubconf, "get", lambda k, d=None: {"run": ["true"]} if k == "runtime.command" else d)):
+            p = mock.patch.object(obj, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        never = mock.patch("subprocess.run", side_effect=AssertionError("nothing may run"))
+        never.start()
+        self.addCleanup(never.stop)
+        self.llm = None
+
+    def test_the_premise_private_tmp_raises(self):
+        import hubconf
+        with self.assertRaises(PermissionError):
+            hubconf.private_tmp()
+
+    def test_completion_run_refuses_with_the_reason(self):
+        for rt in ("claude", "command"):
+            with self.subTest(rt), self.assertRaises(completion.Refused) as cm:
+                completion.run("p", SPEC, "hi", None, target=completion.runtime_target(rt, "m", "token"))
+            self.assertTrue(str(cm.exception).startswith(f"{rt}/m:error:"), cm.exception)
+            self.assertIn("Errno 13", str(cm.exception))
+
+    def test_llm_run_reports_the_refusal(self):
+        import contextlib
+        import importlib.util
+        import io
+        import types
+        spec = importlib.util.spec_from_file_location("llm_ro", ROOT / "bin" / "llm.py")
+        llm_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(llm_mod)
+        published = []
+        llm_mod.job_failed = lambda point, reason: published.append(reason)
+        with mock.patch.object(runtime_ports, "default_name", lambda: "claude"), \
+                contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = llm_mod.run_completion(types.SimpleNamespace(point="p"), {"shape": "completion", **SPEC}, "hi", "m")
+        self.assertEqual(rc, 1)
+        got = json.loads(out.getvalue())
+        self.assertTrue(got["is_error"])
+        self.assertIn("Errno 13", got["llm_error"])
+        self.assertEqual(published, [got["llm_error"]])
+
+
 class CompletionContract(unittest.TestCase):
     """The completion interface: every runtime that has it and every provider implement it completely."""
 
