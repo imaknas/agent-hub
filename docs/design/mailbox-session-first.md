@@ -168,8 +168,8 @@ platform checks the answer against the list and writes only a matching id, to a 
 Not recorded for evals. **No text from the model is kept:** a crafted letter could otherwise have it copy a last reply and read
 it back with `brunna show`. The bus gets `message.routed` with `{session, by}`.
 
-The model reads, marked as data: the letter's sender, type and first 1000 characters, and for each candidate its id, worktree
-name from `.live`, idle time, and the gated text below. No branch lookup (that would need a `project_git` op and time).
+The model reads, marked as data: the letter's sender, type and first 1000 characters, and for each candidate a label (`s1`, `s2`…,
+never its id: see step 5's live check), worktree name from `.live`, idle time, and the gated text below. No branch lookup (that would need a `project_git` op and time).
 
 ### The last reply
 
@@ -757,7 +757,7 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
   (`waiting`) is out before the pick, as in step 4.
 - **What the model reads.** One JSON block between `<data>` tags, every `<` in it written `<`, so a letter's text closes neither the
   JSON nor the tag; the prompt says the block is data, from other agents. The letter: its sender (an address, or `?`), type, first 1000
-  characters. At most 8 candidates, the most recently active first (the model can pick only those): id, `folder` (`main` for the
+  characters. At most 8 candidates, the most recently active first (the model can pick only those): a label (`s1`, `s2`…), `folder` (`main` for the
   project's own, the last part of a folder under it, i.e. a worktree's name, or nothing for a folder elsewhere, whose name isn't this
   project's to show), idle minutes from the last hook, and what it's doing (the tick's status). The folder is the record's `cwd`, where
   the process was first recorded.

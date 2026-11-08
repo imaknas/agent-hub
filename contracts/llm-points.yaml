@@ -273,8 +273,9 @@ points:
     max_tokens: 200
     max_attempts: 1
     timeout_s: 60
-    # the platform takes only an id from the candidates it computed; anything else, or no answer in two ticks, and the
-    # most recently active session gets it
+    # the model answers with a label (s1, s2…), never an id, which completion's mask would take; the platform takes only
+    # a label of the candidates it listed; anything else, or no answer in two ticks, and the most recently active session
+    # gets it
     on_failure: default
   mailbox-conversation:
     caller: bin/hubbus (dispatch → llm.py run, with runtime_claude.resume_args)
