@@ -246,7 +246,7 @@ class JobStateFolder(unittest.TestCase):
         self.assertFalse([r for r in deny_own if str(self.job) in r and not r.startswith("Edit(") or
                           r in (f"Read({rule(self.state / 'agent-jobs')}/**)", f"Edit({rule(self.state / 'agent-jobs')}/**)")],
                          deny_own)
-        self.assertIn(f"Read({rule(self.state / 'agent-jobs')}/**)", deny_whole)
+        self.assertIn(f"Read({rule(self.state)}/**)", deny_whole)   # whole, without the job's folder: listed beside it
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")

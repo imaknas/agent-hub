@@ -36,12 +36,11 @@ policy(name, doc, index) → {
                       outbox reads its own letters from the view the platform writes into its folder)
   credentials:        user-level credential directories (Path); credential_files: credential files (Path): {settings}'s
                       credentials, CREDENTIALS below, and what each installed runtime declares (runtime_ports)
-  platform_state:     the hub's run state and the owner's data (Path; empty for the hub itself): what sits in .state
-                      beside `read` (listed, not whole, so no renderer needs an allow inside a deny), .logs, the data dir,
-                      the evals dir; never one that is or holds the hub root (the old layout's data dir)
-  read:               platform paths readable although platform state is blocked: the registry index the platform CLI
-                      (brunna send, complete, cap-run) reads, the worker slots brunna test locks, the renames a send to
-                      an old name follows (Path)
+  platform_state:     the hub's run state and the owner's data (Path; empty for the hub itself): .state whole, .logs,
+                      the data dir, the evals dir; never one that is or holds the hub root (the old layout's data dir)
+  read:               the platform state sandboxed code reads, outside .state (hubconf.shared(): the registry index the
+                      platform CLI reads (brunna send, complete, cap-run), the worker slots brunna test locks, the renames
+                      a send to an old name follows; Path)
   network:            domains that may be reached (platform defaults + the registry's network)
   local_bind:         may listen on 127.0.0.1 (to test its own server before declaring it a service; 10-31 owner
                       confirmed in the brunna session)
@@ -208,8 +207,9 @@ def run_state_denied(project: str, keep: pathlib.Path | None = None) -> list[pat
 
 
 def readable() -> list[pathlib.Path]:
-    """policy.read: the platform state sandboxed code reads (the platform CLI inside a session, service or job)."""
-    return [hubconf.STATE / "registry", hubconf.STATE / "test-slots", hubconf.STATE / "project-renames.json"]
+    """policy.read: the platform state sandboxed code reads (the platform CLI inside a session, service or job), kept out
+    of .state so that .state can be denied whole (docs/design/capabilities.md 11-08, A1 point 1)."""
+    return [hubconf.shared()]
 
 
 def _uniq(paths) -> list[pathlib.Path]:
@@ -217,17 +217,18 @@ def _uniq(paths) -> list[pathlib.Path]:
 
 
 def platform_state(project: str, keep=()) -> list[pathlib.Path]:
-    """What no sandboxed project reads of the hub's (policy platform_state): .state beside readable() and keep (a confined
-    job's own folder, the notes it writes), .logs, the data dir, the evals dir (its configured path: evals_dir() would
-    make it). One that is or holds the hub root is left out (the old layout's data dir is the hub root). The hub's own
-    sessions and leases read its state; its confined runs hide .state and .logs already (run_state_denied)."""
+    """What no sandboxed project reads of the hub's (policy platform_state): .state, .logs, the data dir, the evals dir (its
+    configured path: evals_dir() would make it), each whole. keep: a confined job's own folder (in .state/agent-jobs) and
+    the notes it writes: a folder holding one is listed beside it instead (beside), only in that run's settings. One that
+    is or holds the hub root is left out (the old layout's data dir is the hub root). The hub's own sessions and leases
+    read its state; its confined runs hide .state and .logs already (run_state_denied)."""
     import os
     if project == hubconf.hub_project():
         return []
-    keeps = [pathlib.Path(os.path.realpath(k)) for k in [*readable(), *keep] if k]
+    keeps = [pathlib.Path(os.path.realpath(k)) for k in keep if k]
     hub = {pathlib.Path(os.path.realpath(r)) for r in (hubconf.ROOT, hubconf.MAIN)}
-    out = beside(hubconf.STATE, keeps)
-    for d in (hubconf.LOGS, hubconf.data_dir(), hubconf.evals_path()):
+    out = []
+    for d in (hubconf.STATE, hubconf.LOGS, hubconf.data_dir(), hubconf.evals_path()):
         r = pathlib.Path(os.path.realpath(d)) if d else None
         if not r or any(h == r or r in h.parents for h in hub):
             continue

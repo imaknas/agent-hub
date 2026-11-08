@@ -24,6 +24,9 @@ import policy  # noqa: E402
 import runtime_claude  # noqa: E402
 import seatbelt  # noqa: E402
 
+REAL = {"state": hubconf.STATE, "shared": hubconf.SHARED, "index": hubconf.REGISTRY_INDEX,
+        "slots": hubconf.shared() / hubconf.TEST_SLOTS_DIR, "renames": hubconf.shared() / hubconf.RENAMES_FILE}
+
 try:
     import yaml  # noqa: F401  (registry.dirs, which policy.policy uses)
 except ImportError:
@@ -37,17 +40,17 @@ class Tree(unittest.TestCase):
         t = self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, t, ignore_errors=True)
         home, hub = self.home, self.hub = t / "home", t / "hub"
-        self.state, self.logs = hub / ".state", hub / ".logs"
+        self.state, self.logs, self.shared = hub / ".state", hub / ".logs", hub / ".shared"
         real = self.inst_real = t / "instance-real"
         link = self.inst = home / ".instance"
-        for d in (self.state / "registry", self.state / "test-slots", self.state / "agent-jobs" / "job-a",
+        for d in (self.shared / "registry", self.shared / "test-slots", self.state / "agent-jobs" / "job-a",
                   self.state / "cap-runner", self.logs, real / "config", real / "data", real / "secrets",
                   home / ".ssh", home / ".aws", home / ".claude" / "projects" / "x" / "memory", home / ".claude" / "plans",
                   t / "ws" / "proj", t / "ws" / "other", t / "pathbin", t / "copies", t / "origin", t / "bus"):
             d.mkdir(parents=True)
         link.symlink_to(real)
-        for f, text in ((self.state / "registry" / "index.json", "{}"), (self.state / "test-slots" / "1", ""),
-                        (self.state / "project-renames.json", "{}"), (self.state / "scheduler-state.json", "{}"),
+        for f, text in ((self.shared / "registry" / "index.json", "{}"), (self.shared / "test-slots" / "1", ""),
+                        (self.shared / "project-renames.json", "{}"), (self.state / "scheduler-state.json", "{}"),
                         (self.state / "agent-jobs" / "job-a" / "report.md", "x"), (self.logs / "a.log", "x"),
                         (real / "config" / "brunna.json", "{}"), (real / "data" / "todo.md", "x"),
                         (real / "secrets" / "key", "x"), (home / ".ssh" / "id_x", "x"), (home / ".aws" / "credentials", "x"),
@@ -127,7 +130,9 @@ def landlock_reads(pol, own, path, root) -> bool:
     """What landlock.plan allows (read_roots of denied(), plus policy.read), walked from the test's own folder; the
     kernel follows links, so the real path counts."""
     orig = landlock.read_roots
-    with mock.patch.object(landlock, "read_roots", lambda deny, r=None: orig(deny, root)):
+    # the fixture is in the temp area, which plan lets everything write (and so read): not counted here
+    with mock.patch.object(landlock, "read_roots", lambda deny, r=None: orig(deny, root)), \
+            mock.patch.object(landlock, "TMP", []):
         pl = landlock.plan(pol, own)
     roots = [*pl["read"], *pl["write"]]   # a write rule carries every right, reading included
     real = pathlib.Path(os.path.realpath(path))
@@ -172,7 +177,7 @@ class Parity(Tree):
                 self.state / "cap-runner", self.evals / "case.json", t / "ws" / "other" / "f"]
 
     def readable_everywhere(self):
-        return [self.state / "registry" / "index.json", self.state / "test-slots" / "1", self.state / "project-renames.json",
+        return [self.shared / "registry" / "index.json", self.shared / "test-slots" / "1", self.shared / "project-renames.json",
                 self.tmp / "ws" / "proj" / "f", self.inst / "config" / "brunna.json",
                 self.inst_real / "config" / "brunna.json"]
 
@@ -198,7 +203,7 @@ class Parity(Tree):
     def test_the_hub_root_is_never_denied_to_the_sessions_bash(self):
         """git dies when a folder above its -C can't be stat'ed: not the workspace root, not the hub's own folder."""
         sandbox = runtime_claude.settings(self.pol())[0]
-        for p in (self.tmp / "ws", self.hub, self.state):
+        for p in (self.tmp / "ws", self.hub, self.shared):
             self.assertTrue(bash_reads(sandbox, str(p), self.home), p)
 
 
@@ -207,14 +212,18 @@ class PlatformState(Tree):
     def test_the_hub_has_none(self):
         self.assertEqual(self.pol(hubconf.hub_project())["platform_state"], [])
 
-    def test_state_is_listed_beside_exactly_the_three_reads(self):
+    def test_state_is_denied_whole_and_what_sandboxes_read_is_beside_it(self):
         got = self.pol()["platform_state"]
-        listed = {p for p in got if p.parent == self.state}
-        self.assertEqual(listed, {self.state / e for e in os.listdir(self.state)}
-                         - {self.state / "registry", self.state / "test-slots", self.state / "project-renames.json"})
-        self.assertNotIn(self.state, got)
-        self.assertEqual(policy.readable(), [self.state / "registry", self.state / "test-slots",
-                                             self.state / "project-renames.json"])
+        self.assertIn(self.state, got)
+        self.assertFalse([p for p in got if self.state in p.parents], "nothing listed inside it")
+        self.assertEqual(self.pol()["read"], [self.shared])
+        for p in (REAL["index"], REAL["slots"], REAL["renames"]):   # the module's own, not this test's tree
+            self.assertIn(REAL["shared"], p.parents, p)
+        self.assertNotIn(REAL["state"], [REAL["shared"], *REAL["shared"].parents])
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        self.assertEqual([r for r in deny if ".state" in r],
+                         [f"{t}(/{self.state}{s})" for t in ("Read", "Edit") for s in ("", "/**")])
+        self.assertEqual([e for e in sandbox["filesystem"]["denyRead"] if ".state" in e], [str(self.state)])
 
     def test_a_confined_jobs_own_folder_is_left_out(self):
         (self.state / "agent-jobs" / "job-b").mkdir()
@@ -300,6 +309,42 @@ class UserControl(Tree):
         deny = runtime_claude.lease_settings(self.pol())["permissions"]["deny"]
         self.assertTrue(rule_hits(deny, "Read", str(self.home / ".claude" / "plans" / "p.md"), self.home))
         self.assertEqual(len(deny), len(set(deny)))
+
+
+class MovedOnce(unittest.TestCase):
+    """What sandboxed code reads left .state for hubconf.SHARED (11-08): moved once, by the live layout's first look, never
+    read in both places."""
+
+    def setUp(self):
+        t = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, t, ignore_errors=True)
+        self.state, self.shared, self.t = t / ".state", t / ".shared", t
+        (self.state / "test-slots").mkdir(parents=True)
+        (self.state / "test-slots" / "slot-00").write_text("")
+        (self.state / "project-renames.json").write_text('{"a": {"new": "b", "stage": "done"}}')
+        for p in (mock.patch.object(hubconf, "MAIN", t), mock.patch.object(hubconf, "STATE", self.state),
+                  mock.patch.object(hubconf, "worktree_lookup", lambda: False)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_a_file_and_a_folder_move_once(self):
+        self.assertEqual(hubconf.renames(), self.shared / "project-renames.json")
+        self.assertFalse((self.state / "project-renames.json").exists())
+        self.assertEqual(hubconf.former_names("b"), ["a"])
+        self.assertEqual(hubconf.test_slots(), self.shared / "test-slots")
+        self.assertTrue((self.shared / "test-slots" / "slot-00").exists())
+        self.assertFalse((self.state / "test-slots").exists())
+        (self.state / "project-renames.json").write_text("{}")   # a stale copy is never taken over the moved one
+        hubconf.renames()
+        self.assertIn("stage", (self.shared / "project-renames.json").read_text())
+
+    def test_not_from_a_worktree_or_a_throwaway_state(self):
+        with mock.patch.object(hubconf, "worktree_lookup", lambda: True):
+            hubconf.renames()
+        with mock.patch.object(hubconf, "MAIN", self.t / "elsewhere"):   # a state other than the hub's own
+            self.assertEqual(hubconf.renames(), self.state / "shared" / "project-renames.json")
+        self.assertTrue((self.state / "project-renames.json").exists())
+        self.assertFalse(self.shared.exists())
 
 
 if __name__ == "__main__":

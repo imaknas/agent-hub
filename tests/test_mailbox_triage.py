@@ -1134,19 +1134,23 @@ class Settings(unittest.TestCase):
         other = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, other, True)
         (other / ".agent-memory" / "memory").mkdir(parents=True)
-        for d in (self.state / "registry", self.state / "test-slots"):
-            d.mkdir()
-        (self.state / "project-renames.json").write_text("{}")
         with mock.patch.object(hubconf, "workspace", lambda n: other):
             deny = self.settings("other", workspace=other)
-        # what the platform CLI reads stays readable (policy.readable); the rest of the hub's state doesn't
-        # (docs/design/capabilities.md 11-08, A1 point 7)
-        for kept in ("registry", "test-slots", "project-renames.json"):
-            self.assertFalse([r for r in deny if r.startswith("Read(") and f".state/{kept}" in r], kept)
-        self.assertNotIn(f"Read({self.tilde(self.state)}/**)", deny)
-        self.assertIn(f"Read({self.tilde(self.state / 'mailbox')}/**)", deny)
+        # the hub's state is denied whole: what the platform CLI reads is beside it, in hubconf.SHARED
+        # (docs/design/capabilities.md 11-08, A1 points 1 and 7)
+        self.assertIn(f"Read({self.tilde(self.state)}/**)", deny)
         self.assertIn(f"Read({self.tilde(self.logs)}/**)", deny)
+        self.assertFalse([r for r in deny if str(hubconf.shared()) in r])
         self.assertIn(f"Edit({self.tilde(self.hub)}/**)", deny)
+        job = self.state / "agent-jobs" / "other-check"
+        job.mkdir()
+        with mock.patch.object(hubconf, "workspace", lambda n: other):
+            deny = self.settings("other", keep=job, workspace=other)
+        # a confined job's own folder: .state is listed beside it, only in that run's settings
+        self.assertNotIn(f"Read({self.tilde(self.state)}/**)", deny)
+        self.assertFalse([r for r in deny if str(job) in r])
+        self.assertIn(f"Read({self.tilde(self.state / 'mailbox')}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.state / 'agent-jobs' / 'mailbox-other')}/**)", deny)
 
     def flags(self, cwd):
         return thc.flags("mailbox-escalation", cwd, {"MAILBOX_PROJECT": self.name})

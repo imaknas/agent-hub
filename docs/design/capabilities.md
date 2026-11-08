@@ -473,12 +473,13 @@ tools can read other projects' transcripts there, as today.
 1. **`platform_state`, for projects other than the hub**: the hub's `.state` and `.logs`, the data dir and the evals dir (its
    configured path, read without making it), minus any that is or contains the hub root (the old layout's data dir is the hub root).
    Empty for the hub (its sessions and leases read its own state; its confined runs already hide `.state` and `.logs`).
-   `.state` is never denied whole, because three things in it are read by sandboxed code (`read`: `.state/registry`,
-   `.state/test-slots`, `.state/project-renames.json`): it is listed as what sits beside those (and beside a confined job's own
-   folder, `keep`), the way `write_except` lists the hub for writing. This doesn't rely on `allowRead`, which was measured only on
-   macOS. A new entry in `.state` is readable until the next render (15 minutes); `backup-verify` moves out of `.state` into
-   `hubconf.private_tmp()` (8), so the whole latest backup is never one of them. The Seatbelt and Landlock renderers keep `.state`
-   in their own fixed list as well, so a profile built from any policy still denies it.
+   `.state` is denied whole: the three things sandboxed code reads moved out of it into `hubconf.shared()` (`<hub>/.shared`, the
+   main checkout's, gitignored, written only by the platform, nothing private), which is `read`: the registry cache and index
+   (`registry.CACHE`, `REGISTRY_INDEX`), brunna test's worker slots (`test_slots()`) and the renames record (`renames()`). Each
+   was moved once by the first unsandboxed process of the live layout that looks (`moved_from_state`: never from a worktree or a
+   throwaway state, never read in both places). Only a confined job's run settings list `.state` beside its own folder (`keep`,
+   in `.state/agent-jobs`), the way `write_except` lists the hub for writing (`beside`). No `allowRead` is relied on. The Seatbelt
+   and Landlock renderers keep `.state` in their own fixed list as well, so a profile built from any policy still denies it.
 2. **Credentials**: the settings' `credentials`, plus a code default, plus what each installed runtime declares
    (`runtime_<name>.CREDENTIALS`: dirs and files; Claude's: its credential file `.credentials.json` in its home, not the home itself,
    whose finer rules are A2): `~/.ssh`, `~/.config/gh`, `~/.aws`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`,
@@ -503,7 +504,7 @@ tools can read other projects' transcripts there, as today.
    `plans/` and `projects/` are untouched. `Bash(security *)` denied, as for leases (reinforcement; the Keychain residual is stated in
    doctor's sandbox row).
 7. **Where `settings()` is also used** (`platform_settings`, `lease_settings`): the hub's own get no `platform_state`; a confined
-   job's `keep` and `notes_dir` are left out of the `.state` list (1).
+   job's `keep` and `notes_dir` are left out of `platform_state` (1).
 8. **backup-verify** restores into `hubconf.private_tmp()` (excluded from the backup, denied to every sandbox both ways).
 9. **Pushing from a sandboxed session**: as before — on macOS an ssh push already fails inside the sandbox; on Linux it stops, and an
    HTTPS remote through gh's helper stops fetching. The owner pushes from a terminal, or the project uses a deploy key of its own.
@@ -519,7 +520,8 @@ the file tools need from the home (shell snapshot, plans, skills), and deny the 
 ### Checks
 
 - Unit: the parity test (4); the hub's policy has no `platform_state`; the old layout's data dir is left out; `evals_dir()` isn't
-  called (nothing is created); the `.state` list leaves out exactly the three carve-outs (+ `keep`); `deny_write` holds the instance
+  called (nothing is created); `.state` is denied whole and `read` is beside it (only `keep` is listed around); the move out of
+  `.state` happens once and only in the live layout; `deny_write` holds the instance
   dir, the venv and its interpreter, uv, the wrapper folder, nvm, the shell files, git's config; `Edit` denies match
   `~/.claude/settings.json`, `hooks/x`, `plugins/x` and not `~/.claude/projects/x/memory/a.md` or `~/.claude/plans/p.md`.
 - Before merge: `render-project-settings.py --report` before and after for a sandboxed project, the diff only these rules.
