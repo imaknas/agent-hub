@@ -1,8 +1,8 @@
 # Bringing back an earlier STATE.md: the to-do list and the lock
 
-Status: design, third version (2026-11-09), after two rounds of blind review (round 1: the rule against the registrar and
-the Principal Handoff spec, locking and failure, scope; round 2: whether the rule is implementable and correct against
-`acts_md`, concurrency and recovery). Replaces the key handling and adds the locking of `bin/state.py restore`
+Status: design, fourth version (2026-11-09), after three rounds of blind review (round 1: the rule against the registrar
+and the Principal Handoff spec, locking and failure, scope; rounds 2 and 3: the rule against `acts_md` and the registrar,
+concurrency, recovery and the git mechanics, tried in throwaway repos). Replaces the key handling and adds the locking of `bin/state.py restore`
 (shipped in v0.9.0, hardened in v0.10.0).
 
 ## The problem
@@ -25,32 +25,41 @@ ticked boxes; markers moved elsewhere). So the to-do sections now move whole.
 ## The rule: the to-do list stays as it is today, everything else goes back
 
 Let T be the restored version, C today's version (both as the memory bare repo holds them, below), L the registrar's
-ledger (`registrar.Ledger(project)`). Sections are the file's `## ` sections; a to-do section is one whose heading is
-either set's to-do heading (`todo_tokens.patterns().section`, the reader `acts_md` and the registrar use).
+ledger (`registrar.Ledger(project)`). Sections and to-do sections are exactly what `acts_md.Doc` reads (`_sections`,
+made public for this: fenced and commented lines skipped, a section ends at the next `#`/`##` heading), the reader the
+registrar uses; never `todo_tokens.Patterns.section`, which ignores fences.
 
-1. **Refuse** when T or C has an unclosed code fence or HTML comment (the registrar leaves such a file alone; reading past
-   it would drop lines), or when C has a key marker outside its to-do sections (a displaced item: the registrar notes it
-   every night; the owner moves it back first). Nothing is guessed in either case.
+1. **Refuse** when T, C or the result R has an unclosed code fence or HTML comment (the registrar leaves such a file
+   alone), or when T or C carries the marker of a bound key L calls open outside its to-do sections (`Doc.mentioned`:
+   a displaced item; the owner moves it back first). Markers of closed keys in an archive or in prose don't matter.
+   Nothing is guessed.
 2. **R is T with its to-do sections replaced by C's**: every to-do section of C, whole and verbatim (all its items, the
    agent's and undecided ones too, ticks, continuation lines, groups, the empty marker), in C's order, at the place of
    T's first to-do section, or at the end when T has none. Every other section is T's.
-3. **One addition from L:** a key the registrar raised itself (a bound key) that L calls open, and whose marker appears
-   nowhere in C, gets one line from L's latest terms in R's first to-do section, written as the registrar's reopen step
-   writes it (`acts_md` writer, content language; under the owner's group in the grouped form). This is the line the
-   librarian deleted.
+   **When C has no to-do section at all** (likely the bad night itself: the model dropped it), R takes T's to-do sections
+   instead, with the owner entries of keys L calls settled or withdrawn removed (whole entries, as `acts_md.apply`
+   strikes them).
+3. **One addition from L:** a bound key (raised by the registrar) that L calls open, that is on an owner entry of T's
+   to-do sections, and whose marker appears nowhere in C (deleted between T and today), gets one line from L's latest
+   terms appended to R's first to-do section, exactly as the registrar's reopen step writes it (`acts_md.apply`: a
+   labelled line after the section's last non-blank line, content language). Not when C has an owner entry whose
+   normalised text equals that key's latest terms (the key was only dropped from the line: the registrar relinks it).
+   Each re-added line is named in the output, so the owner sees it if it duplicates a rewritten item.
 4. **Said, not done:** restore lists what it doesn't bring back, with L's view of each: owner items in T's to-do
-   sections that are not in C (closed since: by key; no key: their text), open keys a project raised itself whose line
-   is gone (the registrar doesn't re-add those either), bound keys settled since by a claim from a deleted line (the owner
-   reopens them on their side if the deletion was wrong; the registrar then re-adds the line).
+   sections that are not in C and that L calls closed (by key) or doesn't know (no key: their text, for the owner to
+   re-add by hand), and open keys a project raised itself (known keys) whose line is gone (the registrar doesn't re-add
+   those either).
 
-**What the owner can predict, one sentence for the docs:** "your to-do list stays exactly as it is today and everything
-else goes back to that day; an item of yours still open whose line was deleted comes back."
+**What the owner can predict, for the docs:** "your to-do list stays exactly as it is today and everything else goes back
+to that day; an item you were waiting on that was in the list that day and was deleted since, still open, comes back.
+Anything else restore leaves out, it lists."
 
 The cost is deliberate: a bad night's edit to the agent's or undecided items inside the to-do sections is not undone by
 restore (it wasn't the owner's list that went wrong, and those items are the agents' to rewrite).
 
-**Invariants** (pinned by tests): R's to-do sections are C's plus rule 3's lines; R's other sections are T's; every bound
-key L calls open and C mentions is in R exactly where C has it; no key is on two lines that C didn't already have.
+**Invariants** (pinned by tests): R's to-do sections are C's plus rule 3's lines (or, when C has none, T's minus closed
+owner entries); R's other sections are T's; every bound key L calls open and C mentions is in R exactly where C has it;
+no key is on two lines that C didn't already have; R has no unclosed fence or comment.
 
 ### The claim the registrar already sent
 
@@ -76,31 +85,40 @@ of the C it was computed from: `brunna state restore garden-app 2026-11-01 --app
 
 ## Writing
 
-**The order, all inside the copy's lock** (restore `--apply`):
+**The order, all inside the copy's lock** (restore `--apply`). Files of a run live in `.state/restore/<project>/`.
 
-1. Finish a previous run first, if its record says it stopped halfway (below).
-2. Read C from the bare repo. If `--from` doesn't match it, refuse: "STATE.md changed since the preview; preview again".
-3. Build R, and the commit for it **without touching the copy's worktree**: a temporary index (`GIT_INDEX_FILE`) on top
-   of the bare repo's `agent-memory`, `git commit-tree`. A crash here leaves at most an unreferenced commit object.
-4. Push it to the bare repo **fast-forward only**, as a compare-and-swap on the ref (`git push <bare> <commit>:refs/heads/
-   agent-memory` with `--force-with-lease=agent-memory:<C's commit>`). Rejected (a session pushed meanwhile): nothing
-   changed; refuse: "STATE.md changed meanwhile; preview again". Never `git-safe-push.sh`, which merges.
-5. Record the run: `.state/restore/<project>.json` (the restore commit, the restored commit, what is still to do),
-   written atomically.
-6. Bring the copy to it with a fast-forward pull (the copy is behind the bare repo now; if the copy has local commits of
-   its own, leave it: the next nightly pull merges, as for any session's push).
-7. The checkpoint: moved back to the restored commit only if that is an ancestor of the current checkpoint **and** the
-   current checkpoint is not already a descendant of the restore commit (a librarian run since the restore has read past
-   it: moving it back again would make it fold notes twice). `--keep-checkpoint` skips this.
-8. The review-log entry, appended with one `os.write`.
-9. The notes (above).
-10. Remove the record. Each of 7-9 is marked done in the record as it completes, so step 1 of a later run finishes only
-    what is missing.
+1. **Finish or drop a previous run** whose record is there (below). Remove a temporary index left by a crash.
+2. **Check the copy:** clean worktree, no `MERGE_HEAD`, and its HEAD an ancestor of the bare repo's `agent-memory` (a copy
+   that diverged, or that a killed librarian left dirty, makes the next plain `git pull` fail and lets the registrar
+   merge its stale file over the restore). Otherwise refuse, naming the state. Read C from the bare repo; if `--from`
+   doesn't match it, refuse: "STATE.md changed since the preview; preview again".
+3. **Build R and its commit without touching any worktree:** in the bare repo, a temporary index
+   (`GIT_INDEX_FILE` under the run folder) read from C's tree, R's blob written, `git commit-tree` with C's commit as the
+   only parent. C, its commit and the new commit are the one C read in step 2.
+4. **Write the record** (atomically): the restored commit, C's commit, the new commit, the steps still to do.
+5. **Publish:** `git --git-dir=<bare> update-ref refs/heads/agent-memory <new> <C's commit>`, the compare-and-swap
+   `project_git.fetch_bundle` already uses. If the ref moved (a session's push, or a sandboxed project's bundle),
+   nothing is published: drop the record, refuse: "STATE.md changed meanwhile; preview again". Never `git-safe-push.sh`,
+   which merges.
+6. **The copy:** a fast-forward pull (step 2 made it an ancestor, the lock kept it so).
+7. **The checkpoint:** moved back to the restored commit when that is an ancestor of the current checkpoint;
+   `--keep-checkpoint` skips this; no checkpoint file means nothing to move. Until this step is done the librarian skips
+   the project ("a restore didn't finish; run brunna state restore <project> to finish it"), so no librarian run can
+   read past the restore first.
+8. **The review-log entry,** one `os.write`, unless an entry naming the new commit is already there.
+9. **The notes** (above; already-sent ones are skipped by id).
+10. **Remove the record.**
+
+**Finishing a previous run (step 1):** if the bare repo's tip is the record's new commit or descends from it, the
+publish happened: do steps 6-10 that the record says are still to do. If the tip is still the record's C commit, nothing
+was published: drop the record (the owner previews again). Otherwise (someone else moved it and the new commit was never
+published): drop the record. `brunna state restore <project>` with no date finishes a stopped run and does nothing else.
 
 **The lock.** `bin/memlock.py`, one lock per memory copy, on the same `fcntl.flock` code as the scheduler's `state_lock`
 (`bin/scheduler.py`): `<copy>/.git/brunna-writer.lock`, opened `O_CREAT | O_RDWR | O_CLOEXEC` without truncating (a
-detached child of a holder must not inherit it), flocked, then the holder's name and start time written for messages. A
-flock dies with its holder, so a crash never leaves a copy locked. `hold(copy, who, timeout)` yields whether it got it; a
+detached child of a holder must not inherit it), flocked, then checked to be still the file at that path (same inode; a copy renamed or re-cloned while waiting means
+retry on the new one), then the holder's name and start time written for messages. A flock dies with its holder, so a
+crash never leaves a copy locked. `hold(copy, who, timeout)` yields whether it got it; a
 CLI for the shell scripts (`memlock.py hold <copy> --who <name> [--timeout s] -- <command>`; macOS has no `flock(1)`).
 
 | writer | holds it | if busy |
@@ -109,7 +127,7 @@ CLI for the shell scripts (`memlock.py hold <copy> --who <name> [--timeout s] --
 | registrar, `run_project` | from reading STATE.md to its push and `hubbus done` | the same (it runs in the foreground: a long wait would block the tick) |
 | consolidate, one project | from the fold's base to its checkpoint check after the push | the same |
 | restore `--apply` | steps 1-10 | refuses at once, naming the holder and since when |
-| rename / recover / onboard of an existing copy | around moving, removing or recreating the copy | refuses at once |
+| rename / recover / onboard of an existing copy, `uninstall --purge` | around moving, removing or recreating the copy; rename also refuses while a restore record exists | refuses at once |
 
 Rules: the writer lock is always taken before `with-lock.sh`'s op lock, never after; no hook and no `with-lock.sh` user
 takes it (a librarian run's agent fires the project's hooks inside the copy); it is not re-entrant, so no path takes it
@@ -117,7 +135,8 @@ twice; a script that removes or re-clones a copy holds it while doing so, and th
 (nothing else holds the old one by then).
 
 A project the registrar skips for a night is harmless: the records it didn't mark done are applied the next night and
-its claim ids stop duplicates; todo.md shows that project's items as of the night before.
+its claim ids stop duplicates; todo.md shows that project's items as of the night before. A night consolidate skips for
+the lock doesn't count as its weekly turn for that project.
 
 ## Tests (pinned first, per tests-before-rewrite)
 
@@ -131,9 +150,12 @@ invariants:
 - C with a displaced marker, T or C with an unclosed fence → refused, nothing written;
 - an unkeyed owner line in T that C lacks, a known key whose line is gone, a key settled since → listed, not restored;
 - zh-Hant, English and mixed token sets;
-- `--from` stale, a session pushing between read and push → refused, the bare repo and the copy unchanged;
-- a crash at each step (simulated by stopping after it) then a rerun → the same end state as an uninterrupted run, the
-  checkpoint moved back once at most;
+- `--from` stale, a session pushing between read and publish, a sandboxed bundle landing meanwhile → refused, the bare
+  repo and the copy unchanged;
+- a diverged, dirty or mid-merge copy → refused before anything is written;
+- C without a to-do section → T's, minus closed owner entries;
+- a crash after each step (simulated by stopping there) then a rerun → the same end state as an uninterrupted run; the
+  librarian skips the project while step 7 is pending; a duplicate log entry is never written;
 - the lock: restore refuses while held; librarian, registrar and consolidate wait 60 s then skip; a killed holder
   releases it; a child of the holder doesn't keep it; rename refuses while held;
 - `history` and a preview leave the copy (refs, HEAD, worktree) untouched.
