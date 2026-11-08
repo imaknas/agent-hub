@@ -434,7 +434,7 @@ class ReadOnlySecrets(Base):
         never = mock.patch("subprocess.run", side_effect=AssertionError("nothing may run"))
         never.start()
         self.addCleanup(never.stop)
-        self.llm = None
+        self.llm = None   # no llm section (Base's settings read it at call time): llm.py's run goes to the runtime
 
     def test_the_premise_private_tmp_raises(self):
         import hubconf

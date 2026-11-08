@@ -144,8 +144,12 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[pat
                readable: list[pathlib.Path] = ()) -> list[str]:
     """What both kinds share: writes only to `writable` (+ `writable_extra`) and the temp area, reads blocked for other
     projects, platform state and credentials (own folders allowed again, `readable` too, the folders above them stat'ed
-    only), Keychain services, other processes, launching outside."""
-    own = [f"(subpath {q(w)})" for w in [*writable, *writable_extra]]
+    only), Keychain services, other processes, launching outside. The paths come as configured: the allows name what they
+    resolve to (Seatbelt matches the real path, so an allow naming a link never matches), the stat-only folders are
+    above both spellings (ancestors)."""
+    configured = [*writable, *writable_extra, *readable]
+    own = [f"(subpath {q(pathlib.Path(w).resolve())})" for w in [*writable, *writable_extra]]
+    readable = [pathlib.Path(r).resolve() for r in readable]
     return [
         "; writes: only its own folders and the temp area (the allow after this wins)",
         '(deny file-write* (subpath "/"))',
@@ -156,7 +160,7 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[pat
         "(deny file-read* " + " ".join(read_denies(pol)) + ")",
         "(allow file-read* " + " ".join(own + [f"(subpath {q(r)})" for r in readable]) + ")",
         "; the folders above them: stat only (resolving a path to its own folder walks through them)",
-        "(allow file-read-metadata " + " ".join(ancestors([*writable, *writable_extra, *readable])) + ")",
+        "(allow file-read-metadata " + " ".join(ancestors(configured)) + ")",
         "; the Keychain system services",
         "(deny mach-lookup " + " ".join(f"(global-name {q(s)})" for s in KEYCHAIN_SERVICES) + ")",
         "; no asking other system services to launch programs outside the sandbox, no touching other processes",
@@ -214,8 +218,8 @@ def service_profile(pol: dict, dirs: list[pathlib.Path], port: int | None = None
                   '(allow network-inbound (local ip "localhost:*"))']
     # policy.write is written too; the registry index the platform CLI reads (agenthub send / complete inside a
     # service): read-only
-    lines += _isolation(pol, [pathlib.Path(d).resolve() for d in dirs], [hubconf.path(w) for w in pol["write"]],
-                        [pathlib.Path(r).resolve() for r in pol.get("read") or []])
+    lines += _isolation(pol, [pathlib.Path(d) for d in dirs], [hubconf.path(w) for w in pol["write"]],
+                        [pathlib.Path(r) for r in pol.get("read") or []])
     return "\n".join(lines + [""])
 
 
