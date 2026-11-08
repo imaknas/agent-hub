@@ -103,6 +103,9 @@ case "$event" in
     for f in $("$HUB/bin/py" "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
       if [ ! -e "$f" ] && [ -f "$main/$f" ]; then
         mkdir -p "$(dirname "$f")" && ln -s "$main/$f" "$f"
+      fi
+      # whether linked here or written above: never a file to commit
+      if [ -e "$f" ] || [ -L "$f" ]; then
         grep -qxF "$f" "$common/info/exclude" 2>/dev/null || echo "$f" >>"$common/info/exclude"
       fi
     done
