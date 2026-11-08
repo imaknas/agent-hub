@@ -322,7 +322,9 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   updates itself only in interactive sessions, so nvm's copy fell weeks behind; owner, 10-24); (c) latest every night, unchecked.
   Desktop's and the Codex daemon's copies update themselves in any case; they are checked (section 6), not controlled.
 - **DV3, a platform config dir for Claude's platform runs. Owner, 11-09: (a), in two stages** (completions and judgment points
-  in step 2; leases, mailbox forks and `connectors: true` jobs after V-M8). Claude's platform runs still share `~/.claude` (settings, plugins, hooks,
+  in step 2; leases, mailbox forks and `connectors: true` jobs after V-M8). V-M8 (11-09): mailbox forks of a user's transcript
+  move too, by `--resume <path> --fork-session` (they read the user's file and write only the platform's dir); `lease-resume`
+  and the `connectors: true` jobs stay on the shared dir. Claude's platform runs still share `~/.claude` (settings, plugins, hooks,
   `~/.claude.json`) with the user's sessions; non-`--restricted` runs (leases) load the user's `settings.json`, plugins and hooks,
   written for the user's version. (a) A platform `CLAUDE_CONFIG_DIR` (runtime_claude.py already passes one through), the token
   through `auth_env`, for the runs that neither resume nor fork a session nor need the subscription login: completions and the
@@ -334,10 +336,19 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   platform's own: `_home()` reads `CLAUDE_CONFIG_DIR` from `os.environ` (runtime_claude.py:161-162) and feeds `credential_paths()`
   and `user_control()`, which become every sandboxed project's denies; set in the platform's environment it would move them off the
   real `~/.claude`. Session-side calls (section 5) keep the user's config dir. Not taken: (b) keep sharing for all of them.
-- **DV5, only if V-M10 shows a token run touches the Keychain login.** (a) Run candidate and session-version checks as a dedicated
-  macOS user made for them (its own Keychain; a one-time setup by the owner). (b) Accept the residual: a candidate is the vendor's
-  integrity-checked build, and the risk is a buggy refresh of the subscription login, which `check-claude-login` notices within the
-  hour.
+- **DV5, the Keychain login. V-M10 (11-09): a token run reads it** (three `find-generic-password` calls, no write, through
+  `security` on PATH), so a candidate holds the refresh token. The options:
+  - (a) Run candidate and session-version checks as a dedicated macOS user made for them (its own Keychain; a one-time setup by
+    the owner).
+  - (b) Accept the residual: a candidate is the vendor's integrity-checked build, and the risk is a buggy refresh of the
+    subscription login, which `check-claude-login` notices within the hour.
+  - (c) A `security` first on PATH that refuses every call ("item not found", exit 44), for candidate and session-version checks
+    and every token run of the platform's copy. A token run works with it (V-M10). It is held by a safety check with a positive
+    control: the candidate, with a scratch config dir and no token, under a refusing stub that logs, must show its Keychain reads
+    in the log. No logged call means the candidate reaches the Keychain some other way (the Security framework directly), and it
+    isn't promoted (fail-closed, and the owner is told DV5 is open again).
+    Residual: a version that calls the stub and the framework directly both. Recommended: no setup for the owner, it holds on any
+    machine, and a change of method stops promotion rather than passing silently.
 - **DV4, cost. Owner, 11-09: accepted as is**, the daily subset included (a server-side change such as 11-08's code mode comes
   with no new version to trigger a check). A full pass is ~40 model calls per new version (Claude Code ships a few a week: ~150 calls a week), the daily
   subset ~12 (one completion per schema), each version a user session runs ~10 more. On the subscription; nothing billed per use
@@ -346,8 +357,37 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 ## Measurements
 
 - V-M1: does `codex debug prompt-input` (no model call) show code mode's nested tool list, for the per-run check?
+  **Done 11-09 (0.167.0, the platform home of M9, the tool-free flags plus M1b's).**
+  - It does. The `additional_tools` item lists the top-level namespaces, and `exec`'s description declares each nested tool
+    (`declare const tools: { apply_patch(…`). The nested names equal what M1b's real run printed from `ALL_TOOLS`: `apply_patch`,
+    `clock__curr_time`, `list_mcp_resource_templates`, `list_mcp_resources`, `read_mcp_resource`.
+  - The description says deferred nested tools "may be omitted from this description", so it is a floor, not the whole list.
+  - It is computed locally. Under a Seatbelt profile with the network denied, the output is identical: it reads the cached
+    catalog (`models_cache.json` in the home, with `fetched_at`), so it can't see a catalog change the run itself fetches.
+  - The rollout records exactly what the run sent: its first `response_item` is `additional_tools` with the full tree. So the
+    per-run check is two steps: `prompt-input` before the run, which refuses on a mismatch; and the rollout's `additional_tools`
+    after it, which refuses the result and alerts on a mismatch. Section 4's "if not" branch (once a day per model) isn't needed.
+  - **New finding: the tool-free set isn't tool-free on the default model.**
+    - The catalog's `gpt-6-luna` (the default) has `multi_agent_version: v2`, and its runs get a `collaboration` namespace:
+      `spawn_agent`, `send_message`, `followup_task`, `wait_agent`, `list_agents`, `interrupt_agent`.
+    - This happens with `features.multi_agent=false`, and with `features.multi_agent_v2=false` too. M1b's real run had it.
+    - `gpt-5.6-luna` (`multi_agent_version: v1`) with `multi_agent=false` has none. `functions.wait` and
+      `request_user_input(_async)` remain on both.
+    - So the server decides which collaboration tools a run gets. Codex Step 1 pins the model per point kind (a v1 model, or
+      whatever setting removes v2's tools, still to find), and the pinned tool list includes the namespace names, not only the
+      nested ones.
 - V-M4: the version of the binary a session runs, read at SessionStart from the session process's executable path or package
   metadata (Claude: `CLAUDE_PID`'s executable; Codex: the daemon's executable; both read as files).
+  **Done 11-09.**
+  - Hooks get `CLAUDE_PID`, both in Desktop's sessions and in a `-p` run of nvm's copy.
+  - `proc_pidpath` (libproc; Linux `/proc/<pid>/exe`) gives the real executable. Desktop's is the file
+    `~/.claude/remote/ccd-cli/<version>-<hash>`: the version is in the file name, not a folder. nvm's resolves to
+    `…/node_modules/@anthropic-ai/claude-code/bin/claude.exe`, a native Mach-O, with `../package.json` beside it holding the
+    version. `ps -o comm=` shows the symlink as run (`…/bin/claude`), so the reader resolves it first.
+  - `CLAUDE_CODE_EXECPATH` is set in Desktop's sessions (the ccd-cli path) but empty in a `-p` run of nvm's copy, so it is a
+    shortcut, not the source.
+  - Codex: a hook's parent chain reaches the daemon `…/app-server-daemon/releases/<version>-<arch>/bin/codex` (M7's log);
+    `proc_pidpath` of the first `codex` ancestor gives it.
 - V-M5: the switch that keeps each tool's updater off for one run: Claude `DISABLE_AUTOUPDATER=1` under `-p` and in a stream session;
   Codex's update and daemon-auto-start settings in the platform home. The check: the binary's digest is unchanged after a run with a
   newer version published.
@@ -355,11 +395,52 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   `claude agents --json` lists it; Codex's thread through its app-server.
 - V-M7: the signal in `claude -p --output-format json` that a run used a tool (`num_turns`, `permission_denials`, or the stream's
   `tool_use` events), with a positive control.
+  **Done 11-09 (2.1.319, the completion flags `--restricted --strict-mcp-config --no-session-persistence`, a scratch config dir,
+  the token).**
+  - `num_turns` counts model round trips:
+    - 1 with `--tools ""` and no schema, 2 with a tool call;
+    - with `--json-schema` the structured output is itself a tool call (`StructuredOutput`): 2 with no tools, 3 when Bash ran.
+    - So turns are a rough signal only (a schema retry adds one).
+  - `permission_denials` stays empty when a tool is simply absent, so it says nothing here.
+  - The exact signal is stream-json (`--output-format stream-json --verbose`). The `system`/`init` event lists the run's tools
+    before the first model call (`['StructuredOutput']` with `--tools ""`, `['Bash', 'StructuredOutput']` with Bash), and each
+    `assistant` event's `tool_use` blocks name the tools called.
+  - So the completion check (section 4) becomes prevention plus detection, as for Codex:
+    - the platform reads the stream; on an `init` tool list other than the pinned one (`StructuredOutput` only, or nothing
+      without a schema), it kills the run before the first turn;
+    - a `tool_use` of any other name refuses the result and alerts.
+    - completions move from `--output-format json` to stream-json.
+  - The positive control: the same run with `--tools Bash --allowedTools "Bash(echo:*)"` shows Bash in `init` and in a
+    `tool_use`. Without the schema, the no-tools model wrote "I ran `echo m7probe`…" in plain text while calling nothing, so the
+    check reads events, never the answer.
 - V-M8: can a Claude run with its own `CLAUDE_CONFIG_DIR` resume or fork a session stored under `~/.claude/projects` (by id, or by a
   path or a link into its own dir)? Until it can, DV3 leaves resumes and forks on the shared dir.
+  **Done 11-09 (2.1.319, two scratch config dirs, a session with a code word made in A).**
+  - From B, `--resume <id>`, with or without `--fork-session`: "No conversation found".
+  - `--resume <path of A's .jsonl> --fork-session` from a fresh dir E works (the answer recalls the code word), and the fork is
+    written to E's `projects/`, while A is untouched.
+  - The transcript copied into C's `projects/<slug>/` works too.
+  - A link from D's `projects/<slug>` to A's works, but the fork lands in A through the link: never that.
+  - So mailbox forks of a user's transcript can run with the platform's config dir, resuming by path: they read the user's
+    file and write only the platform's. That leaves the shared dir only to `lease-resume`, which resumes in the user's own
+    terminal, and to the `connectors: true` jobs.
+  - `--resume <path>` becomes a session-side check, so a version that drops it fails before promotion.
+  - `claude agents --json` lists the same sessions (24 live, machine-wide) with a scratch `CLAUDE_CONFIG_DIR` as with the shared
+    one. A platform config dir doesn't blind section 5's status calls.
 - V-M9: how "create nothing new under `.claude/` but `worktrees`" is expressed: in Claude's permission rules for sessions, and in
   Seatbelt / Landlock for services.
 - V-M10: does `claude` run with `CLAUDE_CODE_OAUTH_TOKEN` read or write the Keychain's Claude Code login item (macOS)? Decides DV5.
+  **Done 11-09 (2.1.319).**
+  - Claude Code reaches the Keychain by running `security` found on PATH. A wrapper first on PATH, which logs only the subcommand
+    and the `-s` service name (a write carries the secret in its arguments), sees every call.
+  - Positive control, a normal subscription run with the shared config dir: seven `find-generic-password` calls (`Claude
+    Code-credentials`, and one for `Claude Code`).
+  - With the token, three `find-generic-password` calls, both with the shared config dir and with a scratch
+    `CLAUDE_CONFIG_DIR`. The service name doesn't change with the config dir.
+  - No `add-`/`delete-` call, and the item's `mdat` is unchanged. So a token run **reads** the subscription login and doesn't
+    write it. The read hands a candidate the refresh token, which is what DV5 is about.
+  - With a `security` first on PATH that refuses every call (exit 44, "item not found"), a token run with a scratch config dir
+    still succeeds. That gives DV5 a third option, (c) below.
 - V-M6 is now: a driver for an interactive (non-print) throwaway session, under a pty, that the wake and status checks can use.
 - V-M4 on macOS: a pid's executable path comes from `ps -o comm=` / `proc_pidpath`, not a file read; the package metadata beside
   it is then read as a file.
