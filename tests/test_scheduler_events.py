@@ -379,7 +379,7 @@ class PlatformSettings(unittest.TestCase):
         env = {"AGENT_JOB_ALLOW": json.dumps(["Bash(git log:*)", "WebFetch(domain:example.org)"]),
                "AGENT_JOB_PROJECT": "p"}
         task = runtime_ports.Task("agent-job-event", "x", self.spec(), env=env)
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path(f"/s/{p}.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task)
         self.assertIn("--restricted", cmd)
         self.assertEqual(cmd[cmd.index("--settings") + 1], "/s/p.json")
@@ -387,7 +387,7 @@ class PlatformSettings(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "dontAsk")
         self.assertIn("Bash(git log:*)", cmd)
         env2 = {**env, "AGENT_JOB_ALLOW": json.dumps(["mcp__claude_ai_x__y", "Edit(./a/**)"])}
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path(f"/s/{p}.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task._replace(env=env2))
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read,Write")   # no MCP names in --tools
         with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load

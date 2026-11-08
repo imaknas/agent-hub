@@ -167,9 +167,13 @@ def _user_config_file() -> pathlib.Path:
     return (_home() if os.environ.get("CLAUDE_CONFIG_DIR") else pathlib.Path.home()) / ".claude.json"
 
 
-# Its login (runtime_ports CREDENTIALS): the credential file, not the folder it is in, whose other entries its sessions
-# use (transcripts, plans, skills; docs/design/capabilities.md 11-08, A2 for the finer rules there)
-CREDENTIALS = {"dirs": [], "files": [str(_home() / ".credentials.json")]}
+def credential_paths() -> dict:
+    """Its login (runtime_ports credential_paths), under its home as configured now: the credential file, not the folder
+    it is in, whose other entries its sessions use (transcripts, plans, skills; docs/design/capabilities.md 11-08, A2 for
+    the finer rules there)."""
+    return {"dirs": [], "files": [str(_home() / ".credentials.json")]}
+
+
 # What it loads settings, hooks and tools from for every session of the user, anywhere: never written by a sandboxed
 # project's file tools (its Bash has no allowWrite there), or the user's next session would run it outside any sandbox.
 # (name under its home, tree); and the user config file. Reading them stays allowed (skills' files, plans).
@@ -254,23 +258,25 @@ def lease_settings(pol: dict) -> dict:
     return {"permissions": {"deny": list(dict.fromkeys(deny))}}
 
 
-def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib.Path:
+def platform_settings(project: str, keep: pathlib.Path | None = None, cwd=None) -> pathlib.Path:
     """A judgment point with settings: platform: the only settings file the run loads (with --restricted, Claude Code
     reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
     the platform's commands, all from the policy, never from what is rendered in the workspace. keep: an unattended
-    job's own state folder that its allow rules write (own_state_dir), left out of the deny list; one file per such
-    job."""
+    job's own state folder that its allow rules write (own_state_dir), left out of the deny list; cwd: the run's working
+    directory, which when it is the job's folder (job_folder) stays readable even with no rule writing it. One file per
+    such job."""
     import hubconf
     import policy
     import registry
     index = registry.refresh()
     doc = index["projects"][project]
     pol = policy.policy(project, doc, index)
-    hidden = policy.run_state_denied(project, keep)
+    folder = keep or job_folder(cwd)   # read: the job's own folder, whether or not its rules write it
+    hidden = policy.run_state_denied(project, folder)
     # the hub's platform state for another project's run, less the job's own folder and the notes it writes (the hub's
     # own runs: hidden above)
     pol = {**pol, "deny_read": [*pol["deny_read"], *hidden],
-           "platform_state": policy.platform_state(project, [keep, policy.notes_dir(project)])}
+           "platform_state": policy.platform_state(project, [folder, policy.notes_dir(project)])}
     sandbox = settings(pol)[0]
     # a runtime's deny can't be narrowed by an allow: the job's own folder and the project's notes come off the list here,
     # and only the run's allow rules decide whether it writes them
@@ -290,7 +296,7 @@ def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib
         # autoAllowBashIfSandboxed defaults to true: a sandboxed Bash command would be approved before allow: is
         # consulted, so allow: would stop being the boundary exactly in the sandboxed projects
         out["sandbox"] = {**sandbox, "autoAllowBashIfSandboxed": False}
-    p = hubconf.STATE / "agent-jobs" / ".settings" / (f"{project}--{keep.name}.json" if keep else f"{project}.json")
+    p = hubconf.STATE / "agent-jobs" / ".settings" / (f"{project}--{folder.name}.json" if folder else f"{project}.json")
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.{os.getpid()}")
     tmp.write_text(json.dumps(out, ensure_ascii=False))
@@ -703,15 +709,23 @@ _GLOB = re.compile(r"[*?\[{]")
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
 
 
-def own_state_dir(allowed, cwd) -> pathlib.Path | None:
-    """The run's working directory when it is an unattended job's own state folder (<state>/agent-jobs/<job>, never the
-    platform's .settings) and one of its allow rules writes into it: the folder platform_settings leaves writable."""
+def job_folder(cwd) -> pathlib.Path | None:
+    """The run's working directory when it is an unattended job's own state folder (<state>/agent-jobs/<job>, registry
+    `cwd: state`; never the platform's .settings), whatever its rules allow."""
     import hubconf
     if not cwd:
         return None
     base = pathlib.Path(cwd).resolve()
-    jobs = (hubconf.STATE / "agent-jobs").resolve()
-    if base.parent != jobs or base.name.startswith("."):
+    if base.parent != (hubconf.STATE / "agent-jobs").resolve() or base.name.startswith("."):
+        return None
+    return base
+
+
+def own_state_dir(allowed, cwd) -> pathlib.Path | None:
+    """The run's working directory when it is an unattended job's own state folder (<state>/agent-jobs/<job>, never the
+    platform's .settings) and one of its allow rules writes into it: the folder platform_settings leaves writable."""
+    base = job_folder(cwd)
+    if base is None:
         return None
     home = pathlib.Path.home()
     for r in allowed:
@@ -800,7 +814,7 @@ def _flags(task) -> list:
             # an Edit rule governs every file-writing tool: a new file (or a whole one rewritten) needs Write
             if "Edit" in tools:
                 tools.add("Write")
-        cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd))),
+        cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd), task.cwd)),
                 "--tools", ",".join(sorted(tools))]
         dirs, extra = _linked_rules(allowed, task.cwd)
         allowed += extra

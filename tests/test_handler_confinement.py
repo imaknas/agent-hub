@@ -53,7 +53,7 @@ def flags(point: str, cwd, env: dict) -> list:
     import runtime_claude
     import runtime_ports
     task = runtime_ports.Task(point, "x", points()[point], cwd=str(cwd), env=env)
-    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path(f"/platform/{p}.json")):
+    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/platform/{p}.json")):
         return runtime_claude._flags(task)
 
 
@@ -129,7 +129,7 @@ class Flags(unittest.TestCase):
         spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read,Edit",
                 "allowed_tools": ["Edit(./notes/**)"]}
         task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.ws), env={"P": "p"})
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None: pathlib.Path("/platform/p.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path("/platform/p.json")):
             cmd = runtime_claude._flags(task)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Edit,Read")
 
@@ -232,6 +232,7 @@ class JobStateFolder(unittest.TestCase):
                "credentials": [], "workspace": str(self.hub)}
         doc = {"name": "p", "paths": {"workspace": str(self.hub)}}
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
+                mock.patch.object(hubconf, "MAIN", self.hub), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
             whole, own = runtime_claude.platform_settings("p"), runtime_claude.platform_settings("p", self.job)
         self.assertNotEqual(whole, own)
@@ -247,6 +248,26 @@ class JobStateFolder(unittest.TestCase):
                           r in (f"Read({rule(self.state / 'agent-jobs')}/**)", f"Edit({rule(self.state / 'agent-jobs')}/**)")],
                          deny_own)
         self.assertIn(f"Read({rule(self.state)}/**)", deny_whole)   # whole, without the job's folder: listed beside it
+
+    def test_a_jobs_own_folder_as_its_cwd_stays_readable_without_a_rule_writing_it(self):
+        """registry `cwd: state` with no write rule (keep is None): the run reads its folder, writes nothing there."""
+        import runtime_claude
+        pol = {"other_projects": [], "deny_write": [self.hub], "deny_read": [], "platform_commands": [],
+               "platform_cli": ["agenthub send"], "write": [], "network": [], "credential_files": [],
+               "credentials": [], "workspace": str(self.hub)}
+        doc = {"name": "p", "paths": {"workspace": str(self.hub)}}
+        self.assertIsNone(runtime_claude.own_state_dir(["Read(./**)"], self.job))
+        with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
+                mock.patch.object(hubconf, "MAIN", self.hub), \
+                mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
+            f = runtime_claude.platform_settings("p", None, self.job)
+        self.assertEqual(f.name, "p--p-check.json", "one file per job folder")
+        deny = json.loads(f.read_text())["permissions"]["deny"]
+        rule = runtime_claude._rule_path
+        self.assertFalse([r for r in deny if r.startswith("Read(") and (str(self.job) in r or r in (
+            f"Read({rule(self.state)}/**)", f"Read({rule(self.state / 'agent-jobs')}/**)"))], deny)
+        self.assertIn(f"Read({rule(self.state / 'agent-jobs' / 'other')}/**)", deny)
+        self.assertIn(f"Edit({rule(self.hub)}/**)", deny, "no rule writes it: the hub stays denied whole")
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")

@@ -67,6 +67,7 @@ CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOO
              "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
 # credential locations every sandbox is denied whatever {settings} says (docs/design/capabilities.md, 11-08 A1 point 2);
 # a runtime's own login is declared by its adapter (runtime_ports.credential_paths)
+# (~/.codex moves to the Codex adapter's credential_paths once there is one)
 CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
                "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
 # what the user's shell and git run outside any sandbox (11-08 A1 point 3)
@@ -225,7 +226,8 @@ def platform_state(project: str, keep=()) -> list[pathlib.Path]:
     import os
     if project == hubconf.hub_project():
         return []
-    keeps = [pathlib.Path(os.path.realpath(k)) for k in keep if k]
+    # a throwaway state (an override, a test's) holds its shared part inside it: left out the same way
+    keeps = [pathlib.Path(os.path.realpath(k)) for k in [*keep, *readable()] if k]
     hub = {pathlib.Path(os.path.realpath(r)) for r in (hubconf.ROOT, hubconf.MAIN)}
     out = []
     for d in (hubconf.STATE, hubconf.LOGS, hubconf.data_dir(), hubconf.evals_path()):
@@ -237,7 +239,7 @@ def platform_state(project: str, keep=()) -> list[pathlib.Path]:
 
 
 def credentials() -> tuple[list[pathlib.Path], list[pathlib.Path]]:
-    """(dirs, files): {settings}'s credentials, CREDENTIALS, and the installed runtimes' own (their adapters)."""
+    """(dirs, files): {settings}'s credentials, CREDENTIALS, and the installed runtimes' own (runtime_ports)."""
     import runtime_ports
     rt_dirs, rt_files = runtime_ports.credential_paths()
     dirs = [*hubconf.get("credentials.dirs", []), *CREDENTIALS["dirs"], *rt_dirs]
