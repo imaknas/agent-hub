@@ -198,12 +198,19 @@ logs the owner out everywhere (Codex 0.165.0 would have, M9).
 Promotion checks a binary once; surface C changes without one. Each run asserts what holds its confinement and refuses rather than
 running wider:
 
-- **Codex**: the tool list a run sees equals the pinned list for its point kind. If it can be read with no model call (V-M1), every
-  run checks it first. If not, it is checked once a day per model, and **a model's points are off until its first check passes**;
-  the residual is up to a day of a wider tool list after a catalog change, bounded by the run's permission profile (M8), which
-  doesn't come from the server.
-- **Claude**: a completion or a `tools: ""` point whose result shows tool use (the signal V-M7 names) is a refusal and an alert. This
-  is detection after the fact, not prevention: the tool already ran, inside the run's sandbox and settings, which hold regardless.
+- **Codex** (V-M1): the tool list a run sees equals the pinned list for its point kind and model, namespaces included (the
+  server's `multi_agent_version` adds `collaboration`, which the feature flags don't remove).
+  - Before the run, `codex debug prompt-input` with the run's flags, which makes no model call, reads the cached catalog. A
+    mismatch refuses the run.
+  - After it, the rollout's `additional_tools` holds what was actually sent, so a catalog the run refreshed itself is caught too.
+    A mismatch refuses the result and alerts.
+  - The residual is one run's wider tool list after a catalog change, bounded by the run's permission profile (M8), which doesn't
+    come from the server.
+- **Claude** (V-M7): completions and `tools: ""` points read stream-json.
+  - The `init` event lists the run's tools before the first model call. Any tool beyond the pinned set (`StructuredOutput` with a
+    schema, nothing without) ends the run there.
+  - A `tool_use` of any other name refuses the result and alerts.
+  - Prevention for what the tool list shows, detection for the rest; the run's sandbox and settings hold regardless.
 - **Models**: an alias that stops resolving fails the run (as now), named "the provider dropped model X", not read as a login problem.
 
 ## 5. Session-side calls use matching versions
