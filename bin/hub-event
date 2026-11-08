@@ -5,7 +5,7 @@ wires its native hooks to this.
   hub-event [--runtime <name>] <event>
                              the event is the platform's own name (runtime_ports.EVENTS); stdin is the runtime's
                              native hook input. --runtime: whose hook this is (each runtime's installed hooks say;
-                             without it, runtime.default's, as hooks written before docs/design/mailbox-runtimes.md A1).
+                             without it, runtime_ports.UNNAMED_HOOKS: hooks written before they named it are Claude Code's).
                              Its lifecycle parses the input, and the session is recorded in the platform's ids
                              (runtime_ports.qualify)
   hub-event [--runtime <name>] wait
@@ -261,7 +261,7 @@ def wait(name: str | None, raw: str) -> int:
     """`hub-event [--runtime <name>] wait`: the runtime's waiter for a wake (docs/design/mailbox-runtimes.md B1), the
     one entry point that doesn't always exit 0: it returns the waiter's exit code (the runtime's way of waking the
     session) and prints its text to stderr. A runtime without the wake port, or a platform run, exits 0 at once."""
-    name = name or runtime_ports.default_name()
+    name = name or runtime_ports.UNNAMED_HOOKS
     if platform_run(os.environ):
         return 0
     try:
@@ -329,9 +329,9 @@ CAGED_NEEDS = {"control", "confine"}
 
 def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     """Run one event and return the native output to print to stdout ("" if none). For main and tests. name: whose
-    hook (--runtime); none = runtime.default."""
+    hook (--runtime); none = runtime_ports.UNNAMED_HOOKS (a hook written before they named it)."""
     global _RT, _RT_NAME
-    _RT_NAME = name = name or runtime_ports.default_name()
+    _RT_NAME = name = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = rt or runtime_ports.load(name, ports=("lifecycle",))
     ev = rt.parse_event(event, raw)
     if ev is None or event not in HANDLERS:
@@ -404,11 +404,11 @@ def _worktree_nudge(ev, ws, cage):
 def worktree(what: str, raw: str, name: str | None = None) -> int:
     """A session in a linked worktree (worktree-memory.sh): what session_record, mail and session_end do for the others, run
     outside any sandbox. A runtime that may not hold a sandboxed project's sessions gets no mail there, as in handle.
-    name: whose hooks (--runtime); none = runtime.default, as hooks written before they named it."""
+    name: whose hooks (--runtime); none = runtime_ports.UNNAMED_HOOKS, as hooks written before they named it."""
     global _RT, _RT_NAME
     if what not in WORKTREE_EVENTS:
         return 0
-    _RT_NAME = name or runtime_ports.default_name()
+    _RT_NAME = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = runtime_ports.load(_RT_NAME, ports=("lifecycle",))
     ev = rt.parse_event(WORKTREE_EVENTS[what], raw)
     if ev is None:
@@ -445,7 +445,7 @@ def worktree_scope(top: str, main: str, raw: str, name: str | None = None) -> in
     """`hub-event worktree-scope`: the folder the hook's input names (the runtime's to read: name's, else runtime.default's)
     goes with what the script found."""
     try:
-        ev = runtime_ports.load(name or runtime_ports.default_name(), ports=("lifecycle",)).parse_event("prompt", raw)
+        ev = runtime_ports.load(name or runtime_ports.UNNAMED_HOOKS, ports=("lifecycle",)).parse_event("prompt", raw)
     except runtime_ports.Unsupported:
         ev = None
     return project_git.worktree_scope(top, main, ev.cwd if ev else None)

@@ -172,9 +172,13 @@ class WorktreeHooksNameTheirRuntime(unittest.TestCase):
             self.assertEqual(self.m.main(["--runtime", "claude", "wait"]), 0)
         self.assertEqual(self.seen, ["claude"])
 
-    def test_without_it_the_default_as_before(self):
-        self.m.main(["worktree", "start"])
-        self.assertEqual(self.seen, ["fake"])
+    def test_without_it_claudes_never_the_default(self):
+        """Every hook written before hooks named their runtime is Claude Code's: runtime.default (here fake) never takes one."""
+        with mock.patch.object(self.m, "platform_run", lambda env: False):
+            for argv in (["worktree", "start"], ["worktree-scope", "/top", "/main"], ["wait"], ["prompt"]):
+                self.seen.clear()
+                self.m.main(argv)
+                self.assertEqual(self.seen, ["claude"], argv)
 
     def test_the_script_names_it_on_every_call(self):
         """Every hub-event and hub-runtime call in worktree-memory.sh that reads a runtime's input or files names claude

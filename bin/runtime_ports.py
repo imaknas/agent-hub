@@ -161,6 +161,10 @@ _ = i18n.domain(__file__)
 RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command",
             "acp": "runtime_acp"}
 DEFAULT = "claude"   # the default when hub.json has no runtime.default
+# Whose a hook is when it doesn't say (`hub-event <event>` with no --runtime): every hook written before hooks named their
+# runtime is Claude Code's, so it is that one, never runtime.default's, which may be another agent by now
+# (docs/design/runtime-codex.md, step 0)
+UNNAMED_HOOKS = DEFAULT
 # those implementing only the completion interface (LLM APIs): hub.json llm.providers' impl names these, or the name of
 # any runtime with a completion interface
 PROVIDERS = {"anthropic": "provider_anthropic", "openai": "provider_openai", "ollama": "provider_ollama"}
