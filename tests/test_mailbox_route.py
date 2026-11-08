@@ -4,6 +4,7 @@ it was asked; no agent or session is started, and no live file is touched.
 
     bin/py -m unittest tests.test_mailbox_route
 """
+import datetime
 import json
 import pathlib
 import sys
@@ -17,6 +18,19 @@ import test_mailbox_dispatch as tmd  # noqa: E402
 import test_mailbox_state as tms  # noqa: E402
 import test_mailbox_triage as tmt  # noqa: E402
 import test_mailbox_wake as tmw  # noqa: E402
+
+NOON = datetime.datetime(2026, 3, 10, 12, 0, 0)   # local time: hours from either midnight
+
+
+def pinned(at: datetime.datetime):
+    """A clock that reads `at` (local time) for everything that asks datetime.datetime.now(): hubbus's now() and iso(), and
+    these tests' helpers that move times back (tms.ago, send, seen), so both agree on what today is."""
+    class Pinned(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            t = cls(at.year, at.month, at.day, at.hour, at.minute, at.second)
+            return t.astimezone(tz) if tz else t
+    return mock.patch.object(datetime, "datetime", Pinned)
 
 
 class Pass(tmt.Base):
@@ -620,8 +634,19 @@ class Budget(Harness):
         self.assertEqual(len(self.rt.woken[0][1].splitlines()), 1)
         self.assertLess(len(self.rt.woken[0][1]), 600, "a flood doesn't make the notice one: ids are capped")
 
+    def pin_clock(self, at=NOON):
+        """The day's budget is a calendar day's: run at noon, so wakes moved minutes back stay today whatever the hour the
+        suite runs at (a run just after midnight put them on yesterday, and the budget never filled)."""
+        p = pinned(at)
+        p.start()
+        self.addCleanup(p.stop)
+
     def test_it_holds_across_ticks_and_lapses_against_a_flood(self):
         """A sender flooding letters, with a session that never takes them: every lapse brings a new wake until the budget stops it."""
+        self.pin_clock()
+        self.flood()
+
+    def flood(self):
         self.open("S1")
         total = self.m.DAILY_WAKES + 5
         for i in range(total):
