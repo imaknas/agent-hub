@@ -100,6 +100,9 @@ def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
     if not names.env("PYTHON", environ=env):
         names.env_set(env, "PYTHON", sys.executable)   # bin/py looks for it under HOME
     names.env_set(env, "TEST_RUNNER", "1")
+    # no bytecode written, as the test runner's tiers write none: an interpreter's own cache can live under HOME (macOS's
+    # python3 keeps its .pyc in ~/Library/Caches/com.apple.python), and what is left in HOME fails the run as a leak
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
     if TMP:
         env["TMPDIR"] = str(TMP)
     names.env_set(env, "ROOT", names.env("ROOT") or str(tests.resolve().parent))

@@ -45,6 +45,17 @@ class T(unittest.TestCase):
 """
 
 
+WRITES_BYTECODE = """import os, subprocess, sys, unittest
+class T(unittest.TestCase):
+    def test_x(self):
+        self.assertTrue(sys.dont_write_bytecode)
+        # what macOS's python3 does: its .pyc under HOME, unless told to write none
+        subprocess.run([sys.executable, "-c", "import sys, py_compile, os; "
+                        "None if sys.dont_write_bytecode else py_compile.compile(sys.argv[1], cfile=os.path.join(os.environ['HOME'], 'x.pyc'))",
+                        __file__], check=True)
+"""
+
+
 class Guard(unittest.TestCase):
     def run_on(self, body):
         with tempfile.TemporaryDirectory() as d:
@@ -102,6 +113,11 @@ class Guard(unittest.TestCase):
             self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
             self.assertIn("move-instance", r.stderr)
             self.assertFalse((d / "said").exists(), "no test ran")
+
+    def test_an_interpreter_writes_no_bytecode_into_home(self):
+        """CI's macOS runner: its python3 caches bytecode under HOME, which the leak check then found (11-08)"""
+        r = self.run_on(WRITES_BYTECODE)
+        self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_a_call_fails_the_run_and_says_so(self):
         r = self.run_on(CALLS)
