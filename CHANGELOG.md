@@ -3,6 +3,16 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.12.0 (2026-11-08)
+
+### New
+
+- **upgrade:** Keep the platform's own entries in the user's tool settings current
+
+### Fixed
+
+- **runtime:** Odd hook shapes crash neither upgrade nor doctor, and the owner's text keeps its form
+
 ## v0.11.0 (2026-11-08)
 
 ### New
