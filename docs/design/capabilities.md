@@ -427,3 +427,58 @@ budgets later, if a project spends a lot).
   and spending (declared under `secrets:`), not the platform's (owner, 10-31).
 - Checked 10-31 in a throwaway instance with a fake provider: a client under the service profile → the real cap-runner →
   `llm.py project`; the declared call answered, an undeclared one was rejected (126), the usage row carries the project.
+
+## 11-08: a sandboxed project's sessions are denied what its services are
+
+### What was wrong (checked 11-08)
+
+The policy (`bin/policy.py`) names what a sandboxed project may not read, but its three renderers took different parts of it:
+
+| | Seatbelt (services, jobs, cap-runner) | Landlock (the same, Linux) | Claude session: Bash sandbox | Claude session: file tools |
+|---|---|---|---|---|
+| other projects, `deny_read` (raw notes, secrets, the bus for an outbox project) | denied | denied | denied | `Read` denied |
+| `credentials` (`~/.ssh`, `~/.claude`, `~/.config/gh`, `~/.aws`) and `credential_files` (`~/.claude.json`) | denied | denied | **readable** | **readable** |
+| the hub's `.state` | denied | denied | **readable** | **readable** |
+| `.logs`, the data dir (digests, `todo.md`: every project's open work), the evals dir (judgment-point inputs) | **readable** | **readable** | **readable** | **readable** |
+| secrets, writing | denied | denied | denied (no `allowWrite`) | **`Edit` allowed** |
+| the runtime's user-level control files (`~/.claude/settings.json`, its hooks, commands, skills, agents) | denied (write) | denied (write) | denied (no `allowWrite`) | **`Edit` allowed** |
+
+A session's Bash in a sandboxed project could `cat ~/.ssh/id_*`, read every project's `todo.md`, or read the hub's job reports. Its
+file tools could write a hook into the user's own settings, which the next session anywhere runs as the user. In a session the owner
+opens, the default mode asks before a file tool goes outside the folder, so the file-tool rows are reinforcement there; for a
+session a mode or the platform starts with fewer prompts, they aren't.
+
+### The design
+
+1. **One list, in the policy.** `policy.platform_state` = the hub's `.state` and `.logs`, the data dir and the evals dir. Not the
+   config dir: it holds no credentials (those are in secrets), and the registry index, which says as much, is readable already
+   (`read`). `seatbelt.read_denies` and `landlock.denied` take `credentials`, `credential_files` and `platform_state` from the
+   policy instead of naming `hubconf.STATE` themselves, so the three renderers can't drift again. A test renders all three for one
+   policy and checks each denies the same set, with `read`'s carve-outs (`.state/registry`, `.state/test-slots`) open in each.
+2. **The session's Bash sandbox** (OS-enforced, the real boundary): `denyRead` gets every credential dir and file and
+   `platform_state`; `allowRead` gets `read` (Claude Code: the narrower path wins, so the registry index and the worker slots stay
+   readable inside a denied `.state`). Bash never needs `~/.claude`: the coding agent reads its own files outside the sandbox.
+3. **The session's file tools** (permission rules: reinforcement, and also merged into the Bash sandbox by Claude Code):
+   - `Read` and `Edit` denied on secrets (the missing `Edit`).
+   - `Read` denied on credentials, except the runtime's own home (`~/.claude`): its auto-memory lives there
+     (`~/.claude/projects/<project>/memory/`), and the docs don't say whether writing it goes through the file tools. Inside that
+     home, `Read` denied on its own credential file (`.credentials.json`), and `credential_files` as listed.
+   - `Edit` denied on the runtime's user-level control files, the user-level twin of the project ones it already protects:
+     `settings.json`, `settings.local.json`, `hooks/`, `commands/`, `skills/`, `agents/` under its home, and `~/.claude.json`
+     (user-level MCP servers). Named by the adapter (`runtime_claude`), as `CONTROL` is; the policy stays neutral.
+   - `Read` denied on `platform_state`. A permission deny can't be narrowed by an allow, so `.state` is listed as what sits beside
+     the `read` carve-outs (`write_except`, as `run_state_denied` does): a new folder in `.state` is readable to the file tools
+     until the next render (15 minutes) — Bash still can't.
+4. **Pushing from a sandboxed session.** Claude Code's docs: on macOS, `git push` to an ssh remote already fails inside the
+   sandbox (git's ssh doesn't go through its proxy), so denying `~/.ssh` breaks nothing there. On Linux it works today and stops:
+   a sandboxed agent then can't use the owner's GitHub key, which is the point of the sandbox (its services never could). The owner
+   pushes from a terminal, or the project uses a deploy key of its own (a project secret). The three sandboxed projects with
+   remotes all use ssh; this machine is macOS.
+
+### Checks
+
+- Unit: the parity test above; a path under `~/.claude/projects/x/memory/` matches no deny rule, `~/.claude/settings.json` and
+  `~/.claude/hooks/x` match an `Edit` deny, `~/.ssh/config` a `Read` deny; `allowRead` is exactly `read`.
+- Before merge: `render-project-settings.py --report` before and after for a sandboxed project, the diff only these rules.
+- After merge, live, in a sandboxed project's session: Bash `ls ~/.ssh`, `cat <data>/todo.md`, `ls <hub>/.state/agent-jobs` fail;
+  `brunna inbox`, `brunna send` (outbox) and `brunna test` (worker slots) still work; writing a memory note still works.
