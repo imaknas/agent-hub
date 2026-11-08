@@ -151,11 +151,11 @@ agent runs; M9 and M10 (nested sandbox) → D2 layer 2; M8 → Step 4.
 - **D3, the default runtime.** With Claude as the default, Codex sessions are served (hooks, letters, wake) but the platform's
   background runs (judgment points, forks, leases) stay on Claude; leases can't move (`RUNTIME_ARG_POINTS`). A per-project default is
   left out.
-- **D4, waking a Codex thread nobody may be watching (M7).** `codex queue` runs a turn on any loaded thread, including one whose TUI
-  quit, with that thread's permissions. The owner's "a woken session keeps its permissions" assumed a session someone has open.
-  Until M11 shows a client is attached: (a) a Codex thread is never woken; its letters go the way of a runtime with no wake port (a
-  background fork under the platform's settings, then triage) (recommended); or (b) wake it anyway, as Claude's, accepting a turn
-  nobody watches.
+- **D4, waking a Codex thread nobody may be watching (M7). Owner, 11-08: (a), never woken.** `codex queue` runs a turn on any
+  loaded thread, including one whose TUI quit, with that thread's permissions. The owner's "a woken session keeps its permissions"
+  assumed a session someone has open. Until M11 shows a client is attached, a Codex thread is never woken: its letters go the way of
+  a runtime with no wake port (a background fork under the platform's settings, then triage). The rejected (b) was to wake it anyway,
+  as Claude's, accepting a turn nobody watches. Revisited only when M11 gives a reliable "a client is attached".
 
 ## Sandboxed sessions on any agent (for D2)
 
@@ -252,4 +252,4 @@ platform's own schemas.
   - The local case (Desktop and TUIs on one machine, without SSH) is unmeasured; doctor's row for it says so until it is.
   - What it changes: Step 2 keys records by session id and ends one on SessionEnd or when the thread is no longer loaded; a TUI that
     quit leaves a record that still looks live. Step 3 can't wake a Codex thread as "the person's open session" until M11 shows a
-    client is attached; until then a Codex thread gets what a session of a runtime with no wake port gets (owner decision D4).
+    client is attached; until then a Codex thread gets what a session of a runtime with no wake port gets (D4, decided 11-08).
