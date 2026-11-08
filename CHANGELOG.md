@@ -3,6 +3,35 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.13.0 (2026-11-08)
+
+### Fixed
+
+- **seatbelt:** Deny a linked path by its target too
+- **hooks:** A sandboxed project's tool call with nothing to nudge is no failure
+- **seatbelt:** A write entry under a linked folder is allowed by its target
+- **policy:** One deny set for a sandboxed project's services and its sessions
+- **sandbox:** A sandboxed project's sessions are denied what its services are
+- **backup:** Verify restores into the private temp folder
+- **policy:** Name the platform's Python variable through names.env
+- **state:** What sandboxed code reads moves out of .state
+- **policy:** .state is denied whole to a sandboxed project
+- **state:** The move out of .state only from the main checkout, at land, and never silently
+- **policy:** A confined job's own folder as its cwd stays readable
+- **state:** Two renames records are merged by key, never picked between
+- **test-runner:** A sandboxed project's tested copy leaves out the files its sandbox may not create
+- **runtime:** The worktree hooks name their runtime, so another runtime.default can't take them
+- **runtime:** The command runtime runs only mailbox-propose in the throwaway copy (**breaking:** runtime.default: command is refused; brunna upgrade moves it
+to none. Judgment points no longer run on a command template: set up an LLM
+provider, or another default runtime with mailbox-propose pinned on command.)
+- **doctor:** The feature table asks for the ports the code needs
+- **hub-event:** A hook that doesn't name its runtime is Claude Code's, never runtime.default's
+- **config:** Config migrate brings every setting v0.12.0 took in line, and never commits the owner's edits (**breaking:** brunna upgrade (config migrate) removes llm.points pins of
+command on any point but mailbox-propose, and llm.providers entries with `impl: command` together with the llm.use groups and point pins naming them.
+Going back to an earlier release doesn't restore them.)
+- **doctor:** The librarian's row counts its answer-only fallback, consolidate gets its own
+- **completion:** A target runtime with no completion interface is a refusal, not an exception
+
 ## v0.12.0 (2026-11-08)
 
 ### New
