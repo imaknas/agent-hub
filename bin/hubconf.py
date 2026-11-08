@@ -343,6 +343,11 @@ def host(role: str) -> str:
     return get("hosts.server") or get("memory_host") or ""
 
 
+def nvm_dir() -> pathlib.Path:
+    """nvm's folder ($NVM_DIR, else ~/.nvm)."""
+    return pathlib.Path(os.environ.get("NVM_DIR") or pathlib.Path.home() / ".nvm")
+
+
 def nvm_bin() -> pathlib.Path | None:
     """The bin/ of the newest installed version matching nvm's default version (~/.nvm/alias/default, e.g. 24, lts/*,
     node, v24.19.0).
@@ -351,7 +356,7 @@ def nvm_bin() -> pathlib.Path | None:
     Homebrew's node was deleted by autoremove and a LINE bot was down for a day and a half). Background services and
     scheduled jobs have no shell nvm setup, so this turns it into a full path; after an nvm upgrade the next
     render-services switches over and restarts the services."""
-    nvm = pathlib.Path(os.environ.get("NVM_DIR") or pathlib.Path.home() / ".nvm")
+    nvm = nvm_dir()
     versions = nvm / "versions" / "node"
     if not versions.is_dir():
         return None
@@ -534,10 +539,15 @@ def _lang(var: str, key: str) -> str:
     return v if v in LANGUAGES else "en"
 
 
+def evals_path() -> pathlib.Path | None:
+    """Where evals_dir() is configured, without making it (what a sandbox denies: it must not create the folder)."""
+    return pathlib.Path(names.env("EVALS")) if names.env("EVALS") else p("evals_dir")
+
+
 def evals_dir() -> pathlib.Path | None:
     """Where eval cases and runs live (docs/design/evaluators.md, i18n.md): hub.json `evals_dir`, or AGENT_HUB_EVALS.
     None = not set up, nothing is recorded. Created 0700; keep it out of git and out of the backup."""
-    d = pathlib.Path(names.env("EVALS")) if names.env("EVALS") else p("evals_dir")
+    d = evals_path()
     if d is None:
         return None
     d.mkdir(parents=True, exist_ok=True, mode=0o700)

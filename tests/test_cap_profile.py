@@ -140,7 +140,8 @@ class CapProfile(unittest.TestCase):
 
     def test_the_instance_is_the_tests_own(self):
         self.assertEqual(hubconf.p("workspace_root"), self.root)
-        self.assertEqual(self.pol["credential_files"], [self.tmp / "creds" / "token"])
+        # the instance's own first; the code's defaults and the runtimes' logins after it (policy.credentials)
+        self.assertEqual(self.pol["credential_files"][0], self.tmp / "creds" / "token")
         self.assertIn(self.tmp / "secrets", self.pol["deny_read"])
         text = self.profile.read_text()
         for p in (self.root, self.tmp / "services", self.tmp / "state", self.tmp / "bus", self.other):

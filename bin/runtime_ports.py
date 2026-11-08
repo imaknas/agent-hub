@@ -43,6 +43,9 @@ The current interfaces (the other layers get added one at a time, following the 
   RULES_FILE_NAMES (a module constant, any runtime)      the names its agent takes as rules from a folder it works in
                                                          or reads (rules_file_names(): every registered runtime's, so a
                                                          memory branch holds none, bin/memory_paths.py)
+  CREDENTIALS (a module constant, optional)              {"dirs": [...], "files": [...]}: where its login is kept
+                                                         (credential_paths(): every installed runtime's), unreadable in
+                                                         every sandbox (policy.py credentials)
   tool_servers: which of the environment's tool servers a run would load (a judgment point declaring
   `tool_servers: allowed_only` denies every one its allow list doesn't name; policy.tool_server_denials)
     ambient_servers(task) -> list[str] | None            the servers this run would load from its environment (the
@@ -525,6 +528,18 @@ def rules_file_names() -> list[str]:
     for name in RUNTIMES:
         out += [n for n in getattr(_module(name), "RULES_FILE_NAMES", ()) if n not in out]
     return out
+
+
+def credential_paths() -> tuple[list[str], list[str]]:
+    """(dirs, files): where the runtimes the user opens sessions with (the default one and runtime.installed) keep their
+    login, from each one's CREDENTIALS ({"dirs": [...], "files": [...]}, absolute paths): unreadable in every sandbox
+    (policy.py credentials). A runtime that declares none adds nothing."""
+    dirs, files = [], []
+    for name in dict.fromkeys([default_name(), *installed()]):
+        decl = getattr(_module(name), "CREDENTIALS", None) or {}
+        dirs += [str(d) for d in decl.get("dirs") or () if str(d) not in dirs]
+        files += [str(f) for f in decl.get("files") or () if str(f) not in files]
+    return dirs, files
 
 
 def installed() -> list[str]:

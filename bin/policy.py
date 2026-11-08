@@ -25,14 +25,23 @@ policy(name, doc, index) → {
   other_projects:     other projects' workspace/runtime, and every memory repo that isn't its own: other projects'
                       bare repos and memory copies, the mirrors, anything else under git_origin / memory_copies (no
                       reading or writing; Path)
-  deny_write:         the platform's places (hub, bare repos, memory copies, LaunchAgents; Path)
+  deny_write:         folders nothing of the project's writes (Path): the platform's places (hub, bare repos, memory
+                      copies, the instance dir, the bus for an outbox project), what runs as the user outside any
+                      sandbox (the platform's Python and uv, the CLI's folder, nvm, git's user config, the service
+                      manager's folder); deny_write_files: single files of the same kind (the shell's startup files,
+                      ~/.gitconfig, uv). Seatbelt and Landlock deny every write outside the project's own folders
+                      already: this is for the runtime's file tools
   deny_read:          the raw notes in the memory copies (glob), the platform's secrets (Path; during the move both the
                       old and new locations are blocked), the bus directory (a project whose mail goes through its
                       outbox reads its own letters from the view the platform writes into its folder)
-  credentials:        user-level credential directories (Path); credential_files: credential files (Path); the
-                      locations are in {settings}'s credentials
+  credentials:        user-level credential directories (Path); credential_files: credential files (Path): {settings}'s
+                      credentials, CREDENTIALS below, and what each installed runtime declares (runtime_ports)
+  platform_state:     the hub's run state and the owner's data (Path; empty for the hub itself): what sits in .state
+                      beside `read` (listed, not whole, so no renderer needs an allow inside a deny), .logs, the data dir,
+                      the evals dir; never one that is or holds the hub root (the old layout's data dir)
   read:               platform paths readable although platform state is blocked: the registry index the platform CLI
-                      (brunna send, complete, cap-run) reads, and the worker slots brunna test locks (Path)
+                      (brunna send, complete, cap-run) reads, the worker slots brunna test locks, the renames a send to
+                      an old name follows (Path)
   network:            domains that may be reached (platform defaults + the registry's network)
   local_bind:         may listen on 127.0.0.1 (to test its own server before declaring it a service; 10-31 owner
                       confirmed in the brunna session)
@@ -57,6 +66,15 @@ HOME = pathlib.Path.home()
 # each tool's cache (and uv's Python installs and tools) per repo, under its git dir: not shared, never untracked files
 CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOOL_DIR": "uv-tools",
              "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
+# credential locations every sandbox is denied whatever {settings} says (docs/design/capabilities.md, 11-08 A1 point 2);
+# a runtime's own login is declared by its adapter (runtime_ports.credential_paths)
+CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
+               "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
+# what the user's shell and git run outside any sandbox (11-08 A1 point 3)
+SHELL_FILES = ["~/.zshrc", "~/.zprofile", "~/.bashrc", "~/.bash_profile", "~/.profile"]
+GIT_USER_DIRS, GIT_USER_FILES = ["~/.config/git"], ["~/.gitconfig"]
+SERVICE_DIRS = ["~/Library/LaunchAgents", "~/.config/systemd/user"]
+CLI_DIR = "~/.local/bin"   # install-cli's default folder (bin/agenthub)
 DOMAINS = ["github.com", "api.github.com", "codeload.github.com", "objects.githubusercontent.com",
            "raw.githubusercontent.com", "pypi.org", "files.pythonhosted.org", "registry.npmjs.org"]
 
@@ -134,25 +152,35 @@ def mail_outbox(doc: dict | None) -> bool:
     return bool(doc) and (doc.get("enforce") or {}).get("sandbox") is True
 
 
+def beside(base: pathlib.Path, keeps) -> list[pathlib.Path]:
+    """What is in base apart from keeps (resolved paths), level by level down to each: a deny on base that leaves keeps
+    alone, written without an allow inside a deny. Only entries that exist now are listed (named under base as given)."""
+    import os
+    base = pathlib.Path(base)
+    real = pathlib.Path(os.path.realpath(base))
+    keeps = [k for k in keeps if real in k.parents]
+    try:
+        entries = sorted(os.listdir(base))
+    except OSError:
+        return []
+    out = []
+    for e in entries:
+        if any(k == real / e for k in keeps):
+            continue
+        inner = [k for k in keeps if real / e in k.parents]
+        out += beside(base / e, inner) if inner else [base / e]
+    return out
+
+
 def write_except(deny_write: list, keep: pathlib.Path) -> list[pathlib.Path]:
     """deny_write with one directory left writable (an unattended job's own state folder, its run's working directory):
     a runtime's deny can't be narrowed by an allow, so a denied place that holds keep is replaced by what sits beside the
     path down to keep, level by level (11-02: the whole hub denied a job writing its own state file). Only entries that
     exist are listed; anything else under the hub stays outside the job's allow rules."""
-    import os
     keep, out = pathlib.Path(keep).resolve(), []
     for d in map(pathlib.Path, deny_write):
         base = d.resolve()
-        if base not in keep.parents:
-            out.append(d)
-            continue
-        cur = base
-        for part in keep.relative_to(base).parts:
-            try:
-                out += [cur / e for e in sorted(os.listdir(cur)) if e != part]
-            except OSError:
-                pass
-            cur = cur / part
+        out += beside(base, [keep]) if base in keep.parents else [d]
     return out
 
 
@@ -179,12 +207,95 @@ def run_state_denied(project: str, keep: pathlib.Path | None = None) -> list[pat
     return write_except(places, keep) if keep else places
 
 
+def readable() -> list[pathlib.Path]:
+    """policy.read: the platform state sandboxed code reads (the platform CLI inside a session, service or job)."""
+    return [hubconf.STATE / "registry", hubconf.STATE / "test-slots", hubconf.STATE / "project-renames.json"]
+
+
+def _uniq(paths) -> list[pathlib.Path]:
+    return list(dict.fromkeys(p for p in paths if p))
+
+
+def platform_state(project: str, keep=()) -> list[pathlib.Path]:
+    """What no sandboxed project reads of the hub's (policy platform_state): .state beside readable() and keep (a confined
+    job's own folder, the notes it writes), .logs, the data dir, the evals dir (its configured path: evals_dir() would
+    make it). One that is or holds the hub root is left out (the old layout's data dir is the hub root). The hub's own
+    sessions and leases read its state; its confined runs hide .state and .logs already (run_state_denied)."""
+    import os
+    if project == hubconf.hub_project():
+        return []
+    keeps = [pathlib.Path(os.path.realpath(k)) for k in [*readable(), *keep] if k]
+    hub = {pathlib.Path(os.path.realpath(r)) for r in (hubconf.ROOT, hubconf.MAIN)}
+    out = beside(hubconf.STATE, keeps)
+    for d in (hubconf.LOGS, hubconf.data_dir(), hubconf.evals_path()):
+        r = pathlib.Path(os.path.realpath(d)) if d else None
+        if not r or any(h == r or r in h.parents for h in hub):
+            continue
+        out += beside(d, keeps) if any(r in k.parents for k in keeps) else [d]
+    return _uniq(out)
+
+
+def credentials() -> tuple[list[pathlib.Path], list[pathlib.Path]]:
+    """(dirs, files): {settings}'s credentials, CREDENTIALS, and the installed runtimes' own (their adapters)."""
+    import runtime_ports
+    rt_dirs, rt_files = runtime_ports.credential_paths()
+    dirs = [*hubconf.get("credentials.dirs", []), *CREDENTIALS["dirs"], *rt_dirs]
+    files = [*hubconf.get("credentials.files", []), *CREDENTIALS["files"], *rt_files]
+    return _uniq(map(hubconf.path, dirs)), _uniq(map(hubconf.path, files))
+
+
+def platform_python() -> list[pathlib.Path]:
+    """The platform's Python, found the way bin/py finds it (AGENT_HUB_PYTHON, else ~/.local/share/<share_dir>/python),
+    every spelling's share folder whole, and the interpreter its pyvenv.cfg names (whose lib is on every platform
+    script's path; sys.base_prefix when the file can't be read)."""
+    import names
+    share = [HOME / ".local" / "share" / n for n in names.all("share_dir")]
+    py = names.env("PYTHON")
+    found = [s / "python" for s in share if (s / "python" / "pyvenv.cfg").exists()]
+    venv = pathlib.Path(py).parent.parent if py else (found or [share[0] / "python"])[0]
+    interp = pathlib.Path(sys.base_prefix)
+    try:
+        for line in (venv / "pyvenv.cfg").read_text().splitlines():
+            k, _sep, v = line.partition("=")
+            if k.strip() == "home" and v.strip():
+                interp = pathlib.Path(v.strip()).parent
+    except OSError:
+        pass
+    return _uniq([*share, venv, interp])
+
+
+def cli_dirs() -> list[pathlib.Path]:
+    """The folder install-cli writes the wrapper to (by default CLI_DIR), whole: a new program there shadows the user's;
+    and wherever the wrapper on PATH is."""
+    out = [hubconf.path(CLI_DIR)]
+    try:
+        import upgrade
+        w = upgrade.cli_wrapper()
+    except Exception:   # noqa: BLE001 (no wrapper found is no reason to fail the policy)
+        w = None
+    return _uniq([*out, *([w.parent] if w else [])])
+
+
+def uv_files() -> list[pathlib.Path]:
+    """uv itself, as setup-python finds it (on PATH, else ~/.local/bin/uv)."""
+    import shutil
+    return [pathlib.Path(shutil.which("uv") or HOME / ".local" / "bin" / "uv")]
+
+
+def instance_dirs() -> list[pathlib.Path]:
+    """The instance dir (config, data, secrets), and each of the three that an override puts elsewhere."""
+    home = hubconf.instance_home()
+    parts = [hubconf.config_dir(), hubconf.data_dir(), hubconf.secrets_dir()]
+    return _uniq([home, *[p for p in parts if not home or home not in p.parents]])
+
+
 def policy(name: str, doc: dict, index: dict) -> dict:
     import registry
     d = registry.dirs(doc)
     outbox = mail_outbox(doc)
     others = [p for n, ps in project_paths(index).items() if n != name for p in ps]
     copies = hubconf.p("memory_copies", "~/.memory-copies")
+    cred_dirs, cred_files = credentials()
     return {
         "workspace": d["workspace"],
         "write": ([tilde(d["runtime"])] if d["runtime"] else []) + ([] if outbox else [tilde(hubconf.BUS_DIR)])
@@ -192,12 +303,17 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "env": cache_env(d["workspace"]),
         "protect": protect(),
         "other_projects": others + others_memory(name, doc, index),
-        "deny_write": [hubconf.ROOT, hubconf.p("git_origin"), copies, HOME / "Library" / "LaunchAgents"],
+        "deny_write": _uniq([hubconf.ROOT, hubconf.p("git_origin"), copies, *instance_dirs(),
+                             *([hubconf.BUS_DIR] if outbox else []), *platform_python(),
+                             *cli_dirs(), hubconf.nvm_dir(), *map(hubconf.path, GIT_USER_DIRS + SERVICE_DIRS)]),
+        "deny_write_files": _uniq([*uv_files(), *map(hubconf.path, SHELL_FILES + GIT_USER_FILES)]),
         "deny_read": [copies / "*" / "memory", *secret_dirs(), *([hubconf.BUS_DIR] if outbox else [])],
-        "credentials": [hubconf.path(x) for x in hubconf.get("credentials.dirs", [])],
-        "credential_files": [hubconf.path(x) for x in hubconf.get("credentials.files", [])],
-        # the registry index; the machine's worker slots (bin/test-runner.py: locked read-only, created by the platform)
-        "read": [hubconf.STATE / "registry", hubconf.STATE / "test-slots"],
+        "credentials": cred_dirs,
+        "credential_files": cred_files,
+        "platform_state": platform_state(name),
+        # the registry index; the machine's worker slots (bin/test-runner.py: locked read-only, created by the platform);
+        # the renames record (a letter to a renamed project's old name)
+        "read": readable(),
         "network": DOMAINS + list(doc.get("network") or []),
         "local_bind": True,
         "platform_commands": [hubconf.ROOT / "bin" / "hubbus", hubconf.ROOT / "bin" / "merge-branch"],

@@ -15,7 +15,8 @@ The base is "allow everything, then block the dangerous parts" (a deny-list; tri
   write    only the project folder + the temp area (deliberately not policy.write: a run job shouldn't write the bus
            or the shared package caches directly)
   read     blocks all of workspace_root and services_root (except its own folder), other projects, policy.deny_read,
-           credentials, platform state and the bus, Keychain files; the folders above its own can be stat'ed (only
+           credentials, platform state (.state whole, policy.platform_state: .logs, the data and evals dirs) and the
+           bus, Keychain files; the folders above its own can be stat'ed (only
            those directories themselves: not listed, nothing in them read), or resolving the path to its own folder
            fails (git 2.56 resolves every component of `git -C <dir>` and dies on the workspace root)
   network  fully off (127.0.0.1 and unix sockets included); Seatbelt can't filter by domain
@@ -103,8 +104,9 @@ def glob_spellings(p) -> list[str]:
 def read_denies(pol: dict) -> list[str]:
     home = pathlib.Path.home()
     out = []
+    # its own fixed list as well as the policy's platform_state: a profile built from any policy still denies .state
     for p in [hubconf.p("workspace_root"), hubconf.p("services_root"), *pol["other_projects"], *pol["credentials"],
-              hubconf.STATE, hubconf.BUS_DIR, home / "Library" / "Keychains"]:
+              hubconf.STATE, hubconf.BUS_DIR, home / "Library" / "Keychains", *(pol.get("platform_state") or [])]:
         if p:
             out += [f"(subpath {q(s)})" for s in spellings(p)]
     for p in pol["deny_read"]:

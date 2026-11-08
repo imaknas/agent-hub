@@ -15,7 +15,7 @@ What it enforces:
   write    only its own runtime/workspace, policy.write (allow_write), the temp areas and a few devices; not the bus
            (its letters go through its outbox: docs/design/bus-sender.md)
   read     everything except: workspace_root and services_root (own folders allowed again), other projects, platform
-           state and the bus directory, policy.deny_read (the memory copies' raw notes, the platform's secrets),
+           state (.state, policy.platform_state: .logs, the data and evals dirs) and the bus directory, policy.deny_read (the memory copies' raw notes, the platform's secrets),
            credentials (directories and files). Landlock only allows, it
            can't carve a hole in an allowed tree, so a denied path is cut out by allowing its siblings at every level
            instead (the walk below); anything created later next to a denied path is not readable (fail closed)
@@ -128,8 +128,10 @@ def _under(p: pathlib.Path, root: pathlib.Path) -> bool:
 def denied(pol: dict) -> list[pathlib.Path]:
     """Every path the service may not read (resolved), globs expanded now; paths that don't exist yet still count: their
     parents are walked instead of allowed whole, so they stay unreadable if created later."""
+    # .state in its own fixed list as well as the policy's platform_state (.logs, the data and evals dirs): a plan built
+    # from any policy still denies it
     out = [hubconf.p("workspace_root"), hubconf.p("services_root"), *pol["other_projects"], *pol["credentials"],
-           *pol["credential_files"], hubconf.STATE, hubconf.BUS_DIR]
+           *pol["credential_files"], hubconf.STATE, hubconf.BUS_DIR, *(pol.get("platform_state") or [])]
     for p in pol["deny_read"]:
         # a glob: what matches now, plus the pattern itself, so the folder holding the matches is walked rather than
         # allowed whole even while nothing matches (a later match stays unreadable)
