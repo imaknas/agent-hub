@@ -169,14 +169,15 @@ $ agenthub doctor    # two coding agents
 · memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine; looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder)
     → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ✓ coding agents: claude, acp (the platform starts claude; hub.json runtime.installed)
-✓ judgment points (librarian, index, consolidate, weekly report analysis): available
-! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no session state)
+! judgment points (librarian, index, consolidate, weekly report analysis): claude available; acp off (has no agent runs outside the platform's throwaway worktree or completion interface)
     → a runtime that is off for a feature only lacks it for its own sessions
-! unattended agent jobs with allow:, and event-triggered agent jobs: claude available; acp off (has no confined runs (declared permissions only))
+! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, confined runs (declared permissions only), or way to tell which tool servers a run loads)
     → a runtime that is off for a feature only lacks it for its own sessions
-! mailbox follow-up (replying with an idle session's context): claude available; acp off (has no session state)
+! unattended agent jobs with allow:, and event-triggered agent jobs: claude available; acp off (has no agent runs outside the platform's throwaway worktree, confined runs (declared permissions only), or way to tell which tool servers a run loads)
     → a runtime that is off for a feature only lacks it for its own sessions
-! channel leasing (also needs the assistant module): claude available; acp off (has no long-running streaming sessions or session state)
+! mailbox follow-up (replying with an idle session's context): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, or confined runs (declared permissions only))
+    → a runtime that is off for a feature only lacks it for its own sessions
+! channel leasing (also needs the assistant module): claude available; acp off (has no long-running streaming sessions, session state, or agent runs outside the platform's throwaway worktree)
     → a runtime that is off for a feature only lacks it for its own sessions
 ! letters seen live in the session, reminders to write notes: claude available; acp off (has no session events (hooks))
     → a runtime that is off for a feature only lacks it for its own sessions
@@ -199,5 +200,5 @@ $ agenthub doctor    # two coding agents
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ✓ background services, project settings: match the config
 
-1 problem, 10 reminders
+1 problem, 11 reminders
 --- stderr

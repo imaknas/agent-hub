@@ -539,10 +539,12 @@ class Capabilities(unittest.TestCase):
             self.assertIn(runtime_ports.PORT_LABELS[port], str(cm.exception))
 
     def test_feature_table(self):
-        table = {f: ok for f, ok, _miss in runtime_ports.feature_table("acp")}
-        on = [f for f, ok in table.items() if ok]
-        self.assertEqual(len(on), 1, on)   # judgment points only
-        self.assertTrue(on[0].startswith("judgment points"))
+        """It runs only mailbox-propose in the throwaway copy (doctor's own row): no feature here is on, judgment points
+        included, though it has the agent port (docs/design/runtime-codex.md, step 0)."""
+        table = runtime_ports.feature_table("acp")
+        self.assertEqual([f for f, ok, _miss in table if ok], [])
+        [(_f, _ok, miss)] = [row for row in table if row[0].startswith("judgment points")]
+        self.assertIn(runtime_ports._("agent runs outside the platform's throwaway worktree"), miss)
 
     def test_no_other_adapter_imported(self):
         import re

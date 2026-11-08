@@ -1,13 +1,13 @@
 === port labels
 [('agent', '跑 agent'), ('auth', '登入狀態'), ('completion', 'completion(只回答案)'), ('confine', '受限執行(只照宣告的權限)'), ('control', 'session 載入設定跟 hook 的檔案'), ('instructions', '規則檔'), ('lifecycle', 'session 事件(hook)'), ('session_status', '判斷 session 在忙、閒置或卡在對話框的方法'), ('session_summary', '讀取 session 最後回覆結尾的方法'), ('sessions', 'session 狀態'), ('stream', '長駐串流 session'), ('tool_servers', '判斷一次執行會載入哪些工具伺服器'), ('wake', '叫醒閒置 session 的方法')]
 === feature (none)
-判斷點(librarian、index、consolidate、週報分析) | False | 跑 agent、登入狀態
+判斷點(librarian、index、consolidate、週報分析) | False | 跑 agent、completion(只回答案)
 === feature (none)
-信箱交辦(沒人收的信由平台派 agent) | False | 跑 agent、登入狀態、session 狀態
+信箱交辦(沒人收的信由平台派 agent) | False | 跑 agent、session 狀態、受限執行(只照宣告的權限)、判斷一次執行會載入哪些工具伺服器
 === feature (none)
-宣告 allow: 的無人值守 agent job、事件觸發的 agent job | False | 跑 agent、登入狀態、受限執行(只照宣告的權限)
+宣告 allow: 的無人值守 agent job、事件觸發的 agent job | False | 跑 agent、受限執行(只照宣告的權限)、判斷一次執行會載入哪些工具伺服器
 === feature (none)
-信箱接續(用閒置 session 的 context 回信) | False | 跑 agent、session 狀態
+信箱接續(用閒置 session 的 context 回信) | False | 跑 agent、session 狀態、受限執行(只照宣告的權限)
 === feature (none)
 通道租借(另外要助理模組) | False | 長駐串流 session、session 狀態、跑 agent、登入狀態
 === feature (none)

@@ -30,5 +30,6 @@
  "{label}: {why}": "{label}:{why}",
  "session {sid} can't be resumed in the background (its runtime isn't {runtime})": "session {sid} 不能在背景接著跑(它的 runtime 不是 {runtime})",
  "way to tell whether a session is busy, idle or waiting on a dialog": "判斷 session 在忙、閒置或卡在對話框的方法",
- "way to read how a session's last reply ended": "讀取 session 最後回覆結尾的方法"
+ "way to read how a session's last reply ended": "讀取 session 最後回覆結尾的方法",
+ "agent runs outside the platform's throwaway worktree": "在平台拋棄式 worktree 以外跑 agent"
 }

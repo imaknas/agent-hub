@@ -194,15 +194,44 @@ def port_labels() -> dict[str, str]:
             "tool_servers": _("way to tell which tool servers a run loads")}
 
 
+def _feature_settings() -> tuple[bool, bool]:
+    """(llm.providers is set, mailbox.handler is propose): what changes which ports two of the features need."""
+    try:
+        import hubconf
+        llm, mailbox = hubconf.get("llm") or {}, hubconf.get("mailbox") or {}
+        return (isinstance(llm, dict) and bool(llm.get("providers")),
+                isinstance(mailbox, dict) and mailbox.get("handler") == "propose")
+    except Exception:
+        return False, False
+
+
 # Which ports each platform feature needs (doctor's "tool x feature" table; docs/design/tool-agnostic.md principle 3).
-# Missing any one = that feature is off.
-def features() -> tuple:
+# Missing any one = that feature is off. What the code asks for (docs/design/runtime-codex.md, the blind review's second
+# finding; tests/test_runtime_ports_features.py derives it from contracts/llm-points.yaml): llm.py loads `agent` for an
+# agent-shaped point and `confine` too for one declaring settings: platform or allow_from_env, asks `tool_servers` for one
+# declaring tool_servers: allowed_only, and takes `auth` only when the runtime has it (none: the tool logs in itself); a
+# completion point goes to llm.providers, else to the runtime's `completion` (llm.completion_target); dispatch loads `agent` +
+# `sessions` (hubbus).
+def features(providers: bool | None = None, propose: bool | None = None) -> tuple:
+    """providers: llm.providers is set (the answer-only points go there, not to the runtime); propose: mailbox.handler is
+    propose (letters go to mailbox-propose in the platform's throwaway copy, which declares no settings: platform and no
+    tool_servers, instead of mailbox-escalation). None: read from the settings."""
+    if providers is None or propose is None:
+        have_providers, is_propose = _feature_settings()
+        providers = have_providers if providers is None else providers
+        propose = is_propose if propose is None else propose
     return (
-        (_("judgment points (librarian, index, consolidate, weekly report analysis)"), ("agent", "auth")),
-        # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus)
-        (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"), ("agent", "auth", "sessions")),
-        (_("unattended agent jobs with allow:, and event-triggered agent jobs"), ("agent", "auth", "confine")),
-        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions")),
+        # the librarian's notes and index and consolidate are agent-shaped; its edits and the weekly analysis answer only
+        (_("judgment points (librarian, index, consolidate, weekly report analysis)"),
+         ("agent",) if providers else ("agent", "completion")),
+        # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus);
+        # mailbox-escalation is confined (settings: platform) and denies tool servers it doesn't name
+        (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"),
+         ("agent", "sessions") if propose else ("agent", "sessions", "confine", "tool_servers")),
+        # agent-job-confined / agent-job-event: settings: platform, allow_from_env, tool_servers: allowed_only
+        (_("unattended agent jobs with allow:, and event-triggered agent jobs"), ("agent", "confine", "tool_servers")),
+        # mailbox-conversation: settings: platform, resumed with the default runtime's own arguments
+        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions", "confine")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         # reinforcement only: without it a letter waits for the session's next hook (docs/design/mailbox-runtimes.md)
@@ -270,9 +299,14 @@ def folder_git_unknown(name: str | None = None) -> bool:
 
 
 def feature_table(name: str | None = None) -> list[tuple[str, bool, str]]:
-    """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names (missing_label)."""
-    have = capabilities(name)
-    return [(f, not (miss := [missing_label(name, p) for p in need if p not in have]), or_list(miss))
+    """(feature, usable or not, what's missing): what's missing uses PORT_LABELS' names (missing_label). A runtime that runs
+    only in the platform's throwaway worktree (THROWAWAY_ONLY) has no agent runs for any feature here: each of them runs
+    somewhere else (its pin on a throwaway point is doctor's own row)."""
+    have, labels = capabilities(name), {}
+    if throwaway_only(name):
+        have = have - {"agent"}
+        labels["agent"] = _("agent runs outside the platform's throwaway worktree")
+    return [(f, not (miss := [labels.get(p) or missing_label(name, p) for p in need if p not in have]), or_list(miss))
             for f, need in features()]
 
 
