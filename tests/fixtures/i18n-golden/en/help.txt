@@ -23,6 +23,9 @@ Getting started:
                         changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
                         checkout (bin/upgrade.py)
   brunna init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
+  brunna user-settings [--update]   the platform's own entries in your tool settings (installed by you, such as
+                        the worktree hooks): which are from an earlier version; --update rewrites only those
+                        (upgrade runs it)
   brunna init --questions [--answers <file>] | --answers <file>
                         for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
