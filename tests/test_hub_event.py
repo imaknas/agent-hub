@@ -92,6 +92,46 @@ class HubEvent(unittest.TestCase):
         self.m.handle = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x"))
         self.assertEqual(self.m.main(["prompt"]), 0)
 
+    def caged(self, as_project):
+        """A sandboxed project's folder: the AS_PROJECT handlers come back from its sandboxed run (as_project)."""
+        ws = self.tmp.resolve() / "box"
+        (ws / ".agent-memory").mkdir(parents=True)
+        self.m._workspace = lambda cwd: pathlib.Path(cwd)
+        self.m.HANDLERS["tool_used"] = [(n, f) if n == "nudge" else (n, self.stub(n)) for n, f in self.m.HANDLERS["tool_used"]]
+        for p in (mock.patch.object(self.m.project_git, "sandbox_of", lambda cwd: ("box", {"name": "box"})),
+                  mock.patch.object(self.m.project_git, "holds", lambda doc, folder: True),
+                  mock.patch.object(self.m.runtime_ports, "capabilities", lambda name: {"control", "confine"}),
+                  mock.patch.object(self.m, "_as_project", as_project)):
+            p.start()
+            self.addCleanup(p.stop)
+        return ws
+
+    def tool_used(self, cwd, cmd):
+        out = self.m.handle("tool_used", json.dumps({"sid": "S1", "dir": str(cwd), "cmd": cmd}), runtime_fake)
+        return out, self.m.LOG.read_text().splitlines()[-1]
+
+    def test_a_sandboxed_projects_tool_call_with_nothing_to_nudge_is_no_failure(self):
+        """Seen 11-02..11-07 as failed=nudge:RuntimeError: the sandboxed run is only started for a git commit/push, and
+        no answer from a run that wasn't started read as a failed one. Its folder or its memory checkout alike."""
+        ws = self.caged(mock.Mock(side_effect=AssertionError("started for a call with nothing to nudge")))
+        for cwd in (ws, ws / ".agent-memory"):
+            with self.subTest(cwd=cwd.name):
+                out, line = self.tool_used(cwd, "ls -la")
+                self.assertEqual(out, "")
+                self.assertIn("failed=-", line)
+                self.assertIn("nudge", line.split("ran=")[1].split()[0])
+
+    def test_a_sandboxed_projects_commit_is_nudged_as_the_project(self):
+        ws = self.caged(lambda project, ws, ev: {"nudge": {"ok": True, "text": "write your notes"}})
+        out, line = self.tool_used(ws, "git commit -m x")
+        self.assertEqual(json.loads(out)["say"], "write your notes")
+        self.assertIn("failed=-", line)
+
+    def test_a_sandboxed_run_that_failed_still_says_so(self):
+        ws = self.caged(lambda project, ws, ev: {"": {"error": "exit 78"}})
+        out, line = self.tool_used(ws, "git commit -m x")
+        self.assertIn("failed=nudge:RuntimeError", line)
+
     def test_every_platform_event_has_handlers(self):
         import runtime_ports
         self.assertEqual(set(self.m.HANDLERS), set(runtime_ports.EVENTS))

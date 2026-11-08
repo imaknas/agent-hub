@@ -351,12 +351,15 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
         _LOOKED[ws] = scope.memdir
     memory_ok = not cage and bool(ws) and (as_project or scope.memory_ok)
     folder_ok = memory_ok and (as_project or scope.folder_ok)
-    inner = _as_project(cage[0], ws, ev) if inside and _needs_project(ev) else {}
+    needed = inside and _needs_project(ev)
+    inner = _as_project(cage[0], ws, ev) if needed else {}
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
             if name in NOT_IN_FOLDER or folder_ok or (memory_ok and name in MEMORY_ONLY):
                 out = fn(ev, ws)
+            elif inside and name in AS_PROJECT and not needed:
+                out = None   # nothing for it to do (a tool call that isn't a git commit/push): what nudge says uncaged
             elif inside and name in AS_PROJECT:
                 if not isinstance(inner.get(name), dict) or not inner[name].get("ok"):
                     raise RuntimeError(f"as the project: {(inner.get('') or {}).get('error', 'failed')}")
