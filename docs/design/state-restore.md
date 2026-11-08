@@ -1,143 +1,152 @@
-# Bringing back an earlier STATE.md: the owner's items and the lock
+# Bringing back an earlier STATE.md: the to-do list and the lock
 
-Status: design, revised after its first blind review (2026-11-09; three reviewers: the rule against the registrar and the
-Principal Handoff spec, locking and failure, scope). Replaces the key handling and adds the locking of
-`bin/state.py restore` (shipped in v0.9.0, hardened in v0.10.0).
+Status: design, third version (2026-11-09), after two rounds of blind review (round 1: the rule against the registrar and
+the Principal Handoff spec, locking and failure, scope; round 2: whether the rule is implementable and correct against
+`acts_md`, concurrency and recovery). Replaces the key handling and adds the locking of `bin/state.py restore`
+(shipped in v0.9.0, hardened in v0.10.0).
 
 ## The problem
 
-`brunna state restore <project> <date|commit>` writes an earlier version of a project's STATE.md back as a new commit in
-the platform's memory copy, to undo a night when the librarian's model got the file wrong. STATE.md's to-do section also
-holds the owner's items, each stamped with a key (`(waiting on owner: task-…)`, or the zh-Hant set's marker; `bin/todo_tokens.py`) that ties it to a
-Principal Handoff item on the bus. Those items have their own source of truth, the bus, which the registrar keeps the file
-in step with every night (`bin/registrar.py`, steps 1-5). Restoring the old text naively revives items the owner closed
-since and loses items opened since.
+`brunna state restore <project> <date|commit>` writes an earlier version of a project's STATE.md back as a new commit, to
+undo a night when the librarian's model got the file wrong. The file's to-do sections hold the owner's items, each
+stamped with a key (`(waiting on owner: task-…)`, or the zh-Hant set's marker; `bin/todo_tokens.py`) that ties it to a
+Principal Handoff item on the bus, which the registrar keeps the file in step with every night (`bin/registrar.py`,
+steps 1-5). Restoring the old text naively revives items closed since and loses items opened since.
 
-v0.9.0 decided from the text alone (a key missing from today's file = closed). The blind review of 11-03 found that wrong
-in five ways, the worst being the case restore exists for: when the librarian deletes an owner line by mistake (its edit
-check allows deleting a whole keyed line, `bin/edits.py`), the key is missing from today's file, so restore called the
-item closed. With the built-in owner side the loss is final: `bin/owner.py` can answer done, drop or already-done, never
-reject a claim or reopen an item. And there was no lock against the nightly jobs.
+v0.9.0 decided from the text alone (a key missing from today's file = closed) and failed the case restore exists for:
+the librarian's edit check allows deleting a whole keyed line (`bin/edits.py`), the registrar then claims the item done,
+and restore called it closed. With the built-in owner side (`bin/owner.py`: done, drop, already-done) nothing can bring it
+back. There was no lock against the nightly jobs either.
 
-## The rule: the owner's items come from today, the rest from the restored day
+Round 2 showed that moving the owner's entries one by one between the two versions keeps meeting structure the registrar
+depends on (several to-do sections, of which the registrar reads only the first; continuation lines; the grouped form;
+ticked boxes; markers moved elsewhere). So the to-do sections now move whole.
 
-Let T be the restored version's text, C today's text (both read at the same HEAD, below), L the registrar's ledger
-(`registrar.Ledger(project)`: what each key's records say, read from the bus and validated by `bin/ph_records.py`). The
-owner's entries are found with the same reader the registrar uses: `acts_md.Doc`, entries whose owner is the principal,
-of any kind (an open line, a ticked box, a struck line, a line of the grouped form under `### [owner]`). Restore never
-decides on its own what an owner entry is.
+## The rule: the to-do list stays as it is today, everything else goes back
 
-1. **Everything that is not an owner entry comes from T**, as it was: that is the point of the restore.
-2. **Every owner entry comes from C**, exactly as it is today (text, key, tick, form), in C's order, in R's first to-do
-   section (under the owner's group heading in the grouped form, created in the content language's set if T has none).
-   No owner entry is taken from T. So nothing the owner closed since comes back, nothing opened since is lost, a key on
-   several lines keeps them, a displaced key stays where C has it, and a stale settlement (one the registrar refused to
-   strike, sending an amendment instead) keeps its line.
-3. **One addition from L:** a key the registrar raised itself (a bound key) that L calls open, with no entry in C, gets
-   one line from L's latest terms, written as the registrar's reopen step writes it (`acts_md` writer, content
-   language). This is the line the librarian deleted. Keys a project raised itself (known keys) are left alone, as the
-   registrar leaves them.
-4. **What the rule can't recover is said, not guessed:** an owner line in T with no key that is in no entry of C and
-   matches no key's terms in any revision (an item a session wrote and the librarian deleted before the registrar ever
-   stamped it) is listed in the output for the owner to re-add by hand.
-5. The empty marker (`- (none)`, or the zh-Hant set's) follows: removed from a section that ends up with entries, added to one with
-   none.
+Let T be the restored version, C today's version (both as the memory bare repo holds them, below), L the registrar's
+ledger (`registrar.Ledger(project)`). Sections are the file's `## ` sections; a to-do section is one whose heading is
+either set's to-do heading (`todo_tokens.patterns().section`, the reader `acts_md` and the registrar use).
 
-**Invariants** (pinned by tests): R's owner entries are C's plus the re-added ones of rule 3; every bound key L calls open
-is on an open entry of R; R minus its owner entries equals T minus its owner entries.
+1. **Refuse** when T or C has an unclosed code fence or HTML comment (the registrar leaves such a file alone; reading past
+   it would drop lines), or when C has a key marker outside its to-do sections (a displaced item: the registrar notes it
+   every night; the owner moves it back first). Nothing is guessed in either case.
+2. **R is T with its to-do sections replaced by C's**: every to-do section of C, whole and verbatim (all its items, the
+   agent's and undecided ones too, ticks, continuation lines, groups, the empty marker), in C's order, at the place of
+   T's first to-do section, or at the end when T has none. Every other section is T's.
+3. **One addition from L:** a key the registrar raised itself (a bound key) that L calls open, and whose marker appears
+   nowhere in C, gets one line from L's latest terms in R's first to-do section, written as the registrar's reopen step
+   writes it (`acts_md` writer, content language; under the owner's group in the grouped form). This is the line the
+   librarian deleted.
+4. **Said, not done:** restore lists what it doesn't bring back, with L's view of each: owner items in T's to-do
+   sections that are not in C (closed since: by key; no key: their text), open keys a project raised itself whose line
+   is gone (the registrar doesn't re-add those either), bound keys settled since by a claim from a deleted line (the owner
+   reopens them on their side if the deletion was wrong; the registrar then re-adds the line).
 
-The docs' promise becomes one sentence: "your to-do items stay exactly as they are today; one still open whose line the
-librarian deleted comes back."
+**What the owner can predict, one sentence for the docs:** "your to-do list stays exactly as it is today and everything
+else goes back to that day; an item of yours still open whose line was deleted comes back."
+
+The cost is deliberate: a bad night's edit to the agent's or undecided items inside the to-do sections is not undone by
+restore (it wasn't the owner's list that went wrong, and those items are the agents' to rewrite).
+
+**Invariants** (pinned by tests): R's to-do sections are C's plus rule 3's lines; R's other sections are T's; every bound
+key L calls open and C mentions is in R exactly where C has it; no key is on two lines that C didn't already have.
 
 ### The claim the registrar already sent
 
 When an open bound key's line vanished, the registrar claimed the item done that same night (step 5, `claimed`, id
-`c:<key>:r<reopens>`). Principal Handoff has no way to withdraw a claim (`claimed` changes no register; `supersedes` names
-records of the same register only: core R3, `record.schema.json`); a `note` from the registrar is the only means. So when
-rule 3 re-adds a key **and** L shows that claim was sent (`c:<key>:r<n>` in the project's sent records) with no
-settlement after it, restore sends one `note` (origin registrar, id `x:<key>:r<n>`, about the key): "the line was
-restored by brunna state restore; the claim came from a wrong nightly edit". Without it the owner side could still
-accept the claim, and the registrar would strike the restored line the next night.
+`c:<key>:r<reopens>`). Principal Handoff can't withdraw a claim (`claimed` changes no register; `supersedes` names
+records of the same register only: core R3); a `note` from the registrar is the only means. Restore sends one note
+(origin registrar, project `led.filed(key)`, id `x:<key>:r<n>`, about the key) for **every** bound key that L calls open,
+that is on an open (unticked) entry of R, whose `c:<key>:r<n>` the project sent, and whose `x:<key>:r<n>` it hasn't:
+decided from the ledger and R, not from what this run changed, so a run after a crash still sends it, and a second run
+doesn't send it again.
 
-A key whose wrong claim the owner side already **settled** is closed in L, so rule 3 doesn't re-add it; restore says so,
-and the owner reopens it on their side if it was wrong (the registrar then re-adds the line). Restore never sends
-settlements or reopenings: those belong to the owner side.
+The note is advisory: it tells the owner side the claim came from a wrong nightly edit. An assistant reading it should
+not accept that claim; the built-in owner side doesn't read claims or notes at all (`bin/owner.py`), so there the item
+simply stays open. If the claim is accepted anyway, the registrar strikes the line the next night, and the owner reopens
+the item on their side. Restore never sends settlements or reopenings.
 
-## Reading without moving anything
+## Reading
 
-`history` and a restore without `--apply` only read: they `git fetch` the memory copy's remote and read
-`origin/agent-memory` with `git log` / `git show`, never `git pull`. A pull would move the copy's HEAD under a librarian
-run (whose model may be editing STATE.md) and make the librarian take that move for a session hook's commit
-(`librarian.process`: it compares HEAD before and after the call). They take no lock.
+`history` and a preview (restore without `--apply`) read the memory bare repo directly (`git --git-dir <bare> log` /
+`show agent-memory:STATE.md`); they never fetch or pull in the copy (that would race the librarian's pull on the copy's
+refs, or move HEAD under its model call) and take no lock. The preview ends with the exact apply command, carrying the id
+of the C it was computed from: `brunna state restore garden-app 2026-11-01 --apply --from <blob>`.
 
-## Writing: the lock, the order, the push
+## Writing
 
-**The lock.** One lock per memory copy, `bin/memlock.py`, built on the same `fcntl.flock` code as the scheduler's
-`state_lock` (`bin/scheduler.py`): a file `<copy>/.git/brunna-writer.lock`, opened without truncating, flocked, then the
-holder's name and start time written for messages; never unlinked. `hold(copy, who, timeout)` yields whether it got the
-lock. A flock is released by the kernel when its holder dies, so a crash never leaves a copy locked. It has a CLI for the
-shell scripts (`memlock.py hold <copy> --who <name> [--timeout s] -- <command>`; macOS has no `flock(1)`).
+**The order, all inside the copy's lock** (restore `--apply`):
 
-Who holds it, and for how long:
+1. Finish a previous run first, if its record says it stopped halfway (below).
+2. Read C from the bare repo. If `--from` doesn't match it, refuse: "STATE.md changed since the preview; preview again".
+3. Build R, and the commit for it **without touching the copy's worktree**: a temporary index (`GIT_INDEX_FILE`) on top
+   of the bare repo's `agent-memory`, `git commit-tree`. A crash here leaves at most an unreferenced commit object.
+4. Push it to the bare repo **fast-forward only**, as a compare-and-swap on the ref (`git push <bare> <commit>:refs/heads/
+   agent-memory` with `--force-with-lease=agent-memory:<C's commit>`). Rejected (a session pushed meanwhile): nothing
+   changed; refuse: "STATE.md changed meanwhile; preview again". Never `git-safe-push.sh`, which merges.
+5. Record the run: `.state/restore/<project>.json` (the restore commit, the restored commit, what is still to do),
+   written atomically.
+6. Bring the copy to it with a fast-forward pull (the copy is behind the bare repo now; if the copy has local commits of
+   its own, leave it: the next nightly pull merges, as for any session's push).
+7. The checkpoint: moved back to the restored commit only if that is an ancestor of the current checkpoint **and** the
+   current checkpoint is not already a descendant of the restore commit (a librarian run since the restore has read past
+   it: moving it back again would make it fold notes twice). `--keep-checkpoint` skips this.
+8. The review-log entry, appended with one `os.write`.
+9. The notes (above).
+10. Remove the record. Each of 7-9 is marked done in the record as it completes, so step 1 of a later run finishes only
+    what is missing.
+
+**The lock.** `bin/memlock.py`, one lock per memory copy, on the same `fcntl.flock` code as the scheduler's `state_lock`
+(`bin/scheduler.py`): `<copy>/.git/brunna-writer.lock`, opened `O_CREAT | O_RDWR | O_CLOEXEC` without truncating (a
+detached child of a holder must not inherit it), flocked, then the holder's name and start time written for messages. A
+flock dies with its holder, so a crash never leaves a copy locked. `hold(copy, who, timeout)` yields whether it got it; a
+CLI for the shell scripts (`memlock.py hold <copy> --who <name> [--timeout s] -- <command>`; macOS has no `flock(1)`).
 
 | writer | holds it | if busy |
 |---|---|---|
-| librarian, `process(proj)` | the whole run: pull, model call, commit, push, checkpoint (it decides who committed by comparing HEAD before and after the call) | waits up to 10 minutes, then leaves the project for tomorrow night |
-| registrar, `run_project` | from reading STATE.md to its push and `hubbus done` | waits up to 10 minutes, then leaves the project for tomorrow night |
-| consolidate, one project | from the fold's base to the checkpoint check after the push | the same |
-| `state.py restore --apply` | the whole write | refuses at once: "the librarian is working on garden-app since 03:01; try again when it is done" |
-| rename / recover / onboard on an existing copy | around moving or recreating the copy | refuses at once |
+| librarian, `process(proj)` | the whole run: pull, model call, commit, push, checkpoint (it tells who committed by comparing HEAD before and after the call) | waits up to 60 s, then leaves the project for tomorrow night |
+| registrar, `run_project` | from reading STATE.md to its push and `hubbus done` | the same (it runs in the foreground: a long wait would block the tick) |
+| consolidate, one project | from the fold's base to its checkpoint check after the push | the same |
+| restore `--apply` | steps 1-10 | refuses at once, naming the holder and since when |
+| rename / recover / onboard of an existing copy | around moving, removing or recreating the copy | refuses at once |
 
-Rules that keep it free of deadlocks: the writer lock is always taken before `with-lock.sh`'s op lock, never after; no
-hook and no `with-lock.sh` user takes the writer lock (a librarian run's headless agent fires the project's hooks inside
-the copy while the librarian holds it); the lock is not re-entrant, so no code path takes it twice.
+Rules: the writer lock is always taken before `with-lock.sh`'s op lock, never after; no hook and no `with-lock.sh` user
+takes it (a librarian run's agent fires the project's hooks inside the copy); it is not re-entrant, so no path takes it
+twice; a script that removes or re-clones a copy holds it while doing so, and the new copy's lock file is a new file
+(nothing else holds the old one by then).
 
-**The order inside the lock** (restore `--apply`): pull the copy (fast-forward only) → read C and L → build R →
-commit → push **fast-forward only** → checkpoint → review-log → note.
-
-- The push is a plain fast-forward push, never `git-safe-push.sh`: that script merges a diverged remote, and a session
-  that pushed a to-do edit meanwhile (sessions push to the memory bare repo without the copy's lock) could merge cleanly
-  into a file that breaks the invariants (two lines with one key). When the push is rejected, restore resets to the pulled
-  HEAD, pulls again, rebuilds R from the new C and L, and tries again, up to three times; then it refuses, nothing changed.
-- Any failure before the push succeeds resets the copy to the pulled HEAD: nothing changed (as v0.10.0).
-- After the push: the checkpoint moves (back only, as v0.10.0), then the review-log entry is appended as one `os.write`
-  (the librarian, consolidate and restore all append to it; the registrar reads it), then the note. A crash after the
-  push leaves the restore published with the checkpoint or log not yet written: the output said nothing yet, and running
-  the same restore again finds STATE.md already as wanted, then finishes the missing steps (checkpoint, log entry, note),
-  each done only if not already done (the note by its id in L's sent records).
-
-## The checkpoint
-
-As v0.10.0: back to the restored commit only when it is an ancestor of the current checkpoint; `--keep-checkpoint`
-leaves it. Assistant handoffs the librarian applied after that day are not applied again (they were closed on the bus);
-the output says how many.
+A project the registrar skips for a night is harmless: the records it didn't mark done are applied the next night and
+its claim ids stop duplicates; todo.md shows that project's items as of the night before.
 
 ## Tests (pinned first, per tests-before-rewrite)
 
-A temp instance: memory bare repo, the copy, a fake `hubbus records` answer for the `Ledger`. Each case asserts the
+A temp instance (memory bare repo, the copy, a fake `hubbus records` answer for the `Ledger`), each case asserting the
 invariants:
 
-- the librarian deleted an open bound key's line → re-added from L's terms; the note sent once, only when the claim was
-  sent and unanswered; a second run sends nothing;
-- an owner entry closed since, on one line, on two lines, ticked, in the grouped form → as C has it (gone, or ticked);
-- a key displaced under another section in C → stays there;
-- a stale settlement over an edited line → C's line kept;
-- an unkeyed owner line in T lost since → listed, not restored;
-- a known key with no line → not re-added;
+- the librarian deleted an open bound key's line → re-added from L's terms; one note when its claim was sent and not
+  answered; a rerun sends none; a crash after the push then a rerun sends it;
+- owner items closed since, on one line, on two, ticked, in the grouped form, in a second to-do section → as C has them;
+- agent and undecided items, continuation lines, groups → C's;
+- C with a displaced marker, T or C with an unclosed fence → refused, nothing written;
+- an unkeyed owner line in T that C lacks, a known key whose line is gone, a key settled since → listed, not restored;
 - zh-Hant, English and mixed token sets;
-- a session pushes a to-do edit between restore's pull and push → restore rebuilds and the invariants hold;
-- the lock: restore refuses while held; librarian, registrar and consolidate wait and then skip; a killed holder releases
-  it; rename refuses while held;
-- `history` and a dry run leave the copy's HEAD and worktree untouched.
+- `--from` stale, a session pushing between read and push → refused, the bare repo and the copy unchanged;
+- a crash at each step (simulated by stopping after it) then a rerun → the same end state as an uninterrupted run, the
+  checkpoint moved back once at most;
+- the lock: restore refuses while held; librarian, registrar and consolidate wait 60 s then skip; a killed holder
+  releases it; a child of the holder doesn't keep it; rename refuses while held;
+- `history` and a preview leave the copy (refs, HEAD, worktree) untouched.
 
-The 11-03 end-to-end run (a clean container, the real registrar, `brunna owner done`, a session-start pull) is repeated
-with the new rule, plus a librarian-deleted line and its claim.
+The 11-03 end-to-end run (a clean container, the real registrar, `brunna owner done`, a session-start pull) is repeated,
+plus a librarian-deleted line and its claim.
 
 ## Settled in review
 
-- A claim can't be withdrawn under the spec: a note is the only means (reviewer reading of 0.6.2's `claimed` and core
-  R3).
+- A claim can't be withdrawn under the spec: an advisory note is the only means; the built-in owner side doesn't read it
+  and doesn't need to (it doesn't act on claims).
 - Restore doesn't reopen a settled item on the bus: settlements are the owner side's.
 - The librarian holds the lock for its whole run: locking only its write would bring back the HEAD-comparison race.
-- The platform's own `openclaw-migration-status.md` (the registrar's other file) is out of scope: restore takes project
-  names only.
+- The to-do sections move whole: moving entries one by one breaks what the registrar reads from section 0, displaced
+  markers, continuation lines and ticks.
+- The platform's own `openclaw-migration-status.md` (the registrar's other file) is out of scope.
