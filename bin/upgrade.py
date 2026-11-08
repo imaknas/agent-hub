@@ -22,6 +22,8 @@ run the target's bin/setup-python → hand over to the target's own step list (b
 The in-step commands, each from the target's files, in this order; the first that fails stops the rest and says how to
 go back (`brunna upgrade --to <previous>`, which runs the same steps on the old code):
   registry.py check · brunna config apply · brunna init --scheduler-only · brunna land ·
+  brunna user-settings --update (the platform's own entries in the user's tool settings brought to this version: only
+  entries the owner installed, such as the worktree hooks; nothing is added to settings that have none) ·
   brunna install-cli --dir <where the wrapper is> (only when the brunna on PATH is install-cli's wrapper) ·
   brunna doctor (the report: its problems are shown, they do not fail the upgrade)
 When they all pass, .state/upgrade.json records the commit they ran for (brunna init writes it too, for a fresh
@@ -31,7 +33,8 @@ setup-python and the steps without a move; going back then means to the commit t
 Hand-over between versions (a contract from v0.2.0 on: keep it): after moving the checkout and running the target's
 bin/setup-python, this process execs the target's `bin/upgrade.py --steps --from <ref>`, where <ref> is what to go back
 to: a release tag, a commit, or `main`. The target runs its own step list. A target without bin/upgrade.py (v0.1.0)
-gets this version's list, run from the target's files, without the scheduler step (its init has no --scheduler-only).
+gets this version's list, run from the target's files, without the scheduler step (its init has no --scheduler-only)
+and without user-settings (it has none).
 
 Exit codes: 0 done, or nothing to do · 10 (--check) `brunna upgrade` would move the checkout · 1 the fetch, the move
 or a step failed · 2 usage · 3 refused: not a checkout to move (says why and what to do) · 4 not confirmed.
@@ -340,13 +343,16 @@ def cli_wrapper() -> pathlib.Path | None:
     return None
 
 
-def step_list(with_scheduler: bool) -> list[tuple[str, list[str]]]:
+def step_list(full: bool) -> list[tuple[str, list[str]]]:
+    """full: the target has this command (v0.2.0 on); v0.1.0's files have no init --scheduler-only and no user-settings."""
     b = ROOT / "bin"
     steps = [("registry", py_step(b / "registry.py", "check")),
              ("config apply", py_step(b / "agenthub", "config", "apply"))]
-    if with_scheduler:
+    if full:
         steps.append(("scheduler", py_step(b / "agenthub", "init", "--scheduler-only")))
     steps.append(("land", py_step(b / "agenthub", "land")))
+    if full:
+        steps.append(("user settings", py_step(b / "agenthub", "user-settings", "--update")))
     w = cli_wrapper()
     if w:
         steps.append(("install-cli", py_step(b / "agenthub", "install-cli", "--dir", w.parent)))
@@ -399,9 +405,9 @@ def failed(name: str, rc: int, back: str | None, manual: bool = False) -> int:
     return FAILED
 
 
-def run_steps(back: str | None, with_scheduler: bool = True, manual_back: bool = False) -> int:
+def run_steps(back: str | None, full: bool = True, manual_back: bool = False) -> int:
     """The in-step commands from the files now on disk; the first failure stops the rest."""
-    for name, argv in step_list(with_scheduler):
+    for name, argv in step_list(full):
         print(f"\n→ {name}", flush=True)
         rc = subprocess.run(argv, cwd=ROOT).returncode
         if rc != 0:
@@ -613,7 +619,7 @@ def bring_in_step(back: str | None, moved: bool) -> int:
         sys.stderr.flush()
         os.execv(sys.executable, [sys.executable, str(mine), "--steps", "--from", back])
     # a target older than this command (v0.1.0): this version's list, run from its files
-    return run_steps(back, with_scheduler=False, manual_back=True)
+    return run_steps(back, full=False, manual_back=True)
 
 
 # ---------- doctor ----------

@@ -131,6 +131,7 @@ class Upgrade(unittest.TestCase):
     def steps(self, mark: str, scheduler: bool = True) -> list[str]:
         return [f"{mark} setup-python", f"{mark} registry.py check", f"{mark} agenthub config apply",
                 *([f"{mark} agenthub init --scheduler-only"] if scheduler else []), f"{mark} agenthub land",
+                *([f"{mark} agenthub user-settings --update"] if scheduler else []),
                 f"{mark} agenthub install-cli --dir {self.wrapper_dir}", f"{mark} agenthub doctor"]
 
     # ---------- the cases ----------

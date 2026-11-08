@@ -1086,10 +1086,108 @@ def remove_lifecycle(workspace, check: bool = False) -> bool:
     return out != before
 
 
+# ---------- the worktree hooks in the user's own settings ----------
+# A linked worktree has no project settings, so only user-level hooks fire there. The owner installs them once
+# (merge-hook-settings.py --worktree); after that the platform keeps its own entries current, never anything else in the
+# file: upgrade (the owner's own command) rewrites them, doctor says when they are behind (AGENTS.md, user-level tool
+# settings).
+WORKTREE_SCRIPT = "worktree-memory.sh"
+
+
+def worktree_hooks() -> tuple[tuple[str, str | None, str], ...]:
+    """(event, matcher, command); a matcher of None fires on every instance of the event."""
+    import hubconf
+    s = hubconf.hub_bin(WORKTREE_SCRIPT)
+    wt = f"[ -x {s} ] && {s}"
+    return (
+        ("SessionStart", None, f"{wt} start || true"),
+        ("SessionEnd", None, f"{wt} end || true"),
+        ("PreCompact", None, f"{wt} end || true"),
+        ("PostToolUse", "Bash", f"{wt} nudge || true"),
+        ("UserPromptSubmit", None, f"{wt} prompt || true"),
+        # the waiter that wakes an idle session for a letter (wait_hook): run in the background, its exit code passed on
+        # (exec, no `|| true`); worktree-memory.sh hands it to hub-event in a linked worktree only
+        ("Stop", None, f"[ -x {s} ] && exec {s} wait; exit 0"),
+    )
+
+
+def _worktree_fields(command: str) -> dict:
+    """The fields a worktree hook entry carries besides its command: the waiter's are the project hooks' own."""
+    return {k: v for k, v in wait_hook().items() if k not in ("type", "command")} if command.endswith(" wait; exit 0") else {}
+
+
+def _is_worktree_hook(command) -> bool:
+    """One of the platform's worktree hooks, for this hub's location or an earlier one."""
+    return f"/bin/{WORKTREE_SCRIPT}" in str(command or "")
+
+
+def merge_worktree_hooks(settings: dict) -> dict:
+    """settings with this version's worktree hooks: the user's own hooks and other settings stay; a worktree hook written
+    for another hub location, or no longer one of today's commands, goes (an entry left with nothing goes with it); the
+    same command is never added twice; an installed one gets today's fields (the waiter's timeout)."""
+    hooks = settings.setdefault("hooks", {})
+    table = worktree_hooks()
+    wanted = {command for _e, _m, command in table}
+    for event in list(hooks):
+        kept = []
+        for e in hooks[event]:
+            inner = [h for h in e.get("hooks", []) if not _is_worktree_hook(h.get("command")) or h.get("command") in wanted]
+            if inner:
+                kept.append({**e, "hooks": inner})
+        hooks[event] = kept
+    for event, matcher, command in table:
+        entries = hooks.setdefault(event, [])
+        if not any(h.get("command") == command for e in entries for h in e.get("hooks", [])):
+            entry = {"hooks": [{"type": "command", "command": command, **_worktree_fields(command)}]}
+            entries.append({"matcher": matcher, **entry} if matcher else entry)
+        for h in (h for e in entries for h in e.get("hooks", []) if h.get("command") == command):
+            h.update(_worktree_fields(command))
+    return settings
+
+
+def user_settings_file() -> pathlib.Path:
+    return pathlib.Path.home() / ".claude" / "settings.json"
+
+
+def user_refresh(apply: bool) -> list[str]:
+    """agenthub upgrade (the owner's own command; apply) and doctor (not): the platform's worktree hooks in the user's
+    settings brought to this version. Only where the owner installed them (a worktree hook is there), and only those
+    entries: nothing is added to settings that have none, nothing else in the file changes, a file that is a link or
+    isn't JSON is left alone. What is (or was) behind; written whole or not at all, with the file's mode kept."""
+    import os
+    path = user_settings_file()
+    if not path.is_file() or path.is_symlink():
+        return []
+    try:
+        before = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    hooks = before.get("hooks") if isinstance(before, dict) else None
+    if not isinstance(hooks, dict) or not any(_is_worktree_hook(h.get("command")) for es in hooks.values()
+                                              if isinstance(es, list) for e in es if isinstance(e, dict)
+                                              for h in e.get("hooks", []) if isinstance(h, dict)):
+        return []
+    try:
+        after = merge_worktree_hooks(json.loads(json.dumps(before)))
+    except (AttributeError, TypeError):   # hooks in a shape Claude Code wouldn't read either: not the platform's to fix
+        return []
+    if after == before:
+        return []
+    if apply:
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        try:
+            tmp.write_text(json.dumps(after, indent=2) + "\n")
+            os.chmod(tmp, path.stat().st_mode & 0o7777)
+            os.replace(tmp, path)
+        finally:
+            tmp.unlink(missing_ok=True)
+    return [_("the worktree hooks in {file}", file=path)]
+
+
 def user_cleanup(apply: bool) -> list[str]:
     """agenthub uninstall, user level (only on the owner's own yes): the worktree hooks merge-hook-settings.py --worktree
     put in the user's settings for this hub. What there is (or was) to remove."""
-    path = pathlib.Path.home() / ".claude" / "settings.json"
+    path = user_settings_file()
     if not path.is_file() or path.is_symlink():
         return []
     import hubconf

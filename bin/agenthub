@@ -21,6 +21,9 @@ Getting started:
                         changelog first; --check stops there (exit 10 = an upgrade is there). Never moves a development
                         checkout (bin/upgrade.py)
   brunna init --scheduler-only   only (re)install the scheduler and watchdog from the templates (upgrade runs it)
+  brunna user-settings [--update]   the platform's own entries in your tool settings (installed by you, such as
+                        the worktree hooks): which are from an earlier version; --update rewrites only those
+                        (upgrade runs it)
   brunna init --questions [--answers <file>] | --answers <file>
                         for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
@@ -1165,6 +1168,24 @@ def machine_sleeps(pmset: str | None = None, batteries: list | None = None) -> s
     return _("it has a battery") if batteries else None
 
 
+def doctor_user_settings(add, installed) -> None:
+    """The platform's own entries in the user's tool settings (installed by the owner) from an earlier version: brunna
+    upgrade brings them current, and `user-settings --update` does on its own (a development checkout, which upgrade
+    refuses)."""
+    import runtime_ports
+    for name in installed:
+        mod = runtime_ports._module(name)
+        fn = getattr(mod, "user_refresh", None)
+        try:
+            behind = fn(False) if fn else []
+        except OSError:
+            behind = []
+        for what in behind:
+            add("warn", _("{what} are from an earlier version of brunna: sessions there may not get what this one "
+                          "added (such as being woken for a letter after a day idle)", what=what),
+                _("brunna upgrade brings them up to date, or brunna user-settings --update on its own"))
+
+
 def cmd_doctor(argv: list[str]) -> int:
     results: list[tuple[str, str, str]] = []   # (ok|info|warn|bad, what, how to fix)
 
@@ -1243,6 +1264,7 @@ def cmd_doctor(argv: list[str]) -> int:
     doctor_wake_misses(add)
     doctor_propose(add)
     doctor_memory_branches(add)
+    doctor_user_settings(add, installed)
     if runtime_ports.throwaway_only(rname):
         add("warn", _("the runtime {runtime} runs only in the platform's throwaway worktree: agent-shaped judgment points "
                       "other than {points} are refused with that reason", runtime=rname,
@@ -1676,6 +1698,34 @@ def cmd_land(argv: list[str]) -> int:
     return max(subprocess.run(s).returncode for s in steps)
 
 
+def cmd_user_settings(argv: list[str]) -> int:
+    """The platform's own entries in the user's tool settings, through each installed runtime's user_refresh: which are
+    from an earlier version, and with --update those entries rewritten (AGENTS.md, user-level tool settings: run by the
+    owner, or by upgrade, which the owner runs; nothing is added to settings that have none)."""
+    if argv not in ([], ["--update"]):
+        print(_("usage: {cli} user-settings [--update]", cli=names.current("cli")), file=sys.stderr)
+        return 2
+    import runtime_ports
+    apply, rc = argv == ["--update"], 0
+    for name in runtime_ports.installed():
+        fn = getattr(runtime_ports._module(name), "user_refresh", None)
+        if not fn:
+            continue
+        try:
+            lines = fn(apply)
+        except OSError as e:
+            print(_("✗ {runtime}: could not update the platform's entries in your settings ({error})", runtime=name,
+                    error=e.strerror or type(e).__name__), file=sys.stderr)
+            rc = 1
+            continue
+        for line in lines:
+            print(_("✓ {what} brought up to this version", what=line) if apply else
+                  _("{what}: from an earlier version (--update rewrites them)", what=line))
+        if not lines:
+            print(_("✓ {runtime}: the platform's entries in your settings are current", runtime=name))
+    return rc
+
+
 def passthrough(script: str):
     return lambda argv: subprocess.run([*hubconf.launch(BIN / script), *argv]).returncode
 
@@ -1740,6 +1790,7 @@ COMMANDS = {
     # after a merge of agent-hub, run by merge-branch from the merged tree (docs/design/test-waiting.md step 2.2;
     # step 2.3 adds the hook install): the registry index rebuilt by the code that just landed
     "land": cmd_land,
+    "user-settings": cmd_user_settings,
     **{name: session_command(name) for name in SESSION_COMMANDS},
 }
 

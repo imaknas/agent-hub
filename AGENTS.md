@@ -414,8 +414,11 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   among them, and the `Conformance` tests run one probe through whichever adapter the machine has; `brunna.json` `service_sandbox_exempt` holds a project back temporarily).
   Every model call goes through `bin/llm.py` (judgment points declared in `contracts/llm-points.yaml`, linted
   nightly); an unattended agent job that declares `allow:` in the registry does not stop to ask
-- **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **are changed only when the owner confirms
-  directly in that session**; consent relayed by someone else does not count
+- **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **get nothing new unless the owner confirms
+  directly in that session**; consent relayed by someone else does not count. The one exception is keeping current
+  what the owner already put there for the platform (the worktree hooks): `brunna upgrade`, which the owner runs, rewrites
+  only those entries to the new version (the runtime's `user_refresh`), adds nothing to settings that have none, and
+  leaves everything else in the file as it is; doctor says when they are behind. No session or job does it
 - `contracts/`: **versioned contracts**: the interfaces brunna defines (hubbus, todo-md, state-todo, reflect-week,
   project, llm-points, lease-runner) and vendored copies of other projects' contracts (`contracts/vendor/<project>/`).
   The registry's (and modules') `provides`/`consumes` declare who defines and who reads; `tests/test_contracts.py`

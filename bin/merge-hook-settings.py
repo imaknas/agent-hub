@@ -6,9 +6,11 @@ platform's hooks are replaced as a set with `hub-event <event>`, the user's own 
 abstraction, docs/design/runtime-abstraction.md). Normally sync-local-setup.sh's `hub-event install` does this, without
 going through here.
 
-`--worktree` mode (user-level settings): the worktree-memory.sh hooks. A mechanical merge: the user's own hooks and
-other settings stay; a worktree-memory.sh hook written for another hub location is replaced; the same command is never
-added twice.
+`--worktree` mode (user-level settings): the worktree-memory.sh hooks (runtime_claude.merge_worktree_hooks). A mechanical
+merge: the user's own hooks and other settings stay; a worktree-memory.sh hook written for another hub location is
+replaced; the same command is never added twice. The owner runs it once, by hand: user-level settings get nothing new
+without the owner. After that `brunna upgrade` keeps those entries current (runtime_claude.user_refresh), and doctor
+says when they are behind.
 
 There's only one mode: memory tracking always lives in the separate .agent-memory worktree, and hooks always cd into
 it first, whether or not the project has an external remote.
@@ -33,84 +35,33 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import hubconf  # noqa: E402  the hub's location as written in a shell string (hubconf.hub_bin)
+import runtime_claude  # noqa: E402
 
-WT_SCRIPT = "worktree-memory.sh"
-WT = f"[ -x {hubconf.hub_bin(WT_SCRIPT)} ] && {hubconf.hub_bin(WT_SCRIPT)}"
-# (event, matcher, command); matcher None means none is set (fires on every instance of the event)
-WORKTREE_HOOKS = (
-    ("SessionStart", None, f"{WT} start || true"),
-    ("SessionEnd", None, f"{WT} end || true"),
-    ("PreCompact", None, f"{WT} end || true"),
-    ("PostToolUse", "Bash", f"{WT} nudge || true"),
-    ("UserPromptSubmit", None, f"{WT} prompt || true"),
-    # the waiter that wakes an idle session for a letter (runtime_claude.wait_hook): run in the background, its exit
-    # code passed on (exec, no `|| true`); worktree-memory.sh hands it to hub-event in a linked worktree only
-    ("Stop", None, f"[ -x {hubconf.hub_bin(WT_SCRIPT)} ] && exec {hubconf.hub_bin(WT_SCRIPT)} wait; exit 0"),
-)
-
-
-def hook_fields(command: str) -> dict:
-    """The fields a worktree hook entry carries besides its command: the waiter's are the project hooks' own."""
-    if command.endswith(" wait; exit 0"):
-        import runtime_claude
-        return {k: v for k, v in runtime_claude.wait_hook().items() if k not in ("type", "command")}
-    return {}
-
-
-def has_command(entries, command):
-    for e in entries:
-        for h in e.get("hooks", []):
-            if h.get("command") == command:
-                return True
-    return False
-
-
-def drop_stale(entries, wanted):
-    """The platform's worktree hooks that aren't one of today's commands (written for where the hub was before) go;
-    an entry left with nothing goes with them."""
-    out = []
-    for e in entries:
-        inner = [h for h in e.get("hooks", []) if f"/bin/{WT_SCRIPT}" not in str(h.get("command", ""))
-                 or h.get("command") in wanted]
-        if inner:
-            out.append({**e, "hooks": inner})
-    return out
+WORKTREE_HOOKS = runtime_claude.worktree_hooks()   # the table and the merge live in the adapter (it keeps them current)
+USAGE = ("usage: merge-hook-settings.py <a project's local settings file>\n"
+         "       merge-hook-settings.py --worktree <user-level settings.json>")
 
 
 def main():
     args = sys.argv[1:]
-    if not (args and args[0] == "--worktree"):
+    # a path, or --worktree and a path: anything else (--help, a typo) writes nothing, never a settings file of that name
+    if not (len(args) == 1 and not args[0].startswith("-") or len(args) == 2 and args[0] == "--worktree"):
+        print(USAGE, file=sys.stderr)
+        sys.exit(2)
+    if args[0] != "--worktree":
         # project mode: installed by the runtime's binding (runtime_claude.install_hooks: the platform's are replaced
         # as a set with hub-event, the user's own are kept); sync-local-setup.sh goes through `hub-event install`, not
         # through here.
-        import runtime_claude
         path = Path(args[0])
         settings = json.loads(path.read_text()) if path.exists() else {}
         out = json.dumps(runtime_claude.install_hooks(settings), indent=2) + "\n"
         if not path.exists() or path.read_text() != out:
             path.write_text(out)
         return
-    # --worktree: user-level settings (the hub machine's ~/.claude/settings.json) change only when the owner confirms
-    # directly in that session; run by hand, never by the platform
+    # --worktree: the owner installs them, by hand; after that upgrade keeps them current (runtime_claude.user_refresh)
     path = Path(args[1])
     settings = json.loads(path.read_text()) if path.exists() else {}
-
-    hooks = settings.setdefault("hooks", {})
-    wanted = {command for _event, _matcher, command in WORKTREE_HOOKS}
-    for event in list(hooks):
-        hooks[event] = drop_stale(hooks[event], wanted)
-    for event, matcher, command in WORKTREE_HOOKS:
-        entries = hooks.setdefault(event, [])
-        if not has_command(entries, command):
-            entry = {"hooks": [{"type": "command", "command": command, **hook_fields(command)}]}
-            if matcher:
-                entry = {"matcher": matcher, **entry}
-            entries.append(entry)
-        for h in (h for e in entries for h in e.get("hooks", []) if h.get("command") == command):
-            h.update(hook_fields(command))   # the same command with the fields of an earlier version (the waiter's timeout)
-
-    out = json.dumps(settings, indent=2) + "\n"
+    out = json.dumps(runtime_claude.merge_worktree_hooks(settings), indent=2) + "\n"
     if not path.exists() or path.read_text() != out:
         path.write_text(out)
 
