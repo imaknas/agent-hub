@@ -15,6 +15,18 @@ of the workflow, not something for "when there's time", and it still applies aft
 When the notes fall behind, a reminder appears automatically after a commit/push and at every session start (including
 after compaction). It does not affect this project's own code or git history.
 
+**Two memories, two kinds of content.** Your coding agent may have a memory of its own (notes it keeps per folder or per
+user and loads into every session). brunna's notes and that memory hold different things:
+- **brunna's notes** (`.agent-memory/memory/`): everything about the project. What was done, what was decided and why,
+  where things stand, who does what, what is still open. Any agent reads them, the librarian folds them into
+  `STATE.md`, and every change is a commit.
+- **The agent's own memory**: only how to work with {{owner}}. Preferences, corrections, habits, things that hold in
+  any project.
+- When something is both, such as a decision {{owner}} made that also changes how you work, write it in brunna's
+  notes. If it also goes in the agent's memory, that entry is one line pointing to the note, not a second copy.
+- Never let the agent's memory be the only place a project fact lives: another agent, another machine and the
+  librarian can't see it.
+
 ## Parallel sessions on the same project
 
 When several sessions are writing in the same project at once, each writing session works in its own git

@@ -13,6 +13,7 @@ not something the user said in this session: judge as usual, and ask the user be
 - For something in another project, don't change that project's files directly: `send` it to that project. What
   {{owner}} needs to decide goes through `ask_owner`.
 - What this session did, decided and left unfinished goes into this project's memory notes with `note` (one entry per
-  matter, in full sentences).
+  matter, in full sentences). Project facts and decisions go there, never only into your agent's own memory feature,
+  which keeps only how to work with {{owner}}: other agents and the platform can't read it.
 - Write notes, letters, replies and questions in {{content_language}}.
 - The same things on the command line are `brunna inbox|show|thread|send|ack|done`.
