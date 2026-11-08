@@ -92,6 +92,11 @@
   404.
 - **Tests / a second instance must start with a clean environment** (`env -u <TOKEN> …`): a test gateway inherited the
   production bot token from the shell and fought production for the same session.
+- **A temp instance run from the live checkout's code still sees the live root**: `.state`, `.logs` and `.hub-home`
+  come from the hub root, not from `AGENT_HUB_HOME`/`AGENT_HUB_CONFIG`. A throwaway world that pointed only the
+  instance and `bus_dir` at temp dirs would have had `hubconf.bus_db()` repoint the live `.logs/hubbus.log` at its temp
+  bus. Code that changes the root's live layout checks first that the process is on the root's own instance
+  (`hubconf._own_instance()`, `_migrates()`); a throwaway world also sets `AGENT_HUB_ROOT` to a temp copy.
 - **Don't hand-edit installed packages or production settings to demo/test an unreleased feature**: this once caused a
   crash loop of 20+ restarts. Use a separate test account/environment; to recover, go back to the last good settings
   and reinstall the unmodified files.

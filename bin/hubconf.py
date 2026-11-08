@@ -561,15 +561,32 @@ BUS_LOG = BUS_DIR / "hubbus.log"
 _OLD_BUS = [STATE / "bus" / "bus.db", STATE / "bus.db"]  # where it used to be (searched in order)
 
 
+def _own_instance() -> bool:
+    """This process sees its root's live layout through the root's own instance: _migrates() (the main checkout's
+    code, its own .state) and the instance the root's .hub-home names (or the old layout without one), with no
+    config override. Only then are the bus_dir it reads and the .logs it would touch the same machine's. A throwaway
+    world, an eval run or a test that points the HOME or CONFIG override at a temp instance from the live checkout's
+    code is not (it once repointed the live .logs/hubbus.log at its temp bus, runtime-versions V-M6)."""
+    if not _migrates() or names.env("CONFIG"):
+        return False
+    v = names.env("HOME")
+    if not v:
+        return True
+    pointed = POINTER.read_text().strip() if POINTER.is_file() else ""
+    return bool(pointed) and pathlib.Path(os.path.expanduser(v)).resolve() == pathlib.Path(
+        os.path.expanduser(pointed)).resolve()
+
+
 def bus_db() -> pathlib.Path:
     """The bus's SQLite file. Not yet at the new location but present at an old one -> move it: one connection takes
     the RESERVED lock (BEGIN IMMEDIATE) to hold off other writes, another connection reads it out with the backup API
     (a connection that holds the lock and then backs itself up deadlocks), and the lock is released only after the
-    rename."""
+    rename. The move and the .logs link change the root's live layout, so only the root's own instance does them
+    (_own_instance()); any other process gets the path and nothing moves."""
     new = BUS_DIR / "bus.db"
     BUS_DIR.mkdir(parents=True, exist_ok=True)
     old = next((o for o in _OLD_BUS if o.exists() and o != new), None)
-    if new.exists() or old is None:
+    if new.exists() or old is None or not _own_instance():
         return new
     import sqlite3
     lock = sqlite3.connect(old, timeout=60, isolation_level=None)
