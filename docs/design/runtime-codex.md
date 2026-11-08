@@ -95,7 +95,8 @@ sessions). User-level hooks (D1), a fixed command (`brunna` on PATH, `hook --run
 upgrades; doctor flags a Codex process with no record (a hook skipped as untrusted). Rules by SessionStart `additionalContext`, the
 `instructions` port left absent so nothing writes the tracked `AGENTS.md`; the feature row says rules arrive by injection. The session id
 for a shell (`current_session`) comes from what Codex puts in a tool shell's environment (M6), else Codex sessions send without a
-sender session. Records keyed by Codex's session id, not by process, if the daemon is shared (M7).
+sender session. Records keyed by Codex's session id, not by process: every thread, Desktop's and the TUIs', runs under one shared
+daemon (M7).
 
 **Step 3: wake** (`codex queue --thread <id>`, the id checked against the record's format first), **status / summary** (the rollout
 reader shared with `sessions_codex.py`, the same privacy gate as Claude's last reply), **resume / fork** (`codex exec fork`).
@@ -131,7 +132,8 @@ gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex run
   a nested sandbox is unmeasured (M10), so Linux gets neither layer until measured. `codex queue` uses `--thread=<uuid>` and a fixed
   message (it arrives as the user's words).
 
-Measurements and what they block: M7 → Step 2; M3 (done for the TUI) → Step 3; M8, M9 and the platform's own schemas → Step 1's
+Measurements and what they block: M7 (done for an SSH project) → Step 2; M3 (done for the TUI) and M11 (is a client attached) →
+Step 3; M8, M9 and the platform's own schemas → Step 1's
 agent runs; M9 and M10 (nested sandbox) → D2 layer 2; M8 → Step 4.
 
 ## Decisions for the owner
@@ -149,6 +151,11 @@ agent runs; M9 and M10 (nested sandbox) → D2 layer 2; M8 → Step 4.
 - **D3, the default runtime.** With Claude as the default, Codex sessions are served (hooks, letters, wake) but the platform's
   background runs (judgment points, forks, leases) stay on Claude; leases can't move (`RUNTIME_ARG_POINTS`). A per-project default is
   left out.
+- **D4, waking a Codex thread nobody may be watching (M7).** `codex queue` runs a turn on any loaded thread, including one whose TUI
+  quit, with that thread's permissions. The owner's "a woken session keeps its permissions" assumed a session someone has open.
+  Until M11 shows a client is attached: (a) a Codex thread is never woken; its letters go the way of a runtime with no wake port (a
+  background fork under the platform's settings, then triage) (recommended); or (b) wake it anyway, as Claude's, accepting a turn
+  nobody watches.
 
 ## Sandboxed sessions on any agent (for D2)
 
@@ -225,4 +232,24 @@ platform's own schemas.
   started a turn at once: its rollout gained a second `task_started` with `turn_trigger: "queue"`, and the UI showed the message and
   the reply. The TUI was attached to the shared app-server daemon (`~/.codex/packages/app-server-daemon/…/codex app-server --listen
   unix://`, 0.167.0, which the CLI runs itself). So **wake works without any hook**, the opposite of Claude (whose wake is its Stop
-  hook). A thread the Desktop app holds is still to measure (M7). Nothing in `~/.codex/config.toml` changed (same sha256).
+  hook). A thread the Desktop app holds is M7, below. Nothing in `~/.codex/config.toml` changed (same sha256).
+- **M7, done for an SSH project (11-08).** The Desktop app on the remote machine, with an SSH project on a folder of the hub machine,
+  and two TUIs in the same folder on the hub machine; a temporary user-level logging hook on all five events, trusted in
+  `config.toml` (both restored afterwards, same sha256).
+  - **A Desktop SSH thread runs on the hub machine**: its hooks run there, from the hub's `~/.codex/hooks.json` and trust, with the
+    hub folder as `cwd`. So a remote-machine Desktop user is served like a TUI on the hub; nothing runs on the remote machine.
+  - **Every thread runs under one process**: the hook's parent was the shared daemon (`codex app-server --listen unix:// …
+    --managed-daemon`, started two days earlier) for both Desktop threads and both TUIs. The hook's environment is the daemon's (the
+    TUIs' hooks carried the same `SSH_CONNECTION` as the Desktop's). Neither the process nor the environment tells sessions or
+    clients apart: records are keyed by the stdin `session_id`, and "alive" can't be a process check (B4 is real).
+  - **SessionEnd fires when a Desktop thread is archived** (`reason: "other"`). **Quitting a TUI doesn't end its thread**: it prints
+    "Disconnected from this task. Any running work continues" and no SessionEnd fires; the thread stays loaded in the daemon.
+  - **`codex queue` starts a turn at once on an idle Desktop thread** (UserPromptSubmit and Stop fired, the reply was the asked word),
+    **and on a TUI's thread after the TUI quit**: a turn nobody watches, with that thread's permissions. So a wake to a Codex thread
+    is a person's open session only while a client is attached, and nothing measured yet says whether one is.
+  - The daemon has `thread/loaded/list` and `thread/read` (status `notLoaded | idle | active | systemError`); neither says whether a
+    client is attached. `codex app-server proxy` didn't answer newline-delimited JSON-RPC within 6 s; its framing is unmeasured (M11).
+  - The local case (Desktop and TUIs on one machine, without SSH) is unmeasured; doctor's row for it says so until it is.
+  - What it changes: Step 2 keys records by session id and ends one on SessionEnd or when the thread is no longer loaded; a TUI that
+    quit leaves a record that still looks live. Step 3 can't wake a Codex thread as "the person's open session" until M11 shows a
+    client is attached; until then a Codex thread gets what a session of a runtime with no wake port gets (owner decision D4).
