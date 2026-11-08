@@ -276,8 +276,26 @@ It can't be written as one deny today: a deny wins over any allow (runtime_claud
 `Edit(/{ws}/**/{name}/**)` (runtime_claude.py:216), so denying `.claude/**` also denies every edit inside `.claude/worktrees/<x>/`, where
 Desktop's worktree sessions work. How it can be expressed is V-M9: a deny on creating a new entry directly under the tool's folder
 (Seatbelt can say it for services; whether Claude's permission rules can for sessions is the question), or rendering a deny for every
-entry present except `worktrees` plus a deny on new top-level entries. Until V-M9 settles it, the enumerated lists stay, and doctor's
-control row names the residuals: a new load location under the tool's folder in the project, a new root-level file name, and a new
+entry present except `worktrees` plus a deny on new top-level entries.
+
+**V-M9 settled it (11-09)** (measurements below):
+- **Services (Seatbelt): one rule.** `(deny file-write* (require-all (subpath "<ws>/.claude") (require-not (subpath
+  "<ws>/.claude/worktrees"))))`. It denies new entries, writes, removals and renames under `.claude/`, and renaming `.claude`
+  itself, while writes inside `worktrees/` go through. This replaces the enumerated control paths in the service profile.
+  - Landlock (Linux) can't be measured here, so Linux services keep the enumerated paths, and doctor says so.
+- **Sessions (Claude's rules): not expressible as one rule.**
+  - A deny wins over every allow, in the sandbox's `denyWrite`/`allowWrite` as well as in permission rules.
+  - The glob matchers (node-ignore for rules, regexes for the sandbox) have no negation and match case-insensitively.
+  - The only form that comes close is about 36 complement character classes. A class either engine doesn't take is silently
+    ignored, and names that start with a non-ASCII character stay open to Bash.
+  - That is a workaround resting on two engines' quirks, so it isn't taken.
+  - So sessions keep the enumerated lists, rendered for every entry present under `.claude/` except `worktrees` (a `denyWrite`
+    and an `Edit` deny each). The control check carries the canary that names the residual: a throwaway session writes a new
+    `.claude/<probe>` through Edit and through Bash (`sh -c`), and the result is recorded per version. For Edit, the tool's own
+    "sensitive file" ask currently stops it (not in bypass mode).
+  - `.claude/.cc-writes/`, which Claude Code creates itself whenever its sandbox is on, is exempt from the check.
+
+The residuals doctor's control row names: a new load location under the tool's folder in the project, a new root-level file name, and a new
 load location under the user's `~/.claude` or `~/.codex` (user-level, which the project sandbox doesn't cover). The vendor's release
 notes for each promoted version are linked from `brunna runtimes` for the owner to read.
 
@@ -303,7 +321,9 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 3. **Session versions**: recorded at start, the job that checks a newly seen version, the narrow per-version gate (`CAGED_NEEDS`
    unchanged), dispatch's split gate, session-side calls on matching
    versions, the SessionStart notice.
-4. **Control as one rule** (section 7), once V-M9 says how it can be written, with the sandbox-parity tests updated.
+4. **Control** (section 7, after V-M9): the one Seatbelt rule for services on macOS; for sessions, the enumerated denies rendered
+   for every entry present under `.claude/` except `worktrees`, plus the control check's per-version canary. The sandbox-parity tests
+   are updated to match.
 5. **Codex Step 1** builds on all of it: `runtime_codex.CONFORMANCE` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
 
@@ -449,6 +469,31 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
     one. A platform config dir doesn't blind section 5's status calls.
 - V-M9: how "create nothing new under `.claude/` but `worktrees`" is expressed: in Claude's permission rules for sessions, and in
   Seatbelt / Landlock for services.
+  **Done 11-09 (2.1.319; macOS).** Each case ran in a throwaway repo with one write per prompt, judged by the file system, with a
+  positive control (no rule: the write happens).
+  - **Permission rules.**
+    - `Edit(...)` rules are gitignore globs (node-ignore). They are case-insensitive, and a matched directory denies everything
+      beneath it: `Edit(<ws>/.claude/*)` also denies `.claude/worktrees/x/a.txt`.
+    - `[!w]` and `[^w]` are taken literally, and there is no `!` negation.
+    - Deny rules hold in bypass mode and cover Write of a new file as well as Edit.
+    - An allow rule doesn't lift the tool's own "sensitive file" ask. That ask covers everything under `.claude/` except
+      `.claude/worktrees/` and is off in bypass mode.
+    - A complement of about 18 character-class rules does express "all but worktrees" for the file tools.
+  - **Sandbox.**
+    - The keys are `sandbox.filesystem.{allowWrite,denyWrite,allowRead,denyRead}`. `denyWrite` beats `allowWrite`, so an allow for
+      `worktrees` inside a deny of `.claude` doesn't win. `Edit` rules are merged into them.
+    - Class rules that the Seatbelt translation doesn't take are silently ignored. A lower-case ASCII complement works, but names
+      starting with a non-ASCII character (a CJK file name) stay writable from Bash.
+    - Without the sandbox, an `Edit` deny stops a parsed `touch`, but not `sh -c 'touch …'` or `python3 -c`. The sandbox is what
+      governs Bash.
+    - With the sandbox on, Claude Code creates `<ws>/.claude/.cc-writes/` itself on every run.
+  - **Seatbelt.** The `require-all`/`require-not` profile in section 7 parses and holds:
+    - **Denied:** new file, `mkdir`, append, `rm`, `mv` out, `mv .claude`, symlink and hard-link tricks.
+    - **Allowed:** writes, `mkdir` and `rm` inside `worktrees/`.
+    - **Gaps:** the `worktrees` entry itself can be swapped for a link, though writes through it are still checked at the real
+      path; and `.claude` can't be created from inside the sandbox.
+    - A create-only rule (`file-write-create` on a regex) leaves existing entries open.
+  - **Landlock:** not measurable on macOS.
 - V-M10: does `claude` run with `CLAUDE_CODE_OAUTH_TOKEN` read or write the Keychain's Claude Code login item (macOS)? Decides DV5.
   **Done 11-09 (2.1.319).**
   - Claude Code reaches the Keychain by running `security` found on PATH. A wrapper first on PATH, which logs only the subcommand
