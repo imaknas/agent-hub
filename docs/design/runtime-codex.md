@@ -85,6 +85,11 @@ table is per the second finding (the librarian's answer-only fallback counted), 
   `web_search="disabled"`, `default_permissions=":read-only"`, `approval_policy=never`, in a platform home with no MCP servers; what is
   left is a clock and MCP resource tools with no server behind them. A test pins the list the run sees (the model asked for
   `ALL_TOOLS`), so a Codex release that adds a tool fails it instead of widening the run.
+  **Not tool-free on the default model** (runtime-versions.md, V-M1, 11-09). A model whose catalog entry has
+  `multi_agent_version: v2` (`gpt-6-luna`, the default) still gets a `collaboration` namespace (`spawn_agent`, `send_message`,
+  …) with every flag above, `features.multi_agent_v2=false` included. `gpt-5.6-luna` (v1) has none. So each point kind's model
+  is pinned, and the pinned list covers the namespaces as well as `ALL_TOOLS`. It is checked per run: `codex debug prompt-input`
+  before, the rollout's `additional_tools` after.
   A point with tools gets them only through a permission profile rendered from the policy (M8): writes to its declared folders, reads
   denied for what `policy.py` denies every sandbox (`deny_read`, credentials, `platform_state`), `approval_policy=never`. Paths and
   globs in a profile must be absolute (a relative glob stops the run at load, nothing runs).
@@ -143,7 +148,9 @@ gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex run
   message (it arrives as the user's words).
 
 Measurements and what they block: M7 (done for an SSH project) → Step 2; M3 (done for the TUI) and M11 (is a client attached) →
-Step 3; M8 and M9 (both done 11-08) and the platform's own schemas → Step 1's agent runs, so only the schemas are left; M10 (nested
+Step 3; M8 and M9 (both done 11-08) and the platform's own schemas → Step 1's agent runs, so only the schemas are left, plus
+which model each point kind pins and what removes v2's `collaboration` tools (runtime-versions.md, V-M1); Step 1 now follows
+runtime-versions.md's steps 1-4 (its step 5); M10 (nested
 sandbox) → D2 layer 2; M8 → Step 4.
 
 ## Decisions for the owner

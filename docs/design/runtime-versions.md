@@ -182,9 +182,9 @@ logs the owner out everywhere (Codex 0.165.0 would have, M9).
   candidate gets the same and nothing else. On Linux the throwaway home has no `.credentials.json`. On macOS the subscription login
   is in the Keychain, which a throwaway config dir doesn't hide, and the platform's Seatbelt profile can't wrap the checks: a second
   Seatbelt layer can't start inside one (seatbelt.py:9-11), so Claude's own sandbox, which the confine checks exercise, wouldn't run,
-  and that profile also turns the network off. So no wrapping: V-M10 measures whether `claude` with `CLAUDE_CODE_OAUTH_TOKEN` reads
-  or writes the Keychain login item at all. If it doesn't, candidates run unwrapped with the token, and that is the answer. If it
-  does, DV5.
+  and that profile also turns the network off. So no wrapping. V-M10 (11-09): a token run reads the Keychain login item (through
+  `security` on PATH) and doesn't write it, so this is DV5. Its option (c), a refusing `security` first on PATH, was measured only
+  under `-p` with a scratch config dir; a stream session and a lease run are to be measured before it is built.
   Residual either way: the promoted copy's refresh of the subscription login (jobs with `connectors: true`) is not checked before
   promotion; `check-claude-login` (hourly, a real request) is what catches it after.
 - **Codex**: a Business / Enterprise workspace's access token when the instance has one (doesn't refresh). Otherwise the candidate's
@@ -207,10 +207,11 @@ running wider:
   - The residual is one run's wider tool list after a catalog change, bounded by the run's permission profile (M8), which doesn't
     come from the server.
 - **Claude** (V-M7): completions and `tools: ""` points read stream-json.
-  - The `init` event lists the run's tools before the first model call. Any tool beyond the pinned set (`StructuredOutput` with a
-    schema, nothing without) ends the run there.
+  - The `init` event lists the run's tools. Any tool beyond the pinned set (`StructuredOutput` with a schema, nothing without)
+    ends the run when it is read. Whether that is always before the first model request goes out wasn't measured.
   - A `tool_use` of any other name refuses the result and alerts.
-  - Prevention for what the tool list shows, detection for the rest; the run's sandbox and settings hold regardless.
+  - What guarantees anything is the `tool_use` check plus the run's sandbox and settings. Ending on `init` only shortens the
+    window.
 - **Models**: an alias that stops resolving fails the run (as now), named "the provider dropped model X", not read as a login problem.
 
 ## 5. Session-side calls use matching versions
@@ -297,8 +298,11 @@ entry present except `worktrees` plus a deny on new top-level entries.
   - The only form that comes close is about 36 complement character classes. A class either engine doesn't take is silently
     ignored, and names that start with a non-ASCII character stay open to Bash.
   - That is a workaround resting on two engines' quirks, so it isn't taken.
-  - So sessions keep the enumerated lists, rendered for every entry present under `.claude/` except `worktrees` (a `denyWrite`
-    and an `Edit` deny each). The control check carries the canary that names the residual: a throwaway session writes a new
+  - So sessions keep the fixed load-location lists (`CONTROL`, `USER_CONTROL`), which deny those names whether or not they exist
+    yet. Added to them: a deny (a `denyWrite` and an `Edit` deny) for every other entry present under `.claude/` except
+    `worktrees`.
+  - The residual is a new load-location name that is neither listed nor present: Bash through `sh -c` gets past the `Edit`
+    parse and the tool's own ask (V-M9). The control check's canary names it: a throwaway session writes a new
     `.claude/<probe>` through Edit and through Bash (`sh -c`), and the result is recorded per version. For Edit, the tool's own
     "sensitive file" ask currently stops it (not in bypass mode).
   - `.claude/.cc-writes/`, which Claude Code creates itself whenever its sandbox is on, is exempt from the check.
@@ -329,8 +333,9 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 3. **Session versions**: recorded at start, the job that checks a newly seen version, the narrow per-version gate (`CAGED_NEEDS`
    unchanged), dispatch's split gate, session-side calls on matching
    versions, the SessionStart notice.
-4. **Control** (section 7, after V-M9): the one Seatbelt rule for services on macOS; for sessions, the enumerated denies rendered
-   for every entry present under `.claude/` except `worktrees`, plus the control check's per-version canary. The sandbox-parity tests
+4. **Control** (section 7, after V-M9): the one Seatbelt rule for services on macOS; for sessions, the fixed load-location lists
+   as today plus a deny for every other entry present under `.claude/` except `worktrees`, and the control check's per-version
+   canary. The sandbox-parity tests
    are updated to match.
 5. **Codex Step 1** builds on all of it: `runtime_codex.CONFORMANCE` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
@@ -476,9 +481,10 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   - The exact signal is stream-json (`--output-format stream-json --verbose`). The `system`/`init` event lists the run's tools
     before the first model call (`['StructuredOutput']` with `--tools ""`, `['Bash', 'StructuredOutput']` with Bash), and each
     `assistant` event's `tool_use` blocks name the tools called.
-  - So the completion check (section 4) becomes prevention plus detection, as for Codex:
-    - the platform reads the stream; on an `init` tool list other than the pinned one (`StructuredOutput` only, or nothing
-      without a schema), it kills the run before the first turn;
+  - So the completion check (section 4) reads the stream:
+    - on an `init` tool list other than the pinned one (`StructuredOutput` only, or nothing without a schema), it ends the run
+      when it reads `init`. Whether that always comes before the first model request wasn't measured, so this only shortens the
+      window;
     - a `tool_use` of any other name refuses the result and alerts.
     - completions move from `--output-format json` to stream-json.
   - The positive control: the same run with `--tools Bash --allowedTools "Bash(echo:*)"` shows Bash in `init` and in a
