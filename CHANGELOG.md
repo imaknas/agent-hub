@@ -3,6 +3,14 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.13.1 (2026-11-08)
+
+### Fixed
+
+- **worktree-memory:** Write memory notes from a worktree without a prompt
+- **worktree-memory:** Exclude the worktree's settings file it now writes itself
+- **hubconf:** Move the bus and relink .logs/hubbus.log only for the root's own instance
+
 ## v0.13.0 (2026-11-08)
 
 ### Fixed
