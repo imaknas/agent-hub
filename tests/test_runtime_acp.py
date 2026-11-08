@@ -539,11 +539,12 @@ class Capabilities(unittest.TestCase):
             self.assertIn(runtime_ports.PORT_LABELS[port], str(cm.exception))
 
     def test_feature_table(self):
-        """It runs only mailbox-propose in the throwaway copy (doctor's own row): no feature here is on, judgment points
-        included, though it has the agent port (docs/design/runtime-codex.md, step 0)."""
-        table = runtime_ports.feature_table("acp")
+        """It runs only mailbox-propose in the throwaway copy (doctor's own row): no feature here is on (no provider set),
+        consolidate included, though it has the agent port (docs/design/runtime-codex.md, step 0)."""
+        with mock.patch("runtime_ports._feature_settings", lambda: (False, False)):
+            table = runtime_ports.feature_table("acp")
         self.assertEqual([f for f, ok, _miss in table if ok], [])
-        [(_f, _ok, miss)] = [row for row in table if row[0].startswith("judgment points")]
+        [(_f, _ok, miss)] = [row for row in table if row[0] == runtime_ports._("memory consolidation (the consolidate module)")]
         self.assertIn(runtime_ports._("agent runs outside the platform's throwaway worktree"), miss)
 
     def test_no_other_adapter_imported(self):

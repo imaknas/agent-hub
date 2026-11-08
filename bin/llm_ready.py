@@ -46,4 +46,9 @@ def unsupported(point: str) -> str | None:
         runtime_ports.load(name, ports=("agent",))
     except runtime_ports.Unsupported as e:
         return str(e)
+    if runtime_ports.throwaway_only(name) and point not in runtime_ports.THROWAWAY_POINTS:
+        # it refuses every other point (runtime_command, runtime_acp): off, so a caller with a fallback takes it (the librarian's
+        # completion parts) instead of failing on every item
+        return _("runtime {name} runs only {points} in the platform's throwaway worktree", name=name,
+                 points=", ".join(runtime_ports.THROWAWAY_POINTS))
     return None

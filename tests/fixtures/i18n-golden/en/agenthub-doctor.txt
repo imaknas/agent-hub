@@ -23,7 +23,8 @@ $ agenthub doctor    # launchd, problems
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 · memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine; looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder)
     → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
-✓ judgment points (librarian, index, consolidate, weekly report analysis): available
+✓ judgment points (librarian, index, weekly report analysis): available
+✓ memory consolidation (the consolidate module): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
 ✓ mailbox follow-up (replying with an idle session's context): available
@@ -69,7 +70,8 @@ $ agenthub doctor    # launchd, all fine
     → brunna mcp config prints the snippet to register; how to add it per tool: docs/mcp.md
 · memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine; looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder)
     → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
-✓ judgment points (librarian, index, consolidate, weekly report analysis): available
+✓ judgment points (librarian, index, weekly report analysis): available
+✓ memory consolidation (the consolidate module): available
 ✓ mailbox tasks (the platform sends an agent for letters nobody picked up): available
 ✓ unattended agent jobs with allow:, and event-triggered agent jobs: available
 ✓ mailbox follow-up (replying with an idle session's context): available
@@ -169,7 +171,9 @@ $ agenthub doctor    # two coding agents
 · memory gaps, the weekly review's statistics, the waiting report: off (no session records on this machine; looked for Claude Code (~/.claude/projects), Codex (~/.codex/sessions), the import folder)
     → they start once a coding agent has sessions on this machine, or files in the contract's format are put in <TMP>/data/sessions-import (contracts/session-record.v1.schema.json)
 ✓ coding agents: claude, acp (the platform starts claude; hub.json runtime.installed)
-! judgment points (librarian, index, consolidate, weekly report analysis): claude available; acp off (has no agent runs outside the platform's throwaway worktree or completion interface)
+! judgment points (librarian, index, weekly report analysis): claude available; acp off (has no completion interface)
+    → a runtime that is off for a feature only lacks it for its own sessions
+! memory consolidation (the consolidate module): claude available; acp off (has no agent runs outside the platform's throwaway worktree)
     → a runtime that is off for a feature only lacks it for its own sessions
 ! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, confined runs (declared permissions only), or way to tell which tool servers a run loads)
     → a runtime that is off for a feature only lacks it for its own sessions
@@ -200,5 +204,5 @@ $ agenthub doctor    # two coding agents
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ✓ background services, project settings: match the config
 
-1 problem, 11 reminders
+1 problem, 12 reminders
 --- stderr

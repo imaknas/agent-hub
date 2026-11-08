@@ -6,7 +6,6 @@
  "long-running streaming sessions": "長駐串流 session",
  "login state": "登入狀態",
  "completion interface": "completion(只回答案)",
- "judgment points (librarian, index, consolidate, weekly report analysis)": "判斷點(librarian、index、consolidate、週報分析)",
  "mailbox tasks (the platform sends an agent for letters nobody picked up)": "信箱交辦(沒人收的信由平台派 agent)",
  "mailbox follow-up (replying with an idle session's context)": "信箱接續(用閒置 session 的 context 回信)",
  "channel leasing (also needs the assistant module)": "通道租借(另外要助理模組)",
@@ -31,5 +30,7 @@
  "session {sid} can't be resumed in the background (its runtime isn't {runtime})": "session {sid} 不能在背景接著跑(它的 runtime 不是 {runtime})",
  "way to tell whether a session is busy, idle or waiting on a dialog": "判斷 session 在忙、閒置或卡在對話框的方法",
  "way to read how a session's last reply ended": "讀取 session 最後回覆結尾的方法",
- "agent runs outside the platform's throwaway worktree": "在平台拋棄式 worktree 以外跑 agent"
+ "agent runs outside the platform's throwaway worktree": "在平台拋棄式 worktree 以外跑 agent",
+ "judgment points (librarian, index, weekly report analysis)": "判斷點(librarian、index、週報分析)",
+ "memory consolidation (the consolidate module)": "記憶整併(consolidate 模組)"
 }

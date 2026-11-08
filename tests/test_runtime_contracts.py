@@ -824,6 +824,13 @@ class CommandRuntimeFailsClosed(unittest.TestCase):
             llm.completion_target("librarian-state-edits", spec)
         self.assertFalse(self.ran.exists())
 
+    def test_callers_with_a_fallback_see_it_off(self):
+        """llm_ready says a point it refuses is off, so the librarian takes its -edits points instead of failing each one."""
+        import llm_ready
+        with mock.patch.object(runtime_ports, "default_name", lambda: "command"):
+            self.assertIsNotNone(llm_ready.unsupported("librarian-state"))
+            self.assertIsNone(llm_ready.unsupported("mailbox-propose"))
+
     def test_it_is_no_completion_provider(self):
         import completion
         self.assertTrue([e for e in completion.config_errors({"providers": {"c": {"impl": "command"}}}) if "command" in e])

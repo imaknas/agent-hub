@@ -225,9 +225,12 @@ def features(providers: bool | None = None, propose: bool | None = None) -> tupl
         providers = have_providers if providers is None else providers
         propose = is_propose if propose is None else propose
     return (
-        # the librarian's notes and index and consolidate are agent-shaped; its edits and the weekly analysis answer only
-        (_("judgment points (librarian, index, consolidate, weekly report analysis)"),
-         ("agent",) if providers else ("agent", "completion")),
+        # the librarian's state, to-do format and index run agent-shaped where an agent can run them, else as their answer-only
+        # -edits points (librarian.completion_in_charge); the weekly analysis answers only. So the agent is never what they
+        # need: an LLM provider, or else the runtime's completion interface
+        (_("judgment points (librarian, index, weekly report analysis)"), () if providers else ("completion",)),
+        # consolidate has no answer-only fallback
+        (_("memory consolidation (the consolidate module)"), ("agent",)),
         # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus);
         # mailbox-escalation is confined (settings: platform) and denies tool servers it doesn't name
         (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"),

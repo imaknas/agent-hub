@@ -23,7 +23,8 @@ $ agenthub doctor    # launchd, problems
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 · memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄;找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾)
     → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
-✓ 判斷點(librarian、index、consolidate、週報分析):可以用
+✓ 判斷點(librarian、index、週報分析):可以用
+✓ 記憶整併(consolidate 模組):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
 ✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
@@ -69,7 +70,8 @@ $ agenthub doctor    # launchd, all fine
     → brunna mcp config 印出要登記的那段;各工具怎麼加:docs/mcp.md
 · memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄;找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾)
     → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
-✓ 判斷點(librarian、index、consolidate、週報分析):可以用
+✓ 判斷點(librarian、index、週報分析):可以用
+✓ 記憶整併(consolidate 模組):可以用
 ✓ 信箱交辦(沒人收的信由平台派 agent):可以用
 ✓ 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:可以用
 ✓ 信箱接續(用閒置 session 的 context 回信):可以用
@@ -169,7 +171,9 @@ $ agenthub doctor    # two coding agents
 · memory 缺口、週報的統計、等待報告:關閉(這台機器上沒有任何 session 紀錄;找過:Claude Code(~/.claude/projects)、Codex(~/.codex/sessions)、匯入資料夾)
     → 這台機器上有 coding agent 的 session、或把合約格式的檔案放進 <TMP>/data/sessions-import(contracts/session-record.v1.schema.json)之後就會開始
 ✓ coding agent:claude, acp(平台啟動的是 claude;hub.json runtime.installed)
-! 判斷點(librarian、index、consolidate、週報分析):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、completion(只回答案))
+! 判斷點(librarian、index、週報分析):claude 可以用;acp 關掉(沒有completion(只回答案))
+    → 某個 runtime 關掉的功能,只是它自己的 session 沒有
+! 記憶整併(consolidate 模組):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 信箱交辦(沒人收的信由平台派 agent):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、判斷一次執行會載入哪些工具伺服器)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
@@ -200,5 +204,5 @@ $ agenthub doctor    # two coding agents
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)
 ✓ 背景服務、專案設定:跟 config 一致
 
-1 個問題、11 個提醒
+1 個問題、12 個提醒
 --- stderr

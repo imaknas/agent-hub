@@ -1,7 +1,9 @@
 === port labels
 [('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'map of where sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('session_status', 'way to tell whether a session is busy, idle or waiting on a dialog'), ('session_summary', "way to read how a session's last reply ended"), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('tool_servers', 'way to tell which tool servers a run loads'), ('wake', 'way to wake an idle session')]
 === feature (none)
-judgment points (librarian, index, consolidate, weekly report analysis) | False | agent runs or completion interface
+judgment points (librarian, index, weekly report analysis) | False | completion interface
+=== feature (none)
+memory consolidation (the consolidate module) | False | agent runs
 === feature (none)
 mailbox tasks (the platform sends an agent for letters nobody picked up) | False | agent runs, session state, confined runs (declared permissions only), or way to tell which tool servers a run loads
 === feature (none)
