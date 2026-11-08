@@ -140,7 +140,10 @@ check counts at once.
   own runs use it) are `Unsupported` with that reason and doctor is red; never a fallback to the PATH copy. The ports that **describe
   the user's sessions** stay: control (what `policy.protect()` denies, policy.py:134-139), lifecycle (the hooks
   render-project-settings keeps, :340-343) and the settings translation, so a sandboxed project keeps every deny with no copy in the
-  store. `runtime_ports.load` gets the split as a parameter, not a second meaning of `Unsupported`. Mailbox dispatch splits its gate
+  store. `runtime_ports.load` gets the split as a parameter, not a second meaning of `Unsupported`. The no-copy refusal lives only in
+  `binary()` and that `load` parameter: `runtime_ports.capabilities()` keeps reporting which ports the adapter implements, so
+  `CAGED_NEEDS` (hub-event:342, :424; render-project-settings.py:379), which reads it, doesn't turn every sandboxed project's hooks
+  off on a fresh install or a restore. doctor and llm.py read the no-copy state on its own. Mailbox dispatch splits its gate
   the same way: today it loads `("agent", "sessions")` and returns before any hold, route or wake when that fails (hubbus:2898-2906);
   routing, holds and wakes need only `sessions` (and `wake`), and only forks, resumes and triage need `agent` from a checked copy, so
   letters keep reaching live sessions with no copy in the store. `hubconf.tool` is no longer used
@@ -236,7 +239,9 @@ Calls the platform makes about the user's sessions run the user's version's beha
   platform starts nothing in this session"), and the owner gets an alert. Everything else runs as today for it: reading and recording
   the version, the session record and its end (`session_record`, `mail_end`), memory sync, the deny handlers (`guard`). Wake is
   gated where it is decided, in hubbus, from the version in the session's process record (the `hub-event wait` entry point isn't a
-  handler). A **pending**, `not-installable` or `not-checkable` version is as today: no gate, a doctor row. An unsandboxed
+  handler). The gate also covers `hub-event worktree` (a session in a git worktree, from the user-level worktree-memory.sh): today it
+  checks only `CAGED_NEEDS` (hub-event:424) and then runs `mail` and `nudge` outside `handle()` (:426-428); for a failed version those
+  two are off, read from the process record the same way, while the record and the session end keep running. A **pending**, `not-installable` or `not-checkable` version is as today: no gate, a doctor row. An unsandboxed
   project's session is never gated by version; a failed check there is a doctor row and an alert.
 - **`CAGED_NEEDS` stays as it is**: it returns before every handler (hub-event:338-341). For a runtime without `control` (Codex
   before its Step 4) the hook files are writable by the sandboxed agent, so every payload in a sandboxed project may be forged, and
@@ -344,6 +349,9 @@ separate, the user's copy is the user's: decision DV2.
 
 ## Found by the blind reviews (11-08), all taken
 
+(Where a later round changed how a finding is taken, the later section says so: pending versions are no longer gated, `CAGED_NEEDS`
+isn't split, and candidates aren't wrapped in a Keychain-blocked profile. The text above is current.)
+
 - A version whose safety checks fail or are pending still got wake, routing and forks for sandboxed sessions: now limited per version
   (section 6), as `CAGED_NEEDS` does per runtime.
 - Safety checks could pass by testing nothing (the model declines to use a tool) and could leak real secrets when the sandbox is
@@ -404,3 +412,9 @@ became a permanent fail. Taken at the root:
 - Should-fix taken: throwaway worlds under `private_tmp()`, the login rule for session-version checks, the platform config dir only
   in the child's environment, pin and digest for every store copy a run executes, pending as today and wake gated in hubbus, a poll
   instead of an event trigger, Desktop's and the daemon's versions found on npm, the citation fixed.
+
+## Verification pass (11-08)
+
+Every earlier fix checked against the code; two gaps found and closed: the no-copy refusal must not change `capabilities()` (or
+`CAGED_NEEDS` would turn sandboxed projects' hooks off on a fresh install), and the per-version gate covers `hub-event worktree`.
+No blocking problem left.
