@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "bin" / "test-runner.py"
@@ -283,3 +284,46 @@ class SlotsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SandboxedExport(unittest.TestCase):
+    """A sandboxed project's run folder is in its own workspace, where its sandbox may create no control file at any
+    depth: those are left out of the tested copy, and the pass is still recorded for the whole tree."""
+
+    def setUp(self):
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("test_runner_export", str(RUNNER))
+        self.mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(self.mod)
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.repo = self.tmp / "repo"
+        for rel in ("src/a.py", ".claude/skills/x/SKILL.md", "sub/.claude/settings.json", ".mcp.json", "notclaude/b.py"):
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / rel).write_text(rel)
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t",
+               "GIT_COMMITTER_EMAIL": "t@x"}
+        for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "x"]):
+            subprocess.run(["git", "-C", str(self.repo), *cmd], check=True, env=env, capture_output=True)
+
+    def files(self, run):
+        return sorted(str(p.relative_to(run / "tree")) for p in (run / "tree").rglob("*") if p.is_file())
+
+    def test_control_files_are_left_out_and_the_tree_id_is_the_whole_trees(self):
+        whole = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD^{tree}"], capture_output=True,
+                               text=True, check=True).stdout.strip()
+        for skip, want in (((), [".claude/skills/x/SKILL.md", ".mcp.json", "notclaude/b.py", "src/a.py",
+                                 "sub/.claude/settings.json"]),
+                           ([".claude", ".mcp.json"], ["notclaude/b.py", "src/a.py"])):
+            with self.subTest(skip=skip):
+                run = pathlib.Path(tempfile.mkdtemp(dir=self.tmp))
+                self.assertEqual(self.mod.export(self.repo, "rev", "HEAD", run, skip), whole)
+                self.assertEqual(self.files(run), want)
+
+    def test_only_a_sandboxed_project_leaves_anything_out(self):
+        self.assertEqual(self.mod.sandbox_controls({}), [])
+        self.assertEqual(self.mod.sandbox_controls({"enforce": {"sandbox": False}}), [])
+        import policy
+        with unittest.mock.patch.object(policy, "protect", lambda: [{"name": ".claude", "tree": False}]):
+            self.assertEqual(self.mod.sandbox_controls({"enforce": {"sandbox": True}}), [".claude"])

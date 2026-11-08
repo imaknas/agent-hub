@@ -129,8 +129,16 @@ def project_of(main: pathlib.Path) -> tuple[str, dict]:
     raise SetupError(_("this repo ({path}) is not a registered project's", path=main))
 
 
-def export(top: pathlib.Path, source: str, rev: str | None, run: pathlib.Path) -> str:
-    """Writes the tested content to run/tree; returns its tree id."""
+def is_control(path: str, controls: list[str]) -> bool:
+    """A tracked path at or under one of the runtime's control files (policy.protect names), at any depth."""
+    p = "/" + path
+    return any(p.endswith("/" + c) or f"/{c}/" in p + "/" for c in controls)
+
+
+def export(top: pathlib.Path, source: str, rev: str | None, run: pathlib.Path, skip: list[str] = ()) -> str:
+    """Writes the tested content to run/tree; returns its tree id (always the whole tree's: what a pass is recorded
+    for). skip: control-file names left out of the files written (a sandboxed project's run folder is in its own
+    workspace, where its sandbox may create none of them at any depth; they hold settings and hooks, not test input)."""
     idx = {"GIT_INDEX_FILE": str(run / "index")}
     if source == "rev":
         tree = git(top, "rev-parse", f"{rev}^{{tree}}")
@@ -141,8 +149,25 @@ def export(top: pathlib.Path, source: str, rev: str | None, run: pathlib.Path) -
         git(top, "add", "-A", env=idx)
         tree = git(top, "write-tree", env=idx)
     git(top, "read-tree", tree, env=idx)
+    if skip:
+        left = [p for p in git(top, "ls-files", "-z", env=idx).split("\0") if p and is_control(p, list(skip))]
+        if left:
+            subprocess.run(["git", "-C", str(top), "rm", "--cached", "-q", "--pathspec-from-file=-",
+                            "--pathspec-file-nul"], input="\0".join(left), text=True, check=True,
+                           env={**os.environ, **idx}, capture_output=True)
+            print(_("{n} {n:file|files} the sandbox may not create left out of the tested copy ({names})", n=len(left),
+                    names=", ".join(sorted({c for c in skip if any(is_control(p, [c]) for p in left)}))))
     git(top, "checkout-index", "-a", f"--prefix={run / 'tree'}/", env=idx)
     return tree
+
+
+def sandbox_controls(doc: dict) -> list[str]:
+    """The control-file names to leave out for a sandboxed project (none otherwise: the hub's own tests read
+    its committed skills)."""
+    if not (doc.get("enforce") or {}).get("sandbox"):
+        return []
+    import policy
+    return [c["name"] for c in policy.protect()]
 
 
 def declaration(name: str, doc: dict, tree: pathlib.Path, run: pathlib.Path) -> dict:
@@ -390,7 +415,7 @@ def main(argv: list[str]) -> int:
     failed = False
     env = None   # its TMPDIR is removed with the run: kept here, never read back from a file in a folder the project writes
     try:
-        tree_id = export(top, "rev" if a.rev else "index" if a.index else "worktree", a.rev, run)
+        tree_id = export(top, "rev" if a.rev else "index" if a.index else "worktree", a.rev, run, sandbox_controls(doc))
         tree = run / "tree"
         decl = declaration(name, doc, tree, run)
         if a.tier:
