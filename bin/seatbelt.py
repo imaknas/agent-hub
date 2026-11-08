@@ -83,16 +83,36 @@ def fragment(cap: str) -> str:
     return (hubconf.ROOT / "capabilities" / f"{cap}.sb").read_text()
 
 
+def spellings(p) -> list[str]:
+    """A configured path and, when it differs, the path it resolves to. Seatbelt matches the real path of what is
+    opened, so a rule naming only a link refuses the link while its target reads fine (a secrets folder reached through
+    the instance folder <hub>/.hub-home points to); landlock.denied() resolves the same way."""
+    import os
+    s, r = str(p), os.path.realpath(p)
+    return [s] if r == s else [s, r]
+
+
+def glob_spellings(p) -> list[str]:
+    """spellings() for a glob from policy.deny_read: the part before the first * resolved, the rest kept."""
+    parts = pathlib.PurePath(p).parts
+    i = next(n for n, x in enumerate(parts) if "*" in x)
+    head, tail = pathlib.PurePath(*parts[:i]), parts[i:]
+    return [str(pathlib.PurePath(h, *tail)) for h in spellings(head)]
+
+
 def read_denies(pol: dict) -> list[str]:
     home = pathlib.Path.home()
     out = []
     for p in [hubconf.p("workspace_root"), hubconf.p("services_root"), *pol["other_projects"], *pol["credentials"],
               hubconf.STATE, hubconf.BUS_DIR, home / "Library" / "Keychains"]:
         if p:
-            out.append(f"(subpath {q(p)})")
+            out += [f"(subpath {q(s)})" for s in spellings(p)]
     for p in pol["deny_read"]:
-        out.append(f"(regex {glob_regex(p)})" if "*" in str(p) else f"(subpath {q(p)})")
-    out += [f"(literal {q(p)})" for p in pol["credential_files"]]
+        if "*" in str(p):
+            out += [f"(regex {glob_regex(s)})" for s in glob_spellings(p)]
+        else:
+            out += [f"(subpath {q(s)})" for s in spellings(p)]
+    out += [f"(literal {q(s)})" for p in pol["credential_files"] for s in spellings(p)]
     return out
 
 
@@ -112,8 +132,11 @@ def protect_denies(pol: dict) -> list[str]:
 
 def ancestors(paths) -> list[str]:
     """The folders above each path, as literals: what a process must be able to stat to resolve the path to a folder
-    it may use (realpath, `git -C`), when one of them is in a denied tree (the workspace root, the platform state)."""
-    above = {a for p in paths for a in pathlib.Path(p).resolve().parents}
+    it may use (realpath, `git -C`), when one of them is in a denied tree (the workspace root, the platform state).
+    Both the folders above the path as given and above what it resolves to: resolving walks the first, then the
+    second (a denied tree may be named by either spelling, read_denies)."""
+    import os
+    above = {a for p in paths for s in {os.path.abspath(p), os.path.realpath(p)} for a in pathlib.PurePath(s).parents}
     return [f"(literal {q(a)})" for a in sorted(above, key=str)]
 
 
@@ -139,7 +162,7 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[pat
         "; no asking other system services to launch programs outside the sandbox, no touching other processes",
         "(deny lsopen)",
         "(deny appleevent-send)",
-        "(deny process-exec " + " ".join(f"(literal {q(x)})" for x in NO_EXEC) + ")",
+        "(deny process-exec " + " ".join(f"(literal {q(s)})" for x in NO_EXEC for s in spellings(x)) + ")",
         # tested 10-25: (deny signal (target others)) doesn't block it; block everything first, then allow the same sandbox
         "(deny process-info*)",
         "(allow process-info* (target same-sandbox))",

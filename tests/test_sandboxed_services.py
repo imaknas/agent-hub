@@ -217,6 +217,8 @@ ls "$ROOT" >/dev/null 2>&1 || echo root-list-blocked
 mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
+cat "$SECRETS_LINK/key" >/dev/null 2>&1 || echo linked-secrets-blocked
+cat "$SECRETS_REAL/key" >/dev/null 2>&1 || echo linked-secrets-target-blocked
 cat /etc/hosts >/dev/null && echo system-read
 kill -0 "$OUTSIDE_PID" 2>/dev/null || echo signal-blocked
 /usr/bin/security list-keychains >/dev/null 2>&1 || echo keychain-blocked
@@ -245,7 +247,8 @@ PY
 WORKS = {"rt-write", "ws-write", "system-read", "bind-declared-ok", "socketpair-ok", "root-stat"}
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
 PROBES = {"own-writes-only": {"outside-write-blocked", "bus-write-blocked"},
-          "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked", "root-list-blocked"},
+          "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked", "root-list-blocked",
+                             "linked-secrets-blocked", "linked-secrets-target-blocked"},
           "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
           "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"},
           "runtime-files-locked": {"control-blocked"}}
@@ -302,6 +305,12 @@ class Conformance(unittest.TestCase):
         (other / "secret").write_text("x")
         cred = tmp / "cred"
         cred.write_text("token")
+        # the secrets folder named through a link (as one reached through the instance folder .hub-home points to):
+        # the target is what gets opened, so it must be refused too
+        secrets_real, secrets_link = tmp / "secrets-real", tmp / "secrets-link"
+        secrets_real.mkdir()
+        (secrets_real / "key").write_text("x")
+        secrets_link.symlink_to(secrets_real)
         outside = subprocess.Popen(["sleep", "60"])
         self.addCleanup(outside.wait)
         self.addCleanup(outside.kill)
@@ -314,6 +323,8 @@ class Conformance(unittest.TestCase):
         env = {**os.environ, "RT": str(ws), "WS": str(ws), "BUS": str(bus), "TOP": str(tmp), "OTHER": str(other),
                "ROOT": str(root),
                "CRED": str(cred), "PORT": str(port), "OUTSIDE_PID": str(outside.pid),
+               "SECRETS_LINK": str(secrets_link), "SECRETS_REAL": str(secrets_real),
+               "AGENT_HUB_SECRETS": str(secrets_link),
                "PY": sys.executable}   # the platform's Python: never rely on a python3 on PATH (AGENTS.md)
         r = subprocess.run([sys.executable, "-c", RUNNER, __import__("json").dumps(args)], capture_output=True,
                            text=True, env=env)
@@ -325,9 +336,41 @@ class Conformance(unittest.TestCase):
 
 
 class Profile(Fixture):
-    def pol(self, other):
+    def pol(self, other, **kw):
         return {"workspace": self.ws, "write": [str(self.tmp / "bus")], "other_projects": [other], "deny_read": [],
-                "credentials": [], "credential_files": []}
+                "credentials": [], "credential_files": [], **kw}
+
+    def test_a_denied_link_is_denied_by_both_spellings(self):
+        real = self.tmp / "real"
+        (real / "secrets").mkdir(parents=True)
+        (real / "secrets" / "key").write_text("x")
+        (real / "copies" / "a").mkdir(parents=True)
+        link = self.tmp / "link"
+        link.symlink_to(real)
+        own = self.tmp / "lws"
+        own.symlink_to(self.ws)
+        pol = self.pol(link / "other", deny_read=[link / "secrets", link / "copies" / "*" / "memory"],
+                       credential_files=[link / "secrets" / "key"])
+        p = seatbelt.service_profile(pol, [self.rt, own])
+        deny = next(x for x in p.splitlines() if x.startswith("(deny file-read*"))
+        for d in ("other", "secrets"):
+            self.assertIn(f'(subpath "{link / d}")', deny)
+            self.assertIn(f'(subpath "{real / d}")', deny)
+        self.assertIn(f'(literal "{link / "secrets" / "key"}")', deny)
+        self.assertIn(f'(literal "{real / "secrets" / "key"}")', deny)
+        for d in (link, real):
+            self.assertIn(f"(regex {seatbelt.glob_regex(d / 'copies' / '*' / 'memory')})", deny)
+        # the allows are only what they were: the own folders resolved, nothing under either spelling of a denied path
+        allow = next(x for x in p.splitlines() if x.startswith("(allow file-read*"))
+        self.assertIn(f'(subpath "{self.ws}")', allow)
+        self.assertNotIn(str(own), allow)
+        self.assertNotIn(str(real), allow)
+        self.assertNotIn(str(link), allow)
+        # stat only, for the folders above the own folder whichever way it is named
+        meta = next(x for x in p.splitlines() if x.startswith("(allow file-read-metadata"))
+        self.assertIn(f'(literal "{self.tmp}")', meta)
+        self.assertNotIn(f'"{own}"', meta)
+        self.assertNotIn(f'"{self.ws}"', meta)
 
     def test_port_rule_only_with_a_port(self):
         p = seatbelt.service_profile(self.pol(self.tmp / "other"), [self.rt, self.ws])
