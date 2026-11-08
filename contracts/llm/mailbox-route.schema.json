@@ -7,7 +7,7 @@
  "properties": {
   "session": {
    "type": "string",
-   "description": "the id of the one candidate session the letter should go to, copied exactly from the list"
+   "description": "the label of the one candidate session the letter should go to, as listed (s1, s2…)"
   }
  }
 }

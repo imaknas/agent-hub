@@ -797,3 +797,26 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
 
 What isn't verified: a real model's picks, and a real call's time on the default runtime for this prompt. The live check after merge:
 a project with two armed sessions on record, a request with no thread, and `hubbus.log` shows the route `(model)`.
+
+### Step 5's live check (11-08): the model saw no ids
+
+- **The first live run went by recency.** Two idle sessions of one project, one on installing tools and one, more recent, on
+  the game's rules; a question about the tools went to the more recent one, `by: recent`, with the day's `job.failed`
+  (`mailbox-route gave no usable answer`) on the status page. The call itself had ended well (haiku, `stop: end`): its answer
+  was `{"session": "[redacted]"}`. `completion.run` masks what looks like a credential before sending, and one of its
+  patterns, 20 or more characters mixing letters and digits, takes every session id. The model was shown "[redacted]" for each
+  candidate and could only copy it back. The tests ran the call on the fake runtime, with ids like `S1`, never through the
+  mask.
+- **The fix: labels, not an exemption from the mask.** The model sees each candidate as `s1`, `s2`… in the order
+  `route_prompt` lists them, which it hands to `start`; the call's process turns the label back into that candidate's id
+  before writing the answer, so the answer file, `read_answer` and dispatch's check against the candidates are as they were.
+  The mask stays on for this point: the letter is anyone's text and a last reply is a session's. An answer that is an id, or
+  a label past the list, is no answer. A test now sends a prompt with real-shaped ids through the real mask.
+- **Shown working on haiku** before merge, by hand with the branch's code: the same two sessions, the tool session listed
+  second and less recent, and the model answered `s2`. The live check runs again after merge.
+- **Folder names that look like a credential are masked too**, such as a worktree a coding agent named with a random hex
+  part. Nothing is lost that the model could use: the random part says nothing about the work. A worktree named for its
+  work keeps its name.
+- **`max_tokens: 200` binds only where a provider takes it** (anthropic, openai, ollama). On the Claude Code runtime the
+  call wrote 677 output tokens, its structured output's own overhead counted: `claude -p` has no output limit to pass. The
+  bound that holds everywhere is `timeout_s` and the call's own `CALL_TIMEOUT_S`.

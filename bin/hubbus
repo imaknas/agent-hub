@@ -2759,7 +2759,7 @@ def _model_pick(c, t, r, cands, ws, proj):
     if proj in t.asked or t.route_target() is None or mr.calls_today(own_names(proj)) >= mr.DAILY_CALLS:
         return None
     t.asked.add(proj)
-    if mr.start(r["id"], proj, route_prompt(c, t, r, cands, ws, proj), cands):
+    if mr.start(r["id"], proj, *route_prompt(c, t, r, cands, ws, proj)):
         return ASKING
     route_failed(c, proj)
     return None
@@ -2775,11 +2775,12 @@ def route_failed(c, proj: str, kind: str | None = None) -> None:
             {"job": f"mailbox-route:{proj}", "detail": detail})
 
 
-def route_prompt(c, t, r, cands: list[str], ws=None, proj=None) -> str:
-    """What mailbox-route reads (design "Picking one", "The last reply"): the letter's sender (an address, or ?), type and the
-    start of its text; for each candidate, the most recently active first and at most MAX_CANDIDATES, its id, its folder under
-    the project, minutes since its last hook, what it is doing, and its last reply where mailbox_route.text_allowed lets it.
-    No branch, nothing read from the session's folder, and from a session nothing else it wrote."""
+def route_prompt(c, t, r, cands: list[str], ws=None, proj=None) -> tuple[str, list[str]]:
+    """What mailbox-route reads (design "Picking one", "The last reply"), and the candidates in the order it lists them (its
+    labels s1, s2… are their places: mailbox_route.label): the letter's sender (an address, or ?), type and the start of its
+    text; for each candidate, the most recently active first and at most MAX_CANDIDATES, its label, its folder under the
+    project, minutes since its last hook, what it is doing, and its last reply where mailbox_route.text_allowed lets it.
+    No id, no branch, nothing read from the session's folder, and from a session nothing else it wrote."""
     import mailbox_route as mr
     proj, p = proj or now_named(r["to_project"]), payload(r)
     q = ",".join("?" * len(cands))
@@ -2798,7 +2799,7 @@ def route_prompt(c, t, r, cands: list[str], ws=None, proj=None) -> str:
         rows.append(row)
     sender = sender_of(r)
     return mr.prompt(proj, {"from": sender if valid_address(sender) else "?", "type": p.get("type"), "text": p.get("text")},
-                     rows)
+                     rows), order
 
 
 def folder_name(cwd, ws) -> str | None:

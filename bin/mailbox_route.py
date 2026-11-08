@@ -9,19 +9,21 @@ active session is picked. One call per letter, one per project per tick (the cal
 day; past those, recency.
 
 What the model reads (prompt): the letter's sender, type and first LETTER_CHARS characters, and for each candidate (at
-most MAX_CANDIDATES) its id, its folder under the project, how long since its last hook and what it is doing; its last
-reply (session_summary) only where text_allowed says so. All of it goes in as one JSON block marked as data: a letter
-anyone can send, and a reply a session wrote, are never instructions.
+most MAX_CANDIDATES) a label (s1, s2…: never its id, which completion would mask; see label), its folder under the
+project, how long since its last hook and what it is doing; its last reply (session_summary) only where text_allowed
+says so. All of it goes in as one JSON block marked as data: a letter anyone can send, and a reply a session wrote, are
+never instructions.
 
-What comes back: only an id in the list it was given, written by the call's process to a mode-600 file
-(<hash>.answer in hubconf.mailbox_route_dir, under the secrets directory), which dispatch checks against the candidates
-again. Nothing the model wrote is kept elsewhere: the process's output goes nowhere, llm.answer prints and publishes
+What comes back: only a label in the list it was given, which the call's process turns into that candidate's id and
+writes to a mode-600 file (<hash>.answer in hubconf.mailbox_route_dir, under the secrets directory), which dispatch
+checks against the candidates again. Nothing the model wrote is kept elsewhere: the process's output goes nowhere, llm.answer prints and publishes
 nothing (a reason can quote the model). For a call that gave no answer dispatch says so itself, in fixed words: in its
 log, and as a job.failed once a day per project (hubbus route_failed). Nothing is recorded for evals. The calls file
 (calls.json beside the answers) holds a hash of each letter's id, its project, when the call started and whether it is
 spent; no text.
 
-    mailbox_route.py      the call's process: reads {"key", "prompt", "cands"} on stdin (start writes it)
+    mailbox_route.py      the call's process: reads {"key", "prompt", "cands"} on stdin (start writes it; cands in the
+                          prompt's order, so s1 is cands[0])
 """
 from __future__ import annotations
 
@@ -186,15 +188,24 @@ def text_allowed(tgt: dict, runtime: str | None, project: str) -> bool:
     return private is not None and project not in private
 
 
+def label(i: int) -> str:
+    """The name the model knows the i-th candidate by. Never its id: a session id is a long mix of letters and digits, which
+    completion masks as a credential before anything is sent (completion.redact), so a model shown ids saw only
+    "[redacted]" for each and could answer none of them (11-08, the first live run)."""
+    return f"s{i + 1}"
+
+
 def prompt(project: str, letter: dict, cands: list[dict]) -> str:
     """The point's prompt: the platform's template with the data as one JSON block. A letter's text can't close it: JSON
     escapes its quotes, and every < is written \\u003c, so no tag is closed either. letter: {from, type, text}; each candidate:
-    {session, folder?, idle_minutes?, doing?, last_reply?}."""
+    {session, folder?, idle_minutes?, doing?, last_reply?}, in the order the caller passes to start: the model sees each one's
+    label, never its id."""
     import prompts
     data = {"letter": {"from": letter.get("from") or "?", "type": letter.get("type") or "?",
                        "text": str(letter.get("text") or "")[:LETTER_CHARS]},
-            "sessions": [{k: (str(v)[-LAST_CHARS:] if k == "last_reply" else v) for k, v in c.items() if v is not None}
-                         for c in cands[:MAX_CANDIDATES]]}
+            "sessions": [{k: (label(i) if k == "session" else str(v)[-LAST_CHARS:] if k == "last_reply" else v)
+                          for k, v in c.items() if v is not None}
+                         for i, c in enumerate(cands[:MAX_CANDIDATES])]}
     block = json.dumps(data, ensure_ascii=False, indent=1).replace("<", "\\u003c")
     return prompts.render(POINT, project=project, data=block)
 
@@ -222,7 +233,7 @@ def start(letter_id: str, project: str, text: str, cands: list[str]) -> bool:
 
 
 def call(data: dict) -> None:
-    """The call's process: ask, check, write an id from the list or nothing. Bounded by CALL_TIMEOUT_S whatever the
+    """The call's process: ask, check, write the id of the candidate whose label came back, or nothing. Bounded by CALL_TIMEOUT_S whatever the
     runtime does: then it writes nothing usable and ends its process group (the runtime's process with it), only when it
     leads that group (main makes it so): run inside someone else's group it ends itself alone, and the runtime's process ends
     at its own timeout. An in-process caller gets its SIGALRM handler back."""
@@ -247,8 +258,9 @@ def call(data: dict) -> None:
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGALRM, before)
-    sid = got.get("session") if isinstance(got, dict) else None
-    write_answer(k, sid if isinstance(sid, str) and sid in [c for c in cands if isinstance(c, str)] else "")
+    picked = got.get("session") if isinstance(got, dict) else None
+    ids = {label(i): s for i, s in enumerate(cands[:MAX_CANDIDATES]) if isinstance(s, str)}
+    write_answer(k, ids.get(picked, "") if isinstance(picked, str) else "")
 
 
 def timed_out(where) -> None:
