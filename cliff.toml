@@ -30,6 +30,8 @@ commit_preprocessors = [
   { pattern = '(?m)^fix: onboard-project\.sh .*\.gitignore.*$', replace = "fix: onboard-project.sh keeps .claude/settings.json from being hidden by the project's own .gitignore" },
   { pattern = '^fix\(evals\): \x{9AA8} is', replace = "fix(evals): U+9AA8 is" },
   { pattern = '^fix\(evals\): \x{96C7} is', replace = "fix(evals): U+96C7 is" },
+  # a BREAKING CHANGE paragraph whose wrapped line starts with "impl: " reads as a trailer of its own and cuts it short
+  { pattern = 'entries with\nimpl: command together', replace = 'entries with `impl: command` together' },
 ]
 commit_parsers = [
   { message = "^feat", group = "<!-- 0 -->New" },
