@@ -233,7 +233,10 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
         raise Refused(_("prompt too long: about {tokens} tokens plus {max_tokens} of output exceed "
                         "{provider}/{model}'s {context}-token context", tokens=estimate_tokens(prompt), max_tokens=max_tokens,
                         provider=target["provider"], model=target["model"], context=target["context"]))
-    impl = runtime_ports.load_completion(target["impl"])
+    try:
+        impl = runtime_ports.load_completion(target["impl"])
+    except runtime_ports.Unsupported as e:   # e.g. the command runtime, which has no completion interface: a refusal, said
+        raise Refused(str(e)) from None
     req = runtime_ports.CompletionRequest(point=point, prompt=prompt, model=target["model"], schema=schema,
                                           max_tokens=max_tokens, timeout_s=int(spec.get("timeout_s") or 600))
     cost_total, last_errs = 0.0, None

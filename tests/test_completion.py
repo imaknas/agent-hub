@@ -442,11 +442,14 @@ class ReadOnlySecrets(Base):
             hubconf.private_tmp()
 
     def test_completion_run_refuses_with_the_reason(self):
-        for rt in ("claude", "command"):
-            with self.subTest(rt), self.assertRaises(completion.Refused) as cm:
-                completion.run("p", SPEC, "hi", None, target=completion.runtime_target(rt, "m", "token"))
-            self.assertTrue(str(cm.exception).startswith(f"{rt}/m:error:"), cm.exception)
-            self.assertIn("Errno 13", str(cm.exception))
+        with self.assertRaises(completion.Refused) as cm:
+            completion.run("p", SPEC, "hi", None, target=completion.runtime_target("claude", "m", "token"))
+        self.assertTrue(str(cm.exception).startswith("claude/m:error:"), cm.exception)
+        self.assertIn("Errno 13", str(cm.exception))
+        # the command runtime has no completion interface (docs/design/runtime-codex.md, step 0): refused before any folder
+        with self.assertRaises(completion.Refused) as cm:
+            completion.run("p", SPEC, "hi", None, target=completion.runtime_target("command", "m", "token"))
+        self.assertIn(runtime_ports.port_labels()["completion"], str(cm.exception))
 
     def test_llm_run_reports_the_refusal(self):
         import contextlib
