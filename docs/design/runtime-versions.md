@@ -1,6 +1,6 @@
 # Runtime versions and compatibility
 
-Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09; the measurements done 11-09, DV5 open with option (c).
+Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09; the measurements done 11-09; DV5 decided 11-09 ((c), V-M11 before it is built).
 Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or the Codex app has a
 breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first, before Codex Step 1
 (`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
@@ -369,8 +369,10 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   platform's own: `_home()` reads `CLAUDE_CONFIG_DIR` from `os.environ` (runtime_claude.py:161-162) and feeds `credential_paths()`
   and `user_control()`, which become every sandboxed project's denies; set in the platform's environment it would move them off the
   real `~/.claude`. Session-side calls (section 5) keep the user's config dir. Not taken: (b) keep sharing for all of them.
-- **DV5, the Keychain login. V-M10 (11-09): a token run reads it** (three `find-generic-password` calls, no write, through
-  `security` on PATH), so a candidate holds the refresh token. The options:
+- **DV5, the Keychain login. Owner, 11-09: (c).** V-M10 (11-09): a token run reads it (three `find-generic-password` calls,
+  no write, through `security` on PATH), so a candidate holds the refresh token. "Every token run" in (c) leaves out the runs
+  that use the subscription login (`connectors: true` jobs), which need the Keychain and keep it. Before (c) is built, V-M11
+  measures it in a stream session and a lease run. The options were:
   - (a) Run candidate and session-version checks as a dedicated macOS user made for them (its own Keychain; a one-time setup by
     the owner).
   - (b) Accept the residual: a candidate is the vendor's integrity-checked build, and the risk is a buggy refresh of the
@@ -531,6 +533,9 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
       path; and `.claude` can't be created from inside the sandbox.
     - A create-only rule (`file-write-create` on a regex) leaves existing entries open.
   - **Landlock:** not measurable on macOS.
+- V-M11: DV5 (c)'s refusing `security` in a stream-json session and a lease run (`llm.py exec lease-session`) with the token:
+  does the run work, and does the logging stub see every Keychain call? Also an interactive session (V-M6's driver), which the
+  session_status and wake checks use. Measured before step 2 builds the stub.
 - V-M10: does `claude` run with `CLAUDE_CODE_OAUTH_TOKEN` read or write the Keychain's Claude Code login item (macOS)? Decides DV5.
   **Done 11-09 (2.1.319).**
   - Claude Code reaches the Keychain by running `security` found on PATH. A wrapper first on PATH, which logs only the subcommand
