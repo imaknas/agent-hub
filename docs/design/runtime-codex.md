@@ -79,9 +79,18 @@ table is per the second finding (the librarian's answer-only fallback counted), 
 `policy.py`, never from the user's or the project's Codex config:
 - `--ignore-user-config` and no project config: measured (M5) that `codex exec` loads no `<repo>/.codex/` config, hooks or MCP servers
   that way, or else the run's working folder is one with none (as Claude's `--restricted` does); refused if neither holds.
-- A point with no tools (`tools: ""`, completion): `-c features.shell_tool=false`, web search off, no MCP servers (M1: no command runs).
-  A point with tools gets them only through a permission profile rendered from the policy: writes to its declared folders, reads denied
-  for what `policy.py` denies every sandbox (`deny_read`, credentials, `platform_state`), `approval_policy=never`.
+- A point with no tools (`tools: ""`, completion): shell off is not enough on 0.167 (M1 again, below: the models are code-mode only
+  and their `exec` tool still reaches `apply_patch`, web and MCP resources). The run sets `features.shell_tool=false`,
+  `features.unified_exec=false`, `features.apps=false`, `features.plugins=false`, `features.goals=false`, `features.multi_agent=false`,
+  `web_search="disabled"`, `default_permissions=":read-only"`, `approval_policy=never`, in a platform home with no MCP servers; what is
+  left is a clock and MCP resource tools with no server behind them. A test pins the list the run sees (the model asked for
+  `ALL_TOOLS`), so a Codex release that adds a tool fails it instead of widening the run.
+  A point with tools gets them only through a permission profile rendered from the policy (M8): writes to its declared folders, reads
+  denied for what `policy.py` denies every sandbox (`deny_read`, credentials, `platform_state`), `approval_policy=never`. Paths and
+  globs in a profile must be absolute (a relative glob stops the run at load, nothing runs).
+- **Codex 0.167.0 or later**: 0.165.0 replaces a linked `auth.json` with a file on refresh (M9); doctor and the login check refuse an
+  older one and say why.
+- `--json` doesn't list commands a code-mode model runs through `exec`; what a run did is read from its rollout in the platform home.
 - The environment is the platform's minimal one (as Claude's runs: the runtime's own auth and PATH), not `os.environ`.
 - `MODELS` per group; `--output-schema` measured with the platform's real schemas (M1 used a strict one; 8 of 11 aren't strict).
 - `auth`: `codex login status`. `RULES_FILE_NAMES = ("AGENTS.md", "AGENTS.override.md")`. `control_paths`: `.codex` (so a sandboxed
@@ -111,11 +120,12 @@ gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex run
   shows a permission profile's `deny` stops `cat` or a write to `.git/config` under `exec -c approval_policy=never` (M1 measured
   `tools: ""` only; `read-only` doesn't stop reads). Points with tools (librarian-state, todo-format, consolidate: file tools only on
   Claude) stay refused on Codex until M8 passes: a profile denying reads and writes, `.git` included, with MCP off, under `exec`.
+  **M8 passed 11-08 (0.167.0)**, below; those points open in Step 1 behind the profile.
 - **Platform runs and `brunna session` use a platform-owned `CODEX_HOME`**, never the user's: `~/.codex/hooks.json` loads even under
   `--ignore-user-config` (M5), and a writable `~/.codex` lets a sandboxed agent plant a hook and its trust for the owner's next
   unsandboxed session. Its `config.toml` and `hooks.json` are the platform's and read-only to the run; only its `sessions/` is
   writable. How the login is shared with it (auth.json and token refresh, the keyring) is M9, which blocks Step 1's agent runs and D2
-  layer 2.
+  layer 2. **M9 done 11-08**: the platform home's `auth.json` is a link to the user's (below).
 - **Step 0 also** makes an unnamed hook's runtime `claude` (every hook written before runtimes were named is Claude's), not the
   default; `runtime_command.run` refuses itself, not only config check.
 - **Step 2:** the hooks' `handle()` returns at once on a platform run (`HUB_LLM_POINT`); Claude's platform runs load no hooks at all
@@ -133,8 +143,8 @@ gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex run
   message (it arrives as the user's words).
 
 Measurements and what they block: M7 (done for an SSH project) → Step 2; M3 (done for the TUI) and M11 (is a client attached) →
-Step 3; M8, M9 and the platform's own schemas → Step 1's
-agent runs; M9 and M10 (nested sandbox) → D2 layer 2; M8 → Step 4.
+Step 3; M8 and M9 (both done 11-08) and the platform's own schemas → Step 1's agent runs, so only the schemas are left; M10 (nested
+sandbox) → D2 layer 2; M8 → Step 4.
 
 ## Decisions for the owner
 
@@ -253,3 +263,35 @@ platform's own schemas.
   - What it changes: Step 2 keys records by session id and ends one on SessionEnd or when the thread is no longer loaded; a TUI that
     quit leaves a record that still looks live. Step 3 can't wake a Codex thread as "the person's open session" until M11 shows a
     client is attached; until then a Codex thread gets what a session of a runtime with no wake port gets (D4, decided 11-08).
+- **M9, done (11-08): the platform's own `CODEX_HOME` shares the login by a link.** Codex's source (main) and the binaries checked:
+  the file store writes `auth.json` as a temp file renamed over the path, after following a link to its target
+  (`resolve_auth_file`, "too many credential symlinks"). That string is in 0.167.0 and not in 0.165.0: on 0.165.0 a refresh would
+  replace the link with a file, and refresh tokens rotate (`refresh_token_reused`), so the two homes would log each other out. A copy
+  of `auth.json` fails the same way and isn't used. Run with 0.167.0, `env -i` (HOME, a bare PATH, `CODEX_HOME`), a home holding only
+  `auth.json -> ~/.codex/auth.json`: `codex login status` said "Logged in using ChatGPT", `codex exec` answered, the user's `auth.json`
+  kept its mtime and size (no refresh fell in the window; it was never read by us), and `~/.codex/config.toml` kept its sha256. Codex
+  filled the platform home itself (sqlite state, `models_cache.json`, `cache/`, `plugins/`, `skills/`, `.sandbox_migration`).
+  - Residual: the lock around a refresh's write is `auth.lock` in each home, so the user's daemon and a platform run aren't locked
+    against each other; both reload from disk before refreshing and on a 401, as two processes on one home already do. Not forced
+    (a refresh can't be triggered without touching `auth.json`); doctor shows a failed platform login with the login check's alert.
+  - The keyring store keys by the home's path, so the link works only with the file store; doctor says so when `config.toml` sets
+    `cli_auth_credentials_store` to anything but `file` (this machine sets none: file).
+  - Other ways, for other plans: `codex login --with-access-token` into the platform home (Codex access tokens are for ChatGPT Business
+    and Enterprise workspaces), or `--with-api-key` (billed per use: `metered_models`). A second interactive login into the platform
+    home is not measured and not needed.
+- **M8, done (11-08, 0.167.0): a permission profile stops reads and writes of the shell and of `exec`.** Platform home as in M9,
+  `default_permissions = "m8"`, `[permissions.m8] extends = ":workspace"`, filesystem: a workspace file `deny`, a folder outside
+  `deny`, `<work>/.git` `read`, `<work>/**/*.env` `deny`, `~/.codex` `deny`. Under `codex sandbox -- /bin/sh -c …` (no model):
+  reading the denied file, the outside folder (also listing it), `a.env` and `sub/b.env`, `~/.codex/config.toml`, writing
+  `.git/config`, a `git commit` (its `index.lock`), writing `~/m8-probe`, creating a new `c.env` and reading it, a symlink to the denied
+  file, a hard link to it, renaming it, and Python's `open()` were all "Operation not permitted"; reading and appending to an allowed
+  workspace file worked. With a model (`codex exec`, approval never): the commands ran through code mode's `exec` →
+  `tools.exec_command`, the denied ones returned exit 1 with "Operation not permitted", the allowed ones ran, no denied text appeared
+  in the output or the rollout, and `.git/config` was unchanged. A relative glob (`**/*.env`) stops the run at load with "must be
+  absolute", before anything runs.
+- **M1 again on 0.167.0: shell off is no longer tool-free.** Every model in the catalog has `tool_mode: code_mode_only`, which
+  `features.*` can't change; its `exec` tool (a JS host with no `fs` import, no `require`, no `fetch`) calls the other tools. With
+  `features.shell_tool=false` only, `exec` still reached `apply_patch`, goal tools, the ChatGPT apps connectors (`mcp__codex_apps__*`),
+  MCP resources and `web__run`. `tools.web_search=false` and `include_apply_patch_tool=false` removed neither; `web_search="disabled"`
+  removed the web tool, `features.apps=false` the connectors, and `default_permissions=":read-only"` made `apply_patch` fail ("writing
+  is blocked by read-only sandbox"). The set Step 1 uses is listed there.
