@@ -32,5 +32,28 @@ class RetentionDue(unittest.TestCase):
                 self.assertEqual(backup.retention_due(today, last), due)
 
 
+class VerifyFolder(unittest.TestCase):
+    """The whole latest backup is restored for the check: into the platform's private temp folder, never .state, which a
+    sandboxed project is denied only entry by entry (docs/design/capabilities.md 11-08, A1 point 8)."""
+
+    def test_restored_into_the_private_temp_folder(self):
+        import tempfile
+        from unittest import mock
+        made = []
+        real = tempfile.mkdtemp
+
+        def mkdtemp(**kw):
+            made.append(pathlib.Path(kw["dir"]))
+            return real(**kw)
+        with tempfile.TemporaryDirectory() as top, \
+                mock.patch.object(backup.hubconf, "private_tmp", lambda: pathlib.Path(top)), \
+                mock.patch.object(backup.tempfile, "mkdtemp", mkdtemp), \
+                mock.patch.object(backup, "restic", mock.Mock(side_effect=RuntimeError("no restic here"))), \
+                mock.patch.object(backup, "fail", lambda stage, err: 1):
+            self.assertEqual(backup.cmd_verify(), 1)
+            self.assertEqual(made, [pathlib.Path(top)])
+            self.assertEqual(list(pathlib.Path(top).iterdir()), [], "removed afterwards")
+
+
 if __name__ == "__main__":
     unittest.main()

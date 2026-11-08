@@ -81,6 +81,7 @@ class Golden(unittest.TestCase):
         m = load()
         out = []
         state = tmp / "state"
+        ptmp = tmp / "private-tmp"
         inc = tmp / "inc"
         inc.mkdir()
         (inc / "f").write_text("x")
@@ -161,9 +162,11 @@ class Golden(unittest.TestCase):
                 mock.patch.object(m.hubconf, "bus_db", lambda: tmp / "bus.db"), \
                 mock.patch.object(m.hubconf, "projects", lambda: {"demo": {"name": "demo"}}), \
                 mock.patch.object(m.hubconf, "workspace", lambda n: ws), \
+                mock.patch.object(m.hubconf, "private_tmp", lambda: ptmp), \
                 mock.patch.object(m, "now", lambda: fixed), mock.patch.object(m.subprocess, "run", side_effect=run):
             state.mkdir()
-            git("init", "-q", cwd=state)   # the real .state sits inside the hub's git repo: `git bundle verify` needs one
+            git("init", "-q", cwd=state)   # the real .state sits inside the hub's git repo
+            ptmp.mkdir()   # where verify restores (hubconf.private_tmp): in no repo, as an instance dir's is
             call("run ok (new password, new repo)", m.cmd_run)
             out.append(("manifest", (state / "backup-staging" / "manifest.json").read_text()))
             restic_fail.add("backup")

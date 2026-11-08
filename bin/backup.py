@@ -278,7 +278,9 @@ def retention_due(today: datetime.date, last: datetime.date | None) -> bool:
 
 
 def cmd_verify() -> int:
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="backup-verify-", dir=hubconf.STATE))
+    # the whole latest backup: in the platform's private temp folder (denied to every sandbox both ways, never backed
+    # up), not .state, which sandboxed code is denied only entry by entry (docs/design/capabilities.md 11-08, A1)
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="backup-verify-", dir=hubconf.private_tmp()))
     try:
         restic("restore", "latest", "--target", str(tmp), capture=True)
         staged = next(tmp.rglob("backup-staging"), None)
@@ -289,9 +291,13 @@ def cmd_verify() -> int:
             c = sqlite3.connect(staged / "sqlite" / f"{name}.db")
             if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise RuntimeError(_("integrity_check of the restored {name}.db is not ok", name=name))
+        # `git bundle verify` needs a repository to run in, and the private temp folder is in none (an instance dir has
+        # no repo above it): an empty one of its own (each bundle is --all, so it has nothing to look up there)
+        repo = tmp / ".verify-repo"
+        subprocess.run(["git", "init", "-q", "--bare", str(repo)], capture_output=True, check=True)
         for b in m["bundles"]:
             r = subprocess.run(["git", "bundle", "verify", str(staged / "git" / f"{b}.bundle")], capture_output=True, text=True,
-                               cwd=tmp)
+                               cwd=repo)
             if r.returncode != 0:
                 raise RuntimeError(_("The restored {bundle}.bundle failed verification: {err}", bundle=b,
                                      err=r.stderr.strip()[-200:]))
