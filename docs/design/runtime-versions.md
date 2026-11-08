@@ -108,9 +108,9 @@ The checks (Claude's now, Codex's from runtime-codex.md):
 | lifecycle | each installed event fires with the fields `parse_event` reads; additionalContext reaches the model; a PreToolUse deny stops the tool | function (deny: safety) |
 | instructions | a marker in the rules file the adapter writes (`CLAUDE.local.md`) reaches the model | function |
 | sessions | the run's transcript / rollout parses with no skipped lines and its version read | function |
-| session_status | `claude agents --json` lists a live throwaway interactive session with a status; `not-checkable` until V-M6 names a driver | function |
+| session_status | `claude agents --json` lists a live throwaway interactive session (V-M6's pty driver) as `idle` after its turn | function |
 | session_summary | the last reply is read from the throwaway session | function |
-| wake | an idle throwaway interactive session takes a turn after `wake()`; `not-checkable` until V-M6 (a `-p` or stream-json session never arms the waiter: `wait()` returns `headless` for print processes, runtime_claude.py:546-549, :588-592) | function |
+| wake | an idle throwaway interactive session (V-M6's pty driver; a `-p` or stream-json session never arms the waiter, runtime_claude.py:546-549, :588-592) takes a turn after `wake()`: its transcript gains the Stop-hook feedback and a reply | function |
 | stream | a short stream-json exchange parses (leases) | function |
 | tool_servers | `claude mcp list` parses with no server and with one | function |
 | auth | the login check | function |
@@ -237,7 +237,7 @@ Calls the platform makes about the user's sessions run the user's version's beha
   which any unsandboxed project could write) and takes each version with no result: it validates it against the vendor's published
   list, installs **that exact version from the vendor** into the store (never runs the binary in the user's folders, which a
   sandboxed session might have written) and runs the session-side checks on it: lifecycle, instructions, sessions, confine and
-  control (session_status and wake are `not-checkable` until V-M6). They run under section 3a's login rule, since they too run
+  control, session_status and wake (V-M6's pty driver). They run under section 3a's login rule, since they too run
   unchecked vendor code with a login. At most 3 installs a day. Desktop's builds are on npm (2.1.308, .309 and .317, the ones on
   this machine, are all published) and so are the daemon's (0.166.0, 0.167.0); a version the vendor doesn't publish or can't be
   installed is `not-installable`: treated as pending, a doctor row naming it, tried again once a week.
@@ -393,6 +393,26 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   newer version published.
 - V-M6: a throwaway interactive session the checks can drive: Claude's stream-json session idles and takes a turn after `wake()`, and
   `claude agents --json` lists it; Codex's thread through its app-server.
+  **Done 11-09 for Claude (2.1.319).** An interactive `claude` under a Python pty does all three steps with no human, in two full
+  runs. So `session_status` and `wake` become checkable, and section 2's two `not-checkable` rows go.
+  - **Setup.**
+    - `pty.fork()`, 50x160, `TERM=xterm-256color`; a scratch config dir seeded with `hasCompletedOnboarding` and the
+      project's `hasTrustDialogAccepted`. No first-run screen appeared, and the token raised no prompt.
+    - The platform's hooks installed by `install_lifecycle`. The prompt is typed followed by `\r`, and `/exit` ends it.
+    - A driver waits for the `❯` input line or the `session_start` hook line, not a fixed delay.
+    - It passes `--permission-mode` explicitly; the session otherwise came up in auto mode.
+  - **Listed:** `claude agents --json` shows it as `kind: "interactive"` with a status, and `session_statuses` returns `idle`.
+    `busy` is too short to catch reliably, so the check reads transcript growth plus `idle`, never `busy`.
+  - **Waiter armed:** after a turn, the `.waiter` exists, `can_wake` is true, and `hub-event wait` runs under the session. A new
+    waiter is armed after every woken turn.
+  - **Woken:** `wake(sid, text)` returns true. Within about 1 s, `hub-event.log` has `wait ran=woke` and then a `prompt` line, and
+    the transcript gains the Stop-hook feedback user message and the reply. Two wakes in a row each took a turn.
+  - **Cleanup:** SessionEnd drops the waiter, and no process is left.
+  - **For section 2's throwaway world.** Besides state, secrets and `bus_dir`, the world sets the hub root (`AGENT_HUB_ROOT`)
+    and the instance (`AGENT_HUB_HOME`). With the live root, `LOGS` is the main checkout's `.logs`, and `hubconf.bus_db()` would
+    repoint the live `.logs/hubbus.log` link at the temp bus's log. The hooks inherit all of it from the session's environment.
+    A check that wants a letter delivered also needs a throwaway registry entry in the temp config.
+  - Codex's thread through its app-server is still unmeasured; it comes with Codex Step 4.
 - V-M7: the signal in `claude -p --output-format json` that a run used a tool (`num_turns`, `permission_denials`, or the stream's
   `tool_use` events), with a positive control.
   **Done 11-09 (2.1.319, the completion flags `--restricted --strict-mcp-config --no-session-persistence`, a scratch config dir,
