@@ -8,8 +8,16 @@ Mapping (these are all the plist fields the platform uses):
   StandardOutPath / StandardErrorPath → StandardOutput=append: / StandardError=append:
   KeepAlive → Restart=always (RestartSec = ThrottleInterval, 10 s if unset), WantedBy=default.target
   StartInterval (without KeepAlive) → a Type=oneshot service + a timer (OnActiveSec 1 s = runs once on load, like
-                                    RunAtLoad; OnUnitActiveSec = the interval)
+                                    RunAtLoad; OnUnitActiveSec = the interval), KillMode=process: see below
   RunAtLoad, no interval, no KeepAlive → a plain service, WantedBy=default.target
+A tick that starts work meant to outlive it (the scheduler's background jobs; hubbus dispatch's triage run, background
+fork and mailbox-route call) leaves the tick's process group with a new session, which is what launchd asks: it kills
+what is left in the job's process group when the job exits. systemd goes by the unit's cgroup, which a new session
+doesn't leave: with the default KillMode=control-group a oneshot service that ends kills everything it started. So an
+interval unit kills only its main process (KillMode=process), as launchd does with a run that left its group. A run that
+stays in the tick's group isn't killed for it, which is the one way the two differ; the platform starts none it means to
+die with the tick. Not a transient scope per run (systemd-run --scope): every place that starts one would have to know the
+service manager, and one that forgot would be killed silently.
 To keep running after logout: `loginctl enable-linger <user>` is needed (doctor says so).
 """
 from __future__ import annotations
@@ -54,6 +62,8 @@ def files(plist: dict) -> dict[str, str]:
         lines.append(f"StandardError=append:{plist['StandardErrorPath']}")
     if plist.get("KeepAlive"):
         lines += ["Restart=always", f"RestartSec={int(plist.get('ThrottleInterval') or 10)}"]
+    if timer:   # a tick: what it started to outlive it isn't killed when it ends (module header)
+        lines.append("KillMode=process")
     if not timer:
         lines += ["", "[Install]", "WantedBy=default.target"]
     out = {f"{label}.service": "\n".join(lines) + "\n"}

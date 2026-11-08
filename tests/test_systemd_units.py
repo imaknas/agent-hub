@@ -43,6 +43,22 @@ class Files(unittest.TestCase):
                       "runs once on load (RunAtLoad), then every 900 seconds")
         self.assertEqual(systemd_units.target({"Label": "local.x.tick", "StartInterval": 900}), "local.x.tick.timer")
 
+    def test_a_tick_doesnt_take_what_it_started_to_outlive_it(self):
+        """Dispatch and the scheduler are interval units, and start runs that outlive the tick in a new session: systemd's
+        default (KillMode=control-group) would kill them when the oneshot ends, a new session or not. An always-running
+        service keeps the default: what it starts goes when it is stopped or restarted."""
+        import yaml
+        dispatch = next(s for s in yaml.safe_load((ROOT / "projects" / "brunna.yaml").read_text())["services"]
+                        if s["name"] == "mailbox-dispatch")
+        self.assertEqual(dispatch["interval_s"], 60)
+        tick = systemd_units.files({"Label": "local.x.tick", "ProgramArguments": ["/bin/true"], "StartInterval": 60})
+        self.assertIn("KillMode=process", tick["local.x.tick.service"].splitlines())
+        for label in ("local.agent-hub-scheduler",):
+            plist = plistlib.loads((ROOT / "launchd" / f"{label}.plist").read_text().replace("{{hub}}", "/hub").encode())
+            self.assertIn("KillMode=process", systemd_units.files(plist)[f"{label}.service"].splitlines())
+        web = systemd_units.files({"Label": "local.x.web", "ProgramArguments": ["/bin/true"], "KeepAlive": True})
+        self.assertNotIn("KillMode", web["local.x.web.service"])
+
     def test_core_templates_translate(self):
         for label in ("local.agent-hub-scheduler", "local.agent-hub-scheduler-watchdog"):
             plist = plistlib.loads((ROOT / "launchd" / f"{label}.plist").read_text().replace("{{hub}}", "/hub").encode())

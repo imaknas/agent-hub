@@ -780,5 +780,17 @@ What step 5 must know: `pick(c, r, cands)` is the only caller to change, and `Ti
   keep their meaning; this file turns it on with the start stubbed, and runs the call's own process against a fake provider, and once
   for real with a model call that hangs, to see it end itself and what it started.
 
+- **On Linux a tick killed what it started to outlive it** (older than this step; found in its cold review). Dispatch and the
+  scheduler are interval units: `bin/systemd_units.py` writes a `Type=oneshot` service with the default `KillMode=control-group`, and
+  when a oneshot's main process exits systemd kills what is left in the unit's cgroup. A new session (`start_new_session=True`, which is
+  what leaves launchd's kill of the job's process group) doesn't leave a cgroup. So the triage run, the background fork, the
+  mailbox-route call and the scheduler's `background: true` jobs could die with their tick. Interval units now get
+  `KillMode=process`: only the main process is killed, as launchd does for a run that left its group. Chosen over a transient scope
+  per run (`systemd-run --user --scope`), which every place that starts one would have to know about, one forgetting it being killed
+  silently. The price: a run that stays in the tick's group isn't killed with it either; the platform starts none it means to die with
+  the tick. macOS is unchanged. **Confirmed by reading, not run:** `bin/linux-test`'s container has no systemd, and the 10-29 lima VM
+  that verified the units is not this step's. A unit's file changes by content: render-services rewrites dispatch's within 15 minutes,
+  and the scheduler's at the next `brunna upgrade` (`init --scheduler-only`) or `init`.
+
 What isn't verified: a real model's picks, and a real call's time on the default runtime for this prompt. The live check after merge:
 a project with two armed sessions on record, a request with no thread, and `hubbus.log` shows the route `(model)`.
