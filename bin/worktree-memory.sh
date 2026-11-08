@@ -24,6 +24,10 @@
 #   and the reminder (the bus is in no sandbox, and a hook's output is one JSON or none). Only what's left runs below.
 #   wait   (Stop, run in the background) hand over to `hub-event wait`, the waiter that wakes the idle session when a
 #          letter comes (docs/design/mailbox-runtimes.md B1); its exit code is the wake
+# Whose hooks: Claude Code's (runtime_claude.worktree_hooks installs them in its user-level settings, and no other runtime
+# installs this script), so every call below names `--runtime claude`: hub-event and hub-runtime would otherwise read the
+# hook input with runtime.default's adapter, and a default of another runtime would take them (docs/design/runtime-codex.md,
+# step 0). The installed hook commands stay as they are, so hooks installed before this name it too.
 # The symlink points at the same .agent-memory, and with-lock uses the same git dir, so it doesn't collide with the
 # main checkout. Deleting the worktree only deletes the symlink, never the main checkout's memory.
 set -uo pipefail
@@ -41,7 +45,7 @@ main=$(dirname "$common")                      # <main checkout>/.git → <main 
 # wait (Stop, in the background): the runtime's waiter that wakes an idle session for a letter
 # (docs/design/mailbox-runtimes.md B1). Handed over before stdin is read, never as the project (it reads only the
 # platform's sessions folder, which no sandbox reaches), its exit code passed on
-[ "$event" = wait ] && exec "$HUB/bin/py" "$HUB/bin/hub-event" wait
+[ "$event" = wait ] && exec "$HUB/bin/py" "$HUB/bin/hub-event" --runtime claude wait
 cd "$top" || exit 0
 # the hook JSON (stdin) can be read only once, and both memory-nudge and hubbus need it
 hook_json=""
@@ -50,7 +54,7 @@ hook_json=""
 # The session's process record, its end and its mail, outside any sandbox (the secrets folder and the bus are in none): a
 # session here is judged and told like any other (hubbus Live), and one that exits frees what it holds
 if [ -z "${HUB_AS_PROJECT:-}" ] && [ -n "$hook_json" ]; then
-  printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree "$event" 2>/dev/null
+  printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" --runtime claude worktree "$event" 2>/dev/null
 fi
 
 # Hooks run outside the agent's sandbox, with the user's authority. For a sandboxed project, everything below (git in
@@ -59,7 +63,7 @@ fi
 # here first, finding the repo above, starts no git. $top and $main are read from the folder and from pointer files the
 # project can write: whose this is is project_git.worktree_scope's call, from the folder the hook's input names first.
 if [ -z "${HUB_AS_PROJECT:-}" ]; then
-  scope=$(printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" worktree-scope "$top" "$main")
+  scope=$(printf '%s' "$hook_json" | "$HUB/bin/py" "$HUB/bin/hub-event" --runtime claude worktree-scope "$top" "$main")
   case $? in
     0) project="${scope%%$'\t'*}"; owner="${scope#*$'\t'}"   # by its name from here: the folder can change after this look
        [ "$event" = end ] && exec "$HUB/bin/py" "$HUB/bin/project_git.py" sync-memory --lock "$project"
@@ -100,7 +104,7 @@ case "$event" in
     # the main checkout's, by name: what sits here could have been changed since it was looked at, and this folder may be out
     # where others can write
     (cd "$main/.agent-memory" && "$HUB/bin/with-lock.sh" git pull -q) >/dev/null 2>&1
-    instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" instructions-file "$PWD" 2>/dev/null)
+    instr=$("$HUB/bin/py" "$HUB/bin/hub-runtime" --runtime claude instructions-file "$PWD" 2>/dev/null)
     if [ -n "$linked" ] && [ -n "$instr" ] && [ -f "$instr" ]; then
       hub_say "(this session is in a git worktree of {main}. Memory is linked to the main checkout's .agent-memory;
  {file} did not exist yet when the session started, so here it is; follow it:)" main="$main" file="$instr"

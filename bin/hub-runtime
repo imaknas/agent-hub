@@ -2,12 +2,15 @@
 """A small command for shell scripts to ask about the runtime (runtime abstraction, docs/design/runtime-abstraction.md).
 The default runtime is set in {settings}.
 
-  hub-runtime instructions-file <folder>   the file the platform's managed block goes into (relative to that folder)
+  hub-runtime [--runtime <name>] instructions-file <folder>
+                                           the file the platform's managed block goes into (relative to that folder),
+                                           for that runtime (default: runtime.default)
   hub-runtime instructions-files <folder>  the same for every installed runtime with a rules file ({settings}
                                            runtime.installed), one per line, no repeats: each gets the managed block
   hub-runtime local-ignores                the installed runtimes' machine-local files, one per line (to add to
                                            .git/info/exclude)
-  hub-runtime has <port>                   exit 0 when the runtime has that interface (runtime_ports.PORTS), 3 when not
+  hub-runtime [--runtime <name>] has <port>
+                                           exit 0 when the runtime has that interface (runtime_ports.PORTS), 3 when not
 
 The system python3 (3.9) can run it.
 """
@@ -49,12 +52,15 @@ def installed(argv) -> int:
 
 
 def main(argv) -> int:
+    name = None   # --runtime: which runtime's (worktree-memory.sh names its own); none = runtime.default
+    if argv[:1] == ["--runtime"] and len(argv) >= 3:
+        name, argv = argv[1], argv[2:]
     if argv[:1] == ["has"] and len(argv) == 2:   # e.g. onboard says only what was really set up
-        return 0 if argv[1] in runtime_ports.capabilities() else 3
-    if argv[:1] == ["instructions-files"] and len(argv) == 2 or argv == ["local-ignores"]:
+        return 0 if argv[1] in runtime_ports.capabilities(name) else 3
+    if (argv[:1] == ["instructions-files"] and len(argv) == 2 or argv == ["local-ignores"]) and name is None:
         return installed(argv)
     try:
-        rt = runtime_ports.load(ports=("instructions",))
+        rt = runtime_ports.load(name, ports=("instructions",))
     # no rules file: exit code 3 (the caller treats it as "unsupported" rather than guessing a default file name)
     except runtime_ports.Unsupported as e:
         print(e, file=sys.stderr)

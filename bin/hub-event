@@ -14,13 +14,14 @@ wires its native hooks to this.
                               that wakes it (the one exception to "always exit 0" below)
   hub-event install <folder>  install the hooks of every installed runtime with session events in this project (the
                               platform's replaced with new ones, the user's own kept): called by sync-local-setup
-  hub-event worktree <start|prompt|nudge|end>
+  hub-event [--runtime <name>] worktree <start|prompt|nudge|end>
                               worktree-memory.sh's user-level hooks, before anything runs as the project: a session in
                               a linked worktree goes on record as any session does, gets its mail (the bus is in no
                               sandbox, so it has to be from here) and its after-commit reminder in one output, and its
                               end (the runtime's session_ending: that command also runs at compaction) counts as any
-                              session's
-  hub-event worktree-scope <top> <main>
+                              session's. --runtime: whose hooks they are (worktree-memory.sh names it on every call, so a
+                              runtime.default of another runtime never parses them)
+  hub-event [--runtime <name>] worktree-scope <top> <main>
                               worktree-memory.sh's question, with the hook's input on stdin: whether what's left of that hook
                               runs as the user (project_git.worktree_scope; its exit code, and the memory folder printed)
   hub-event as-project <event> <workspace> <command>
@@ -400,13 +401,14 @@ def _worktree_nudge(ev, ws, cage):
     return nudge(ev, ws) if ws and project_git.folder_git_ok(ws) else None
 
 
-def worktree(what: str, raw: str) -> int:
+def worktree(what: str, raw: str, name: str | None = None) -> int:
     """A session in a linked worktree (worktree-memory.sh): what session_record, mail and session_end do for the others, run
-    outside any sandbox. A runtime that may not hold a sandboxed project's sessions gets no mail there, as in handle."""
+    outside any sandbox. A runtime that may not hold a sandboxed project's sessions gets no mail there, as in handle.
+    name: whose hooks (--runtime); none = runtime.default, as hooks written before they named it."""
     global _RT, _RT_NAME
     if what not in WORKTREE_EVENTS:
         return 0
-    _RT_NAME = runtime_ports.default_name()
+    _RT_NAME = name or runtime_ports.default_name()
     rt = _RT = runtime_ports.load(_RT_NAME, ports=("lifecycle",))
     ev = rt.parse_event(WORKTREE_EVENTS[what], raw)
     if ev is None:
@@ -439,10 +441,11 @@ def worktree(what: str, raw: str) -> int:
     return 0
 
 
-def worktree_scope(top: str, main: str, raw: str) -> int:
-    """`hub-event worktree-scope`: the folder the hook's input names (the runtime's to read) goes with what the script found."""
+def worktree_scope(top: str, main: str, raw: str, name: str | None = None) -> int:
+    """`hub-event worktree-scope`: the folder the hook's input names (the runtime's to read: name's, else runtime.default's)
+    goes with what the script found."""
     try:
-        ev = runtime_ports.load(runtime_ports.default_name(), ports=("lifecycle",)).parse_event("prompt", raw)
+        ev = runtime_ports.load(name or runtime_ports.default_name(), ports=("lifecycle",)).parse_event("prompt", raw)
     except runtime_ports.Unsupported:
         ev = None
     return project_git.worktree_scope(top, main, ev.cwd if ev else None)
@@ -513,26 +516,26 @@ def install(ws: pathlib.Path) -> int:
 def main(argv) -> int:
     if argv[:1] == ["as-project"] and len(argv) == 4:
         return as_project(*argv[1:])
-    if argv[-1:] == ["wait"] and (len(argv) == 1 or (len(argv) == 3 and argv[0] == "--runtime")):
+    name = None   # --runtime: whose hook this is, for every event below (install goes over every installed runtime)
+    if argv[:1] == ["--runtime"] and len(argv) >= 3:
+        name, argv = argv[1], argv[2:]
+    if argv == ["wait"]:
         try:
-            return wait(argv[1] if len(argv) == 3 else None, _read_stdin())
+            return wait(name, _read_stdin())
         except Exception as e:   # a broken waiter ends quietly: the session never sees an error from it
             _log("wait", None, [], [f"hub-event:{type(e).__name__}"])
             return 0
     if argv[:1] == ["worktree-scope"] and len(argv) == 3:
         try:
-            return worktree_scope(argv[1], argv[2], _read_stdin())
+            return worktree_scope(argv[1], argv[2], _read_stdin(), name)
         except Exception as e:   # can't tell: nothing runs (never the 0 or the 3 the script goes on from)
             _log("worktree-scope", None, [], [f"hub-event:{type(e).__name__}"])
             return 1
     try:
-        if argv[:1] == ["install"] and len(argv) == 2:
+        if argv[:1] == ["install"] and len(argv) == 2 and name is None:
             return install(pathlib.Path(argv[1]).resolve())
         if argv[:1] == ["worktree"] and len(argv) == 2:
-            return worktree(argv[1], _read_stdin())
-        name = None
-        if argv[:1] == ["--runtime"] and len(argv) == 3:
-            name, argv = argv[1], argv[2:]
+            return worktree(argv[1], _read_stdin(), name)
         if len(argv) == 1:
             out = handle(argv[0], _read_stdin(), name=name)
             if out:

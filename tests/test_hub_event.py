@@ -137,5 +137,71 @@ class HubEvent(unittest.TestCase):
         self.assertEqual(set(self.m.HANDLERS), set(runtime_ports.EVENTS))
 
 
+class WorktreeHooksNameTheirRuntime(unittest.TestCase):
+    """worktree-memory.sh's hooks are Claude Code's (runtime_claude.worktree_hooks): with runtime.default set to another
+    runtime they still read their input with Claude's adapter, never the default's (docs/design/runtime-codex.md, step 0)."""
+
+    def setUp(self):
+        self.m = load_hub_event()
+        self.m.LOG = pathlib.Path(tempfile.mkdtemp()) / "hub-event.log"
+        self.seen = []
+
+        def load(name=None, ports=None):
+            self.seen.append(name)
+            raise self.m.runtime_ports.Unsupported("stand-in")
+        patches = [mock.patch.object(self.m.runtime_ports, "load", load),
+                   mock.patch.object(self.m.runtime_ports, "default_name", lambda: "fake"),
+                   mock.patch.object(self.m, "_read_stdin", lambda: "{}"),
+                   mock.patch.object(self.m.project_git, "worktree_scope", lambda top, main, cwd: 3)]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_worktree_events(self):
+        for what in ("start", "prompt", "nudge", "end"):
+            self.seen.clear()
+            self.assertEqual(self.m.main(["--runtime", "claude", "worktree", what]), 0)
+            self.assertEqual(self.seen, ["claude"], what)
+
+    def test_worktree_scope(self):
+        self.assertEqual(self.m.main(["--runtime", "claude", "worktree-scope", "/top", "/main"]), 3)
+        self.assertEqual(self.seen, ["claude"])
+
+    def test_wait(self):
+        with mock.patch.object(self.m, "platform_run", lambda env: False):
+            self.assertEqual(self.m.main(["--runtime", "claude", "wait"]), 0)
+        self.assertEqual(self.seen, ["claude"])
+
+    def test_without_it_the_default_as_before(self):
+        self.m.main(["worktree", "start"])
+        self.assertEqual(self.seen, ["fake"])
+
+    def test_the_script_names_it_on_every_call(self):
+        """Every hub-event and hub-runtime call in worktree-memory.sh that reads a runtime's input or files names claude
+        (local-ignores goes over every installed runtime, so it names none)."""
+        calls = [line for line in (ROOT / "bin" / "worktree-memory.sh").read_text().splitlines()
+                 if not line.lstrip().startswith("#") and ('bin/hub-event"' in line or 'bin/hub-runtime"' in line)]
+        self.assertGreaterEqual(len(calls), 5)
+        for line in calls:
+            if "local-ignores" in line:
+                continue
+            self.assertRegex(line, r'bin/hub-(event|runtime)" --runtime claude ', line.strip())
+
+
+class HubRuntimeNamesItsRuntime(unittest.TestCase):
+    def test_the_rules_file_of_the_runtime_asked(self):
+        loader = importlib.machinery.SourceFileLoader("hub_runtime", str(ROOT / "bin" / "hub-runtime"))
+        hr = importlib.util.module_from_spec(importlib.util.spec_from_loader("hub_runtime", loader))
+        loader.exec_module(hr)
+        import io
+        import runtime_claude
+        ws = tempfile.mkdtemp()
+        out = io.StringIO()
+        with mock.patch.object(hr.runtime_ports, "default_name", lambda: "fake"), mock.patch("sys.stdout", out):
+            self.assertEqual(hr.main(["--runtime", "claude", "instructions-file", ws]), 0)
+        self.assertEqual(out.getvalue().strip(), str(runtime_claude.instructions_file(pathlib.Path(ws).resolve())
+                                                     .relative_to(pathlib.Path(ws).resolve())))
+
+
 if __name__ == "__main__":
     unittest.main()
