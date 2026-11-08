@@ -1530,6 +1530,64 @@
       }
     },
     {
+      "id": "ph-0.6-with-a-0.5-ext-is-not-held",
+      "records": [
+        {
+          "ph": "0.6",
+          "ext": "acts/0.5",
+          "id": "h1",
+          "type": "related",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "relation": {
+            "kind": "derived_from",
+            "target": {
+              "uri": "a2a:task/1"
+            },
+            "active": true
+          }
+        },
+        {
+          "ph": "0.5",
+          "ext": "acts/0.5",
+          "id": "h9",
+          "type": "related",
+          "origin": "requester",
+          "by": "agent:demo",
+          "key": "task-demo-aaaaaaaaaa",
+          "project": "demo",
+          "ts": "2026-10-27T09:00:00Z",
+          "relation": {
+            "kind": "derived_from",
+            "target": {
+              "ext": "decisions/0.5",
+              "project": "demo",
+              "key": "q-demo-9"
+            },
+            "active": true
+          }
+        }
+      ],
+      "expect": {
+        "held": [
+          "h9"
+        ],
+        "relations": [
+          {
+            "kind": "derived_from",
+            "target": {
+              "ext": "decisions",
+              "project": "demo",
+              "key": "q-demo-9"
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "ph-0.5-without-ext-is-not-held",
       "records": [
         {

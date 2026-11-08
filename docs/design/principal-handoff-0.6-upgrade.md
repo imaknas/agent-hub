@@ -197,3 +197,36 @@ code of main and of this branch ran `registrar.py --dry-run`, `hubbus open-quest
 --project P` for every project name on the bus and in the roster (29). Every output, error output and exit code is
 byte-identical: no difference to explain. The one warning the dry run prints (a project's line carrying a key its own
 session raised) is the same on both.
+
+## The 0.6.2 suites (11-09)
+
+agent-ops-specs published 0.6.2 (tag `principal-handoff-0.6.2`, 8f70f0a, release-2026-11-07): the same text and
+schemas, records still `ph`/`ext` 0.6, and the readings the implementations share recorded as more cases. The vendored
+copy moved from `principal-handoff-0.6.1/` to `principal-handoff-0.6.2/` (byte-identical to the tag; its `SOURCE`
+says what is run), and the tests read it.
+
+| Suite | Cases | Passed |
+|---|---|---|
+| acts/conformance/records.json | 278 | 278 |
+| decisions/conformance/records.json | 296 | 296 |
+| acts/conformance/lifecycle.json, settlement view | 79 | 79 |
+| decisions/conformance/lifecycle.json, settlement view | 84 | 84 |
+| core/conformance/raw.json (both extensions) | 52 | 52 |
+| core/conformance/convert.json held | 13 | 13 |
+
+The other suites are unchanged from 0.6.1 and still pass. Nothing in `bin/` changed.
+
+0.6.2 states that a records.json or lifecycle.json case is for a receiver of the suite's version alone. brunna is not
+one: it implements 0.5 as well, as a converting party (core §14). Two new cases, in both extensions, hold a 0.5 record,
+and brunna reads them the way convert.json's `held` cases, which are written for a party implementing both, read the
+same records:
+
+- `ph-not-judged-for-a-version-not-implemented` (records.json, `valid: null`): a `ph` of 0.6 with an `ext` of
+  `acts/0.5` (or `decisions/0.5`). brunna implements that `ext`'s version, so it judges `ph` against it and finds the
+  record invalid, as `held`'s `ph-0.6-with-a-0.5-ext-is-not-held` says.
+- `record-of-another-version-is-not-acted-on` (lifecycle.json): a 0.6 `raised` and a 0.5 `settled`. brunna holds the
+  `settled` and is settled by it, as `held`'s `a-non-relation-of-0.5-is-held` says.
+
+The tests state both readings explicitly (`tests/test_ph_records.py`, `requester_view`); every other case is compared as
+given. The 0.6.2 release notes say brunna passes these suites; whether OPEN-READINGS should record this multi-version
+reading is for agent-ops-specs to decide (asked 11-09).

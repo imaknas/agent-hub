@@ -1,6 +1,6 @@
 """bin/ph_wire.py: the versions brunna reads and sends and the guard on sending 0.6, the terms digest of 0.4 and since
 0.5 (core §4), the strict reading of a record's text, and the conversion between versions (core §14), against the
-spec's vectors (contracts/vendor/agent-ops-specs/: 0.6.1's terms-digest and convert cases, 0.5's and 0.4's).
+spec's vectors (contracts/vendor/agent-ops-specs/: 0.6.2's terms-digest and convert cases, 0.5's and 0.4's).
 
     bin/py -m unittest tests.test_ph_wire
 """
@@ -20,7 +20,7 @@ import ph_wire  # noqa: E402
 VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
 V04 = VENDOR / "principal-handoff-0.4" / "core" / "terms-digest.json"
 V05 = VENDOR / "principal-handoff-0.5" / "core" / "conformance"
-V06 = VENDOR / "principal-handoff-0.6.1" / "core" / "conformance"
+V06 = VENDOR / "principal-handoff-0.6.2" / "core" / "conformance"
 
 
 class JCS(unittest.TestCase):
@@ -114,7 +114,7 @@ class TermsDigest(unittest.TestCase):
 
 class Convert(unittest.TestCase):
     def test_vectors_0_6(self):
-        """core 0.6 §14 (0.6.1's convert.json cases): from the record alone; the Criteria cases are for parties that
+        """core 0.6 §14 (0.6.2's convert.json cases): from the record alone; the Criteria cases are for parties that
         implement Criteria, which brunna does not. Its held cases: tests/test_ph_records.py"""
         cases = [c for c in json.loads((V06 / "convert.json").read_text())["cases"] if c.get("module") != "criteria"]
         self.assertEqual(len(cases), 28)

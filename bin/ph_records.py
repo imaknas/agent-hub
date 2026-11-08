@@ -2,7 +2,7 @@
 §12 and §14; Acts and Decisions §3): validation, what it holds, and each item's settlement view and relations.
 
 Follows the spec's reference (reference/ph_core.py and schema_subset.py, Apache-2.0). Records are validated against
-the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.6.1/, -0.5/ and -0.4/.
+the schemas vendored in contracts/vendor/agent-ops-specs/principal-handoff-0.6.2/, -0.5/ and -0.4/.
 
     cfg = ph_records.config()                      # the configured principal (core R6), from {settings}
     validate(record, cfg)          -> (schema, [errors])   a 0.6, 0.5 or 0.4 record by its own version's rules; an
@@ -53,7 +53,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import ph_wire  # noqa: E402
 
 VENDOR = pathlib.Path(__file__).resolve().parents[1] / "contracts" / "vendor" / "agent-ops-specs"
-SPECS = {"0.6": VENDOR / "principal-handoff-0.6.1",
+SPECS = {"0.6": VENDOR / "principal-handoff-0.6.2",
          "0.5": VENDOR / "principal-handoff-0.5",    # for records in 0.5 (core §14: N−1 by N−1's rules)
          "0.4": VENDOR / "principal-handoff-0.4"}    # for records in 0.4, brunna's own reading (see the header)
 SPEC, SPEC_04 = SPECS["0.6"], SPECS["0.4"]

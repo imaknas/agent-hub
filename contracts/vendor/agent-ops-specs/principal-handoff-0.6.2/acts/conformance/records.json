@@ -453,6 +453,25 @@
       }
     },
     {
+      "id": "reopened-superseding-nothing",
+      "spec": "core §4, §6",
+      "valid": true,
+      "schema": "reopened",
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "o1",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "supersedes": [],
+        "restore_text": "Renew the domain"
+      }
+    },
+    {
       "id": "reopened-without-supersedes",
       "spec": "acts §3",
       "valid": false,
@@ -702,6 +721,30 @@
       "record": {
         "ph": "0.6",
         "ext": "other/0.3",
+        "id": "s13",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "ph-not-judged-for-a-version-not-implemented",
+      "spec": "core §4",
+      "valid": null,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.5",
         "id": "s13",
         "type": "settled",
         "origin": "principal",
@@ -2836,6 +2879,27 @@
       }
     },
     {
+      "id": "ts-leap-second-at-any-minute",
+      "spec": "core §4",
+      "valid": true,
+      "schema": "raised",
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-11-05T09:30:60Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "Which one?"
+        }
+      }
+    },
+    {
       "id": "ts-year-0",
       "spec": "core §4",
       "valid": true,
@@ -3587,6 +3651,122 @@
       }
     },
     {
+      "id": "note-due-not-a-date",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "about": {
+          "key": "task-demo-aaaaaaaaaa"
+        },
+        "note": "Progress.",
+        "terms": {
+          "text": "Which one?",
+          "due": "2026-02-30"
+        }
+      }
+    },
+    {
+      "id": "note-terms-digest-malformed",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "about": {
+          "key": "task-demo-aaaaaaaaaa"
+        },
+        "note": "Progress.",
+        "terms_digest": "sha-256:AAAA"
+      }
+    },
+    {
+      "id": "withdrawn-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "w1",
+        "type": "withdrawn",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "reason": "not_needed",
+        "supersedes": [
+          "r1"
+        ],
+        "terms_rev": 0
+      }
+    },
+    {
+      "id": "reopened-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "o1",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "supersedes": [
+          "s1"
+        ],
+        "restore_text": "Renew the domain",
+        "terms_rev": 0
+      }
+    },
+    {
+      "id": "related-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "l3",
+        "type": "related",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "relation": {
+          "kind": "derived_from",
+          "target": {
+            "uri": "a2a:task/123"
+          },
+          "active": true
+        },
+        "terms_rev": 0
+      }
+    },
+    {
       "id": "note-rev-1",
       "spec": "core §4, §7",
       "valid": true,
@@ -3835,6 +4015,27 @@
       }
     },
     {
+      "id": "supersedes-with-an-id-with-whitespace",
+      "spec": "core §10",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "w1",
+        "type": "withdrawn",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "reason": "not_needed",
+        "supersedes": [
+          "a b"
+        ]
+      }
+    },
+    {
       "id": "adopts-not-an-array",
       "spec": "core §4",
       "valid": false,
@@ -3919,6 +4120,36 @@
         },
         "adopts": [
           ""
+        ]
+      }
+    },
+    {
+      "id": "adopts-with-an-id-with-whitespace",
+      "spec": "core §10",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+        "authority": {
+          "kind": "attested",
+          "decider": "ps:v"
+        },
+        "evidence": {
+          "basis": "A payment record"
+        },
+        "adopts": [
+          "a b"
         ]
       }
     },
@@ -4012,6 +4243,28 @@
             "goes"
           ]
         }
+      }
+    },
+    {
+      "id": "whitespace-only-unknown-member",
+      "spec": "core §4",
+      "valid": true,
+      "schema": "raised",
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "Which one?"
+        },
+        "x_blank": " \t"
       }
     },
     {
@@ -4123,6 +4376,54 @@
         "outcome": "done",
         "terms_rev": 1,
         "terms_digest": 1,
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "terms-digest-uppercase",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        }
+      }
+    },
+    {
+      "id": "terms-digest-short",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:000000000000000000000000000000000000000000000000000000000000000",
         "authority": {
           "kind": "principal",
           "decider": "p:owner"
@@ -4959,6 +5260,60 @@
         },
         "evidence": {
           "presented": "sha-256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "id": "evidence-presented-not-a-string",
+      "spec": "core §5.2",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": 1
+        }
+      }
+    },
+    {
+      "id": "evidence-presented-off-pattern",
+      "spec": "core §5.2",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "done",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:83d94fcb636f0549e42c92c90600f69e2169688d10aaa2c5fea82b4aa337b529",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "evidence": {
+          "presented": "the terms as shown"
         }
       }
     },
@@ -5892,6 +6247,27 @@
         "terms_rev": 1,
         "terms": {
           "text": "One\rTwo"
+        }
+      }
+    },
+    {
+      "id": "terms-text-with-line-separator",
+      "spec": "acts §2",
+      "valid": true,
+      "schema": "raised",
+      "record": {
+        "ph": "0.6",
+        "ext": "acts/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "task-demo-aaaaaaaaaa",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "One Two"
         }
       }
     },

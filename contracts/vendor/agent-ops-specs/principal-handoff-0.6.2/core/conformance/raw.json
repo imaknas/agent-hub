@@ -47,6 +47,13 @@
       "schema": "raised"
     },
     {
+      "id": "decisions-minus-zero",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":-0}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
       "id": "decisions-duplicate-member",
       "spec": "core §4",
       "raw": "{\"ph\":\"0.6\",\"ext\":\"decisions/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"q-demo-1\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"key\":\"q-demo-1\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"}}",
@@ -183,6 +190,13 @@
       "id": "acts-integer-at-the-bound",
       "spec": "core §4",
       "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":9007199254740991}",
+      "valid": true,
+      "schema": "raised"
+    },
+    {
+      "id": "acts-minus-zero",
+      "spec": "core §4",
+      "raw": "{\"ph\":\"0.6\",\"ext\":\"acts/0.6\",\"id\":\"r1\",\"type\":\"raised\",\"origin\":\"requester\",\"by\":\"agent:demo\",\"key\":\"task-demo-aaaaaaaaaa\",\"project\":\"demo\",\"ts\":\"2026-10-27T09:00:00Z\",\"terms_rev\":1,\"terms\":{\"text\":\"Which one?\"},\"x_a\":-0}",
       "valid": true,
       "schema": "raised"
     },

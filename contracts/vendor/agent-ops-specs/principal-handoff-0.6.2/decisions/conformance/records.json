@@ -530,6 +530,24 @@
       }
     },
     {
+      "id": "reopened-superseding-nothing",
+      "spec": "core §4, §6",
+      "valid": true,
+      "schema": "reopened",
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "o1",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "supersedes": []
+      }
+    },
+    {
       "id": "reopened-without-supersedes",
       "spec": "decisions §3",
       "valid": false,
@@ -811,6 +829,34 @@
       }
     },
     {
+      "id": "ph-not-judged-for-a-version-not-implemented",
+      "spec": "core §4",
+      "valid": null,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.5",
+        "id": "s13",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "answer": {
+          "text": "SQLite for now",
+          "option": "sqlite"
+        }
+      }
+    },
+    {
       "id": "wrong-core-version",
       "spec": "core §4",
       "valid": false,
@@ -885,6 +931,34 @@
           "decider": "p:owner"
         },
         "note": "The cache is going away"
+      }
+    },
+    {
+      "id": "dismissed-with-an-answer",
+      "spec": "decisions §2",
+      "valid": true,
+      "schema": "settled",
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s17",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "outcome": "dismissed",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:0000000000000000000000000000000000000000000000000000000000000000",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "note": "The cache is going away",
+        "answer": {
+          "text": "Neither: the cache is going away"
+        }
       }
     },
     {
@@ -2870,6 +2944,27 @@
       }
     },
     {
+      "id": "ts-leap-second-at-any-minute",
+      "spec": "core §4",
+      "valid": true,
+      "schema": "raised",
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-11-05T09:30:60Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "Which one?"
+        }
+      }
+    },
+    {
       "id": "ts-year-0",
       "spec": "core §4",
       "valid": true,
@@ -3631,6 +3726,121 @@
       }
     },
     {
+      "id": "note-due-not-a-date",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "about": {
+          "key": "q-demo-1"
+        },
+        "note": "Progress.",
+        "terms": {
+          "text": "Which one?",
+          "due": "2026-02-30"
+        }
+      }
+    },
+    {
+      "id": "note-terms-digest-malformed",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "n1",
+        "type": "note",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "about": {
+          "key": "q-demo-1"
+        },
+        "note": "Progress.",
+        "terms_digest": "sha-256:AAAA"
+      }
+    },
+    {
+      "id": "withdrawn-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "w1",
+        "type": "withdrawn",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "reason": "not_needed",
+        "supersedes": [
+          "r1"
+        ],
+        "terms_rev": 0
+      }
+    },
+    {
+      "id": "reopened-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "o1",
+        "type": "reopened",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "supersedes": [
+          "s1"
+        ],
+        "terms_rev": 0
+      }
+    },
+    {
+      "id": "related-rev-0",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "l3",
+        "type": "related",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "relation": {
+          "kind": "derived_from",
+          "target": {
+            "uri": "a2a:task/123"
+          },
+          "active": true
+        },
+        "terms_rev": 0
+      }
+    },
+    {
       "id": "note-rev-1",
       "spec": "core §4, §7",
       "valid": true,
@@ -3879,6 +4089,27 @@
       }
     },
     {
+      "id": "supersedes-with-an-id-with-whitespace",
+      "spec": "core §10",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "w1",
+        "type": "withdrawn",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T11:00:00Z",
+        "reason": "not_needed",
+        "supersedes": [
+          "a b"
+        ]
+      }
+    },
+    {
       "id": "adopts-not-an-array",
       "spec": "core §4",
       "valid": false,
@@ -3976,6 +4207,39 @@
       }
     },
     {
+      "id": "adopts-with-an-id-with-whitespace",
+      "spec": "core §10",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:f4a371d3451432d6dca9a61774d156a1eb725a15e991cc5325d5b65985cbb166",
+        "authority": {
+          "kind": "attested",
+          "decider": "ps:v"
+        },
+        "answer": {
+          "text": "Yes"
+        },
+        "evidence": {
+          "basis": "A payment record"
+        },
+        "adopts": [
+          "a b"
+        ]
+      }
+    },
+    {
       "id": "note-member-not-a-string",
       "spec": "core §4",
       "valid": false,
@@ -4065,6 +4329,28 @@
             "goes"
           ]
         }
+      }
+    },
+    {
+      "id": "whitespace-only-unknown-member",
+      "spec": "core §4",
+      "valid": true,
+      "schema": "raised",
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "Which one?"
+        },
+        "x_blank": " \t"
       }
     },
     {
@@ -4185,6 +4471,60 @@
         "outcome": "decided",
         "terms_rev": 1,
         "terms_digest": 1,
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "answer": {
+          "text": "Yes"
+        }
+      }
+    },
+    {
+      "id": "terms-digest-uppercase",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "answer": {
+          "text": "Yes"
+        }
+      }
+    },
+    {
+      "id": "terms-digest-short",
+      "spec": "core §4",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:000000000000000000000000000000000000000000000000000000000000000",
         "authority": {
           "kind": "principal",
           "decider": "p:owner"
@@ -5117,6 +5457,66 @@
         },
         "evidence": {
           "presented": "sha-256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "id": "evidence-presented-not-a-string",
+      "spec": "core §5.2",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:f4a371d3451432d6dca9a61774d156a1eb725a15e991cc5325d5b65985cbb166",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "answer": {
+          "text": "Yes"
+        },
+        "evidence": {
+          "presented": 1
+        }
+      }
+    },
+    {
+      "id": "evidence-presented-off-pattern",
+      "spec": "core §5.2",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "s1",
+        "type": "settled",
+        "origin": "principal",
+        "by": "ps:assistant",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-28T08:00:00Z",
+        "outcome": "decided",
+        "terms_rev": 1,
+        "terms_digest": "sha-256:f4a371d3451432d6dca9a61774d156a1eb725a15e991cc5325d5b65985cbb166",
+        "authority": {
+          "kind": "principal",
+          "decider": "p:owner"
+        },
+        "answer": {
+          "text": "Yes"
+        },
+        "evidence": {
+          "presented": "the terms as shown"
         }
       }
     },
@@ -6797,6 +7197,33 @@
             {
               "id": "a",
               "label": " "
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "option-label-not-a-string",
+      "spec": "decisions §2, §3",
+      "valid": false,
+      "schema": null,
+      "record": {
+        "ph": "0.6",
+        "ext": "decisions/0.6",
+        "id": "r1",
+        "type": "raised",
+        "origin": "requester",
+        "by": "agent:demo",
+        "key": "q-demo-1",
+        "project": "demo",
+        "ts": "2026-10-27T09:00:00Z",
+        "terms_rev": 1,
+        "terms": {
+          "text": "Which one?",
+          "options": [
+            {
+              "id": "a",
+              "label": 1
             }
           ]
         }

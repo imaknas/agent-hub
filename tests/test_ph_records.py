@@ -1,12 +1,16 @@
 """bin/ph_records.py, brunna as a conforming requester (core §12) and converting party (core §14), against the spec's
-0.6.1 fixtures (contracts/vendor/agent-ops-specs/principal-handoff-0.6.1/): Acts' and Decisions' records.json in full
+0.6.2 fixtures (contracts/vendor/agent-ops-specs/principal-handoff-0.6.2/): Acts' and Decisions' records.json in full
 (`valid: null`: kept, not acted on), lifecycle.json compared on the settlement view (settlement, outcome, answer,
 authority, stale) in the fixtures' order and reversed, relations.json in full, core raw.json (the strict reading of a
 record's text) and convert.json's held cases (what a party configured for 0.6 that also implements 0.5 holds). Records
 of 0.5 keep being validated by 0.5's rules (core §14), and of 0.4 by 0.4's (brunna's own reading of an older version):
 their records.json and lifecycle.json run too.
 
-No case of 0.6.1 is expected to fail: every one passes (docs/design/principal-handoff-0.6-upgrade.md, report 1).
+No case of 0.6.2 is expected to fail: every one passes (docs/design/principal-handoff-0.6-upgrade.md, report 1 and "The 0.6.2 suites").
+0.6.2 states that a records.json or lifecycle.json case is for a receiver of the suite's version alone; brunna also
+implements 0.5 (core §14), so where a case holds a record of 0.5 it is read as convert.json's `held` cases read it, the
+reading the spec gives a party that implements both: a 0.6 `ph` with a 0.5 `ext` is invalid
+(ph-0.6-with-a-0.5-ext-is-not-held), and a 0.5 record is held and acted on (a-non-relation-of-0.5-is-held).
 
     bin/py -m unittest tests.test_ph_records
 """
@@ -21,7 +25,7 @@ import ph_records  # noqa: E402
 import ph_wire  # noqa: E402
 
 VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
-SPEC = VENDOR / "principal-handoff-0.6.1"
+SPEC = VENDOR / "principal-handoff-0.6.2"
 V05 = VENDOR / "principal-handoff-0.5"
 V04 = VENDOR / "principal-handoff-0.4"
 REQUESTER = ("settlement", "outcome", "answer", "authority", "stale")   # what a requester compares (core §12)
@@ -35,15 +39,36 @@ def cfg_of(s: dict, c: dict) -> ph_records.Config:
     return ph_records.Config(s["principal"], c.get("principal_type", s.get("principal_type")) == "legal")
 
 
+def requester_view(s: dict, c: dict) -> dict:
+    """What a requester compares of a lifecycle case (core §12). A case is for a receiver of its suite's version alone
+    (0.6.2): a record of a version it doesn't implement is in `ignored`. One of those brunna implements too (a 0.5
+    settled) it holds and acts on, as convert.json's held case a-non-relation-of-0.5-is-held says a party implementing
+    both does: then that settled is the settlement."""
+    want = {k: c["expect"][k] for k in REQUESTER}
+    held = [r for r in c["records"] if isinstance(r, dict) and r.get("id") in c["expect"]["ignored"]
+            and ph_records.implemented(r) and ph_wire.version_of(r) == "0.5"
+            and not ph_records.validate(r, ph_records.Config(s["principal"]))[1]]
+    if held:
+        [r] = held
+        assert r["type"] == "settled" and want["settlement"] is None, c["id"]
+        want = {"settlement": r["id"], "outcome": r["outcome"], "answer": r.get("answer"),
+                "authority": r["authority"]["kind"], "stale": False}
+    return want
+
+
 class Conformance(unittest.TestCase):
-    """0.6.1"""
+    """0.6.2"""
 
     def records(self, s: dict) -> int:
         for c in s["cases"]:
             with self.subTest(case=c["id"]):
                 name, errs = ph_records.validate(c["record"], cfg_of(s, c))
-                if c["valid"] is None:   # an extension or version brunna does not implement: kept, not acted on
-                    self.assertFalse(ph_records.implemented(c["record"]))
+                if c["valid"] is None and ph_records.implemented(c["record"]):
+                    # of a version the suite's receiver doesn't implement and brunna does (0.5): its ph is judged
+                    # against its ext, as convert.json's held case ph-0.6-with-a-0.5-ext-is-not-held says
+                    self.assertEqual(ph_wire.version_of(c["record"]), "0.5")
+                    self.assertTrue(any(e.startswith("$.ph:") for e in errs), errs)
+                elif c["valid"] is None:   # an extension or version brunna does not implement: kept, not acted on
                     self.assertEqual((name, errs), (None, [ph_records.NOT_IMPLEMENTED]))
                     self.assertEqual(ph_records.received([c["record"]], cfg_of(s, c)), ([], [c["record"]]))
                 elif c["valid"]:
@@ -54,15 +79,15 @@ class Conformance(unittest.TestCase):
         return len(s["cases"])
 
     def test_acts_records(self):
-        self.assertEqual(self.records(suite(SPEC, "acts", "records.json")), 262)
+        self.assertEqual(self.records(suite(SPEC, "acts", "records.json")), 278)
 
     def test_decisions_records(self):
-        self.assertEqual(self.records(suite(SPEC, "decisions", "records.json")), 279)
+        self.assertEqual(self.records(suite(SPEC, "decisions", "records.json")), 296)
 
     def lifecycle(self, s: dict) -> int:
         cfg = ph_records.Config(s["principal"])
         for c in s["cases"]:
-            want = {k: c["expect"][k] for k in REQUESTER}
+            want = requester_view(s, c)
             for order, records in (("given", c["records"]), ("reversed", list(reversed(c["records"])))):
                 with self.subTest(case=c["id"], order=order):
                     view = ph_records.settlement_view(records, cfg)
@@ -70,10 +95,10 @@ class Conformance(unittest.TestCase):
         return len(s["cases"])
 
     def test_acts_lifecycle_settlement_view(self):
-        self.assertEqual(self.lifecycle(suite(SPEC, "acts", "lifecycle.json")), 73)
+        self.assertEqual(self.lifecycle(suite(SPEC, "acts", "lifecycle.json")), 79)
 
     def test_decisions_lifecycle_settlement_view(self):
-        self.assertEqual(self.lifecycle(suite(SPEC, "decisions", "lifecycle.json")), 78)
+        self.assertEqual(self.lifecycle(suite(SPEC, "decisions", "lifecycle.json")), 84)
 
     def relations(self, s: dict) -> int:
         cfg = ph_records.Config(s["principal"])
@@ -103,7 +128,7 @@ class Conformance(unittest.TestCase):
                 else:
                     self.assertTrue(errs, f"expected invalid, validated against {name}")
                     self.assertNotIn(ph_records.NOT_IMPLEMENTED, errs, "expected invalid, judged kept")
-        self.assertEqual(len(s["cases"]), 50)
+        self.assertEqual(len(s["cases"]), 52)
 
     def test_a_record_that_names_no_extension_is_invalid_not_kept(self):
         """core §4: `ext` is required, and only what names an extension or version can be kept. A string that names one
@@ -127,7 +152,7 @@ class Conformance(unittest.TestCase):
                 with self.subTest(case=c["id"], order=order):
                     self.assertEqual({"held": sorted(r["id"] for r in ph_records.received(records, cfg)[0]),
                                       "relations": ph_records.relations(records, cfg)}, c["expect"])
-        self.assertEqual(len(s["held"]), 12)
+        self.assertEqual(len(s["held"]), 13)
 
 
 class Older(unittest.TestCase):
@@ -360,7 +385,7 @@ class Prevailing(unittest.TestCase):
             s = suite(SPEC, ext, "lifecycle.json")
             cfg = ph_records.Config(s["principal"])
             for c in s["cases"]:
-                want = {k: c["expect"][k] for k in REQUESTER}
+                want = requester_view(s, c)
                 for records in (c["records"], list(reversed(c["records"]))):
                     with self.subTest(ext=ext, case=c["id"]):
                         kept = [records[i] for i in ph_records.prevailing(records, cfg)]

@@ -1,6 +1,6 @@
 """agent-hub runs the conformance data of the Acts Markdown binding (agent-ops-specs) against bin/acts_md.py, the
-reader and document steps bin/registrar.py and bin/gen-todo.py use: 0.6.1's (acts-markdown/conformance, source in
-contracts/vendor/agent-ops-specs/principal-handoff-0.6.1/SOURCE), 0.5's (principal-handoff-0.5/SOURCE), and 0.4's
+reader and document steps bin/registrar.py and bin/gen-todo.py use: 0.6.2's (acts-markdown/conformance, source in
+contracts/vendor/agent-ops-specs/principal-handoff-0.6.2/SOURCE), 0.5's (principal-handoff-0.5/SOURCE), and 0.4's
 (principal-handoff-0.4/acts/SOURCE), whose rules 0.5 and 0.6 keep for every key that is bound (0.5 adds known keys; 0.6
 changes no rule of the binding, acts-markdown §6).
 
@@ -20,7 +20,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 VENDOR = ROOT / "contracts" / "vendor" / "agent-ops-specs"
-FIXTURES = {"0.6.1": VENDOR / "principal-handoff-0.6.1" / "acts-markdown" / "conformance",
+FIXTURES = {"0.6.2": VENDOR / "principal-handoff-0.6.2" / "acts-markdown" / "conformance",
             "0.5": VENDOR / "principal-handoff-0.5" / "acts-markdown" / "conformance",
             "0.4": VENDOR / "principal-handoff-0.4" / "acts"}
 sys.path.insert(0, str(ROOT / "bin"))
@@ -31,7 +31,7 @@ spec = importlib.util.spec_from_file_location("registrar_conf", ROOT / "bin" / "
 registrar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(registrar)
 TAG = registrar.TAG
-SPEC = json.loads((FIXTURES["0.6.1"] / "profiles.json").read_text())["profiles"]
+SPEC = json.loads((FIXTURES["0.6.2"] / "profiles.json").read_text())["profiles"]
 LANG = {"zh-hant": "zh-Hant", "en": "en"}
 
 
