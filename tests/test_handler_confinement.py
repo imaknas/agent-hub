@@ -237,11 +237,16 @@ class JobStateFolder(unittest.TestCase):
         self.assertNotEqual(whole, own)
         deny_whole = json.loads(whole.read_text())["permissions"]["deny"]
         deny_own = json.loads(own.read_text())["permissions"]["deny"]
-        tilde = runtime_claude._tilde
-        self.assertIn(f"Edit({tilde(self.hub)}/**)", deny_whole)
-        self.assertNotIn(f"Edit({tilde(self.hub)}/**)", deny_own)
-        self.assertIn(f"Edit({tilde(self.state / 'agent-jobs' / '.settings')}/**)", deny_own)
-        self.assertIn(f"Edit({tilde(self.hub / '.hub-home')})", deny_own)
+        rule = runtime_claude._rule_path   # ~/… or //… (a single / would be the settings file's folder)
+        self.assertIn(f"Edit({rule(self.hub)}/**)", deny_whole)
+        self.assertNotIn(f"Edit({rule(self.hub)}/**)", deny_own)
+        self.assertIn(f"Edit({rule(self.state / 'agent-jobs' / '.settings')}/**)", deny_own)
+        self.assertIn(f"Edit({rule(self.hub / '.hub-home')})", deny_own)
+        # its own folder isn't in the hub's platform state either (a project other than the hub: policy.platform_state)
+        self.assertFalse([r for r in deny_own if str(self.job) in r and not r.startswith("Edit(") or
+                          r in (f"Read({rule(self.state / 'agent-jobs')}/**)", f"Edit({rule(self.state / 'agent-jobs')}/**)")],
+                         deny_own)
+        self.assertIn(f"Read({rule(self.state / 'agent-jobs')}/**)", deny_whole)
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")

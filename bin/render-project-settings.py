@@ -10,13 +10,15 @@ would write (--report). Not applied to the platform itself (brunna).
 What is written:
   sandbox (the whole key is managed by the platform): enabled, failIfUnavailable, allowUnsandboxedCommands: false,
     filesystem.allowWrite (its own runtime, the bus directory, the registry's allow_write),
-    filesystem.denyRead (other projects' workspace/runtime, raw memory notes, the platform's secrets),
+    filesystem.denyRead (other projects' workspace/runtime, raw memory notes, the platform's secrets, credentials,
+    the hub's platform state: what its services are denied, docs/design/capabilities.md 11-08),
     network.allowedDomains (platform defaults + the registry's network)
   env: the variables the platform sets (its own tool caches, policy.py env); other variables are untouched
   the entries the platform adds to permissions.deny / permissions.allow (other entries are untouched -- an
   interactive session's "always allow" is written there too):
-    deny  Read/Edit other projects' workspace/runtime, Edit the platform/bare repos/memory copies/LaunchAgents,
-          Read the raw notes in memory copies, Read the platform's secrets
+    deny  Read/Edit other projects' workspace/runtime, Edit the platform/bare repos/memory copies/the instance/what
+          runs as the user (policy deny_write), Read/Edit the raw notes in memory copies, the platform's secrets, its
+          platform state and credentials, Edit the runtime's user-level control files, the Keychain command
     allow the mailbox CLI, the merge gate (the only channels across the boundary)
   Which entries were written last time is recorded in .state/rendered-settings/<project>.json; next time those are
   removed first and then added again, so nothing piles up.

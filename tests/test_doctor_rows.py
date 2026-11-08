@@ -249,6 +249,15 @@ class Doctor(unittest.TestCase):
         self.assertEqual(what, T("sandboxed projects' own services and jobs: off, they are not run ({reason})",
                                  reason="no adapter here") + T("; affects: {projects}", projects="boxed"))
 
+    KEYCHAIN = ("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
+                "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement")
+
+    def test_the_sessions_keychain_residual_is_said_when_a_project_is_sandboxed(self):
+        self.projects = {"open": {"name": "open"}}
+        self.assertFalse([r for r in self.doctor() if r[1] == T(self.KEYCHAIN)])
+        self.projects["boxed"] = {"name": "boxed", "enforce": {"sandbox": True}}
+        self.assertEqual([r for r in self.doctor() if r[1] == T(self.KEYCHAIN)], [("info", T(self.KEYCHAIN), "")])
+
     # ---------- agent logins: the default runtime, then each pinned one ----------
 
     def login_rows(self, rows):

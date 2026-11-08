@@ -508,6 +508,10 @@ tools can read other projects' transcripts there, as today.
 9. **Pushing from a sandboxed session**: as before — on macOS an ssh push already fails inside the sandbox; on Linux it stops, and an
    HTTPS remote through gh's helper stops fetching. The owner pushes from a terminal, or the project uses a deploy key of its own.
 
+Built 11-08 as above, with three small additions: a settings `credentials.dirs` entry that is the runtime's own home
+(`~/.claude`) stays whole for Seatbelt, Landlock and leases while sessions get only its credential file (6); `Edit` is denied on
+credential files too (`~/.npmrc` can name a shell npm runs); `git bundle verify` runs in an empty repo of its own (8).
+
 **A2 (later)**: port Claude's folder naming into the adapter (exact own slug and `<slug>--claude-worktrees-*`, the computed slugs of
 every registered project denied even before their first session), then measure in a Desktop-opened sandboxed session what Bash and
 the file tools need from the home (shell snapshot, plans, skills), and deny the rest.

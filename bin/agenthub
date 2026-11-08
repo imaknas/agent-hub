@@ -1352,6 +1352,10 @@ def cmd_doctor(argv: list[str]) -> int:
             + (_("; affects: {projects}", projects=", ".join(held)) if held else ""),
             _("what each system needs: docs/design/capabilities.md (macOS: sandbox-exec; Linux: kernel 6.7 or later "
               "with Landlock enabled)"))
+    # their sessions get the same denies from the runtime's settings (docs/design/capabilities.md 11-08, A1), all but one
+    if any((d.get("enforce") or {}).get("sandbox") is True for d in hubconf.projects().values()):
+        add("info", _("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
+                      "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement"))
     hb = hubconf.STATE / "scheduler-heartbeat"
     if hb.exists():
         age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(hb.stat().st_mtime)).total_seconds() / 60

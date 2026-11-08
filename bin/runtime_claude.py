@@ -49,6 +49,7 @@ Tool servers (runtime_ports' tool_servers interface; docs/design/evaluators.md s
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -135,17 +136,92 @@ def _cli_rules(commands) -> list[str]:
     return [r for c in commands for r in (f"Bash({c})", f"Bash({c} *)")]
 
 
+def _rule_path(p) -> str:
+    """A path in a permission rule: ~/… under the home folder, //… (absolute) elsewhere (a single / is the settings
+    file's project folder)."""
+    s = _tilde(p)
+    return s if s.startswith("~") else "/" + s
+
+
+def _spellings(p) -> list[str]:
+    """The path as configured and, when it differs, what it resolves to (the part before a glob's first *): a rule
+    naming only a link would leave its target readable (seatbelt.spellings does the same for the platform's profiles)."""
+    s = str(p)
+    head, star, _tail = s.partition("*")
+    cut = head[:head.rfind("/")] if star else s
+    r = os.path.realpath(cut) + s[len(cut):] if cut else s
+    return [s] if r == s else [s, r]
+
+
+def _spelled(paths) -> list[str]:
+    return list(dict.fromkeys(x for p in paths for x in _spellings(p)))
+
+
+def _home() -> pathlib.Path:
+    """Claude Code's user-level folder: $CLAUDE_CONFIG_DIR, else ~/.claude."""
+    return pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or pathlib.Path.home() / ".claude").expanduser()
+
+
+def _user_config_file() -> pathlib.Path:
+    """~/.claude.json, or the one in $CLAUDE_CONFIG_DIR (as configured_servers reads it)."""
+    return (_home() if os.environ.get("CLAUDE_CONFIG_DIR") else pathlib.Path.home()) / ".claude.json"
+
+
+# Its login (runtime_ports CREDENTIALS): the credential file, not the folder it is in, whose other entries its sessions
+# use (transcripts, plans, skills; docs/design/capabilities.md 11-08, A2 for the finer rules there)
+CREDENTIALS = {"dirs": [], "files": [str(_home() / ".credentials.json")]}
+# What it loads settings, hooks and tools from for every session of the user, anywhere: never written by a sandboxed
+# project's file tools (its Bash has no allowWrite there), or the user's next session would run it outside any sandbox.
+# (name under its home, tree); and the user config file. Reading them stays allowed (skills' files, plans).
+USER_CONTROL = (("settings.json", False), ("settings.local.json", False), ("CLAUDE.md", False), ("hooks", True),
+                ("commands", True), ("agents", True), ("plugins", True), ("output-styles", True), ("rules", True),
+                ("skills", True))
+# The Keychain isn't a file, so the OS sandbox can't block it (tested 10-25: Bash inside the sandbox could look up
+# Claude's login credentials). These rules are only reinforcement: another way of writing it (sh -c, python) gets around
+# them (doctor's sandbox row says so)
+SECURITY_DENY = ("Bash(security:*)", "Bash(security *)", "Bash(/usr/bin/security *)")
+
+
+def user_control() -> list[tuple[pathlib.Path, bool]]:
+    return [(_home() / n, t) for n, t in USER_CONTROL] + [(_user_config_file(), False)]
+
+
+def _not_home(paths) -> list:
+    """Credential folders, less any that is or holds its own home: its sessions' Bash and file tools use the home (the
+    settings' ~/.claude stays denied whole to the platform's own sandboxes; finer rules inside it are A2)."""
+    home = pathlib.Path(os.path.realpath(_home()))
+    real = {p: pathlib.Path(os.path.realpath(p)) for p in paths}
+    return [p for p in paths if real[p] != home and real[p] not in home.parents]
+
+
+def _edit(p, tree: bool) -> list[str]:
+    """Edit denied on a file, or on a folder and everything in it (also as the entry itself: it can't be replaced)."""
+    return [r for s in _spellings(p) for r in ([f"Edit({_rule_path(s)})"] + ([f"Edit({_rule_path(s)}/**)"] if tree else []))]
+
+
 def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     deny = []
     for p in pol["other_projects"]:
         deny += [f"Read(/{p}/**)", f"Edit(/{p}/**)"]  # //abs: an absolute path
-    deny += [f"Edit({_tilde(p)}/**)" for p in pol["deny_write"]]
-    deny += [f"Read({_tilde(p)}/**)" for p in pol["deny_read"]]
+    secret = _spelled(pol["deny_read"])
+    deny += [f"Read({_rule_path(p)}/**)" for p in secret]
     # the files its sessions load settings and hooks from, at any depth (worktrees included): never written by the
     # session's file tools (its Bash is kept off them by the sandbox itself)
     ws = pol.get("workspace")
     deny += [r for c in pol.get("protect") or [] if c["tree"] and ws
              for r in (f"Edit(/{ws}/**/{c['name']})", f"Edit(/{ws}/**/{c['name']}/**)")]
+    # docs/design/capabilities.md 11-08, A1: what its services are denied, its sessions are too (points 5 and 6)
+    state = _spelled(pol.get("platform_state") or [])
+    cred_dirs = _spelled(_not_home(pol.get("credentials") or []))
+    cred_files = _spelled(pol.get("credential_files") or [])
+    deny += [r for p in secret for r in _edit(p, True)]
+    deny += [r for p in [*state, *cred_dirs] for r in (f"Read({_rule_path(p)})", f"Read({_rule_path(p)}/**)", *_edit(p, True))]
+    deny += [r for p in cred_files for r in (f"Read({_rule_path(p)})", *_edit(p, False))]
+    deny += [r for p in pol.get("deny_write_files") or [] for r in _edit(p, False)]
+    deny += [r for p in pol["deny_write"] for r in _edit(p, True)]
+    deny += [r for p, tree in user_control() for r in _edit(p, tree)]
+    deny += SECURITY_DENY
+    deny = list(dict.fromkeys(deny))
     allow = [f"Bash({_tilde(c)} *)" for c in pol["platform_commands"]] + _cli_rules(pol.get("platform_cli") or [])
     sandbox = {
         "enabled": True,
@@ -153,7 +229,10 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
         "allowUnsandboxedCommands": False,
         "filesystem": {
             "allowWrite": list(pol["write"]),
-            "denyRead": [_tilde(p) for p in pol["other_projects"]] + [_tilde(p) for p in pol["deny_read"]],
+            # not the workspace root: git dies when a folder above its -C can't be stat'ed, and these settings have no
+            # stat-only allow (other_projects names each project instead)
+            "denyRead": list(dict.fromkeys([_tilde(p) for p in pol["other_projects"]] + [_tilde(p) for p in secret]
+                                           + [_tilde(p) for p in [*cred_dirs, *cred_files, *state]])),
         },
         "network": {"allowedDomains": list(pol["network"]), "allowLocalBinding": bool(pol.get("local_bind"))},
     }
@@ -167,14 +246,12 @@ def session_env(pol: dict) -> dict[str, str]:
 
 
 def lease_settings(pol: dict) -> dict:
+    """settings()' deny, plus every credential folder whole, its own home included (a lease's tools only read; the real
+    gate is that every work-mode command asks the owner)."""
     deny = settings(pol)[1]
-    deny += [f"Read({_tilde(p)})" for p in pol["credential_files"]] + [f"Read({_tilde(p)}/**)" for p in pol["credentials"]]
-    # The Keychain isn't a file, so the OS sandbox can't block it (tested 10-25: Bash inside the sandbox could look up
-    # Claude's login credentials).
-    # These rules are only reinforcement: another way of writing it (sh -c, python) gets around them; the real gate
-    # is that every work-mode command asks the owner
-    deny += ["Bash(security:*)", "Bash(security *)", "Bash(/usr/bin/security *)"]
-    return {"permissions": {"deny": deny}}
+    deny += [f"Read({_rule_path(p)})" for p in pol["credential_files"]] + [f"Read({_rule_path(p)}/**)" for p in pol["credentials"]]
+    deny += SECURITY_DENY
+    return {"permissions": {"deny": list(dict.fromkeys(deny))}}
 
 
 def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib.Path:
@@ -190,7 +267,10 @@ def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib
     doc = index["projects"][project]
     pol = policy.policy(project, doc, index)
     hidden = policy.run_state_denied(project, keep)
-    pol = {**pol, "deny_read": [*pol["deny_read"], *hidden]}
+    # the hub's platform state for another project's run, less the job's own folder and the notes it writes (the hub's
+    # own runs: hidden above)
+    pol = {**pol, "deny_read": [*pol["deny_read"], *hidden],
+           "platform_state": policy.platform_state(project, [keep, policy.notes_dir(project)])}
     sandbox = settings(pol)[0]
     # a runtime's deny can't be narrowed by an allow: the job's own folder and the project's notes come off the list here,
     # and only the run's allow rules decide whether it writes them
@@ -198,14 +278,12 @@ def platform_settings(project: str, keep: pathlib.Path | None = None) -> pathlib
     for place in (keep, policy.notes_dir(project)):
         if place:
             carved = policy.write_except(carved, place)
-    changed = carved != pol["deny_write"]
     pol = {**pol, "deny_write": carved}
     # only the mail commands (read, send, close letters): not raw hubbus, merging or running code through the platform
     allow = _cli_rules(policy.platform_cli(mail_only=True))
+    # each carved entry is denied as itself too (settings: a file beside the path, not only a folder's contents)
     deny = lease_settings(pol)["permissions"]["deny"]
-    if changed:   # a file beside the path (not only a folder's contents)
-        deny += [f"Edit({_tilde(x)})" for x in carved if not x.is_dir()]
-    deny += [f"Read({_tilde(x)})" for x in hidden if not x.is_dir()]
+    deny += [r for x in hidden if not x.is_dir() for r in (f"Read({_rule_path(x)})",) if r not in deny]
     out = {"permissions": {"deny": deny, "allow": allow}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
@@ -567,7 +645,6 @@ def slug_for_path(path: str) -> str:
 # read here for now, until layer 2's neutral policy is settled.
 
 import itertools  # noqa: E402
-import os  # noqa: E402
 
 from runtime_ports import TaskResult  # noqa: E402
 

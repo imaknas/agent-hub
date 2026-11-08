@@ -1102,7 +1102,7 @@ class Settings(unittest.TestCase):
 
     def tilde(self, p):
         import runtime_claude
-        return runtime_claude._tilde(p)
+        return runtime_claude._rule_path(p)   # ~/… or //… (a single / would be the settings file's folder)
 
     def test_notes_are_writable_and_nothing_else_of_the_hub_is(self):
         deny = self.settings()
@@ -1134,9 +1134,18 @@ class Settings(unittest.TestCase):
         other = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, other, True)
         (other / ".agent-memory" / "memory").mkdir(parents=True)
+        for d in (self.state / "registry", self.state / "test-slots"):
+            d.mkdir()
+        (self.state / "project-renames.json").write_text("{}")
         with mock.patch.object(hubconf, "workspace", lambda n: other):
             deny = self.settings("other", workspace=other)
-        self.assertFalse([r for r in deny if r.startswith("Read(") and ".state" in r])
+        # what the platform CLI reads stays readable (policy.readable); the rest of the hub's state doesn't
+        # (docs/design/capabilities.md 11-08, A1 point 7)
+        for kept in ("registry", "test-slots", "project-renames.json"):
+            self.assertFalse([r for r in deny if r.startswith("Read(") and f".state/{kept}" in r], kept)
+        self.assertNotIn(f"Read({self.tilde(self.state)}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.state / 'mailbox')}/**)", deny)
+        self.assertIn(f"Read({self.tilde(self.logs)}/**)", deny)
         self.assertIn(f"Edit({self.tilde(self.hub)}/**)", deny)
 
     def flags(self, cwd):
