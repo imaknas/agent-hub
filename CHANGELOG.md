@@ -3,6 +3,87 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.11.0 (2026-11-08)
+
+### New
+
+- **ph:** Read Principal Handoff 0.6 and fold in it
+- **alert:** Platform alerts can also go to the personal assistant
+- **hubbus:** A letter's state is per session, and a route, an ack and a fork all end
+- **hubbus:** A headless handler triages and takes nothing
+- **alerts:** Say so on the other channels when the assistant's pushes stop reaching the phone
+- **alerts:** No phone subscribed is a problem, and a phone off all day is allowed for
+- **hubbus:** The session record: project, waiter lifetime, last reply, status ports
+- **hubbus:** Mail and a session's record give one answer for its project
+- **hubbus:** Pass, for a session a letter was routed to and isn't its
+- **registry:** Mailbox.wake, an off switch manifest.update can't change
+- **hubbus:** Route a request to a live session first, and wake it
+- **doctor:** Say which memory branch holds more than notes, and what a runtime leaves
+- **llm:** Max_attempts for completion points, and an answer that says nothing when it fails
+- **hubbus:** Mailbox-route, a small model's pick of which live session gets a letter
+
+### Fixed
+
+- **reflect:** Re-running a week keeps the analysis the model wrote
+- **ph:** Send 0.5 records as 0.6 after the switch; a malformed 0.4 record is invalid, not an error
+- **hubbus:** A batch kept for resending is judged when it goes
+- **ph:** A record that names no extension is invalid, not kept
+- **records:** The platform's former name goes on being pulled
+- **hubbus:** One outbox file can't stop the outbox or the next project
+- **hubbus:** A session is judged closed only on good evidence
+- **hubbus:** Old letters keep alerting, leases stay quiet, a fork gets credit only for its own
+- **runtime:** One process record ps rejects is gone, not a failed lookup
+- **hubbus:** Nothing in one outbox file stops the rest, a point isn't an outbox's word, worktree sessions end cleanly
+- **hubbus:** What the cold review of triage found
+- **jobs:** A failed detach is a failed start
+- **hubbus:** What breaks on one project stays with that project
+- **hubbus:** A confined run's question on a handoff letter is no answer
+- **hubbus:** A linked worktree's mail goes through hub-event, outside any sandbox
+- **hooks:** A pointer a sandboxed project wrote decides nothing that runs as the user
+- **hubbus:** What the cold review of step 3 found in the session record
+- **hooks:** What runs as the user goes by the folder the hook names and the registry, not by anything under it
+- **hooks:** A real worktree runs no memory planted beside it
+- **hooks:** A platform run's agent runs no git of its own in a project's folder, and what a remembered folder may lead to
+- **hooks:** A worktree under workspace_root or its main checkout keeps the reminder and local setup
+- **hooks:** Nothing run as the user sits in a folder a sandbox writes, and a project is asked by its name
+- **hooks:** A probe that can't clean up says so, like anything else that breaks it
+- **hubbus:** No propose run for a sandboxed project, and the copy where a runtime looks for it
+- **hooks:** The private temp folder fails visibly, gets pruned, and no test leaves anything in it
+- **hubbus:** A name the registry's index lacks is couldn't tell, not not sandboxed
+- **llm:** Restricted is honoured or the run fails, and the check after an update exercises it
+- **hooks:** The roster script's temp folder makes a missing secrets folder 700 too
+- **llm:** Restricted goes back on mailbox-propose, and a runtime that can't is held to the throwaway copy
+- **hooks:** An old claude can upgrade, and the flag is asked of the version being installed
+- **hubbus:** A propose refusal isn't a failed start
+- **hooks:** The prune keeps what it can't be sure of, and says so
+- **runner:** The leak check looks only at what this run's own tests could write
+- **hooks:** Only making the folder reads as could not make a folder
+- **hooks:** The name scan of an exported tree leaves out what a running test made
+- **hubbus:** A wake's five minutes end only the route it was for
+- **hubbus:** Read what sessions are doing once a tick, and bound it
+- **hubbus:** What a woken session reads counts as read, and the texts say so
+- **agent-jobs:** A job's status file is replaced whole, never read half written
+- **test-runner:** A tier's temp folder is one no other project can write
+- **project_git:** A memory bundle holding more than notes is refused
+- **llm:** Agents in a copy of a memory branch run only on what is notes
+- **test-runner:** A project whose jobs are exempt from the sandbox tests in the private folder
+- **memory:** A stray file in memory/ no longer stops a project's notes
+- **test-runner:** Remove only the temp folder it made; run-tests by hand doesn't run without a private one
+- **hubbus:** A route call is marked before it starts, and only dispatch touches its file
+- **hubbus:** Mailbox-route goes by the project's name now, not the one a letter was sent to
+- **hubbus:** A broken mailbox-route shows as a job.failed, and a pick gone since is said so
+- **mailbox-route:** Keep the calls and answers in a secrets folder of their own
+- **hubbus:** A mailbox-route record that can't be kept spends the call, not the project's tick
+- **mailbox-route:** The call's kill takes only its own process group
+- **mailbox-route:** A call killed at its time leaves a usage row
+- **systemd:** An interval unit doesn't kill what its tick started to outlive it
+- **mailbox-route:** The model sees each candidate by a label, since the mask took every id
+- **run-tests:** No bytecode is written, so macOS's python3 leaves no cache in the tests' HOME
+
+### Faster
+
+- **hubbus:** A hook judges its letters before the write lock, and reads the registry once
+
 ## v0.10.0 (2026-11-03)
 
 ### New
