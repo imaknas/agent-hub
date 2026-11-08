@@ -1,6 +1,6 @@
 # Runtime versions and compatibility
 
-Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09; the measurements done 11-09; DV5 decided 11-09 ((c), V-M11 before it is built).
+Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09; the measurements done 11-09; DV5 decided 11-09 ((c); V-M11 done).
 Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or the Codex app has a
 breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first, before Codex Step 1
 (`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
@@ -180,11 +180,14 @@ logs the owner out everywhere (Codex 0.165.0 would have, M9).
 
 - **Claude**: platform runs already use the headless token (`CLAUDE_CODE_OAUTH_TOKEN`, `auth_env`), which doesn't refresh; a
   candidate gets the same and nothing else. On Linux the throwaway home has no `.credentials.json`. On macOS the subscription login
-  is in the Keychain, which a throwaway config dir doesn't hide, and the platform's Seatbelt profile can't wrap the checks: a second
+  is in the Keychain, and the platform's Seatbelt profile can't wrap the checks: a second
   Seatbelt layer can't start inside one (seatbelt.py:9-11), so Claude's own sandbox, which the confine checks exercise, wouldn't run,
-  and that profile also turns the network off. So no wrapping. V-M10 (11-09): a token run reads the Keychain login item (through
-  `security` on PATH) and doesn't write it, so this is DV5. Its option (c), a refusing `security` first on PATH, was measured only
-  under `-p` with a scratch config dir; a stream session and a lease run are to be measured before it is built.
+  and that profile also turns the network off. So no wrapping.
+  - V-M10 and V-M11 (11-09): a run on the shared config dir reads the user's login item through `security` on PATH, and doesn't
+    write it.
+  - A run with its own `CLAUDE_CONFIG_DIR` looks up only that dir's items (`Claude Code-credentials-<hash>`), so a throwaway
+    config dir does hide the login, by naming.
+  - DV5 (c) adds a refusing `security` first on PATH, which `-p`, stream, lease-shaped and interactive runs all work with.
   Residual either way: the promoted copy's refresh of the subscription login (jobs with `connectors: true`) is not checked before
   promotion; `check-claude-login` (hourly, a real request) is what catches it after.
 - **Codex**: a Business / Enterprise workspace's access token when the instance has one (doesn't refresh). Otherwise the candidate's
@@ -369,10 +372,16 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
   platform's own: `_home()` reads `CLAUDE_CONFIG_DIR` from `os.environ` (runtime_claude.py:161-162) and feeds `credential_paths()`
   and `user_control()`, which become every sandboxed project's denies; set in the platform's environment it would move them off the
   real `~/.claude`. Session-side calls (section 5) keep the user's config dir. Not taken: (b) keep sharing for all of them.
-- **DV5, the Keychain login. Owner, 11-09: (c).** V-M10 (11-09): a token run reads it (three `find-generic-password` calls,
-  no write, through `security` on PATH), so a candidate holds the refresh token. "Every token run" in (c) leaves out the runs
-  that use the subscription login (`connectors: true` jobs), which need the Keychain and keep it. Before (c) is built, V-M11
-  measures it in a stream session and a lease run. The options were:
+- **DV5, the Keychain login. Owner, 11-09: (c).**
+  - V-M10/V-M11 (11-09): a token run on the shared config dir reads the user's login item (`find-generic-password` through
+    `security` on PATH, no write). A run with its own config dir looks up only that dir's hashed items.
+  - So the risk is a candidate that changes that naming, or a run left on the shared dir.
+  - "Every token run" in (c) leaves out the runs that use the subscription login (`connectors: true` jobs), which need the
+    Keychain and keep it.
+  - (c) works in `-p`, stream, lease-shaped and interactive runs (V-M11). Its positive control can check names as well as
+    calls: a scratch-dir run whose logged lookups name the user's unhashed `Claude Code-credentials` fails it.
+
+  The options were:
   - (a) Run candidate and session-version checks as a dedicated macOS user made for them (its own Keychain; a one-time setup by
     the owner).
   - (b) Accept the residual: a candidate is the vendor's integrity-checked build, and the risk is a buggy refresh of the
@@ -536,18 +545,32 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 - V-M11: DV5 (c)'s refusing `security` in a stream-json session and a lease run (`llm.py exec lease-session`) with the token:
   does the run work, and does the logging stub see every Keychain call? Also an interactive session (V-M6's driver), which the
   session_status and wake checks use. Measured before step 2 builds the stub.
+  **Done 11-09 (2.1.319, a scratch config dir each, the token, a stub first on PATH that refuses every call and logs the
+  subcommand and service).** All three cases work, and the stub logged the Keychain lookups in each:
+  - **stream-json:** two turns, one of them a Read.
+  - **Lease-shaped:** stream-json with the lease point's tools and `--allowedTools`, a stdio MCP server standing in for
+    `lease_relay` (connected), `--permission-prompt-tool` on it, and three turns. The turns used Read, WebSearch (a server tool),
+    and WebFetch (asked through the relay, which denied it as told).
+  - **Interactive** (V-M6's driver): listed busy then idle, the waiter armed, and woken twice, each wake taking a turn.
+  - Every lookup named `Claude Code-credentials-<hash>` / `Claude Code-<hash>`, the config dir's own items, never the user's.
+  - A driver note: the driver picks its session by the newest transcript, or by the `session_start` hook, never by name order.
+    A reused config dir otherwise hands it an old session, which shows as `unknown` and `not_armed`.
 - V-M10: does `claude` run with `CLAUDE_CODE_OAUTH_TOKEN` read or write the Keychain's Claude Code login item (macOS)? Decides DV5.
-  **Done 11-09 (2.1.319).**
+  **Done 11-09 (2.1.319); corrected the same day by V-M11.**
   - Claude Code reaches the Keychain by running `security` found on PATH. A wrapper first on PATH, which logs only the subcommand
     and the `-s` service name (a write carries the secret in its arguments), sees every call.
   - Positive control, a normal subscription run with the shared config dir: seven `find-generic-password` calls (`Claude
     Code-credentials`, and one for `Claude Code`).
-  - With the token, three `find-generic-password` calls, both with the shared config dir and with a scratch
-    `CLAUDE_CONFIG_DIR`. The service name doesn't change with the config dir.
-  - No `add-`/`delete-` call, and the item's `mdat` is unchanged. So a token run **reads** the subscription login and doesn't
-    write it. The read hands a candidate the refresh token, which is what DV5 is about.
-  - With a `security` first on PATH that refuses every call (exit 44, "item not found"), a token run with a scratch config dir
-    still succeeds. That gives DV5 a third option, (c) below.
+  - With the token and the shared config dir: three `find-generic-password` calls on the user's items. No `add-`/`delete-`
+    call, and the item's `mdat` is unchanged. So a token run on the shared dir **reads** the subscription login and doesn't
+    write it.
+  - **With a scratch `CLAUDE_CONFIG_DIR`, the lookups name the config dir's own items:** `Claude Code-credentials-<8 hex>` and
+    `Claude Code-<8 hex>`, a different suffix per dir. None of them exists in the Keychain, so the user's login isn't read.
+    The first record said the name doesn't change with the config dir. That run hadn't set the dir: zsh passed
+    `--config <dir>` as one word, the helper ignored it, and the run used the shared dir.
+  - So the platform's config dir (DV3) and the checks' throwaway dirs keep the user's login out of reach by naming alone. DV5
+    (c) guards against a version that changes that naming.
+  - With a `security` first on PATH that refuses every call (exit 44, "item not found"), a token run still succeeds.
 - V-M6 is now: a driver for an interactive (non-print) throwaway session, under a pty, that the wake and status checks can use.
 - V-M4 on macOS: a pid's executable path comes from `ps -o comm=` / `proc_pidpath`, not a file read; the package metadata beside
   it is then read as a file.
