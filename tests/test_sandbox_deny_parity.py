@@ -8,6 +8,7 @@ renderer matches a path, on a tree whose instance dir is reached through a link 
 """
 import contextlib
 import io
+import json
 import os
 import pathlib
 import re
@@ -365,14 +366,35 @@ class MovedOnce(unittest.TestCase):
         self.assertEqual(hubconf.move_shared(), [])   # and the live layout then does move it
         self.assertFalse(self.old.exists())
 
-    def test_two_copies_that_differ_are_both_kept_and_said(self):
+    def test_two_records_with_different_keys_are_merged(self):
+        """An old-code rename across the merge found no record in .state and started its own: nothing is lost."""
         self.shared.mkdir()
-        (self.shared / "project-renames.json").write_text("{}")
+        new = self.shared / "project-renames.json"
+        new.write_text('{"c": {"new": "d", "stage": "github"}}')
+        hubconf.renames()
+        self.assertFalse(self.old.exists())
+        self.assertEqual(json.loads(new.read_text()), {"a": {"new": "b", "stage": "done"},
+                                                       "c": {"new": "d", "stage": "github"}})
+        self.assertEqual(hubconf.shared_leftovers(), [self.state / "registry", self.state / "test-slots"])
+
+    def test_a_key_the_two_give_differently_keeps_both_and_is_said(self):
+        self.shared.mkdir()
+        new = self.shared / "project-renames.json"
+        new.write_text('{"a": {"new": "b", "stage": "github"}, "c": {"new": "d", "stage": "done"}}')
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             hubconf.renames()
         self.assertTrue(self.old.exists())
+        self.assertIn("stage", self.old.read_text())
+        self.assertEqual(json.loads(new.read_text())["a"]["stage"], "github", "neither side is picked")
         self.assertIn(str(self.old), err.getvalue())
+        self.assertIn(self.old, hubconf.shared_leftovers())
+
+    def test_a_copy_that_isnt_a_record_is_kept_and_said(self):
+        self.shared.mkdir()
+        (self.shared / "project-renames.json").write_text("not json")
+        with contextlib.redirect_stderr(io.StringIO()):
+            hubconf.renames()
         self.assertIn(self.old, hubconf.shared_leftovers())
 
     def test_the_same_copy_twice_is_one(self):

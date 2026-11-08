@@ -434,6 +434,36 @@ def _same(a: pathlib.Path, b: pathlib.Path) -> bool:
         return False
 
 
+def write_atomic(path: pathlib.Path, text: str) -> None:
+    """path's new content, never half written: a file beside it, synced, renamed over it."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def _merge_renames(old: pathlib.Path, new: pathlib.Path) -> list[str] | None:
+    """Two renames records (an old-code rename across the merge started its own from nothing): merged by key into new,
+    old removed. None when merged; else the keys the two give differently (or ["?"] when one isn't a JSON object), and
+    nothing is touched: never pick a side."""
+    try:
+        a, b = json.loads(old.read_text()), json.loads(new.read_text())
+    except (OSError, ValueError):
+        return ["?"]
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return ["?"]
+    clash = sorted(k for k in a.keys() & b.keys() if a[k] != b[k])
+    if clash:
+        return clash
+    write_atomic(new, json.dumps({**a, **b}, ensure_ascii=False, indent=1))
+    old.unlink()
+    return None
+
+
 def _move(old: pathlib.Path, new: pathlib.Path) -> None:
     """old → new, never leaving a half-written new: a rename on one filesystem; across two (EXDEV), a copy beside new,
     synced, renamed into place, then old removed."""
@@ -468,7 +498,8 @@ def moved_from_state(new: pathlib.Path) -> pathlib.Path:
     """new, after a one-time move of what was at the same name in .state before shared() existed (11-08), done by the
     first process that may (_migrates) and looks. A sandboxed one can't see the old place: it reads new only. Never read
     in both places. Both there: the same file → the old one goes; a rebuilt cache folder (the registry's, the slots) →
-    the old one goes; anything else, or a move that fails, stays where it is and is said (stderr here, and doctor while
+    the old one goes; two renames records → merged by key when no key differs; anything else, or a move that fails,
+    stays where it is and is said (stderr here, and doctor while
     shared_leftovers() names it): the renames record is the one thing in it that can't be rebuilt."""
     old = STATE / new.name
     if not _migrates() or not os.path.lexists(old):
@@ -481,6 +512,10 @@ def moved_from_state(new: pathlib.Path) -> pathlib.Path:
         elif new.is_dir() and old.is_dir() and not old.is_symlink() and new.name != RENAMES_FILE:
             import shutil
             shutil.rmtree(old)   # derived: the registry rebuilds its cache, the slots are empty lock files
+        elif new.name == RENAMES_FILE and old.is_file() and not old.is_symlink():
+            if (clash := _merge_renames(old, new)):
+                print(_("{old} and {new} give {keys} differently: both are kept until one is put right by hand", old=old,
+                        new=new, keys=", ".join(clash)), file=sys.stderr)
         else:
             print(_("{old} and {new} both exist and differ: keep the right one, remove the other", old=old, new=new),
                   file=sys.stderr)

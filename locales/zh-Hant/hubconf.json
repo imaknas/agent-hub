@@ -10,5 +10,6 @@
  "schedule `{command}` yourself every 15 minutes (for example the crontab line `*/15 * * * * {command}`)": "自己每 15 分鐘排程 `{command}`(例如 crontab 加一行 `*/15 * * * * {command}`)",
  "HOME ({home}) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one)": "HOME({home})不是這個帳號的家目錄:平台不碰這個帳號的背景服務(從這裡安裝,會換掉帳號裡真正在跑的那一個)",
  "{old} and {new} both exist and differ: keep the right one, remove the other": "{old} 跟 {new} 都在而且內容不一樣:留對的那份、刪另一份",
- "{old} could not be moved to {new}: {why}": "{old} 搬不到 {new}:{why}"
+ "{old} could not be moved to {new}: {why}": "{old} 搬不到 {new}:{why}",
+ "{old} and {new} give {keys} differently: both are kept until one is put right by hand": "{old} 跟 {new} 對 {keys} 寫的不一樣:兩份都留著,等人手動改對"
 }

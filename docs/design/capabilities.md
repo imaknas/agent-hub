@@ -479,7 +479,8 @@ tools can read other projects' transcripts there, as today.
    `brunna land` moves all three at once after the merge (`move_shared`; cap-runner and lease-runner restart themselves on the
    new code once idle, `code_stamp`); a later first look moves what is left. Only the main checkout's own code in its own state
    moves (`ROOT == MAIN`, no STATE override), never read in both places; a copy that differs or a move that fails stays, is
-   said, and doctor shows it red (`shared_leftovers`). Only a confined job's run settings list `.state` beside its own
+   said, and doctor shows it red (`shared_leftovers`); two renames records are merged by key unless a key differs. Until they
+   restart, services still on the old code fail closed (a sandboxed cap-run or complete is refused, not run unconfined). Only a confined job's run settings list `.state` beside its own
    folder (`keep`, or its `cwd: state` folder with no rule writing it), the way `write_except` lists the hub (`beside`). No `allowRead` is relied on. The Seatbelt
    and Landlock renderers keep `.state` in their own fixed list as well, so a profile built from any policy still denies it.
 2. **Credentials**: the settings' `credentials`, plus a code default, plus what each installed runtime declares

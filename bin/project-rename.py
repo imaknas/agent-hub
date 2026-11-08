@@ -72,8 +72,7 @@ def records() -> dict:
 def record(old: str, **fields) -> None:
     rec = records()
     rec[old] = {**rec.get(old, {}), **fields, "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
-    RECORD.parent.mkdir(parents=True, exist_ok=True)
-    RECORD.write_text(json.dumps(rec, ensure_ascii=False, indent=1))
+    hubconf.write_atomic(RECORD, json.dumps(rec, ensure_ascii=False, indent=1))   # never half written
 
 
 def load(name: str) -> dict | None:
