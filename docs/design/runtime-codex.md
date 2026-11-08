@@ -70,6 +70,10 @@ throwaway copy, where it can't reach the real checkout and the platform applies 
 too, since it can't be made tool-free generically. Config check then refuses `runtime.default: command`; an instance that has it (the
 Codex preset until step 1) gets an upgrade step that says so and points to step 1's runtime, and doctor says judgment points are off
 on it and why. Before this, the worktree hooks name their runtime (`--runtime claude`), so a default other than Claude can't take them.
+Built 11-08: `runtime_command` is `THROWAWAY_ONLY` with no completion port (`run()` refuses itself); config check refuses it as the
+default, and `brunna config migrate` (run by upgrade before config apply, one-way) moves off it `runtime.default: command`, its pins on
+other points and `impl: command` providers; the worktree hooks name `--runtime claude` and an unnamed hook is Claude's; doctor's feature
+table is per the second finding (the librarian's answer-only fallback counted), with a row for the residual of a pinned `mailbox-propose`.
 
 **Step 1: `runtime_codex` with agent + completion + auth, confined.** Every platform run of Codex is built from the point's spec and
 `policy.py`, never from the user's or the project's Codex config:
@@ -100,19 +104,74 @@ reader shared with `sessions_codex.py`, the same privacy gate as Claude's last r
 the platform's own runs (a sandboxed project's Codex session the owner opens is confined only if D2 says so); render-project-settings
 gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex runs git in the folder) until measured.
 
+## Found by the second blind review (11-08), taken into the steps
+
+- **Step 1 ships completion and tool-free points only.** Codex has no file-only tools: the shell is how it reads, and nothing yet
+  shows a permission profile's `deny` stops `cat` or a write to `.git/config` under `exec -c approval_policy=never` (M1 measured
+  `tools: ""` only; `read-only` doesn't stop reads). Points with tools (librarian-state, todo-format, consolidate: file tools only on
+  Claude) stay refused on Codex until M8 passes: a profile denying reads and writes, `.git` included, with MCP off, under `exec`.
+- **Platform runs and `brunna session` use a platform-owned `CODEX_HOME`**, never the user's: `~/.codex/hooks.json` loads even under
+  `--ignore-user-config` (M5), and a writable `~/.codex` lets a sandboxed agent plant a hook and its trust for the owner's next
+  unsandboxed session. Its `config.toml` and `hooks.json` are the platform's and read-only to the run; only its `sessions/` is
+  writable. How the login is shared with it (auth.json and token refresh, the keyring) is M9, which blocks Step 1's agent runs and D2
+  layer 2.
+- **Step 0 also** makes an unnamed hook's runtime `claude` (every hook written before runtimes were named is Claude's), not the
+  default; `runtime_command.run` refuses itself, not only config check.
+- **Step 2:** the hooks' `handle()` returns at once on a platform run (`HUB_LLM_POINT`); Claude's platform runs load no hooks at all
+  (`--restricted`), which Codex can't do, so this is new, not "as Claude's". The command in the trusted hook is the hub's absolute path
+  (a bare `brunna` can be shadowed on PATH, and the Dock-started app's PATH lacks `~/.local/bin`); the platform writes `trusted_hash`
+  only after checking the definition under that key is its own, never from `hooks/list`'s current hash; doctor says when the owner's
+  edits moved a hook's key (keys are positional). M7 blocks it: `record_session` drops other records with the same pid.
+- **Environment:** "minimal, as Claude's" was wrong (Claude's runs pass `os.environ`). Codex's runs get a minimal one that keeps
+  `HUB_LLM_POINT`, the confinement markers, the hub's PATH, `HOME` and the platform's `CODEX_HOME`.
+- **Credentials:** `~/.codex` stays denied whole to every sandbox (it holds every project's conversations, not only `auth.json`),
+  whichever runtimes are installed.
+- **Step 4:** the "sessions confined" check replaces `CAGED_NEEDS` in `hub-event` and `render-project-settings`; fallback triage
+  stays off on Codex until then. **Linux:** Codex's bwrap can't start where unprivileged user namespaces are refused (Ubuntu 24.04), and
+  a nested sandbox is unmeasured (M10), so Linux gets neither layer until measured. `codex queue` uses `--thread=<uuid>` and a fixed
+  message (it arrives as the user's words).
+
+Measurements and what they block: M7 → Step 2; M3 (done for the TUI) → Step 3; M8, M9 and the platform's own schemas → Step 1's
+agent runs; M9 and M10 (nested sandbox) → D2 layer 2; M8 → Step 4.
+
 ## Decisions for the owner
 
-- **D1, where the hooks live.** (a) User-level `~/.codex/hooks.json`, once per machine: one trust review; the hook works out its project
+- **D1, where the hooks live. Owner, 11-08: user-level.** (a) User-level `~/.codex/hooks.json`, once per machine: one trust review; the hook works out its project
   from the cwd; installed by the owner and kept current by upgrade (`user_refresh`, as Claude's worktree hooks). (b) Project-level
   `<repo>/.codex/hooks.json`, untracked: one review per project, and only in trusted projects. (a) recommended. Platform runs must not
   fire them (M5).
-- **D2, a sandboxed project's sessions on Codex.** The platform confines its own Codex runs (steps 1, 4). A Codex session the owner opens
+- **D2, a sandboxed project's sessions on Codex. Owner, 11-08, asked back: a user who has only Codex (or another agent) must get the
+  sandbox too.** So "Claude-only" isn't the answer; the options are in "Sandboxed sessions on any agent" below.
+  The earlier text: The platform confines its own Codex runs (steps 1, 4). A Codex session the owner opens
   in a sandboxed project would load a permission profile from the project's `.codex/config.toml` only if the project is trusted, and the
   platform can't hold it to that the way Claude's settings are enforced. Recommended: sandboxed projects stay Claude-only for sessions;
   doctor says so.
 - **D3, the default runtime.** With Claude as the default, Codex sessions are served (hooks, letters, wake) but the platform's
   background runs (judgment points, forks, leases) stay on Claude; leases can't move (`RUNTIME_ARG_POINTS`). A per-project default is
   left out.
+
+## Sandboxed sessions on any agent (for D2)
+
+The rule today (AGENTS.md, tool neutrality): the platform guarantees what *it* starts; a session the owner opens has only the tool's
+own protection, which the platform sets up and checks but can't force. With Claude that protection is strong (its settings file holds
+an OS sandbox that the session can't turn off, and the platform rewrites it if changed). For other agents, two layers:
+
+1. **The agent's own sandbox, set up by the platform (per adapter).** For Codex: the platform writes the project's `.codex/config.toml`
+   with a permission profile rendered from `policy.py` (reads denied for credentials, platform state, other projects; writes to its
+   own folders; network off or the allowed domains if Codex can name them), protects `.codex/` from the project's own writes (the
+   control map), and, because Codex loads a project's config only when the project is trusted, adds the project's trust entry to the
+   user's config (a user-level change: installed once by the owner, kept current by `brunna upgrade`, as the hooks). The owner can still
+   start Codex with a flag that overrides it, as with any agent; doctor and the status page show a sandboxed project whose rendered
+   config is missing or changed. An agent with no sandbox of its own gets nothing here, and doctor says so.
+2. **The platform's own sandbox around the agent (any agent).** `brunna session <project> [--agent <name>]` starts the agent's
+   terminal UI under the same OS profile the project's services run in (Seatbelt / Landlock, `bin/sandboxed-run`), so what it may read
+   and write doesn't depend on the agent at all. Limits: an app the owner opens from the Dock (Codex's or Claude's desktop app) isn't
+   started through it; the OS profiles can't allow outbound traffic by domain the way Claude's proxy does (all or nothing, plus local
+   ports), and the agent's own state folder (`~/.codex`) has to be writable for it, which the profile then allows for that run only.
+
+**Owner, 11-08: both.** Recommended was: both — (1) for Codex now, as each adapter's job; (2) as the general way for any agent with no sandbox of its own, and for
+owners who want the guarantee rather than the agent's word. Until then doctor names, per sandboxed project, which agents' sessions
+there are confined and which aren't.
 
 ## Measurements (scratch folders; `--ephemeral` where possible; nothing in `~/.codex/config.toml` changed)
 
@@ -145,3 +204,25 @@ platform's own schemas.
   the final reply is the `assistant` item with `phase: "final_answer"`; `token_usage_record` and `event_msg/token_count` hold usage.
   So session_status (a `task_started` with no `task_complete` after it = busy) and session_summary (`last_agent_message`) are readable
   (C2.5), with the format's own caveat.
+- **M2, done.** An unreviewed hook is skipped silently by `codex exec` (only the interactive UI says "hooks need review"); in an
+  untrusted project the project's `.codex/` doesn't load at all, and `-c 'projects."<path>".trust_level=…'` on the command line is
+  ignored (trust is read only from `config.toml`). **Trust can be written without interaction**: `[hooks.state."<hooks file>:<event in
+  snake_case>:<group>:<handler>"] trusted_hash = "sha256:<hex>"` in `config.toml`; the app-server's `hooks/list` gives each hook's key,
+  current hash and trust status (managed / untrusted / trusted / modified). So the platform can install its user-level hooks *and*
+  their trust in one owner-approved step, and upgrade can rewrite both (`user_refresh`); doctor reads `hooks/list` to see a hook
+  that's `modified` or `untrusted`. A user-level SessionStart hook's `additionalContext` reaches the model (it answered the planted word).
+- **M5, done.** `--ignore-user-config` skips `config.toml` (so trust and hook trust are gone: no project config, no hooks needing
+  review) but **not `~/.codex/hooks.json`**: with trust bypassed, user-level hooks still fired. The platform's own runs therefore
+  set `HUB_LLM_POINT` (it reaches the hook's environment, measured) and the hooks do nothing under it, as Claude's do. No flag ignores
+  a trusted project's config; a working folder that isn't a trusted path loads none (trust is by absolute path), which covers the
+  throwaway copy and memory copies. A project MCP server entry loads in a trusted repo.
+- **M6, done.** A tool shell sees `CODEX_THREAD_ID` (= `CODEX_SESSION_ID`), `CODEX_TOOL_CALL_ID`, `CODEX_SANDBOX`: the sessions port's
+  `current_session(env)` reads it. **The caller's whole environment reaches the tool shell** (a run started from a Claude session saw
+  its `CLAUDE_CODE_*`): the platform's runs pass a minimal environment. Hook stdin has `session_id`, `turn_id`, `transcript_path`,
+  `permission_mode`; a hook's parent is the native `codex exec` process.
+- **M3, done for the terminal UI.** A TUI session (`codex --sandbox read-only`, 0.165.0) that had answered once and sat idle; from
+  outside, `codex queue --thread <its id> --message …` (no `--resume`) printed "Queued message … for thread …", and the session
+  started a turn at once: its rollout gained a second `task_started` with `turn_trigger: "queue"`, and the UI showed the message and
+  the reply. The TUI was attached to the shared app-server daemon (`~/.codex/packages/app-server-daemon/…/codex app-server --listen
+  unix://`, 0.167.0, which the CLI runs itself). So **wake works without any hook**, the opposite of Claude (whose wake is its Stop
+  hook). A thread the Desktop app holds is still to measure (M7). Nothing in `~/.codex/config.toml` changed (same sha256).
