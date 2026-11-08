@@ -245,7 +245,7 @@ def credentials() -> tuple[list[pathlib.Path], list[pathlib.Path]]:
 
 
 def platform_python() -> list[pathlib.Path]:
-    """The platform's Python, found the way bin/py finds it (AGENT_HUB_PYTHON, else ~/.local/share/<share_dir>/python),
+    """The platform's Python, found the way bin/py finds it (names.env("PYTHON"), else ~/.local/share/<share_dir>/python),
     every spelling's share folder whole, and the interpreter its pyvenv.cfg names (whose lib is on every platform
     script's path; sys.base_prefix when the file can't be read)."""
     import names
