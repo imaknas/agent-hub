@@ -154,7 +154,9 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
         return drift
     for folder in runtime_claude.session_folders(ws):   # the workspace and its worktrees get the same settings
         try:
-            if folder != ws or new != cur or drift:
+            if folder != ws:   # plus its own .agent-memory, which a worktree reaches through a link
+                write_settings(doc, runtime_claude.worktree_memory(new, ws), folder)
+            elif new != cur or drift:
                 write_settings(doc, new, folder)
         except OSError as e:   # e.g. the folder it is in is itself a link: nothing written through it
             drift.append(_("the settings file could not be written ({why})", why=e))
@@ -455,7 +457,10 @@ def worktree(folder: str) -> int:
     try:
         index = registry.refresh()
         c = compose(found[0], index["projects"][found[0]], index)
-        write_settings(found[1], c[2], pathlib.Path(folder))
+        ws = registry.dirs(found[1])["workspace"]
+        # its own .agent-memory as a working directory, notes and STATE.md only (runtime_claude.worktree_memory): the
+        # worktree reaches it through a link, and every write there would ask. Never a folder that is a link
+        write_settings(found[1], runtime_claude.worktree_memory(c[2], ws), pathlib.Path(folder))
     except Exception as e:   # said into the session (worktree-memory.sh prints it): no sandbox settings here
         print(_("⚠️ This worktree's sandbox settings could not be written ({why}); don't run commands in this session, "
                 "ask the owner to look at it", why=e))

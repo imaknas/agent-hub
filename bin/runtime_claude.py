@@ -1177,6 +1177,76 @@ def remove_lifecycle(workspace, check: bool = False) -> bool:
     return out != before
 
 
+# ---------- a linked worktree's own settings ----------
+# A session in a linked worktree (<main>/.claude/worktrees/<name>) reaches the main checkout's .agent-memory through a
+# link (worktree-memory.sh). Claude Code asks before any write whose resolved path is outside the session's working
+# directories, in auto mode too, so every note asked (measured 11-09 on 2.1.319: Bash redirection and Edit alike; an
+# Edit allow rule doesn't lift it, a working directory does). So the worktree's settings name that folder as a working
+# directory and deny Edit on what in it isn't the session's to write: the notes are memory/ and STATE.md
+# (memory_paths.TOP, TREE). A deny rule also holds for Bash redirection; an ask rule doesn't (measured the same day).
+# Claude Code reads hooks from a settings file that is a link but no permissions (also measured), so the worktree's file
+# is a plain one, not a link to the main checkout's.
+MEMORY_DIR = ".agent-memory"
+MEMORY_DENY = (("AGENT.md", False), ("RULES", False), (".git", True))   # (name in it, tree)
+_MEMORY_RULE = re.compile(r"Edit\(.*/" + re.escape(MEMORY_DIR) + r"/(AGENT\.md|RULES|\.git)(/\*\*)?\)")
+
+
+def memory_access(main) -> tuple[list[str], list[str]]:
+    """(working directories, deny rules) that let a worktree session write its main checkout's notes and STATE.md, and
+    nothing else there. Nothing when the folder is a link or missing: a project's links never decide what is granted."""
+    mem = pathlib.Path(main) / MEMORY_DIR
+    if mem.is_symlink() or not mem.is_dir():
+        return [], []
+    return _spellings(mem), list(dict.fromkeys(r for name, tree in MEMORY_DENY for r in _edit(mem / name, tree)))
+
+
+def _platform_memory(entry, key: str) -> bool:
+    if not isinstance(entry, str):
+        return False
+    if key == "additionalDirectories":
+        return entry.rstrip("/").endswith("/" + MEMORY_DIR)
+    return bool(_MEMORY_RULE.fullmatch(entry))
+
+
+def worktree_memory(settings: dict, main) -> dict:
+    """settings with the platform's memory entries (memory_access) for this main checkout, any it wrote before for
+    another location replaced, everything else kept; rerunning gives the same result."""
+    dirs, deny = memory_access(main)
+    perms = dict(settings.get("permissions") or {})
+    for key, mine in (("additionalDirectories", dirs), ("deny", deny)):
+        keep = [e for e in perms.get(key) or [] if not _platform_memory(e, key)]
+        merged = keep + [e for e in mine if e not in keep]
+        if merged:
+            perms[key] = merged
+        else:
+            perms.pop(key, None)
+    out = {k: v for k, v in settings.items() if k != "permissions"}
+    if perms:
+        out["permissions"] = perms
+    return out
+
+
+def install_worktree(folder, main, check: bool = False) -> bool:
+    """worktree-memory.sh, at a session's start in a linked worktree of a project that isn't sandboxed (a sandboxed one's
+    is render-project-settings'): its settings as a plain file, the platform's hooks (install_hooks) and memory entries
+    (worktree_memory) in it, the user's own kept. Missing, or the link it used to be: seeded from the main checkout's
+    file, so what the link gave carries over. Whether it changed."""
+    path, src = settings_path(folder), settings_path(main)
+    if path.is_symlink() or not path.exists():
+        before = None
+        cur = json.loads(src.read_text()) if src.is_file() and not src.is_symlink() else {}
+    else:
+        before = path.read_text()
+        cur = json.loads(before)
+    out = json.dumps(worktree_memory(install_hooks(cur), main), indent=2) + "\n"
+    if out != before and not check:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.{os.getpid()}")
+        tmp.write_text(out)
+        tmp.replace(path)   # a link there is replaced, never written through
+    return out != before
+
+
 # ---------- the worktree hooks in the user's own settings ----------
 # A linked worktree has no project settings, so only user-level hooks fire there. The owner installs them once
 # (merge-hook-settings.py --worktree); after that the platform keeps its own entries current, never anything else in the

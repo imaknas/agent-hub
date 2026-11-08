@@ -9,8 +9,9 @@
 # The approach: this script hangs off the **user-level** settings (not project level: a worktree has no project local
 # settings), installed by merge-hook-settings.py --worktree. In the main checkout it does nothing (the project's own
 # hooks handle it, no duplication); in a linked worktree:
-#   start  symlink in the main checkout's .agent-memory and the runtime's local-only files
-#          (`hub-runtime local-ignores`), pull memory, the first time it links print the rules file
+#   start  symlink in the main checkout's .agent-memory and the runtime's rules file (`hub-runtime local-ignores`),
+#          write the worktree's own settings file (`hub-runtime worktree-settings`: hooks, and that .agent-memory as a
+#          working directory so notes written through the link don't ask), pull memory, the first time it links print the rules file
 #          (`hub-runtime instructions-file`) into the context (it didn't exist yet when the session started),
 #          remind when memory is behind
 #   end    (SessionEnd / PreCompact) sync the memory notes, same script as the main checkout's hook; at SessionEnd the
@@ -89,9 +90,16 @@ case "$event" in
     if [ ! -e .agent-memory ]; then
       ln -s "$main/.agent-memory" .agent-memory && linked=1
     fi
+    # the worktree's own settings, a plain file: the platform's hooks, and the main checkout's .agent-memory as a working
+    # directory, or every note written through the link asks (runtime_claude.install_worktree; Claude Code takes no
+    # permissions from a settings file that is a link). A sandboxed project's is render-project-settings', above, and
+    # the project can't write it.
+    if [ -z "${HUB_AS_PROJECT:-}" ]; then
+      "$HUB/bin/py" "$HUB/bin/hub-runtime" --runtime claude worktree-settings "$top" "$main" >/dev/null 2>&1
+    fi
     # the runtime's local-only files (rules file, local settings; `hub-runtime local-ignores`) are all in the main
-    # checkout, not in the worktree (gitignored): symlink them in, add them to the shared info/exclude. Claude Code
-    # reloads settings live (phase two's sandbox/permission rules)
+    # checkout, not in the worktree (gitignored): symlink in any still missing (the settings file only if the step above
+    # failed), add them to the shared info/exclude. Claude Code reloads settings live
     for f in $("$HUB/bin/py" "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do
       if [ ! -e "$f" ] && [ -f "$main/$f" ]; then
         mkdir -p "$(dirname "$f")" && ln -s "$main/$f" "$f"

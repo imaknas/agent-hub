@@ -11,6 +11,10 @@ The default runtime is set in {settings}.
                                            .git/info/exclude)
   hub-runtime [--runtime <name>] has <port>
                                            exit 0 when the runtime has that interface (runtime_ports.PORTS), 3 when not
+  hub-runtime [--runtime <name>] worktree-settings <worktree> <main checkout>
+                                           worktree-memory.sh: a linked worktree's own settings, so its session can write
+                                           the main checkout's memory notes (the runtime's install_worktree); 3 when the
+                                           runtime has none
 
 The system python3 (3.9) can run it.
 """
@@ -59,6 +63,17 @@ def main(argv) -> int:
         return 0 if argv[1] in runtime_ports.capabilities(name) else 3
     if (argv[:1] == ["instructions-files"] and len(argv) == 2 or argv == ["local-ignores"]) and name is None:
         return installed(argv)
+    if argv[:1] == ["worktree-settings"] and len(argv) == 3:
+        try:
+            rt = runtime_ports.load(name, ports=("lifecycle",))
+        except runtime_ports.Unsupported as e:
+            print(e, file=sys.stderr)
+            return 3
+        install = getattr(rt, "install_worktree", None)
+        if not callable(install):   # a runtime whose worktree sessions need nothing of the kind
+            return 3
+        install(pathlib.Path(argv[1]), pathlib.Path(argv[2]))
+        return 0
     try:
         rt = runtime_ports.load(name, ports=("instructions",))
     # no rules file: exit code 3 (the caller treats it as "unsupported" rather than guessing a default file name)
