@@ -25,7 +25,7 @@ project names.
   - The platform's own registry entry (<hub>/projects/brunna.yaml) is part of the platform: registry reads it
     wherever registry_dir is
   - Project registry: <registry_dir>/<name>.yaml (YAML edited by people); every tick the scheduler validates it with
-    registry.py and writes <hub>/.state/registry/index.json -- this module reads that JSON (no PyYAML needed); if it
+    registry.py and writes <hub>/.shared/registry/index.json (REGISTRY_INDEX) -- this module reads that JSON (no PyYAML needed); if it
     has not been produced yet (new machine, the laptop), fall back to roster(): names and paths read straight from
     the YAML files
 
@@ -404,7 +404,46 @@ def worktree_lookup() -> bool:
     scripts that rebuild that state (registry refresh, config apply, the scheduler) must not run from here, where
     they would build it from a half-edited copy. An explicit AGENT_HUB_STATE (config-check --staged) is not live."""
     return MAIN != ROOT and not names.env("STATE")
-REGISTRY_INDEX = STATE / "registry" / "index.json"
+
+
+# What sandboxed code reads of the platform's run state (the platform CLI inside a project's session, service or job:
+# policy.py read), apart from .state, which every sandbox is denied whole (docs/design/capabilities.md 11-08, A1). Written
+# only by the platform; nothing private ever goes here. In the hub root beside .state (the main checkout's, as .state is);
+# a state other than the hub's own (an explicit override, a test's) is a throwaway one and holds it inside.
+def shared() -> pathlib.Path:
+    return MAIN / ".shared" if STATE == MAIN / ".state" else STATE / "shared"
+
+
+SHARED = shared()
+REGISTRY_INDEX = SHARED / "registry" / "index.json"   # registry.py's cache (registry.CACHE)
+RENAMES_FILE = "project-renames.json"                 # finished and half-done renames (bin/project-rename.py): renames()
+TEST_SLOTS_DIR = "test-slots"                         # brunna test's worker slots (bin/test-runner.py): test_slots()
+
+
+def moved_from_state(new: pathlib.Path) -> pathlib.Path:
+    """new, after a one-time move of what was at the same name in .state before shared() existed (11-08): done by the
+    first unsandboxed process of the live layout that looks, never from a linked worktree (whose main checkout may still
+    run the code reading the old place) or in a throwaway state. A sandboxed one can't see the old place: it reads new
+    only. No reading of both: once moved, the old name is gone, and a later copy there is never taken over it."""
+    old = STATE / new.name
+    if worktree_lookup() or STATE != MAIN / ".state" or os.path.lexists(new) or not os.path.lexists(old):
+        return new
+    try:
+        new.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(old, new)   # atomic on one filesystem; a second process racing it finds old gone
+    except OSError:
+        pass
+    return new
+
+
+def renames() -> pathlib.Path:
+    """The renames record, in shared() (moved out of .state the first time): every reader and the writer take it here."""
+    return moved_from_state(shared() / RENAMES_FILE)
+
+
+def test_slots() -> pathlib.Path:
+    """brunna test's worker slots, in shared() (moved out of .state the first time): sandboxed callers lock them too."""
+    return moved_from_state(shared() / TEST_SLOTS_DIR)
 
 
 # The event bus has its own directory (hub.json bus_dir), in no project's sandbox: a sandboxed project's letters go
@@ -638,25 +677,25 @@ def party_ids(role: str) -> set[str]:
 
 
 def former_names(project: str) -> list[str]:
-    """The names this project had before being renamed (from .state/project-renames.json, counting only finished
+    """The names this project had before being renamed (from renames(), counting only finished
     renames, stage done). Old letters on the bus and records the assistant sends may still use an old name (e.g.
     idea-1 upgraded and renamed to garden-app). The platform's own other spelling (agent-hub / brunna) counts in both
     directions, from the name table, so a release on either side of the rename reads the other's letters and records."""
     hub = [names.other("project")] if project == hub_project() else []
     try:
-        renames = json.loads((STATE / "project-renames.json").read_text())
+        recs = json.loads(renames().read_text())
     except (OSError, ValueError):
         return hub
 
     def now(name: str) -> str:
         seen = set()
-        while name in renames and name not in seen and (renames[name] or {}).get("stage") == "done":
+        while name in recs and name not in seen and (recs[name] or {}).get("stage") == "done":
             seen.add(name)
-            name = renames[name]["new"]
+            name = recs[name]["new"]
         return name
     # a rename that ended at the platform's other spelling ended at the platform
     mine = {project, *hub}
-    return hub + sorted(old for old in renames if old not in mine and now(old) in mine)
+    return hub + sorted(old for old in recs if old not in mine and now(old) in mine)
 
 
 def principal_is_legal_person() -> bool:

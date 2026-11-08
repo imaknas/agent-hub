@@ -55,5 +55,18 @@ class VerifyFolder(unittest.TestCase):
             self.assertEqual(list(pathlib.Path(top).iterdir()), [], "removed afterwards")
 
 
+class SharedState(unittest.TestCase):
+    """The renames record left .state for hubconf.shared() (11-08): a backup of .state takes it too."""
+
+    def test_state_in_include_takes_the_shared_state(self):
+        from unittest import mock
+        with mock.patch.object(backup, "CFG", {"include": [".state", "~/elsewhere"]}):
+            got = backup.included()
+            self.assertIn(backup.hubconf.shared(), got)
+            self.assertTrue(backup.covers(backup.hubconf.shared() / backup.hubconf.RENAMES_FILE))
+        with mock.patch.object(backup, "CFG", {"include": ["~/elsewhere"]}):
+            self.assertNotIn(backup.hubconf.shared(), backup.included())
+
+
 if __name__ == "__main__":
     unittest.main()

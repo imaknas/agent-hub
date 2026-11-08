@@ -42,7 +42,7 @@ tests:
 class HubDeclaration(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
-        for d in ("home", "config/projects", "state/registry", "bus"):
+        for d in ("home", "config/projects", "state/shared/registry", "bus"):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
@@ -60,7 +60,7 @@ class HubDeclaration(unittest.TestCase):
         self.git(self.hub, "add", "-A")
         self.git(self.hub, "commit", "-q", "-m", "chore: hub")
         # the index says what the main checkout says (a stale entry): the runner must not use it for the hub
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": {"agent-hub": {
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": {"agent-hub": {
             "v": 2, "name": "agent-hub", "tests": [{"tier": "old", "run": "false", "when": ["merge"]}]}}}))
         self.wt = self.tmp / "wt"
         self.git(self.hub, "worktree", "add", "-q", "-b", "work", str(self.wt))

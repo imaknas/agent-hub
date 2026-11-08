@@ -288,8 +288,8 @@ class MemorySync(Base):
         (r / ".agent-memory" / "memory" / "n.md").write_text("note\n")
         hostile(r, self.marker, payload=f"cat '{other}/secret' >> '{self.marker}'")
         state = self.tmp / "state"
-        (state / "registry").mkdir(parents=True)
-        (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (state / "shared" / "registry").mkdir(parents=True)
+        (state / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
         p = subprocess.run([sys.executable, str(BIN / "project_git.py"), "sync-memory", "proj"], cwd=self.tmp, env=env,
                            capture_output=True, text=True, timeout=120)
@@ -314,8 +314,8 @@ class MemorySync(Base):
         git(r, "worktree", "add", "-q", str(wt), "-b", "w")
         (r / ".git" / "worktrees" / "w" / "agent-hub-deps-pruned").symlink_to(other / "secret")
         state = self.tmp / "state"
-        (state / "registry").mkdir(parents=True)
-        (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (state / "shared" / "registry").mkdir(parents=True)
+        (state / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
         p = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), "start"], cwd=wt, env=env, capture_output=True,
                            text=True, timeout=120, stdin=subprocess.DEVNULL)
@@ -768,8 +768,8 @@ class FindingTheRepo(Base):
     def test_worktree_hook_finds_its_repo_without_git(self):
         _r, wt = self.worktree()
         state = self.tmp / "state"
-        (state / "registry").mkdir(parents=True)
-        (state / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (state / "shared" / "registry").mkdir(parents=True)
+        (state / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         env = {**ENV, "AGENT_HUB_STATE": str(state), "AGENT_HUB_OFFLINE": "1"}
         p = subprocess.run(["bash", str(BIN / "worktree-memory.sh"), "prompt"], cwd=wt, env=env,
                            capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)

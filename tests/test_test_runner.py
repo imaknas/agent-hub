@@ -24,7 +24,7 @@ PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sy
 class Runner(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
-        for d in ("home", "config/projects", "state/registry", "bus"):
+        for d in ("home", "config/projects", "state/shared/registry", "bus"):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
@@ -52,7 +52,7 @@ class Runner(unittest.TestCase):
     def declare(self, **doc):
         """The validated registry index, as registry.refresh would write it (a v1 entry, or a v2 one)."""
         d = {"v": 1, "name": "demo", "paths": {"workspace": str(self.ws)}, **doc}
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": {"demo": d}}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": {"demo": d}}))
 
     def run_(self, *args, cwd=None, **env):
         return subprocess.run([PY, str(RUNNER), *args], cwd=cwd or self.ws, env={**self.env, **env},

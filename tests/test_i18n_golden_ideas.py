@@ -257,7 +257,7 @@ class Golden(unittest.TestCase):
         (hub / "projects" / "idea-7.yaml").write_text(IDEA + "bogus: 1\n")
         self.call("invalid registry", s, ["idea-7"], env)
         (hub / "projects" / "idea-7.yaml").write_text(IDEA)
-        state = hub / ".state"
+        state = hub / ".shared"   # hubconf.shared(): beside the hub's .state
         state.mkdir()
         (state / "project-renames.json").write_text(json.dumps({"idea-7": {"new": "garden", "stage": "github"}}))
         self.call("unfinished rename", s, ["idea-7"], env)

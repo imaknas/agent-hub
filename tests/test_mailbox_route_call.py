@@ -423,7 +423,8 @@ class Prompt(Harness):
 
     def renamed(self):
         """proj was called old; reflection_private and the rest go by the name it has now."""
-        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
+        (self.tmp / "state" / "shared").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "state" / "shared" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
         self.m._OWN_NAMES.clear()
         p = mock.patch.object(self.m.hubconf, "former_names", lambda p: ["old"] if p == "proj" else [])
         p.start()

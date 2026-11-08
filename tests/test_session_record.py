@@ -573,7 +573,7 @@ class LastThroughTheHook(tbs.WorktreeFixture):
 
     def label(self, project, value):
         self.docs[project]["privacy"] = {"reflection": value}
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
 
     def test_a_label_of_include_keeps_it(self):
         self.label("open", "include")

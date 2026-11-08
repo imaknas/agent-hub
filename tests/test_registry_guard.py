@@ -41,7 +41,7 @@ class Guard(unittest.TestCase):
                               capture_output=True, text=True, timeout=60)
 
     def index(self):
-        return json.loads((self.state / "registry" / "index.json").read_text())
+        return json.loads((self.state / "shared" / "registry" / "index.json").read_text())
 
     def users(self):
         return sorted(n for n, d in self.index()["projects"].items() if d.get("type") != "platform")
@@ -52,7 +52,7 @@ class Guard(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("not rebuilt", r.stderr)
         self.assertEqual(self.users(), ["proj-a"])
-        self.assertTrue((self.state / "registry" / "proj-a.json").exists(), "the cache stays")
+        self.assertTrue((self.state / "shared" / "registry" / "proj-a.json").exists(), "the cache stays")
         log = [json.loads(l) for l in (self.state / "registry-refused.jsonl").read_text().splitlines()]
         self.assertEqual(len(log), 1)
         self.assertEqual((log[0]["config"], log[0]["state"], log[0]["argv"][1:]),
@@ -80,13 +80,13 @@ class Guard(unittest.TestCase):
         (self.tmp / "a" / "projects" / "proj-c.yaml").unlink()
         self.assertEqual(self.check("a").returncode, 0)
         self.assertEqual(self.users(), ["proj-a"])
-        self.assertFalse((self.state / "registry" / "proj-c.json").exists())
+        self.assertFalse((self.state / "shared" / "registry" / "proj-c.json").exists())
 
     def test_an_index_from_before_the_guard_is_rebuilt(self):
         self.assertEqual(self.check("a").returncode, 0)
         idx = self.index()
         del idx["registry_dir"]
-        (self.state / "registry" / "index.json").write_text(json.dumps(idx))
+        (self.state / "shared" / "registry" / "index.json").write_text(json.dumps(idx))
         self.assertEqual(self.check("b").returncode, 0)
         self.assertEqual(self.users(), ["proj-b"])
 

@@ -125,6 +125,15 @@ def workspace_env_files(ws: pathlib.Path) -> list[pathlib.Path]:
     return sorted(p for p in out if p.is_file())
 
 
+def included() -> list[pathlib.Path]:
+    """{settings} backup.include, and with .state in it the hub's shared state too (hubconf.shared(): what sandboxed code
+    reads, split off .state on 11-08, docs/design/capabilities.md; the renames record in it can't be rebuilt)."""
+    out = [p for p in (hubconf.path(x) for x in CFG.get("include") or []) if p]
+    if any(p.resolve() == hubconf.STATE.resolve() for p in out) and hubconf.shared() not in out:
+        out.append(hubconf.shared())
+    return out
+
+
 def covers(path: pathlib.Path) -> bool:
     """Whether this file goes into the backup (used by check-secrets.py; same rules as cmd_run / stage): under include
     and not excluded, or a .env / .env.* in a registered project's workspace (stage copies those, see
@@ -140,9 +149,8 @@ def covers(path: pathlib.Path) -> bool:
         pat = str(hubconf.path(x)) if x.startswith(("~", "/")) else x
         if fnmatch.fnmatch(str(path) if "/" in pat else path.name, pat):
             return False
-    for x in CFG.get("include") or []:
-        inc = hubconf.path(x)
-        if inc and (path == inc.resolve() or inc.resolve() in path.parents):
+    for inc in included():
+        if path == inc.resolve() or inc.resolve() in path.parents:
             return True
     if is_env_name(path.name):
         for n in hubconf.projects():
@@ -229,7 +237,7 @@ def cmd_run() -> int:
               sqlite=len(m["sqlite"]), bundles=len(m["bundles"]), workspaces=len(m["workspace"])))
         # the stage directory is under .state, and .state itself is in include, so it isn't listed separately
         # (otherwise the snapshot would hold two copies)
-        paths = [str(p) for p in (hubconf.path(x) for x in CFG.get("include") or []) if p and p.exists()]
+        paths = [str(p) for p in included() if p.exists()]
         if not any(STAGE.is_relative_to(pathlib.Path(x)) for x in paths):
             paths.insert(0, str(STAGE))
         args = ["backup", "--tag", "nightly", "--json", "--exclude", str(hubconf.session_addresses_dir()),
@@ -279,7 +287,7 @@ def retention_due(today: datetime.date, last: datetime.date | None) -> bool:
 
 def cmd_verify() -> int:
     # the whole latest backup: in the platform's private temp folder (denied to every sandbox both ways, never backed
-    # up), not .state, which sandboxed code is denied only entry by entry (docs/design/capabilities.md 11-08, A1)
+    # up), not .state, which is backed up itself (docs/design/capabilities.md 11-08, A1)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="backup-verify-", dir=hubconf.private_tmp()))
     try:
         restic("restore", "latest", "--target", str(tmp), capture=True)
@@ -301,7 +309,7 @@ def cmd_verify() -> int:
             if r.returncode != 0:
                 raise RuntimeError(_("The restored {bundle}.bundle failed verification: {err}", bundle=b,
                                      err=r.stderr.strip()[-200:]))
-        need = [p for p in (hubconf.path(x) for x in CFG.get("include") or []) if p and p.exists()]
+        need = [p for p in included() if p.exists()]
         missing = [str(p) for p in need if not (tmp / str(p).lstrip("/")).exists()]
         if missing:
             raise RuntimeError(_("The restored snapshot is missing: {paths}", paths=", ".join(missing[:5])))

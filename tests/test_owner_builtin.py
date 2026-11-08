@@ -116,8 +116,8 @@ class Builtin(unittest.TestCase):
         """the project was called hub-old before: a to-do and a question it raised under that name, on the bus as they
         were sent then"""
         import sqlite3
-        (self.tmp / "state").mkdir()
-        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"hub-old": {"new": "agent-hub",
+        (self.tmp / "state" / "shared").mkdir(parents=True)   # a state of its own holds its shared part (hubconf.shared)
+        (self.tmp / "state" / "shared" / "project-renames.json").write_text(json.dumps({"hub-old": {"new": "agent-hub",
                                                                                          "stage": "done"}}))
         self.env["AGENT_HUB_STATE"] = str(self.tmp / "state")
         self.records()   # creates the bus

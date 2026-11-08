@@ -232,7 +232,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(self.reg()["type"], "idea")
 
     def test_refuses_while_a_rename_of_the_same_project_is_unfinished(self):
-        state = self.hub / ".state"
+        state = self.hub / ".shared"   # hubconf.shared(): beside the hub's .state
         state.mkdir(exist_ok=True)
         for rec in ({"idea-7": {"new": "room-3d", "stage": "github"}}, {"old-name": {"new": "idea-7", "stage": "github"}}):
             (state / "project-renames.json").write_text(json.dumps(rec))

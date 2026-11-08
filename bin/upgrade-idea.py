@@ -96,7 +96,7 @@ def unfinished_rename(name: str) -> str | None:
     to find the registry entry (e.g. an upgrade's rename stopped halfway, then it was renamed in between), so neither
     starts while the other is unfinished."""
     try:
-        recs = json.loads((hubconf.STATE / "project-renames.json").read_text())
+        recs = json.loads(hubconf.renames().read_text())
     except (OSError, ValueError):
         return None
     for old, r in recs.items():

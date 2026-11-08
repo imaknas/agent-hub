@@ -50,7 +50,7 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         t = self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, t, ignore_errors=True)
-        for d in ("home", "config/projects", "data", "secrets", "bus", "state/registry"):
+        for d in ("home", "config/projects", "data", "secrets", "bus", "state/shared/registry"):
             (t / d).mkdir(parents=True)
         self.ws = {}
         docs = {}
@@ -61,7 +61,7 @@ class Fixture(unittest.TestCase):
             docs[name] = {"v": 1, "name": name, "paths": {"workspace": str(ws)},
                           **({"enforce": {"sandbox": True}} if sandbox else {})}
         self.docs = docs
-        (t / "state" / "registry" / "index.json").write_text(json.dumps({"projects": docs}))
+        (t / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": docs}))
         cfg = {"owner": {"name": "alex", "tag": "Alex"}, "owner_side": "builtin", "bus_dir": str(t / "bus"),
                "registry_dir": "projects", "workspace_root": str(t / "ws"), "runtime": {"default": "none"},
                "language": {"ui": "en", "content": "en"}}
@@ -82,7 +82,7 @@ class Fixture(unittest.TestCase):
         ws.mkdir(parents=True)
         subprocess.run(["git", "init", "-q", "-b", "main", str(ws)], check=True, env={**os.environ, **GIT_ENV})
         self.docs[name] = {"v": 1, "name": name, "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}}
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
 
     def hubbus(self, *args, cwd=None, check=True, env=None):
         r = subprocess.run([sys.executable, str(BIN / "hubbus"), *args], env={**self.env, **(env or {})},

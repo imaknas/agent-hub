@@ -250,7 +250,8 @@ class BridgeV2(unittest.TestCase):
         self.assertEqual(self.incoming("newbie"), ["s:k1"])
 
     def test_renamed_projects_old_name_is_pulled_into_the_new_one(self):
-        (self.state / "project-renames.json").write_text(json.dumps({"idea-9": {"new": "proj", "stage": "done"}}))
+        (self.state / "shared").mkdir(parents=True, exist_ok=True)
+        (self.state / "shared" / "project-renames.json").write_text(json.dumps({"idea-9": {"new": "proj", "stage": "done"}}))
         self.m.pull_records(self.c)
         self.fake.out["idea-9"] = [settled("k1", project="idea-9")]
         self.m.pull_records(self.c)

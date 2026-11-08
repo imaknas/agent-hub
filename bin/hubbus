@@ -1535,13 +1535,13 @@ def handoff_text(h: dict) -> str:
 
 
 def current_name(proj: str) -> str:
-    """What a renamed project is called now (followed all the way through .state/project-renames.json; unchanged if
+    """What a renamed project is called now (followed all the way through hubconf.renames(); unchanged if
     never renamed). The assistant's handoffs may still use the old name (e.g. after idea-1 was upgraded and renamed to
     garden-app, handoffs still came addressed to idea-1). Either spelling of the platform's own name is the platform."""
     if proj in names.all("project"):
         return hubconf.hub_project()
     try:
-        renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
+        renames = json.loads(hubconf.renames().read_text())
     except (OSError, ValueError):
         return proj
     seen = set()
@@ -1850,7 +1850,7 @@ def pull_names() -> dict[str, str]:
     current = projects()
     names = {p: p for p in current}
     try:
-        renames = json.loads((hubconf.STATE / "project-renames.json").read_text())
+        renames = json.loads(hubconf.renames().read_text())
     except (OSError, ValueError):
         renames = {}
     for old in renames:

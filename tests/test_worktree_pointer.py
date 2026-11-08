@@ -437,7 +437,7 @@ class SwappedFolder(Fixture):
 
     def test_the_last_reply_goes_by_the_sandboxed_projects_label(self):
         self.docs["box"]["privacy"] = {"reflection": "stats_only"}
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         self.tree("open")
         self.link(self.ws["open"])
         d = self.tmp / "secrets" / "sessions"

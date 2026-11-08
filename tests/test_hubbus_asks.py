@@ -180,8 +180,8 @@ class RenamedProjects(unittest.TestCase):
         m.ASSISTANT_CLI = ROOT / "bin" / "hubbus"
         m.RECORDS = False
         state = self.tmp / "state"
-        state.mkdir()
-        (state / "project-renames.json").write_text(json.dumps({"idea-1": {"new": "room-x", "stage": "done"},
+        (state / "shared").mkdir(parents=True)   # a state of its own holds its shared part (hubconf.shared)
+        (state / "shared" / "project-renames.json").write_text(json.dumps({"idea-1": {"new": "room-x", "stage": "done"},
                                                                 "room-x": {"new": "garden-app", "stage": "done"}}))
         st = mock.patch.object(m.hubconf, "STATE", state)   # hubconf is a shared module: always swap it back
         st.start()

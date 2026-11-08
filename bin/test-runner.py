@@ -28,7 +28,7 @@ job as the project (isolation.wrap). It never touches the branch: no rebase, no 
      session's own run. The waiting report (bin/test-waiting-report.py, test-waiting.md B7) reads it.
   Exit 0 when every selected tier passed (or was a hit), 1 when one failed, 2 when the tests could not be set up.
 
-Worker slots (B5): one lock file per slot in <state>/test-slots, opened read-only without following links and
+Worker slots (B5): one lock file per slot in hubconf.test_slots() (beside .state: sandboxed callers lock them too), opened read-only without following links and
 without blocking; held by an advisory lock the kernel drops when the process ends. After SLOT_WAIT seconds a run
 starts with the slots it holds, or with one worker and none.
 """
@@ -416,7 +416,7 @@ def main(argv: list[str]) -> int:
         runlog = tiers.RunLog(common)
         measured = {"run": f"{stamp}-{os.getpid()}", "moment": a.when, "caller": caller(a),
                     "source": "rev" if a.rev else "index" if a.index else "worktree", "tree": tree_id[:12]}
-        slots = Slots(hubconf.STATE / "test-slots")
+        slots = Slots(hubconf.test_slots())
         built = None
         for project, tier in chosen:
             k = tiers.key(tree_id, tier, values, identity)

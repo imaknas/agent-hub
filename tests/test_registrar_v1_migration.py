@@ -91,7 +91,8 @@ def migrated(env: Env, sent: dict) -> None:
 
 def make(d: str, sent: dict | None) -> Env:
     env = Env(pathlib.Path(d), SCENES)
-    (env.hub / ".state" / "project-renames.json").write_text(json.dumps({"mc-old": {"new": "mc", "stage": "done"}}))
+    (env.hub / ".shared").mkdir(exist_ok=True)
+    (env.hub / ".shared" / "project-renames.json").write_text(json.dumps({"mc-old": {"new": "mc", "stage": "done"}}))
     v1_letters(env)
     if sent is not None:
         migrated(env, sent)

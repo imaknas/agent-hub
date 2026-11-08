@@ -10,7 +10,7 @@ Usage: project-rename.py <old name> <new name> [--apply] [--json]
   Without --apply it only prints what it would do. --json: the last line prints the result:
     {"result": "renamed"|"already", "name", "origin"}                                         exit 0
     {"result": "bad_name"|"not_found"|"name_taken"|"busy"|"failed", "detail"}                exit 1
-What it does (in order; each step that changes something outside is recorded in .state/project-renames.json when done):
+What it does (in order; each step that changes something outside is recorded in hubconf.renames() when done):
   1. Checks (all done before touching anything): the new name's rules (lowercase letters, digits and -, at most 40
      characters; the same rules as sandboxes), not the platform itself, the new name not taken by the registry/a
      folder/a memory repo; if the origin is GitHub, no repo with the new name exists on GitHub (or it's the one we
@@ -42,7 +42,7 @@ import i18n  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-RECORD = hubconf.STATE / "project-renames.json"
+RECORD = hubconf.renames()
 UPGRADES = hubconf.STATE / "idea-upgrades.json"   # upgrade-idea.py's record: a half-done upgrade must be finished first
 BUSY = 75  # rename-project.sh's exit code for "a process's working directory is in the old folder"
 NAME = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$")

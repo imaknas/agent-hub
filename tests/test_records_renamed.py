@@ -1,4 +1,4 @@
-"""Records of a renamed project: the ones filed under a name it had before (.state/project-renames.json) stay on the bus
+"""Records of a renamed project: the ones filed under a name it had before (hubconf.renames()) stay on the bus
 as they were sent (their project field, the event's source or recipient), and are read as this project's.
 
   hubbus records --project <new>   lists them, each in its direction; a former name another project now uses is that
@@ -72,8 +72,8 @@ class Bus(unittest.TestCase):
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "reused": self.tmp, "other": self.tmp}
         st = self.tmp / "state"
-        st.mkdir()
-        (st / "project-renames.json").write_text(json.dumps(RENAMES))
+        (st / "shared").mkdir(parents=True)   # a state of its own holds its shared part (hubconf.shared)
+        (st / "shared" / "project-renames.json").write_text(json.dumps(RENAMES))
         patch = mock.patch.object(m.hubconf, "STATE", st)   # hubconf is a shared module: always swap it back
         patch.start()
         self.addCleanup(patch.stop)
@@ -149,7 +149,8 @@ class Registrar(unittest.TestCase):
     def env(self, d):
         env = Env(pathlib.Path(d), SCENES)
         env.env["AGENT_HUB_LANG_UI"] = "en"
-        (env.hub / ".state" / "project-renames.json").write_text(json.dumps({"rn-old": {"new": "rn", "stage": "done"}}))
+        (env.hub / ".shared").mkdir(exist_ok=True)
+        (env.hub / ".shared" / "project-renames.json").write_text(json.dumps({"rn-old": {"new": "rn", "stage": "done"}}))
         for k, text in ((K1, "Renew the permit"), (K2, "Pay the deposit"), (K3, "Call the plumber"),
                         (K4, "Return the keys")):
             insert(env.db, "rn-old", OWNER, rec("rn-old", f"r:{k}", "raised", k, by=REGISTRAR, terms={"text": text},

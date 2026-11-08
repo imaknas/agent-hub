@@ -4,7 +4,7 @@ JSON cache.
 
 The platform's code holds no project names: a project's jobs, services, privacy labels and paths are all in the
 registry. The scheduler calls refresh() on every tick: each file is validated on its own; valid ones are written to
-.state/registry/<name>.json (the cache of the last valid version), invalid ones keep using the last valid version and
+<hub>/.shared/registry/<name>.json (CACHE: the cache of the last valid version; sandboxed code reads it), invalid ones keep using the last valid version and
 their errors go into index.json's errors (red on the status page), **without affecting other projects**.
 index.json is for programs that may only use the standard library (hubconf.py, hubbus).
 
@@ -143,7 +143,7 @@ import yaml  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-CACHE = hubconf.STATE / "registry"
+CACHE = hubconf.REGISTRY_INDEX.parent   # hubconf.SHARED: readable inside every sandbox, written only here
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
        "models", "metered_models", "layout_intent"}
@@ -788,6 +788,8 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     index but writes nothing: the live index is built only by the main checkout's code."""
     live = not hubconf.worktree_lookup()
     if live:
+        if CACHE == hubconf.REGISTRY_INDEX.parent:   # the live cache: the one in .state moved over once (11-08)
+            hubconf.moved_from_state(CACHE)
         CACHE.mkdir(parents=True, exist_ok=True)
     reg = hubconf.registry_dir()
     files = sorted(reg.glob("*.yaml")) if reg.is_dir() else []

@@ -99,7 +99,7 @@ tests:
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
-        for d in ("home", "config/projects", "data", "secrets", "bus", "state/registry"):
+        for d in ("home", "config/projects", "data", "secrets", "bus", "state/shared/registry"):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),
                                                                   "registry_dir": "projects"}))
@@ -125,7 +125,7 @@ class Base(unittest.TestCase):
 
     def index(self, projects: dict):
         """The validated registry index as registry.refresh writes it."""
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": projects}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": projects}))
 
     def events(self, etype: str) -> list[dict]:
         db = self.tmp / "bus" / "bus.db"

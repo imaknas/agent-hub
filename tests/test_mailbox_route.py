@@ -898,7 +898,8 @@ class WakeEdges(Harness):
 
 class Rename(Harness):
     def test_a_rename_between_the_record_and_the_tick(self):
-        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
+        (self.tmp / "state" / "shared").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "state" / "shared" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
         self.open("S1")
         self.rt.records["S1"] = "old"
         self.send("m1", "proj", "request")
@@ -907,7 +908,8 @@ class Rename(Harness):
         self.assertIn("proj", self.rt.woken[0][1])
 
     def test_a_letter_to_the_old_name(self):
-        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
+        (self.tmp / "state" / "shared").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "state" / "shared" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
         self.m._OWN_NAMES.clear()
         with mock.patch.object(self.m.hubconf, "former_names", lambda p: ["old"] if p == "proj" else []):
             self.open("S1")
@@ -921,7 +923,8 @@ class Rename(Harness):
         self.docs["old"] = {"v": 2, "name": "old"}
         real = self.m.projects
         self.m.projects = lambda: {**real(), "old": self.tmp}
-        (self.tmp / "state" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
+        (self.tmp / "state" / "shared").mkdir(parents=True, exist_ok=True)
+        (self.tmp / "state" / "shared" / "project-renames.json").write_text(json.dumps({"old": {"new": "proj", "stage": "done"}}))
         self.open("S1")
         self.rt.records["S1"] = "old"
         self.send("m1", "proj", "request")
@@ -1158,7 +1161,7 @@ class Sandboxed(tbs.Fixture):
         state = self.tmp / "state" / "lease-runner"
         state.mkdir(parents=True)
         targets = [sessions / "VICTIM.live", sessions / "VICTIM.waiter", state / "leases.json",
-                   self.tmp / "state" / "project-renames.json", self.tmp / "bus" / "bus.db"]
+                   self.tmp / "state" / "shared" / "project-renames.json", self.tmp / "bus" / "bus.db"]
         for f in targets:
             r = tbs.subprocess.run([tbs.seatbelt.SANDBOX_EXEC, "-p", self.profile("box"), "/bin/sh", "-c", f"echo x > '{f}'"],
                                    capture_output=True, text=True)
@@ -1228,7 +1231,7 @@ class ThroughTheService(tbs.WorktreeFixture):
     def test_a_project_off_in_its_registry_entry(self):
         self.on_record("open")
         self.docs["open"]["mailbox"] = {"wake": False}
-        (self.tmp / "state" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"projects": self.docs}))
         self.hubbus("send", "--from", "brunna", "--to", "open", "--type", "request", "--text", "please look")
         self.run_dispatch()
         self.assertEqual(self.requests(), [])

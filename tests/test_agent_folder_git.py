@@ -861,7 +861,7 @@ class TheHourlySync(twp.Fixture):
 
     def test_a_name_the_roster_gives_and_the_index_lacks_runs_nothing_as_the_user(self):
         self.plant_memory(self.ws["box"])
-        index = self.tmp / "state" / "registry" / "index.json"
+        index = self.tmp / "state" / "shared" / "registry" / "index.json"
         docs = json.loads(index.read_text())
         del docs["projects"]["box"]
         index.write_text(json.dumps(docs))

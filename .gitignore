@@ -1,4 +1,6 @@
 .state/
+# what sandboxed code reads of the platform's state (hubconf.SHARED): written only by the platform
+.shared/
 .logs/
 __pycache__/
 .secrets/
