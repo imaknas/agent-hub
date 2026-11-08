@@ -813,7 +813,11 @@ a project with two armed sessions on record, a request with no thread, and `hubb
   The mask stays on for this point: the letter is anyone's text and a last reply is a session's. An answer that is an id, or
   a label past the list, is no answer. A test now sends a prompt with real-shaped ids through the real mask.
 - **Shown working on haiku** before merge, by hand with the branch's code: the same two sessions, the tool session listed
-  second and less recent, and the model answered `s2`. The live check runs again after merge.
+  second and less recent, and the model answered `s2`.
+- **Live after merge, done:** the same two sessions, the other one now the more recent; a question with no thread that only
+  the older one's last reply had the context for went `message.routed {by: model}` to the older one → woken → delivered →
+  ack → its reply → done, 2 minutes from send to done (the call's answer read on the next tick). Recency would have picked
+  the other.
 - **Folder names that look like a credential are masked too**, such as a worktree a coding agent named with a random hex
   part. Nothing is lost that the model could use: the random part says nothing about the work. A worktree named for its
   work keeps its name.
