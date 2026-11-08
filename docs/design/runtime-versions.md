@@ -1,8 +1,9 @@
 # Runtime versions and compatibility
 
-Status: design, 11-08. Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or
-the Codex app has a breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first,
-before Codex Step 1 (`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
+Status: design, 11-08, revised after two blind reviews the same day (their findings are in "Found by the blind reviews" at the end).
+Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or the Codex app has a
+breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first, before Codex Step 1
+(`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
 
 ## What can change under the platform
 
@@ -20,137 +21,270 @@ Three surfaces, and only one of them is the platform's to choose:
   every Codex model became `tool_mode: code_mode_only`, which made "shell off" stop meaning "no tools" (runtime-codex.md, M1 again).
   Pinning a binary doesn't stop this.
 
-So the answer is not "pin the version". It is: **the platform's runs use a copy that passed a check, every run re-checks what can
-change from the server, and the user's sessions are watched so a break is said, by version, instead of going quiet.** This is the
-tool-neutrality rule (AGENTS.md: "when a capability is missing, turn the feature off explicitly and say why") applied over time.
+A and B also meet: some calls the platform makes with its own binary read what the user's binary wrote (`claude agents --json` over
+the user's sessions, a fork of a user's transcript, the linked Codex login). Those are the **session-side calls** (section 5).
+
+So the answer is not "pin the version". It is: **the platform's runs use a copy that passed a check and can't change after; what the
+server can change is re-checked as runs go; every version the user's sessions run is checked when first seen, and until it passes,
+what the platform starts in those sessions is limited as for a runtime without the port.** This is the tool-neutrality rule
+(AGENTS.md: work the platform starts is guaranteed by the platform; "when a capability is missing, turn the feature off explicitly
+and say why") applied over time.
 
 ## What exists today (survey 11-08)
 
 - `bin/update-claude.py` (nightly 01:15, claude module): when npm has a newer Claude Code, a real request on the current version,
   `npm install -g …@latest`, then `--version`, the same request and one real completion with the completion flags
-  (`--restricted`) on the new one; any failure reinstalls the old one and alerts (`claude-version`). Separately, every version found
-  in nvm's copy gets the folder-git probe (`claude-git-filter`) once, recorded in `.state/claude-filter-probe.json`.
+  (`--restricted`) on the new one; any failure reinstalls the old one and alerts (`claude-version`). Every version found in nvm's
+  copy, including ones Claude Code's own updater brought, gets the folder-git probe once (`claude-git-filter`), which has a positive
+  control: it refuses to pass when the unguarded run doesn't trigger the filter (update-claude.py:158-166).
 - `bin/check-claude-login.py` (hourly): a real request per credential, expiry dates.
 - No minimum versions, no version gating, no doctor row with a runtime's version. "Tested on 2.1.316" lives only in comments.
+  ACP's protocol version is the only version the platform checks (runtime_acp.py:55, :461).
 - Hooks (`bin/hub-event`): a payload that isn't JSON, lacks `session_id` / `cwd`, or names an unknown event returns before the log
-  line (hub-event:336-338), so a changed payload is a silent no-op; the header's "every run logs one line" doesn't hold. A wrongly
-  typed payload raises and is logged to `.logs/hub-event.log`, which nothing reads.
+  line (hub-event:336-338), so a changed payload is a silent no-op; the header's "every run logs one line" doesn't hold. Empty stdin
+  is the same path, on purpose (onboard, recover and sync-local-setup call it with none). A wrongly typed payload raises and is
+  logged to `.logs/hub-event.log`, which nothing reads.
+- Gating today is per runtime, not per version: `CAGED_NEEDS <= capabilities(runtime)` in hub-event:330-341 and
+  render-project-settings.py:359, :379.
 - Session readers (`sessions_claude.py`, `sessions_codex.py`) fail only when a whole file has no known line type; unknown line types
-  and malformed entries are skipped, and neither reads the tool's version (Claude's lines carry `version`, Codex's `session_meta`
-  carries `cli_version`).
+  and malformed entries are skipped, and neither reads the tool's version.
+- `session_statuses` maps a failed `claude agents --json` to every session `unknown` (runtime_claude.py:451-453), and `unknown`
+  counts as idle (runtime_ports.py:341): a listing broken by a version change makes letters wake busy sessions.
 - No test runs a real `claude` or `codex`. `tests/fixtures/llm-golden.json` pins what the platform sends, not how the tool answers.
 - The contract surface with Claude Code is wide: ~25 CLI flags, `claude agents --json` and the text of `claude mcp list`, four
   environment variables (`CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS` carries a security property), `-p` JSON result fields, the
   stream-json event types, hook events, matchers, input fields and output shapes, settings keys (`sandbox.*`, `permissions.*`, rule
-  syntax), transcript paths and their line format. Codex's will be as wide.
+  syntax), transcript paths and their line format, the files it loads as control (`USER_CONTROL`, runtime_claude.py:180).
 
-## The design
+## 1. A distribution port, so the job stays neutral
 
-### 1. Conformance checks, per port, owned by the adapter
+Getting, installing and pinning a tool is tool syntax, so it lives in the adapter as a new port, `distribution`:
+`latest()` (the newest version the vendor publishes), `install(version, folder)` (the exact version from the vendor's source, its
+integrity checked as the vendor publishes it: npm's `dist.integrity`), `version(binary)`, `pin_env()` / `pin_config()` (what turns
+the tool's own updater off for a run of this copy: Claude `DISABLE_AUTOUPDATER=1`, Codex its update and daemon-auto-start settings in
+the platform home; V-M5), and `MIN_VERSION`. The neutral job and runner only call these. A runtime without the port (ACP, a
+command template) keeps today's behaviour and doctor says it is unversioned.
 
-A neutral runner, `bin/conformance.py`, runs an adapter's checks against **a given binary** and records the result. The adapter
-declares them (`runtime_claude.CONFORMANCE`, later `runtime_codex.CONFORMANCE`), each tagged with the port it guards and whether it
-is a **safety** check (a confinement property) or a **function** check:
+## 2. Conformance checks, one or more per port
 
-| Port | Checks (Claude today's; Codex's from runtime-codex.md) | Kind |
+A neutral runner, `bin/conformance.py`, runs an adapter's checks (`runtime_claude.CONFORMANCE`, later `runtime_codex.CONFORMANCE`)
+against **a binary in the platform's store** and records the result. Each check guards a port and is a **safety** check (it holds a
+confinement property) or a **function** check.
+
+How every check runs:
+- **In a throwaway world**: a throwaway project folder, tool home and config dir, and the platform's own state, data, secrets and bus
+  pointed at temp folders (`AGENT_HUB_STATE`, `bus_dir`…), so a real `hub-event` firing in a lifecycle check can't touch the live
+  bus or mark a letter told. Hooks are installed the way the platform installs them (`install_lifecycle` into the throwaway
+  project, the worktree set into the throwaway home), not through `--settings`.
+- **Safety checks have a positive control**, as the folder-git probe does: the same case without the guard must show the effect (the
+  unguarded run reads the canary; a run with tools does use one), or the check fails as "tests nothing". **Model-free where it can
+  be** (M8 used `codex sandbox -- /bin/sh -c …`; Claude's sandbox can be driven the same way through a Bash call the check scripts).
+- **Canaries, never real secrets**: canary files at paths that go through the same policy → settings translation as real ones
+  (a canary credential path, a canary `.git/config`, a canary control file), so a broken sandbox leaks a canary. Results keep
+  pass / fail / error and the reason, never tool output or file contents.
+- **Logins** (section 3, "a candidate never refreshes the user's login").
+
+The checks (Claude's now, Codex's from runtime-codex.md):
+
+| Port | Checks | Kind |
 |---|---|---|
-| completion | one completion per schema in `contracts/llm/` returns schema-valid output; the run had no tools (Claude: `--tools ""` asked to run a command, no tool use in the result; Codex: the tool list a run sees equals the pinned list) | function + safety |
-| agent | a run's result fields parse (`result`, `is_error`, usage); `--model` aliases in `MODELS` resolve | function |
-| confine | the sandbox profile denies what the policy denies (Claude: settings `sandbox` + `permissions.deny`; Codex: the permission profile, M8's cases: read, write, `.git`, links, rename); folder git off (`NO_FOLDER_GIT`, today's filter probe) | safety |
-| lifecycle | a headless run in a throwaway home with the platform's hook set fires each event the platform installs, and each payload has the fields the adapter reads (`parse_event`'s inputs); hook output is honoured (additionalContext reaches the model; a PreToolUse deny stops the tool) | function (deny: safety) |
-| sessions | that run's transcript / rollout parses with the reader, with no skipped lines and its version read; `claude agents --json` parses | function |
+| completion | one completion per schema in `contracts/llm/` returns schema-valid output; the run has no tools (Claude: a positive-control run with tools shows the signal V-M7 names, the `--tools ""` run doesn't; Codex: the tool list equals the pinned one) | function + safety |
+| agent | a run's result fields parse (`result`, `is_error`, usage, `permission_denials`); `MODELS` aliases resolve | function |
+| confine | the sandbox denies the canaries the policy denies: read, write, `.git`, links, rename, a new file; folder git off (`NO_FOLDER_GIT`, today's probe) | safety |
+| control | the control paths a sandboxed session is denied are written as one rule over the tool's folder in the project (section 7), and a canary write there is denied | safety |
+| lifecycle | each installed event fires with the fields `parse_event` reads; additionalContext reaches the model; a PreToolUse deny stops the tool | function (deny: safety) |
+| instructions | a marker in the rules file the adapter writes (`CLAUDE.local.md`) reaches the model | function |
+| sessions | the run's transcript / rollout parses with no skipped lines and its version read | function |
+| session_status | `claude agents --json` lists a live throwaway session with a status (V-M6) | function |
+| session_summary | the last reply is read from the throwaway session | function |
+| wake | an idle throwaway session takes a turn after `wake()` (V-M6) | function |
 | stream | a short stream-json exchange parses (leases) | function |
 | tool_servers | `claude mcp list` parses with no server and with one | function |
 | auth | the login check | function |
+| distribution | `version()` of the installed binary is the version asked for; the updater stays off for a run (the binary's digest is unchanged after it) | safety |
 
-Checks run in a throwaway home and folder (as update-claude's probes and the M8 runs did), never the user's. Each needs a model
-call or two; a full pass is a few dozen calls, run only when a version is new (below). A test (`tests/test_conformance_cover.py`)
-fails when an adapter implements a port with no check for it, so a new port can't ship unguarded.
+`tests/test_conformance_cover.py` fails when an adapter implements a port with no check, so a new port can't ship unguarded.
 
 Results: `.state/runtime-conformance/<runtime>/<version>.json`: per check pass / fail / error with the reason, the binary's path and
-digest, and the time. `<version>` is what `--version` prints, plus the digest, since two installs can report the same version.
+digest, the time. A function check that fails is run once more before it counts (a model's answer can miss a schema once); a safety
+check counts at once.
 
-### 2. The platform's runs use their own copy, promoted only after a pass
+## 3. The platform's runs: their own copy, promoted only after a pass, fixed after
 
-- Each runtime's platform copy lives in the instance: `<instance>/runtimes/<runtime>/<version>/` (an `npm install --prefix` there,
-  or the tool's own installer), with `current` and `previous` links. `hubconf.tool` stops resolving runtimes for platform runs; the
-  adapter's `binary()` returns `current`'s executable. The user's own copy (nvm's, Desktop's, the daemon's) is never what the
-  platform runs.
-- `update-runtimes` (neutral platform job, replacing `update-claude` with `legacy_name`): for each runtime in use, when the tool's
-  source has a newer version, install it beside `current`, run the full conformance, and move `current` only if every safety check
-  and every function check of a port the instance uses passes. Otherwise `current` stays, the failed checks go to an alert
-  (`alert.once`, by runtime and version), and the status page shows which version is held back and why. Keep `current` and
-  `previous`; delete older ones (a Claude copy is ~300 MB, Codex's ~350 MB).
-- A minimum version per adapter (`MIN_VERSION`, e.g. Codex 0.167.0 for the linked login, M9): doctor and the runner refuse below it.
-- `brunna runtimes` shows each runtime's platform copy (version, when promoted, held-back version and its failed checks) and the
-  versions seen in the user's sessions (section 4). `brunna runtimes rollback <runtime>` moves `current` back to `previous`.
-- First install (init / `brunna llm setup`): the same path, so a new instance starts on a checked copy.
+- **The store**: `<instance>/runtimes/<runtime>/<version>/`, installed by `distribution.install`; `current` and `previous` are links
+  swapped by rename (atomic). A run resolves `current` once at its start, records the version and digest it ran with, and holds that
+  path to its end, so a swap mid-run doesn't change what a running job or lease executes. A version folder is removed only when no
+  process runs from it (the store keeps a lock per version a run holds); a held-back candidate is removed after 14 days.
+- **Fixed after promotion**: every platform run of the copy carries `pin_env()` / `pin_config()` (its updater off), and `binary()`
+  compares the executable with the digest recorded at promotion before the run (size and mtime each run, the full digest once a
+  day), refusing on a mismatch with "the platform's Claude Code changed after it was checked". The `distribution` check above shows
+  the updater stays off.
+- **No checked copy, no run**: when there is no `current` (a fresh install, the vendor unreachable on first install, a version that
+  never passed, a restore), the runtime's ports are `Unsupported` with that reason and doctor is red; never a fallback to the PATH
+  copy. `hubconf.tool` is no longer used for runtimes; `_env` puts the platform copy's bin first on PATH, not nvm's, so nothing a
+  run starts finds the user's copy by name; `agenthub.agent_found` reports the platform copy.
+- **First install** (init, `brunna llm setup`, a restore): install the latest version into the store, log in (section 3a), run the
+  checks, promote; until then the features say "no checked copy of Claude Code yet" and init says it is running the checks.
+- **`update-runtimes`** (a neutral platform job replacing `update-claude` by `legacy_name`, doing nothing for a runtime not in use):
+  when `latest()` is newer than `current`, install it beside `current`, run every check, and promote only when every safety check and
+  every function check of a port the instance uses passes. Otherwise `current` stays (held back) and the result goes to the status
+  page and an alert keyed by **check and reason**, not by version (the next version failing the same way doesn't re-alert). Held
+  back 7 days or more escalates once ("Claude Code has been held back at X since …"). A version below `MIN_VERSION` is never promoted.
+- **Rollback**: `brunna runtimes rollback <runtime>` moves `current` to `previous` only after the safety checks pass on it again and
+  it is at least `MIN_VERSION`.
+- **Daily, with no new version**: the completion and agent checks on `current`, since the server side moves (section 4).
+- **Backup**: the store is left out of the backup (it is rebuilt from the vendor; ~300 MB per Claude copy, ~350 MB per Codex copy, and
+  OS-specific); a restore runs first install.
+- **Linux**: Codex's bwrap is refused where unprivileged user namespaces are (Ubuntu 24.04), so its confine checks fail and no copy is
+  promoted there: fail-closed, and doctor says why.
 
-### 3. What the server can change is re-checked on every run, cheaply
+### 3a. A candidate never refreshes the user's login
 
-Promotion checks a binary once; surface C changes without one. So a run asserts the invariants that hold its confinement, and fails
-closed (`Refused`, with the reason) instead of running wider:
+The platform's copy needs a login, and a candidate is unchecked code. Rotating refresh tokens mean a candidate that refreshes wrongly
+logs the owner out everywhere (Codex 0.165.0 would have, M9).
 
-- Codex: the tool list the run sees equals the pinned list for that point kind (completion: none but clock and server-less MCP
-  resources; tool points: the profile's). How to read it without a model call is a measurement (V-M1: whether `codex debug
-  prompt-input` lists code mode's nested tools); if it can't be read without one, the check runs once a day per model, not per run,
-  and a mismatch turns the points off until it passes.
-- Claude: a `-p` result with tool use on a `--tools ""` run, or a `permission_denials` entry on a point that declared none, is a
-  refusal and an alert, not an answer.
-- A model alias that stopped resolving is a loud failure (it already is: the run fails), named in the alert as "the provider dropped
-  model X", so it isn't read as a login problem.
-- A daily conformance subset (completion + the tool list) on `current` even with no new version, since the catalog moves.
+- **Claude**: platform runs already use the headless token (`CLAUDE_CODE_OAUTH_TOKEN`, `auth_env`), which doesn't refresh; a
+  candidate gets the same and nothing else (no `~/.claude/.credentials.json` reachable from its throwaway config dir).
+- **Codex**: a Business / Enterprise workspace's access token when the instance has one (doesn't refresh). Otherwise the candidate's
+  model checks run with the linked `auth.json` only after its model-free checks pass, including that its file store follows the link
+  (`resolve_auth_file`), and only when the adapter's credential check (it reads the expiry and `last_refresh`, never the tokens) says
+  no refresh can fall due during the checks; otherwise they wait for the next night. Accepted residual, as M9 says: the user's daemon
+  and a platform run aren't locked against each other's refresh (`auth.lock` is per home).
 
-### 4. The user's sessions: watched by version, never silently degraded
+## 4. What the server can change is checked as runs go
 
-- **Record the version.** The hook reads it once per session (Claude: the `version` field of the transcript's last lines, the path is
-  in the hook input; Codex: `session_meta.cli_version` from the rollout) and writes it into the session's record; the session readers
-  return it per session.
-- **Check the versions in use.** The nightly job also runs the session-side checks (lifecycle, sessions, confine for sandboxed
-  projects) against each version seen in the last 7 days that has no result yet, using that binary where it is on disk (Desktop's
-  `ccd-cli/<version>`, the daemon's `releases/<version>`, nvm's), and records it like any other.
-- **Say it, by feature and version.** doctor and the status page show, per feature that rides on user sessions (letters seen live,
-  wake, rules, notes reminders, a sandboxed project's session confinement): on, off with the failed check, or unverified (a version
-  seen but not checked, e.g. no binary on disk). A **safety** check failing on a version the owner's sessions use (a sandboxed
-  project's session not confined) alerts at once; a function check alerts once per version.
-- **Hooks stop failing silently.** `hub-event` logs every payload it can't use (`unusable=<reason>` with the runtime and version),
-  as the header already promises; a nightly count per version above zero is a doctor row and, for the events letters depend on, an
-  alert. The worktree hooks' one-line `read -t 1` stays (it reads a path only).
-- **Readers count what they skip.** Per file: lines skipped as unknown type or malformed. A version whose files skip more than a few
-  percent is a doctor row ("the weekly statistics may undercount sessions of Claude Code X") instead of a quiet undercount.
+Promotion checks a binary once; surface C changes without one. Each run asserts what holds its confinement and refuses rather than
+running wider:
 
-### 5. The user's own copy
+- **Codex**: the tool list a run sees equals the pinned list for its point kind. If it can be read with no model call (V-M1), every
+  run checks it first. If not, it is checked once a day per model, and **a model's points are off until its first check passes**;
+  the residual is up to a day of a wider tool list after a catalog change, bounded by the run's permission profile (M8), which
+  doesn't come from the server.
+- **Claude**: a completion or a `tools: ""` point whose result shows tool use (the signal V-M7 names) is a refusal and an alert. This
+  is detection after the fact, not prevention: the tool already ran, inside the run's sandbox and settings, which hold regardless.
+- **Models**: an alias that stops resolving fails the run (as now), named "the provider dropped model X", not read as a login problem.
+
+## 5. Session-side calls use matching versions
+
+Calls the platform makes about the user's sessions run the user's version's behaviour, or are refused:
+
+- Each adapter call is classed platform-side (a run of its own) or session-side: Claude's `agents --json` (status), `--resume
+  --fork-session` of a user's transcript, `lease-resume` and `run-agent-job.sh`'s resume of a platform session in a terminal; Codex's
+  `queue`, the daemon's status calls, the linked login.
+- A session-side call runs with **the store's copy of the session's own version** (installed from the vendor when first seen,
+  section 6), or with `current` only when the pair (`current`, that version) passed the session-side checks (a transcript written by
+  that version forked by `current`; a session of that version listed by `current`). Otherwise it is refused, as a missing port is.
+- A failed listing is `unknown`, and **`unknown` no longer counts as idle**: no wake, no route to it, until a listing works.
+- `lease-resume` and `run-agent-job.sh` resume with the store's copy of the version that wrote the session, not `claude` on PATH.
+
+## 6. The user's sessions: checked when first seen, limited until they pass
+
+- **Record the version at session start.** The transcript isn't written before the first turn (runtime_claude.py:1503), so the
+  hook reads it from the session process's executable: its path (Desktop's `ccd-cli/<version>/`, the daemon's
+  `releases/<version>-<arch>/`) or the package metadata beside it (nvm's `package.json`), read as files, never run (V-M4). It goes
+  into the session's record and a `runtime.version_seen` bus event; the readers also return the version per session from the
+  transcript.
+- **Check it then.** An event job on `runtime.version_seen` for a version with no result installs **that exact version from the
+  vendor** into the store (never runs the binary in the user's folders, which a sandboxed session might have written) and runs the
+  session-side checks on it: lifecycle, instructions, sessions, session_status, wake, confine and control. Minutes, not a night.
+- **Until it passes, the version is limited for the platform's work.** A version whose checks are pending or failed counts, for the
+  features riding on it, as a runtime without those ports:
+  - a **sandboxed project's** session on it gets no platform work at all (no wake, no route, no fork or resume, no hub-event
+    handlers that start work), exactly as `CAGED_NEEDS` does for a runtime that lacks confine today, and the session is told once at
+    start (SessionStart's context: "this Claude Code version isn't checked yet; the platform starts nothing in this session until it
+    is"), and the owner gets an alert when a confine or control check **fails**;
+  - an unsandboxed project's session keeps what doesn't depend on the failed port (a failed wake check means no wake, routed letters
+    stay for the next hook).
+- **Hooks stop failing silently.** `hub-event` logs every payload it can't use as `unusable=<reason>` with runtime and version, empty
+  stdin apart (`empty`, expected). An event name the platform didn't install is counted as `unknown-event` (info: a new event the tool
+  added), not as unusable. Unusable payloads of an event letters depend on, three times for a version, are a doctor row and an alert
+  keyed by event and reason.
+- **Readers count what they skip** per file; a version whose files skip more than 5% of lines is a doctor row ("the weekly statistics
+  may undercount Claude Code X's sessions").
+- **doctor / `brunna runtimes`**: per runtime, the platform's copy (version, promoted when, a held-back version and its failed
+  checks) and each version seen in the user's sessions in the last 7 days with its state (passed, pending, failed: which check),
+  and which features are limited for which version.
+
+## 7. Control paths become one rule over the tool's folder
+
+The control check can't find a load location a new version adds: the platform's list of control paths (`USER_CONTROL`,
+runtime_claude.py:180) is the only description, and a check against it compares the list with itself. So the list becomes a rule
+the tool can't outgrow inside the project: a sandboxed project's session and its services may not write anywhere under the tool's
+folder in the project (`.claude/**`, `.codex/**`) except what the platform names writable (worktrees), and not the rules files. A
+new file under the tool's folder is covered without knowing it. What stays uncovered is a new load location **outside** the tool's
+folder (a new root-level file name); that is said in doctor's control row as the accepted residual, and the vendor's release notes
+for each promoted version are linked from `brunna runtimes` for the owner to read.
+
+## 8. The user's own copy
 
 The owner asked on 10-24 that the terminal Claude not fall behind (that is why `update-claude` exists). With the platform's copy
-separate, the user's copy is the user's: decision DV2 below says whether the platform still updates it, and to what.
+separate, the user's copy is the user's: decision DV2.
 
 ## Steps
 
-1. **Conformance runner + Claude's checks** (port update-claude's three probes in; add completion with every schema, lifecycle,
-   sessions, stream, tool_servers), the results store, `brunna runtimes`, the coverage test. `hub-event` logs unusable payloads;
-   readers count skips and read the version. No behaviour change for runs yet.
-2. **Platform copies + `update-runtimes`** for Claude (promotion, hold-back, rollback, `MIN_VERSION`, doctor rows); `update-claude`
-   retired by `legacy_name`. `hubconf.tool("claude")` callers for platform runs move to `binary()`.
-3. **User-session versions**: recorded per session, checked nightly, doctor / status page / alerts by feature and version.
-4. **Codex Step 1** builds on it: `runtime_codex.CONFORMANCE` (the M1/M8/M9 cases), its platform copy and home, the per-run tool-list
-   invariant (V-M1).
+1. **Distribution port + conformance runner + Claude's checks** (the folder-git probe and the completion check ported in; the
+   rest added), the results store, `brunna runtimes`, the coverage test. `hub-event` logs unusable payloads; readers count skips and
+   read the version; `unknown` stops counting as idle. No change to which binary runs yet.
+2. **The store + `update-runtimes`** for Claude: promotion, hold-back, the digest check, the updater pinned, no PATH fallback, first
+   install, rollback, `MIN_VERSION`; `update-claude` retired by `legacy_name`; callers of `hubconf.tool("claude")` move to `binary()`.
+3. **Session versions**: recorded at start, the `runtime.version_seen` job, per-version limits, session-side calls on matching
+   versions, the SessionStart notice.
+4. **Control as one rule** (section 7), with the sandbox-parity tests updated.
+5. **Codex Step 1** builds on all of it: `runtime_codex.CONFORMANCE` (M1, M8, M9's cases), its store and platform home, section 3a's
+   login rule, the per-run tool list (V-M1).
 
 ## Decisions for the owner
 
-- **DV1, the platform's own copy.** (a) A copy per runtime in the instance, promoted only after a pass; the user's copy never
-  affects platform runs (recommended; ~650 MB on disk for both runtimes with `previous` kept). (b) Keep sharing the user's copy
-  and only check it (a user's manual update still changes the platform's runs before any check).
-- **DV2, the user's copy.** (a) The platform updates nvm's copy only to a version that passed, the same night it passes
-  (recommended: the terminal doesn't fall behind, and doesn't get ahead of what's checked). (b) Leave it to the tool's own updater
-  and only watch it. (c) As today, latest every night. Desktop's and the Codex daemon's copies update themselves in any case; they
-  are watched (section 4), not controlled.
-- **DV3, cost.** A full conformance pass is a few dozen model calls per new version (Claude Code ships several a week), plus a
-  daily subset of a few calls. On the subscription; nothing billed per use unless `metered_models` says so.
+- **DV1, the platform's own copy.** (a) A copy per runtime in the store, promoted only after a pass, fixed after; the user's copy
+  never runs platform work (recommended; ~650 MB for both runtimes with `previous` kept, not backed up). (b) Keep sharing the user's
+  copy and only check it: a manual update or the tool's own updater changes the platform's runs before any check.
+- **DV2, the user's copy (nvm's).** (a) The platform updates it only to a version that passed, the same night. That alone doesn't
+  stop Claude Code's own updater from moving it further; turning that updater off is a user-level setting (`DISABLE_AUTOUPDATER` in
+  `~/.claude/settings.json`), which AGENTS.md leaves to the owner's direct yes in a session. So (a) is "updated to checked versions,
+  and with the owner's yes, not past them". (b) Leave it to the tool's own updater; section 6 checks whatever version shows up
+  (recommended: the platform's runs no longer depend on it, and every version the sessions use is checked within minutes). (c) As
+  today, latest every night. Desktop's and the Codex daemon's copies update themselves in any case; they are checked (section 6), not
+  controlled.
+- **DV3, a platform config dir for Claude's platform runs.** Claude's platform runs still share `~/.claude` (settings, plugins, hooks,
+  `~/.claude.json`) with the user's sessions; non-`--restricted` runs (leases) load the user's `settings.json`, plugins and hooks,
+  written for the user's version. (a) A platform `CLAUDE_CONFIG_DIR` (runtime_claude.py already passes one through), the token
+  through `auth_env`; a fork of a user's transcript reads it from the user's folder by path (recommended, built in step 2). (b) Keep
+  sharing.
+- **DV4, cost.** A full pass is ~40 model calls per new version (Claude Code ships a few a week: ~150 calls a week), the daily
+  subset ~12 (one completion per schema), each version a user session runs ~10 more. On the subscription; nothing billed per use
+  unless `metered_models` says so.
 
 ## Measurements
 
-- V-M1: does `codex debug prompt-input` (no model call) show code mode's nested tool list, for the per-run invariant?
-- V-M2: does a `claude -p` run with `--settings` carrying the platform's hooks fire SessionStart, UserPromptSubmit, PostToolUse,
-  Stop and SessionEnd, with the same payload fields an interactive session sends (so lifecycle can be checked headlessly)?
-- V-M3: can Desktop's `ccd-cli/<version>` binary be run headlessly in a throwaway home (for checking the versions in use)?
-- V-M4: the hook can read the session's version cheaply (the transcript's last lines) at SessionStart, before the first message.
+- V-M1: does `codex debug prompt-input` (no model call) show code mode's nested tool list, for the per-run check?
+- V-M4: the version of the binary a session runs, read at SessionStart from the session process's executable path or package
+  metadata (Claude: `CLAUDE_PID`'s executable; Codex: the daemon's executable; both read as files).
+- V-M5: the switch that keeps each tool's updater off for one run: Claude `DISABLE_AUTOUPDATER=1` under `-p` and in a stream session;
+  Codex's update and daemon-auto-start settings in the platform home. The check: the binary's digest is unchanged after a run with a
+  newer version published.
+- V-M6: a throwaway interactive session the checks can drive: Claude's stream-json session idles and takes a turn after `wake()`, and
+  `claude agents --json` lists it; Codex's thread through its app-server.
+- V-M7: the signal in `claude -p --output-format json` that a run used a tool (`num_turns`, `permission_denials`, or the stream's
+  `tool_use` events), with a positive control.
+
+## Found by the blind reviews (11-08), all taken
+
+- A version whose safety checks fail or are pending still got wake, routing and forks for sandboxed sessions: now limited per version
+  (section 6), as `CAGED_NEEDS` does per runtime.
+- Safety checks could pass by testing nothing (the model declines to use a tool) and could leak real secrets when the sandbox is
+  broken: positive controls, model-free where possible, canaries through the same translation, no output kept (section 2).
+- A candidate ran with the user's live login: section 3a.
+- The promoted copy could update itself: pinned updater and a digest check per run (section 3).
+- No `current` fell back to the PATH copy: `Unsupported`, first install defined (section 3).
+- The coverage test contradicted the table (8 of 13 ports): every port has a check; control, which no run can check, becomes a rule
+  over the tool's folder (sections 2, 7).
+- Platform runs mixed versions with the user's sessions (status listing, forks, resumes, the linked login), and a failed listing
+  counted as idle: session-side calls (section 5).
+- Running binaries from the user's folders was a new exposure, and V-M3 could leave versions unverified for good: versions are
+  installed from the vendor into the store (section 6).
+- The transcript isn't written at SessionStart: the version is read from the process's executable (V-M4).
+- `npm install` in a neutral job broke tool neutrality: the distribution port (section 1).
+- DV2(a) claimed more than it can deliver without the owner's yes for a user-level setting: rewritten.
+- Should-fix taken: rename swaps, per-run version records, in-use versions kept, store not backed up, Linux fail-closed, alerts keyed
+  by check and reason with a retry for function checks and an escalation after 7 days held back, empty stdin and unknown events
+  counted apart, V-M7 for Claude's tool-use signal, the job idle for runtimes not in use, a platform config dir (DV3), costs (DV4).
