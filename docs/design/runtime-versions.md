@@ -1,6 +1,6 @@
 # Runtime versions and compatibility
 
-Status: design, 11-08, revised after two blind reviews the same day (their findings are in "Found by the blind reviews" at the end).
+Status: design, 11-08, revised after the blind reviews the same day (their findings are at the end); DV1–DV4 decided 11-09, DV5 waits on V-M10.
 Not built. Owner, 11-08: "brunna has two adapters but no way to fix their versions: one day Claude Code or the Codex app has a
 breaking change, the user updates without meaning to, and brunna may just break". Owner: design this first, before Codex Step 1
 (`docs/design/runtime-codex.md`), which builds the platform's own Codex home and `update-codex`.
@@ -151,6 +151,14 @@ check counts at once.
   runtime_claude.py:666-680), so nothing a run starts finds the user's `claude` by name; `agenthub.agent_found` reports the store copy.
 - **First install** (init, `brunna llm setup`, a restore): install the latest version into the store, log in (section 3a), run the
   checks, promote; until then the features say "no checked copy of Claude Code yet" and init says it is running the checks.
+  init's agent question (`choose_agent`, bin/agenthub:517) keeps its options and stays the one place the runtime is chosen; what
+  follows it changes. Today it looks for the user's copy and, on the owner's consent, installs one at user level, which the
+  platform then runs. After: the store copy is installed and checked whether or not the user has one (it touches nothing of the
+  user's, so it needs no consent, but init says first what it downloads, ~300 MB, and that the checks take minutes); the user-level
+  install becomes an offer for the user's own use only, no longer needed for the platform. The login steps init already runs
+  (Claude's headless token, Codex's linked `auth.json`) now serve the store copy. `brunna init --agent <other>` installs and checks
+  the other runtime's store copy; the one no longer chosen stops updating (`update-runtimes` does nothing for a runtime not in
+  use) and is removed after 14 days. Choosing `none` installs nothing; the judgment points can still use a provider's API.
 - **`update-runtimes`** (a neutral platform job replacing `update-claude` by `legacy_name`, doing nothing for a runtime not in use):
   when `latest()` is newer than `current`, install it beside `current`, run every check, and promote only when every safety check and
   every function check of a port the instance uses passes. Otherwise `current` stays (held back) and the result goes to the status
@@ -276,7 +284,12 @@ notes for each promoted version are linked from `brunna runtimes` for the owner 
 ## 8. The user's own copy
 
 The owner asked on 10-24 that the terminal Claude not fall behind (that is why `update-claude` exists). With the platform's copy
-separate, the user's copy is the user's: decision DV2.
+separate, the user's copy no longer runs platform work, but it still must not fall behind (DV2 (a)): after `update-runtimes`
+promotes a version, it installs that same version into nvm's copy (the distribution port's `install` into the user's global
+prefix, the vendor's integrity checked) when nvm's is older, never downgrading one the tool's own updater moved further. A failed
+install is an alert keyed by runtime and reason, as `update-claude`'s are today. The same holds for Codex's npm CLI. Desktop's
+copies and the Codex daemon update themselves and are only checked (section 6). Anything else on the machine that runs nvm's
+`claude` itself (the assistant, for one) gets the checked version this way, with no change of its own.
 
 ## Steps
 
@@ -296,17 +309,20 @@ separate, the user's copy is the user's: decision DV2.
 
 ## Decisions for the owner
 
-- **DV1, the platform's own copy.** (a) A copy per runtime in the store, promoted only after a pass, fixed after; the user's copy
-  never runs platform work (recommended; ~650 MB for both runtimes with `previous` kept, not backed up). (b) Keep sharing the user's
-  copy and only check it: a manual update or the tool's own updater changes the platform's runs before any check.
-- **DV2, the user's copy (nvm's).** (a) The platform updates it only to a version that passed, the same night. That alone doesn't
-  stop Claude Code's own updater from moving it further; turning that updater off is a user-level setting (`DISABLE_AUTOUPDATER` in
-  `~/.claude/settings.json`), which AGENTS.md leaves to the owner's direct yes in a session. So (a) is "updated to checked versions,
-  and with the owner's yes, not past them". (b) Leave it to the tool's own updater; section 6 checks whatever version shows up
-  (recommended: the platform's runs no longer depend on it, and every version the sessions use is checked within minutes). (c) As
-  today, latest every night. Desktop's and the Codex daemon's copies update themselves in any case; they are checked (section 6), not
-  controlled.
-- **DV3, a platform config dir for Claude's platform runs.** Claude's platform runs still share `~/.claude` (settings, plugins, hooks,
+- **DV1, the platform's own copy. Owner, 11-09: (a).** A copy per runtime in the store, promoted only after a pass, fixed after; the
+  user's copy never runs platform work (~650 MB for both runtimes with `previous` kept, not backed up). Only the runtime the instance
+  uses gets one (init's agent question, section 3 "First install"). Runtimes without the distribution port (ACP, a command template)
+  stay unversioned, and doctor says so. Not taken: (b) keep sharing the user's copy and only check it, where a manual update or the
+  tool's own updater changes the platform's runs before any check.
+- **DV2, the user's copy (nvm's). Owner, 11-09: (a), with the tool's own updater left on.** After each promotion the platform
+  moves nvm's copy up to the promoted version, never down (section 8). Claude Code's own updater stays on: turning it off is a
+  user-level setting (`DISABLE_AUTOUPDATER` in `~/.claude/settings.json`), which AGENTS.md leaves to the owner's direct yes, and the
+  owner chose not to; a version it brings first is checked when a session first shows it (section 6). Not taken: (b) leave it to the
+  tool's own updater alone, which brings back what `update-claude` was made for (the owner works mostly in Desktop, Claude Code
+  updates itself only in interactive sessions, so nvm's copy fell weeks behind; owner, 10-24); (c) latest every night, unchecked.
+  Desktop's and the Codex daemon's copies update themselves in any case; they are checked (section 6), not controlled.
+- **DV3, a platform config dir for Claude's platform runs. Owner, 11-09: (a), in two stages** (completions and judgment points
+  in step 2; leases, mailbox forks and `connectors: true` jobs after V-M8). Claude's platform runs still share `~/.claude` (settings, plugins, hooks,
   `~/.claude.json`) with the user's sessions; non-`--restricted` runs (leases) load the user's `settings.json`, plugins and hooks,
   written for the user's version. (a) A platform `CLAUDE_CONFIG_DIR` (runtime_claude.py already passes one through), the token
   through `auth_env`, for the runs that neither resume nor fork a session nor need the subscription login: completions and the
@@ -317,12 +333,13 @@ separate, the user's copy is the user's: decision DV2.
   login, which a token can't stand in for. The platform config dir goes only into the child run's environment, never the
   platform's own: `_home()` reads `CLAUDE_CONFIG_DIR` from `os.environ` (runtime_claude.py:161-162) and feeds `credential_paths()`
   and `user_control()`, which become every sandboxed project's denies; set in the platform's environment it would move them off the
-  real `~/.claude`. Session-side calls (section 5) keep the user's config dir. (b) Keep sharing for all of them.
+  real `~/.claude`. Session-side calls (section 5) keep the user's config dir. Not taken: (b) keep sharing for all of them.
 - **DV5, only if V-M10 shows a token run touches the Keychain login.** (a) Run candidate and session-version checks as a dedicated
   macOS user made for them (its own Keychain; a one-time setup by the owner). (b) Accept the residual: a candidate is the vendor's
   integrity-checked build, and the risk is a buggy refresh of the subscription login, which `check-claude-login` notices within the
   hour.
-- **DV4, cost.** A full pass is ~40 model calls per new version (Claude Code ships a few a week: ~150 calls a week), the daily
+- **DV4, cost. Owner, 11-09: accepted as is**, the daily subset included (a server-side change such as 11-08's code mode comes
+  with no new version to trigger a check). A full pass is ~40 model calls per new version (Claude Code ships a few a week: ~150 calls a week), the daily
   subset ~12 (one completion per schema), each version a user session runs ~10 more. On the subscription; nothing billed per use
   unless `metered_models` says so.
 
