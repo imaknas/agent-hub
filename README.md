@@ -110,7 +110,7 @@ Everything it does, in detail: [docs/features.md](docs/features.md).
 
 | What | Options |
 |---|---|
-| Your AI agent | Claude Code: everything. Codex: its chats reach the mailbox through brunna's tools (MCP); brunna's own background work and decisions don't run on it yet (they use a model provider meanwhile). Any CLI agent with a headless mode, or one that speaks the [Agent Client Protocol](https://agentclientprotocol.com/), can handle mailbox requests in a throwaway copy, through an adapter |
+| Your AI agent | Claude Code: everything. Codex: its chats reach the mailbox through brunna's tools (MCP); brunna's own background work and decisions don't run on it yet (they use a model provider meanwhile). Any CLI agent with a headless mode, or one that speaks the [Agent Client Protocol](https://agentclientprotocol.com/), can handle mailbox requests in a throwaway copy, through an adapter, beside a default agent that knows its sessions (Claude Code today; with none, no mailbox request is sent to any agent) |
 | The model behind brunna's decisions | Your agent's own login, Anthropic, any OpenAI-compatible API, or a local Ollama (`brunna llm setup`) |
 | The computer | macOS or Linux. An always-on machine is best; a laptop works |
 

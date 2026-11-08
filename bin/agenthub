@@ -163,45 +163,106 @@ def cmd_config(argv: list[str]) -> int:
     return 2
 
 
-def config_migrate(apply: bool) -> int:
-    """`brunna config migrate [--check]`: a setting an earlier release took and this one's config check refuses, brought in
-    line and said (brunna upgrade runs it before config apply, so an upgrade doesn't stop halfway at a config the new check
-    refuses); {settings} written whole and committed alone. --check only says it. Today one: runtime.default naming a runtime
-    that runs only in the platform's throwaway worktree (runtime_command since docs/design/runtime-codex.md step 0, which the
-    Codex preset set) becomes none: nothing that couldn't be held to a point's limits keeps running, and nothing else is
-    guessed (its own settings stay; picking an agent is the owner's)."""
+def config_migrations(d: dict) -> list[str]:
+    """The settings an earlier release took and this one's config check refuses, brought in line in d (the parsed {settings});
+    one line each for the owner, what changed and why. Each is fail-closed: what can't be held to a point's limits stops, and
+    nothing is guessed in its place (picking an agent or a provider is the owner's). Today, since docs/design/runtime-codex.md
+    step 0 (v0.12.0 took all three):
+    - runtime.default naming a runtime that runs only in the platform's throwaway worktree (runtime_command, which the Codex
+      preset set) becomes none; its own settings (runtime.<name>) stay, for pinning it on a throwaway point
+    - llm.points.<point> pinning such a runtime on a point that doesn't run in that worktree: the pin goes, the point runs on
+      the default
+    - llm.providers.<x> whose impl is a runtime with no completion interface (command): the provider goes, with each llm.use
+      group and llm.points pin that names it"""
     import runtime_ports
+    said = []
+    throwaway = ", ".join(runtime_ports.THROWAWAY_POINTS)
+    rt = d.get("runtime")
+    name = rt.get("default") if isinstance(rt, dict) else None
+    if isinstance(name, str) and name in runtime_ports.RUNTIMES and runtime_ports.throwaway_only(name):
+        rt["default"] = "none"
+        said.append(_("runtime.default was {name}, which runs only {points} in the platform's throwaway worktree: anywhere else "
+                      "it can't be held to a judgment point's limits (the tool would get a shell and read anything), so config "
+                      "check refuses it as the default. It is none now: no agent runs for brunna's own work until you pick one; "
+                      "runtime.{name} stays as it was", name=name, points=throwaway))
+    llm = d.get("llm") if isinstance(d.get("llm"), dict) else {}
+    points = llm.get("points") if isinstance(llm.get("points"), dict) else {}
+    for point, pin in list(points.items()):
+        r = pin.get("runtime") if isinstance(pin, dict) else None
+        if isinstance(r, str) and r in runtime_ports.RUNTIMES and runtime_ports.throwaway_only(r) \
+                and point not in runtime_ports.THROWAWAY_POINTS:
+            del points[point]
+            said.append(_("llm.points.{point} pinned it on {name}, which runs only {points} in the platform's throwaway "
+                          "worktree: the pin is gone, so {point} runs on the default runtime", point=point, name=r,
+                          points=throwaway))
+    providers = llm.get("providers") if isinstance(llm.get("providers"), dict) else {}
+    for prov, conf in list(providers.items()):
+        impl = conf.get("impl") if isinstance(conf, dict) else None
+        if not (isinstance(impl, str) and impl in runtime_ports.RUNTIMES
+                and "completion" not in runtime_ports.capabilities(impl)):
+            continue
+        del providers[prov]
+        use = llm.get("use") if isinstance(llm.get("use"), dict) else {}
+        groups = [g for g, n in list(use.items()) if n == prov]
+        for g in groups:
+            del use[g]
+        pinned = [p for p, pin in list(points.items()) if isinstance(pin, dict) and pin.get("provider") == prov]
+        for p in pinned:
+            del points[p]
+        said.append(_("llm.providers.{provider} used the runtime {impl}, which has no completion interface (a command template "
+                      "can't be made tool-free): the provider is gone, with what named it ({what}); answer-only judgment points "
+                      "need another provider (brunna llm setup)", provider=prov, impl=impl,
+                      what=_(", ").join([*(f"llm.use.{g}" for g in groups), *(f"llm.points.{p}" for p in pinned)])
+                      or _("nothing else")))
+    if "providers" in llm and not providers:   # none left: use alone is refused (completion.config_errors)
+        llm.pop("providers")
+        llm.pop("use", None)
+    return said
+
+
+def config_migrate(apply: bool) -> int:
+    """`brunna config migrate [--check]`: config_migrations on {settings} (brunna upgrade runs it before config apply, so an
+    upgrade doesn't stop halfway at a config the new check refuses). --check only says them: exit 10 when there are some, 0 when
+    not (as upgrade --check). Otherwise the file is written (the same JSON, the keys in their order, only those values changed)
+    and committed alone, unless it already had changes of the owner's not committed: then it is written but not committed,
+    and said. One-way: going back to an earlier release doesn't put the old values back (the config repo's history has them)."""
     path = hubconf.config_path()
     try:
         d = read_hub_json()
     except (OSError, ValueError):
         return 0   # none yet, or one config check says is broken: nothing here to bring in line
-    rt = d.get("runtime") if isinstance(d, dict) else None
-    name = rt.get("default") if isinstance(rt, dict) else None
-    if not (isinstance(name, str) and name in runtime_ports.RUNTIMES and runtime_ports.throwaway_only(name)):
+    said = config_migrations(d) if isinstance(d, dict) else []
+    if not said:
         return 0
-    if apply and hubconf.worktree_lookup():   # the instance's settings are the main checkout's to change
+    for line in said:
+        print(("✓ " if apply else "· ") + line)
+    if not apply:
+        print(_("  brunna config migrate makes {n} {n:change|changes} (brunna upgrade does that first)", n=len(said)))
+        return 10
+    if hubconf.worktree_lookup():   # the instance's settings are the main checkout's to change
         print(_("brunna config migrate: {root} is a linked worktree of the hub; run it from the main checkout ({main})",
                 root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
         return 1
-    points = ", ".join(runtime_ports.THROWAWAY_POINTS)
-    print(_("runtime.default is {name}, which runs only {points} in the platform's throwaway worktree: anywhere else it can't "
-            "be held to a judgment point's limits (the tool would get a shell and read anything), so this release runs nothing "
-            "else on it and config check refuses it as the default", name=name, points=points))
-    if not apply:
-        print(_("  brunna config migrate sets it to none (brunna upgrade does that first)"))
-        return 0
-    rt["default"] = "none"
+    import runtime_ports
+    # the owner's own edits not committed yet: committing the file would take them along, unseen
+    st = subprocess.run(["git", "-C", str(path.parent), "status", "--porcelain", "--", path.name], capture_output=True,
+                        text=True)
+    mine = st.returncode == 0 and bool(st.stdout.strip())
     write_hub_json(d)
     hubconf._cfg = None
-    print(_("✓ runtime.default is none now: no agent runs for brunna's own work until you pick one; runtime.{name} stays as it "
-            "was", name=name))
-    print(_("  judgment points again: brunna llm setup (an API key or a local model) or brunna init --agent {names}; {name} "
-            "can still handle mailbox requests, pinned on {points} beside a default with session state "
-            "(llm.points.<point>.runtime: {name}, mailbox.handler: propose). Codex gets a runtime of its own next "
-            "(docs/design/runtime-codex.md, step 1)", name=name, points=points, names="|".join(agent_presets())))
-    rc = subprocess.run([str(BIN / "commit-hub-files.sh"), f"chore(config): runtime.default {name} -> none (it runs only in "
-                         "the throwaway worktree)", path.name]).returncode
+    print(_("  judgment points again: brunna llm setup (an API key or a local model) or brunna init --agent {names}; a "
+            "throwaway-only runtime can still handle mailbox requests, pinned on {points} beside a default with session state "
+            "(llm.points.<point>.runtime, mailbox.handler: propose). Codex gets a runtime of its own next "
+            "(docs/design/runtime-codex.md, step 1)", points=", ".join(runtime_ports.THROWAWAY_POINTS),
+            names="|".join(agent_presets())))
+    print(_("  this is one-way: going back to an earlier release doesn't put the old values back (the config repo's history "
+            "has them)"))
+    if mine:
+        print(_("⚠️ {file} had changes of yours that weren't committed: it is written with these changes too, and not "
+                "committed. Look it over (git -C {dir} diff {file}) and commit it yourself", file=path.name, dir=path.parent))
+        return 0
+    rc = subprocess.run([str(BIN / "commit-hub-files.sh"), "chore(config): settings this release refuses brought in line "
+                         "(brunna config migrate)", path.name]).returncode
     if rc != 0:
         print(_("warning: {file} was written, but the commit/push failed; it needs a manual fix", file=path.name))
     return 0
@@ -1512,6 +1573,13 @@ def doctor_throwaway_runtimes(add, default: str) -> None:
             _("keep a runtime with session state as runtime.default and pin {runtime} on {points} ({settings} "
               "llm.points.<point>.runtime, with mailbox.handler: propose); answer-only judgment points can go to an LLM "
               "provider (brunna llm setup)", runtime=name, points=points) if name == default or not used else "")
+        if used:
+            # what the copy doesn't hold (llm.py: a runtime without the login port gets os.environ minus the providers' keys;
+            # mailbox-propose's letters come from anyone who can write the bus): said, as the accepted residual
+            add("info", _("{runtime} on {points}: in the throwaway copy it still has a shell, reads whatever your user can, and gets "
+                          "the environment minus the LLM providers' keys, and the letter it handles can be anyone's; accepted "
+                          "until the platform's own sandbox wraps these runs (docs/design/runtime-codex.md, \"Sandboxed sessions "
+                          "on any agent\", layer 2)", runtime=name, points=", ".join(used)))
 
 
 def doctor_runtimes(add, default: str, installed: list[str], optional: set) -> None:

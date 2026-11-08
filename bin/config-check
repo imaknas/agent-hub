@@ -77,7 +77,8 @@ def check(root: pathlib.Path) -> list[str]:
                       have=", ".join(runtime_ports.RUNTIMES)))
     elif rdefault and runtime_ports.throwaway_only(rdefault):
         # a runtime that can't be held to a point's limits runs only where the platform confines it (runtime_command, runtime_acp);
-        # an instance that has it as the default is moved off it by brunna upgrade (bin/upgrade.py throwaway_default)
+        # an instance that has it as the default is moved off it by `brunna config migrate`, which brunna upgrade runs before
+        # config apply (bin/agenthub config_migrate)
         errs.append(_("{settings}: runtime.default `{name}` runs only {points} in the platform's throwaway worktree (it can't be "
                       "held to a judgment point's limits anywhere else), so as the default it would run nothing (dispatch needs "
                       "session state, every other point is refused); set runtime.default to a runtime with session state, or "

@@ -103,8 +103,12 @@ class ThrowawayRuntimes(unittest.TestCase):
         self.assertIn("brunna llm setup", row[2], "not pinned yet: what to do")
         pinned = {"runtime": {"default": "claude", "command": {"run": ["x"]}}, "mailbox": {"handler": "propose"},
                   "llm": {"points": {"mailbox-propose": {"runtime": "command"}}}}
-        [row] = self.rows(pinned, default="claude")
+        row, residual = self.rows(pinned, default="claude")
         self.assertEqual((row[0], row[2]), ("info", ""), "pinned where it runs: nothing to do")
+        # what the copy doesn't hold, said as the accepted residual
+        self.assertEqual(residual[0], "info")
+        for said in ("mailbox-propose", "shell", "anyone's", "layer 2"):
+            self.assertIn(said, residual[1])
 
     def test_nothing_when_no_such_runtime_is_named(self):
         self.assertEqual(self.rows({"runtime": {"default": "claude"}}, default="claude"), [])

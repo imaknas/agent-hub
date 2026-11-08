@@ -296,34 +296,67 @@ class NewUser(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed")
 
-    def test_an_instance_with_the_old_codex_preset_is_moved_off_it(self):
-        """runtime.default: command (the Codex preset before docs/design/runtime-codex.md step 0) is refused by config check, so
-        brunna upgrade runs config migrate before config apply: the default becomes none, the template stays, the file is
-        committed alone, and the check passes again. --check only says it."""
+    def old_settings(self):
+        """An instance init made with the Codex preset, then given what v0.12.0 took and this release refuses (committed past
+        the config gate, which refuses it now): runtime.default: command, a non-throwaway point pinned on command, a provider
+        whose impl is command with a group and a point naming it. Returns (the settings as committed, as migrate should
+        leave them)."""
+        import copy
         import json
         subprocess.run(["git", "init", "-q", str(self.hub)], env=self.env, check=True)   # commit-hub-files locks in the hub's repo
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "codex")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        cfg = self.home / ".brunna" / "config" / "brunna.json"
+        self.assertTrue(self.git_cfg("config", "core.hooksPath").stdout.strip(), "the config gate is on: migrate's commit passes it")
         d = self.cfg_json()
         d["runtime"]["default"] = "command"   # what the old preset wrote
-        cfg.write_text(json.dumps(d, indent=2) + "\n")
-        self.git_cfg("commit", "-q", "--no-verify", "-m", "chore(config): the old preset", "--", "brunna.json")
+        d["llm"] = {"points": {"mailbox-propose": {"runtime": "command"}, "librarian-state": {"runtime": "command"},
+                               "reflect-week": {"provider": "c"}},
+                    "providers": {"c": {"impl": "command", "models": {"standard": "m"}}}, "use": {"standard": "c"}}
+        (self.home / ".brunna" / "config" / "brunna.json").write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+        self.git_cfg("commit", "-q", "--no-verify", "-m", "chore(config): what v0.12.0 took", "--", "brunna.json")
+        want = copy.deepcopy(d)
+        want["runtime"]["default"] = "none"
+        want["llm"] = {"points": {"mailbox-propose": {"runtime": "command"}}}
+        return d, want
+
+    def test_an_instance_with_the_old_codex_preset_is_moved_off_it(self):
+        """What config check refuses now stops config apply, so brunna upgrade runs config migrate first: each setting brought
+        in line and said, nothing else in the file changed (keys in their order), committed alone through the config gate, and
+        the check passes again. --check only says them, exit 10."""
+        import json
+        d, want = self.old_settings()
+        cfg = self.home / ".brunna" / "config" / "brunna.json"
         r = self.hub_cmd("config", "check")
         self.assertEqual(r.returncode, 1, "refused: " + r.stdout + r.stderr)
         self.assertIn("runtime.default `command`", r.stdout + r.stderr)
+        before = cfg.read_text()
         r = self.hub_cmd("config", "migrate", "--check")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("mailbox-propose", r.stdout)
-        self.assertEqual(self.cfg_json()["runtime"]["default"], "command", "--check changes nothing")
+        self.assertEqual(r.returncode, 10, r.stdout + r.stderr)
+        for said in ("runtime.default", "llm.points.librarian-state", "llm.providers.c", "llm.use.standard", "llm.points.reflect-week"):
+            self.assertIn(said, r.stdout)
+        self.assertEqual(cfg.read_text(), before, "--check changes nothing")
         r = self.hub_cmd("config", "migrate")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.cfg_json()["runtime"]["default"], "none")
-        self.assertEqual(self.cfg_json()["runtime"]["command"], d["runtime"]["command"], "its own settings stay")
+        self.assertEqual(cfg.read_text(), json.dumps(want, indent=2, ensure_ascii=False) + "\n", "only those values, keys in order")
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed: " + r.stdout + r.stderr)
+        self.assertIn("config migrate", self.git_cfg("log", "-1", "--format=%s").stdout)
         self.assertEqual(self.hub_cmd("config", "check").returncode, 0)
-        r = self.hub_cmd("config", "migrate")   # nothing left to do: says nothing
-        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+        for args in (("migrate",), ("migrate", "--check")):   # nothing left to do: says nothing
+            r = self.hub_cmd("config", *args)
+            self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
+
+    def test_migrate_never_commits_the_owners_own_edits(self):
+        import json
+        d, want = self.old_settings()
+        cfg = self.home / ".brunna" / "config" / "brunna.json"
+        d["owner"]["tag"] = want["owner"]["tag"] = "Robin"   # the owner's edit, not committed yet
+        cfg.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+        r = self.hub_cmd("config", "migrate")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(json.loads(cfg.read_text()), want, "written, with the owner's edit kept")
+        self.assertIn("git -C", r.stdout, "said, with how to look")
+        self.assertTrue(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout.strip(), "not committed")
+        self.assertEqual(self.git_cfg("log", "-1", "--format=%s").stdout.strip(), "chore(config): what v0.12.0 took")
 
     def test_init_refuses_an_unknown_agent(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "nosuch")
