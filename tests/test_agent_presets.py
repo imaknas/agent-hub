@@ -54,7 +54,8 @@ class Presets(unittest.TestCase):
         presets = ah.agent_presets()
         d = {"runtime": {"default": "claude"}, "modules": {"claude": True, "codex": False, "owner": True}}
         ah.apply_agent(d, "codex", presets)
-        self.assertEqual(d["runtime"]["default"], "command")
+        self.assertEqual(d["runtime"]["default"], "none", "the command template is no default (runtime-codex.md step 0)")
+        self.assertIn("command", d["runtime"])
         self.assertEqual((d["modules"]["claude"], d["modules"]["codex"], d["modules"]["owner"]), (False, True, True))
         ah.apply_agent(d, "none", presets)
         self.assertEqual(d["runtime"]["default"], "none")

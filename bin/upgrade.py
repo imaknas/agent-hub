@@ -21,7 +21,9 @@ run the target's bin/setup-python → hand over to the target's own step list (b
 
 The in-step commands, each from the target's files, in this order; the first that fails stops the rest and says how to
 go back (`brunna upgrade --to <previous>`, which runs the same steps on the old code):
-  registry.py check · brunna config apply · brunna init --scheduler-only · brunna land ·
+  registry.py check · brunna config migrate (a setting an earlier release took and this one's config check refuses,
+  brought in line and said, so config apply doesn't stop the upgrade halfway: e.g. a runtime.default that runs only in
+  the throwaway worktree becomes none) · brunna config apply · brunna init --scheduler-only · brunna land ·
   brunna user-settings --update (the platform's own entries in the user's tool settings brought to this version: only
   entries the owner installed, such as the worktree hooks; nothing is added to settings that have none) ·
   brunna install-cli --dir <where the wrapper is> (only when the brunna on PATH is install-cli's wrapper) ·
@@ -344,10 +346,13 @@ def cli_wrapper() -> pathlib.Path | None:
 
 
 def step_list(full: bool) -> list[tuple[str, list[str]]]:
-    """full: the target has this command (v0.2.0 on); v0.1.0's files have no init --scheduler-only and no user-settings."""
+    """full: the target has this command (v0.2.0 on); v0.1.0's files have no init --scheduler-only, no user-settings and
+    no config migrate."""
     b = ROOT / "bin"
-    steps = [("registry", py_step(b / "registry.py", "check")),
-             ("config apply", py_step(b / "agenthub", "config", "apply"))]
+    steps = [("registry", py_step(b / "registry.py", "check"))]
+    if full:
+        steps.append(("config migrate", py_step(b / "agenthub", "config", "migrate")))
+    steps.append(("config apply", py_step(b / "agenthub", "config", "apply")))
     if full:
         steps.append(("scheduler", py_step(b / "agenthub", "init", "--scheduler-only")))
     steps.append(("land", py_step(b / "agenthub", "land")))

@@ -1,20 +1,18 @@
-=== health: no template
-(False, 'brunna.json runtime.command.run is not set (the command template)')
+=== unsupported: completion
+a command template can't be held to no tools, and the tool gets a shell and reads anything; an answer-only judgment point needs an LLM provider (brunna llm setup)
+=== unsupported: confine
+a command template can't carry a judgment point's limits: it runs only in the platform's throwaway worktree
+=== run: another point
+the command runtime runs only mailbox-propose in the platform's throwaway worktree, and this is librarian-state in /: a command template can't carry a judgment point's limits, so anywhere else the tool would have a shell and read anything
+=== run: not in the copy
+the command runtime runs only mailbox-propose in the platform's throwaway worktree, and this is mailbox-propose in /: a command template can't carry a judgment point's limits, so anywhere else the tool would have a shell and read anything
 === run: no template
 brunna.json runtime.command.run is not set (the command template)
-=== health: not found
-(False, '/nonexistent/agent-cli not found')
 === run: not found
-/nonexistent/agent-cli not found
-=== complete: not found
 /nonexistent/agent-cli not found
 === run: timeout
 took longer than 1 s
 === run: no output, empty stderr
 no output: (stderr is empty too)
-=== complete: no output
-no output: 
 === run: no output, stderr
-no output: oops
-=== complete: no output, stderr
 no output: oops

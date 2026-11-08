@@ -227,6 +227,7 @@ class CommandFixture:
     """The command template from settings (runtime_command): a fake CLI agent. It returns only text/JSON: no cost,
     session, turn count or "not completed normally"."""
     REPORTS = frozenset()   # what this runtime can report (cost, session, turns, incomplete)
+    POINT = "mailbox-propose"   # the only point it runs, and only in the platform's copy (made in configure_run)
 
     def setup(self, tmp: pathlib.Path):
         import runtime_command as m
@@ -241,11 +242,19 @@ class CommandFixture:
         return m, {}
 
     def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
-        return {**os.environ, "CMD_MODE": mode}
+        # as AcpFixture: the Task has no cwd = the process's own directory, made and marked where propose_apply does
+        import hubconf
+        copy = hubconf.throwaway_copy("contract")
+        copy.mkdir()
+        self._cwd = os.getcwd()
+        os.chdir(copy)
+        return {**os.environ, "CMD_MODE": mode, "HUB_THROWAWAY_COPY": str(copy)}
 
     def teardown(self):
         import hubconf
         hubconf.get = self._get
+        if getattr(self, "_cwd", None):
+            os.chdir(self._cwd)
 
 
 class AcpFixture:
@@ -736,14 +745,88 @@ class CommandTemplate(unittest.TestCase):
         saved = hubconf.get
         conf = {"run": [sys.executable, str(script)]}
         hubconf.get = lambda k, default=None: conf if k == "runtime.command" else saved(k, default)
+        copy = hubconf.throwaway_copy("contract")
+        copy.mkdir()
         try:
-            res = m.run(runtime_ports.Task(point="p", prompt="héllo", spec={}, cwd=str(tmp), model=None,
-                                           output_schema=None, timeout_s=30, env=None))
+            res = m.run(runtime_ports.Task(point="mailbox-propose", prompt="héllo", spec={}, cwd=str(copy), model=None,
+                                           output_schema=None, timeout_s=30, env={**os.environ, m.COPY_VAR: str(copy)}))
         finally:
             hubconf.get = saved
         self.assertFalse(res.ok, "a tool that was blocked by permissions and ended without saying anything "
                                  "is not a successful empty answer")
         self.assertIn("auto-denied", res.error)
+
+
+class CommandRuntimeFailsClosed(unittest.TestCase):
+    """runtime_command can't carry a judgment point's limits (tools, permissions, its environment): it runs only
+    mailbox-propose in the platform's throwaway copy, and has no completion interface (docs/design/runtime-codex.md,
+    step 0)."""
+
+    def setUp(self):
+        import hubconf
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.ran = self.tmp / "ran"
+        script = self.tmp / "agent.py"
+        script.write_text(f"open({str(self.ran)!r}, 'w').write('x')\nprint('done')\n")
+        conf = {"run": [sys.executable, str(script)]}
+        saved = hubconf.get
+        p = mock.patch.object(hubconf, "get", lambda k, default=None: conf if k == "runtime.command" else saved(k, default))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def copy(self):
+        import hubconf
+        copy = hubconf.throwaway_copy("contract")
+        copy.mkdir()
+        return copy
+
+    def run_task(self, point, cwd, mark):
+        import runtime_command as m
+        env = {k: v for k, v in os.environ.items() if k != m.COPY_VAR}
+        if mark is not None:
+            env[m.COPY_VAR] = mark
+        return m.run(runtime_ports.Task(point=point, prompt="p", spec={}, cwd=str(cwd), env=env, timeout_s=30))
+
+    def test_it_is_throwaway_only(self):
+        self.assertTrue(runtime_ports.throwaway_only("command"))
+
+    def test_refused_outside_the_copy_and_nothing_runs(self):
+        copy = self.copy()
+        for point, cwd, mark in (("librarian-state", self.tmp, None),       # another point, anywhere
+                                 ("librarian-state", copy, str(copy)),      # another point, even in the copy
+                                 ("mailbox-propose", self.tmp, None),       # the point, in a folder of its own
+                                 ("mailbox-propose", copy, None),           # the copy, not marked
+                                 ("mailbox-propose", copy, str(self.tmp))):  # marked for another folder
+            res = self.run_task(point, cwd, mark)
+            self.assertFalse(res.ok, (point, cwd, mark))
+            self.assertIn(point, res.error)   # the refusal, in either language: it names the point and where
+            self.assertIn(os.path.realpath(cwd), res.error)
+            self.assertFalse(self.ran.exists(), (point, cwd, mark))
+
+    def test_runs_mailbox_propose_in_the_copy(self):
+        copy = self.copy()
+        res = self.run_task("mailbox-propose", copy, str(copy))
+        self.assertTrue(res.ok, res.error)
+        self.assertTrue(self.ran.exists())
+
+    def test_no_completion_interface_and_says_why(self):
+        self.assertNotIn("completion", runtime_ports.capabilities("command"))
+        with self.assertRaises(runtime_ports.Unsupported):
+            runtime_ports.load_completion("command")
+        self.assertIn("brunna llm setup", runtime_ports.missing_label("command", "completion"))
+
+    def test_a_completion_point_on_it_is_refused_not_run(self):
+        import completion
+        import llm
+        spec = llm.points()["points"]["librarian-state-edits"]
+        with mock.patch.object(completion, "settings", lambda: None), \
+                mock.patch.object(runtime_ports, "default_name", lambda: "command"), self.assertRaises(completion.Refused):
+            llm.completion_target("librarian-state-edits", spec)
+        self.assertFalse(self.ran.exists())
+
+    def test_it_is_no_completion_provider(self):
+        import completion
+        self.assertTrue([e for e in completion.config_errors({"providers": {"c": {"impl": "command"}}}) if "command" in e])
 
 
 if __name__ == "__main__":

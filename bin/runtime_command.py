@@ -1,9 +1,9 @@
 """Any CLI agent with a headless mode: plug it in by writing a command template in the settings, no code needed
 (docs/design/tool-agnostic.md principle 4).
 
-{settings}:
-  "runtime": {"default": "command",
-              "command": {"run": ["agy", "--add-dir", ".", "--mode", "accept-edits", "--model", "{model}", "-p", "{prompt}"],
+{settings} (never as runtime.default, which config check refuses: pinned on a throwaway point, beside another default):
+  "llm": {"points": {"mailbox-propose": {"runtime": "command"}}}, "mailbox": {"handler": "propose"},
+  "runtime": {"command": {"run": ["agy", "--add-dir", ".", "--mode", "accept-edits", "--model", "{model}", "-p", "{prompt}"],
                                                    the command template (list)
                           "stdin": true,           the prompt is given on stdin (default: stdin when the template has
                                                    no {prompt}/{prompt_file})
@@ -26,20 +26,22 @@
   Exit 0 without any output counts as a failure (some tools end quietly like that when a permission is blocked);
   stderr gives the reason.
 
-Only two interfaces are provided: agent (one run) and completion. Nothing else (resume, streaming, hooks,
-login status) -- the platform turns those features off explicitly via Unsupported. So "one run" should
-only be used in the platform's throwaway worktree (bin/propose_apply.py): the platform cannot control such a tool's
-permissions, and the guarantee comes from "it cannot touch the real checkout, and the platform applies only allowed
-paths".
+Only one interface is provided: agent (one run), and it runs only in the platform's throwaway worktree
+(THROWAWAY_ONLY; runtime_ports.THROWAWAY_POINTS, bin/propose_apply.py marks the copy with HUB_THROWAWAY_COPY). A template
+can't carry a judgment point's limits (its tools, allowed tools, permission mode, extra arguments) and the tool gets the
+whole environment, so anywhere else it would have a shell and read anything (docs/design/runtime-codex.md, "Found by the
+11-08 blind review"); in the copy the guarantee comes from "it cannot touch the real checkout, and the platform applies
+only allowed paths". Every other run is refused with that reason. No completion interface either: a generic template
+can't be made tool-free (a completion's contract), so completion points need llm.providers. Nothing else (resume,
+streaming, hooks, login status) -- the platform turns those features off explicitly via Unsupported.
 Structured output: the schema is appended to the end of the prompt, and the returned text is parsed and validated by
-the caller (llm.py / completion.py). Standard library.
+the caller (llm.py). Standard library.
 """
 from __future__ import annotations
 
 import json
 import os
 import pathlib
-import shutil
 import signal
 import subprocess
 import sys
@@ -47,10 +49,22 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
-from runtime_ports import CompletionResult, TaskResult  # noqa: E402
+from runtime_ports import TaskResult  # noqa: E402
 
 _ = i18n.domain(__file__)
 RULES_FILE_NAMES = ("AGENTS.md",)   # the cross-tool convention (Codex and others read it)
+THROWAWAY_ONLY = True   # runs only where the platform confines them (runtime_ports.THROWAWAY_POINTS)
+COPY_VAR = "HUB_THROWAWAY_COPY"   # set by propose_apply: this working directory is its throwaway worktree
+
+
+def unsupported(port: str) -> str | None:
+    """Why it lacks a port, for people (doctor's feature table, Unsupported reasons)."""
+    if port == "completion":
+        return _("a command template can't be held to no tools, and the tool gets a shell and reads anything; an answer-only "
+                 "judgment point needs an LLM provider (brunna llm setup)")
+    if port == "confine":
+        return _("a command template can't carry a judgment point's limits: it runs only in the platform's throwaway worktree")
+    return None
 
 
 def _conf() -> dict:
@@ -122,7 +136,24 @@ def describe(task) -> list:
     return _argv(list(conf["run"]), task.model, "<prompt_file>", "<output_file>", "<prompt>", task.cwd or "<cwd>")
 
 
+def _in_copy(task) -> str:
+    """Why this run is refused, or "" when it may run: only a THROWAWAY_POINTS point, in the throwaway worktree propose_apply
+    marks (the mark, the point and the place itself; no working directory given means the process's own)."""
+    import hubconf
+    import runtime_ports
+    cwd = os.path.realpath(task.cwd or os.getcwd())
+    marked = (os.environ if task.env is None else task.env).get(COPY_VAR) or ""
+    if task.point in runtime_ports.THROWAWAY_POINTS and hubconf.is_throwaway_copy(cwd, marked=marked):
+        return ""
+    return _("the command runtime runs only {points} in the platform's throwaway worktree, and this is {point} in {cwd}: a "
+             "command template can't carry a judgment point's limits, so anywhere else the tool would have a shell and read "
+             "anything", points=", ".join(runtime_ports.THROWAWAY_POINTS), point=task.point, cwd=cwd)
+
+
 def run(task) -> TaskResult:
+    why = _in_copy(task)
+    if why:
+        return TaskResult(False, error=why)
     code, out, err = _run(task.prompt + _schema_note(task.output_schema), task.model, task.cwd, task.env, task.timeout_s)
     if code is None:
         return TaskResult(False, error=err)
@@ -138,30 +169,3 @@ def run(task) -> TaskResult:
         except ValueError:
             so = None   # llm.py handles it as "no structured_output"
     return TaskResult(True, text=out.strip(), structured_output=so, stop="end")
-
-
-# ---------- completion ----------
-
-def complete(req, conf) -> CompletionResult:
-    import hubconf
-    try:
-        # an empty folder of its own: a template's {cwd} may grant the tool all of it
-        tmp = tempfile.TemporaryDirectory(prefix="hub-command-cwd-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)
-    except OSError as e:
-        return CompletionResult(False, stop="error", error=_("could not make a folder for the run: {e}", e=e))
-    with tmp as cwd:
-        code, out, err = _run(req.prompt + _schema_note(req.schema), req.model, cwd, None, req.timeout_s)
-    if code is None or code != 0:
-        return CompletionResult(False, stop="error", error=err or f"exit {code}")
-    if not out.strip():
-        return CompletionResult(False, stop="error", error=_("no output: {detail}", detail=err.strip()[-300:]))
-    return CompletionResult(True, text=out, stop="end")
-
-
-def health(conf) -> tuple:
-    try:
-        c = _conf()
-    except RuntimeError as e:
-        return False, str(e)
-    exe = c["run"][0]
-    return (bool(shutil.which(exe)), "" if shutil.which(exe) else _("{exe} not found", exe=exe))

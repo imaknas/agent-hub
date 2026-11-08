@@ -9,6 +9,6 @@
  "Platform-run capabilities (cap-runner): sandboxed projects borrow a capability with brunna cap-run --cap": "平台代跑(cap-runner):sandbox 裡的專案用 hub-run --cap 借能力",
  "issue a new application key in the Backblaze console and write it into .secrets/b2-env": "Backblaze 後台重發 application key,寫進 .secrets/b2-env",
  "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old": "每晚:移除標了 org.testcontainers、超過一天的 Docker 容器",
- "background work and brunna's decisions through Codex; your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet)": "背景工作和 brunna 的判斷交給 Codex;你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡)",
- "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token"
+ "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token",
+ "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)": "你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡);brunna 自己的背景工作和判斷還不在 Codex 上跑(這段期間要設一家 LLM provider)"
 }

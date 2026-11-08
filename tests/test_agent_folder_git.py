@@ -142,9 +142,9 @@ class StandIn(unittest.TestCase):
         import runtime_command
         with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(hubconf, "projects", lambda: {"p": {}}), \
                 mock.patch.object(hubconf, "get", lambda k, d=None: {"run": ["true"]} if k == "runtime.command" else d):
-            got = runtime_command.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
-            self.assertFalse(got.ok)
-            self.assertTrue(got.error)
+            code, _out, why = runtime_command._run("p", None, None, None, 10)   # what its run makes the folder with
+            self.assertIsNone(code)
+            self.assertTrue(why)
             res = propose_apply.run("p", self.tmp, "mailbox-propose", "p", [])
             self.assertFalse(res["ok"])
             self.assertTrue(res["error"])
@@ -427,22 +427,6 @@ class CheckAfterAnUpdate(unittest.TestCase):
         self.assertIn("--restricted", json.loads(seen.read_text()))
 
 
-class CommandRuntimeFolder(unittest.TestCase):
-    def test_complete_gets_an_empty_folder_of_its_own(self):
-        import runtime_command
-        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
-        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), \
-                mock.patch.object(hubconf, "get", lambda k, d=None: {"run": ["/bin/sh", "-c", 'echo "{cwd}"; pwd; ls -A']} if k == "runtime.command" else d):
-            (hubconf.private_tmp() / "another-runs-file").write_text("x")
-            got = runtime_command.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
-        self.assertTrue(got.ok, got.error)
-        named, here, *listed = got.text.split("\n")
-        self.assertEqual(os.path.realpath(named), os.path.realpath(here))
-        self.assertTrue(pathlib.Path(here).name.startswith("hub-command-cwd-"))
-        self.assertEqual(pathlib.Path(os.path.realpath(here)).parent, secrets / "tmp")
-        self.assertEqual([x for x in listed if x], [], "nothing of another run's")
-
-
 class ProbeThroughTheRealPath(tbs.Fixture):
     """agent_run on the platform's path, the agent a stand-in: the request reaches it in the repo, with the variable."""
 
@@ -534,15 +518,17 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         return d
 
     def test_an_agent_in_a_copy_of_a_memory_branch_starts_only_if_it_holds_only_notes(self):
-        """On a runtime that can't be told to load no settings file too: the platform's own look at the files is what holds, and the core
-        points go on running on it (AGENTS.md, Tool neutrality). The flag reinforces where a runtime has it."""
+        """The platform's own look at the files comes first, on every runtime (AGENTS.md, Tool neutrality); the flag reinforces where a
+        runtime has it. The command runtime runs none of them even in a clean copy: a template can't carry the point's limits, so the
+        agent would have a shell and read anything (docs/design/runtime-codex.md, step 0)."""
         env = self.on_command()
         d = self.memory_copy()
         for point in self.MEMORY_POINTS:
             with self.subTest(point):
                 self.ran.unlink(missing_ok=True)
                 r = self.memory_point_at(point, d, env)
-                self.assertTrue(self.ran.exists(), r.stdout + r.stderr)
+                self.assertFalse(self.ran.exists(), "the agent never started")
+                self.assertIn("mailbox-propose", r.stdout + r.stderr, "the only point it runs, and why")
         (d / ".claude").mkdir()
         (d / ".claude" / "settings.json").write_text("{}")
         for point in self.MEMORY_POINTS:
@@ -632,15 +618,17 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                 bad = memory_paths.folder_problems(d)
                 self.assertTrue(any(says in x for x in bad), bad)
 
-    def test_login_check_runs_on_a_default_command_runtime(self):
-        """Its point doesn't ask for the flag: the check before an update doesn't fail for lack of confined runs."""
+    def test_login_check_is_refused_on_a_default_command_runtime(self):
+        """Its point doesn't ask for the flag, but the command runtime runs nothing outside the throwaway copy (check-claude-login
+        doesn't ask it: runtime_ports.throwaway_only)."""
         env = self.on_command()
         repo = self.tmp / "repo"
         repo.mkdir()
         r = subprocess.run([sys.executable, str(BIN / "llm.py"), "run", "login-check", "--cwd", str(repo)], input="ok", cwd=repo,
                            capture_output=True, text=True, timeout=60, env=env)
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertTrue(self.ran.exists())
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertFalse(self.ran.exists())
+        self.assertIn("login-check", r.stdout + r.stderr)
 
 
 class ARuntimeThatDoesntSay(unittest.TestCase):

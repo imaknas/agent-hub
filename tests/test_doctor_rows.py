@@ -80,6 +80,36 @@ class ProposeOff(unittest.TestCase):
         self.assertEqual(self.rows("headless", {"box": {"enforce": {"sandbox": True}}}), [])
 
 
+class ThrowawayRuntimes(unittest.TestCase):
+    """A runtime that runs only in the throwaway copy (runtime_command since docs/design/runtime-codex.md step 0): the
+    owner is told judgment points are off on it, and why; red-ish (warn) only as the default."""
+
+    def rows(self, conf, default="none"):
+        rows = []
+        with mock.patch.object(hubconf, "get", lambda k, d=None: conf.get(k, d)):
+            load_agenthub().doctor_throwaway_runtimes(lambda *a: rows.append(a), default)
+        return rows
+
+    def test_the_default_is_a_warning_with_what_to_do(self):
+        [row] = self.rows({"runtime": {"default": "command", "command": {"run": ["x"]}}}, default="command")
+        self.assertEqual(row[0], "warn")
+        self.assertIn("mailbox-propose", row[1])
+        self.assertIn("a command template can't carry a judgment point's limits", row[1], "why, in the runtime's words")
+        self.assertIn("mailbox.handler: propose", row[2])
+
+    def test_set_up_but_not_the_default_is_said(self):
+        [row] = self.rows({"runtime": {"default": "none", "command": {"run": ["x"]}}})
+        self.assertEqual(row[0], "info")
+        self.assertIn("brunna llm setup", row[2], "not pinned yet: what to do")
+        pinned = {"runtime": {"default": "claude", "command": {"run": ["x"]}}, "mailbox": {"handler": "propose"},
+                  "llm": {"points": {"mailbox-propose": {"runtime": "command"}}}}
+        [row] = self.rows(pinned, default="claude")
+        self.assertEqual((row[0], row[2]), ("info", ""), "pinned where it runs: nothing to do")
+
+    def test_nothing_when_no_such_runtime_is_named(self):
+        self.assertEqual(self.rows({"runtime": {"default": "claude"}}, default="claude"), [])
+
+
 class MemoryBranches(unittest.TestCase):
     """A memory branch already holding more than notes; and what the check leaves on a runtime that can't be told."""
 

@@ -280,7 +280,9 @@ class NewUser(unittest.TestCase):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "codex")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         d = self.cfg_json()
-        self.assertEqual(d["runtime"]["default"], "command")
+        # the command template is no default (it can't be held to a point's limits; docs/design/runtime-codex.md step 0):
+        # kept for pinning mailbox-propose on it, and config check passes (init applied the config)
+        self.assertEqual(d["runtime"]["default"], "none")
         self.assertEqual(d["runtime"]["command"]["run"][:2], ["codex", "exec"])
         self.assertTrue(d["modules"]["codex"])
         self.assertFalse(d["modules"]["claude"])
@@ -290,8 +292,38 @@ class NewUser(unittest.TestCase):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "none")
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "codex")
         d = self.cfg_json()
-        self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("command", True), r.stdout + r.stderr)
+        self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("none", True), r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed")
+
+    def test_an_instance_with_the_old_codex_preset_is_moved_off_it(self):
+        """runtime.default: command (the Codex preset before docs/design/runtime-codex.md step 0) is refused by config check, so
+        brunna upgrade runs config migrate before config apply: the default becomes none, the template stays, the file is
+        committed alone, and the check passes again. --check only says it."""
+        import json
+        subprocess.run(["git", "init", "-q", str(self.hub)], env=self.env, check=True)   # commit-hub-files locks in the hub's repo
+        r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "codex")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        cfg = self.home / ".brunna" / "config" / "brunna.json"
+        d = self.cfg_json()
+        d["runtime"]["default"] = "command"   # what the old preset wrote
+        cfg.write_text(json.dumps(d, indent=2) + "\n")
+        self.git_cfg("commit", "-q", "--no-verify", "-m", "chore(config): the old preset", "--", "brunna.json")
+        r = self.hub_cmd("config", "check")
+        self.assertEqual(r.returncode, 1, "refused: " + r.stdout + r.stderr)
+        self.assertIn("runtime.default `command`", r.stdout + r.stderr)
+        r = self.hub_cmd("config", "migrate", "--check")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("mailbox-propose", r.stdout)
+        self.assertEqual(self.cfg_json()["runtime"]["default"], "command", "--check changes nothing")
+        r = self.hub_cmd("config", "migrate")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(self.cfg_json()["runtime"]["default"], "none")
+        self.assertEqual(self.cfg_json()["runtime"]["command"], d["runtime"]["command"], "its own settings stay")
+        self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed: " + r.stdout + r.stderr)
+        self.assertEqual(self.hub_cmd("config", "check").returncode, 0)
+        r = self.hub_cmd("config", "migrate")   # nothing left to do: says nothing
+        self.assertEqual((r.returncode, r.stdout), (0, ""), r.stderr)
 
     def test_init_refuses_an_unknown_agent(self):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "nosuch")

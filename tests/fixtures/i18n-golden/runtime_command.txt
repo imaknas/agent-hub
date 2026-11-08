@@ -1,20 +1,18 @@
-=== health: no template
-(False, 'brunna.json runtime.command.run 沒有設(指令樣板)')
+=== unsupported: completion
+指令樣板沒辦法限定不用工具,工具會有 shell、什麼都讀得到;只要答案的判斷點需要一家 LLM provider(brunna llm setup)
+=== unsupported: confine
+指令樣板帶不了判斷點的限制:只在平台的拋棄式 worktree 裡跑
+=== run: another point
+執行環境 command 只在平台的拋棄式 worktree 裡跑 mailbox-propose,這次是 librarian-state、在 /:指令樣板帶不了判斷點的限制,在別的地方工具會有 shell、什麼都讀得到
+=== run: not in the copy
+執行環境 command 只在平台的拋棄式 worktree 裡跑 mailbox-propose,這次是 mailbox-propose、在 /:指令樣板帶不了判斷點的限制,在別的地方工具會有 shell、什麼都讀得到
 === run: no template
 brunna.json runtime.command.run 沒有設(指令樣板)
-=== health: not found
-(False, '找不到 /nonexistent/agent-cli')
 === run: not found
-找不到 /nonexistent/agent-cli
-=== complete: not found
 找不到 /nonexistent/agent-cli
 === run: timeout
 超過 1 秒
 === run: no output, empty stderr
 沒有輸出:(stderr 也是空的)
-=== complete: no output
-沒有輸出:
 === run: no output, stderr
-沒有輸出:oops
-=== complete: no output, stderr
 沒有輸出:oops

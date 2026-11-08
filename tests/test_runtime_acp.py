@@ -469,28 +469,43 @@ class ConfigCheckDefault(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / "bin" / "config-check")], cwd=tmp, env=env,
                               capture_output=True, text=True, timeout=120)
 
-    def test_acp_as_the_default_is_refused(self):
-        import i18n
-        for lang in ("en", "zh-Hant"):
-            with self.subTest(lang=lang):
-                # set up properly, so the refusal is the only problem
-                r = self.check({"runtime": {"default": "acp", "acp": {"agent": "a", "agents": {"a": {"command": ["x"]}}}}},
-                               lang)
-                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-                self.assertEqual(len(r.stderr.strip().splitlines()), 1, "the only problem: " + r.stderr)
-                want = i18n.translate("config-check", (
-                    "{settings}: runtime.default `{name}` runs only in the platform's throwaway worktree, so as the "
-                    "default it would run nothing (dispatch needs session state, every other point is refused); keep "
-                    "another runtime as the default and pin {name} on {points} (llm.points.<point>.runtime)"),
-                    {"settings": "hub.json", "name": "acp",   # the file this test writes
-                     "points": ", ".join(runtime_ports.THROWAWAY_POINTS)}, lang)
-                self.assertIn(want, r.stderr)
+    # each throwaway-only runtime, set up properly, so the refusal is the only problem (runtime_command since
+    # docs/design/runtime-codex.md step 0)
+    THROWAWAY = {"acp": {"agent": "a", "agents": {"a": {"command": ["x"]}}}, "command": {"run": ["x", "-"]}}
 
-    def test_acp_pinned_on_a_throwaway_point_passes(self):
-        cfg = {"runtime": {"default": "fake", "acp": {"agent": "a", "agents": {"a": {"command": ["x"]}}}},
-               "llm": {"points": {p: {"runtime": "acp"} for p in runtime_ports.THROWAWAY_POINTS}}}
-        r = self.check(cfg, "en")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+    def test_a_throwaway_only_runtime_as_the_default_is_refused(self):
+        import i18n
+        for name, conf in self.THROWAWAY.items():
+            for lang in ("en", "zh-Hant"):
+                with self.subTest(name, lang=lang):
+                    r = self.check({"runtime": {"default": name, name: conf}}, lang)
+                    self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                    self.assertEqual(len(r.stderr.strip().splitlines()), 1, "the only problem: " + r.stderr)
+                    want = i18n.translate("config-check", (
+                        "{settings}: runtime.default `{name}` runs only {points} in the platform's throwaway worktree (it can't be "
+                        "held to a judgment point's limits anywhere else), so as the default it would run nothing (dispatch needs "
+                        "session state, every other point is refused); set runtime.default to a runtime with session state, or "
+                        "to none, and pin {name} on {points} (llm.points.<point>.runtime, with mailbox.handler: propose)"),
+                        {"settings": "hub.json", "name": name,   # the file this test writes
+                         "points": ", ".join(runtime_ports.THROWAWAY_POINTS)}, lang)
+                    self.assertIn(want, r.stderr)
+
+    def test_pinned_on_a_throwaway_point_passes(self):
+        for name, conf in self.THROWAWAY.items():
+            for default in ("fake", "none"):
+                with self.subTest(name, default=default):
+                    cfg = {"runtime": {"default": default, name: conf}, "mailbox": {"handler": "propose"},
+                           "llm": {"points": {p: {"runtime": name} for p in runtime_ports.THROWAWAY_POINTS}}}
+                    r = self.check(cfg, "en")
+                    self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_pinned_on_another_point_is_refused(self):
+        for name, conf in self.THROWAWAY.items():
+            with self.subTest(name):
+                r = self.check({"runtime": {"default": "fake", name: conf},
+                                "llm": {"points": {"librarian-state": {"runtime": name}}}}, "en")
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("librarian-state", r.stderr)
 
 
 class LoginCheck(unittest.TestCase):

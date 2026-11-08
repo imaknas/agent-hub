@@ -33,6 +33,8 @@ Getting started:
 config:
   brunna config check | plan | apply [--only <applier>,...]
                         validate the config / what would change / apply (check → apply → plan again must be empty → record)
+  brunna config migrate [--check]
+                        bring a setting an earlier release took and this one refuses in line, and say so (upgrade runs it)
   brunna llm setup [--llm …] [--llm-model …] [--llm-base-url …]
                         who handles the platform's decisions (nightly tidy-up, weekly report): the coding agent's own login,
                         an Anthropic / OpenAI (or compatible) API key, a local Ollama; the key is not shown and goes into the

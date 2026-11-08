@@ -1,11 +1,16 @@
-# Codex as the platform's agent (docs/design/newcomer-path.md B4): agent runs and judgment calls go through the Codex
-# CLI with a command template (bin/runtime_command.py). Codex sessions reach the mailbox through MCP only (docs/mcp.md);
-# its own adapter (session hooks, waking sessions) is the next version's work (docs/design/mailbox-runtimes.md).
+# Codex (docs/design/newcomer-path.md B4). What works today: its sessions reach the mailbox through brunna's MCP server
+# (docs/mcp.md, registered by init), and the weekly statistics read its session files. The platform's own work doesn't run
+# on Codex yet: the command template (bin/runtime_command.py) can't be held to a judgment point's limits, so it runs only
+# mailbox-propose in the platform's throwaway worktree, and never as runtime.default (config check refuses it;
+# docs/design/runtime-codex.md, step 0). So the preset leaves runtime.default at none and keeps the template, for pinning
+# mailbox-propose on it beside a default with session state; brunna's decisions need an LLM provider meanwhile (init offers
+# brunna llm setup). Its own runtime (bin/runtime_codex.py, docs/design/runtime-codex.md step 1) is the next step: session
+# hooks, its login, confined runs.
 # `agenthub init` offers it in its agent step and turns this module on when it is picked.
 v: 1
 name: codex
 type: module
-description: "background work and brunna's decisions through Codex; your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet)"
+description: "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)"
 runtime_preset:
   label: Codex
   find: codex
@@ -22,7 +27,8 @@ runtime_preset:
   mcp_unregister: [codex, mcp, remove, "{server}"]
   settings:
     runtime:
-      default: command
+      # not command: it can't be held to a point's limits, so it is no default (docs/design/runtime-codex.md, step 0)
+      default: none
       command:
         run: [codex, exec, --sandbox, workspace-write, --skip-git-repo-check, --ephemeral, --color, never,
               -o, "{output_file}", "-"]

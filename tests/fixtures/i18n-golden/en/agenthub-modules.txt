@@ -4,7 +4,7 @@ $ agenthub modules
   assistant    Personal assistant: question reconciliation, channel leases
 ✓ backup       Nightly encrypted cloud backup + monthly restore test
   claude       Claude Code login check, updates, headless token expiry reminders
-  codex        background work and brunna's decisions through Codex; your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet)
+  codex        your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)
   consolidate  Nightly: folds memory date files older than 14 days into reference/ (before the librarian) (needs an LLM: brunna llm setup)
   mirror       Nightly: updates the --mirror clone of every repo in mirror-list.txt
   owner        Built-in owner side: notices of new to-dos and questions (close and answer with brunna owner)

@@ -45,7 +45,9 @@
 - **Any agent, any model.** The platform defines its own interfaces; Claude Code is one implementation of them, not a
   requirement. Any CLI agent with a headless mode can be plugged in through a command template (tested with Codex and
   Antigravity), any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com/) through the ACP
-  adapter, and the platform's own judgment calls can go to Anthropic, any OpenAI-compatible API, a local Ollama, or the
-  coding agent's own login. When a capability is missing, it is switched off explicitly and `brunna doctor` says why.
+  adapter: neither can be held to a judgment point's limits, so they handle mailbox requests only, in the platform's
+  throwaway copy, with the platform applying only the notes and letters (Codex gets an adapter of its own next,
+  [docs/design/runtime-codex.md](design/runtime-codex.md)). The platform's own judgment calls can go to Anthropic, any
+  OpenAI-compatible API, a local Ollama, or the coding agent's own login. When a capability is missing, it is switched off explicitly and `brunna doctor` says why.
 
 Back to the [README](../README.md).

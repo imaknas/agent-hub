@@ -5,5 +5,8 @@
  "no output: {detail}": "沒有輸出:{detail}",
  "(stderr is empty too)": "(stderr 也是空的)",
  "exit {code}: {detail}": "exit {code}:{detail}",
- "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}"
+ "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}",
+ "a command template can't be held to no tools, and the tool gets a shell and reads anything; an answer-only judgment point needs an LLM provider (brunna llm setup)": "指令樣板沒辦法限定不用工具,工具會有 shell、什麼都讀得到;只要答案的判斷點需要一家 LLM provider(brunna llm setup)",
+ "a command template can't carry a judgment point's limits: it runs only in the platform's throwaway worktree": "指令樣板帶不了判斷點的限制:只在平台的拋棄式 worktree 裡跑",
+ "the command runtime runs only {points} in the platform's throwaway worktree, and this is {point} in {cwd}: a command template can't carry a judgment point's limits, so anywhere else the tool would have a shell and read anything": "執行環境 command 只在平台的拋棄式 worktree 裡跑 {points},這次是 {point}、在 {cwd}:指令樣板帶不了判斷點的限制,在別的地方工具會有 shell、什麼都讀得到"
 }

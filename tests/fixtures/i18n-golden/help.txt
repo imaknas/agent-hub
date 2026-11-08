@@ -29,6 +29,8 @@ brunna 的單一入口(docs/design/new-user.md 3.4)。薄薄一層分派,不重�
 config:
   brunna config check | plan | apply [--only <套用者>,...]
                         驗證 config / 會改什麼 / 套用(check → 套用 → 再 plan 要是空的 → 記錄)
+  brunna config migrate [--check]
+                        把舊版收下、這一版會拒絕的設定改到合格,並說出來(upgrade 會跑)
   brunna llm setup [--llm …] [--llm-model …] [--llm-base-url …]
                         平台的判斷(每晚整理、週報)交給誰:coding agent 自己的登入、Anthropic / OpenAI(或相容的)API key、
                         本機 Ollama;key 不顯示、寫進 secrets 目錄;模型從那家實際有的清單選(平台不猜名稱)

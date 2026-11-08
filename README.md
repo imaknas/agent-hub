@@ -69,8 +69,9 @@ By hand, requirements, machines that sleep and where things are kept: [docs/inst
    brunna connect ~/code
    ```
 
-2. Open your agent in a project's folder (`claude` or `codex`). It picks up the project's setup when the session
-   starts, and writes notes as it works.
+2. Open your agent in a project's folder (`claude` or `codex`). Claude Code picks up the project's setup when the
+   session starts, and writes notes as it works; Codex reaches the mailbox and the notes through brunna's tools (MCP)
+   for now.
 3. `brunna doctor` says what is still missing, each with how to fix it. The status page at http://localhost:18790
    shows how everything is doing, no terminal needed
    ([from another computer](docs/install.md#the-status-page-from-another-computer)).
@@ -109,7 +110,7 @@ Everything it does, in detail: [docs/features.md](docs/features.md).
 
 | What | Options |
 |---|---|
-| Your AI agent | Claude Code: everything. Codex: background work and decisions; its chats reach the mailbox through brunna's tools (MCP). Any CLI agent with a headless mode, or one that speaks the [Agent Client Protocol](https://agentclientprotocol.com/), through an adapter |
+| Your AI agent | Claude Code: everything. Codex: its chats reach the mailbox through brunna's tools (MCP); brunna's own background work and decisions don't run on it yet (they use a model provider meanwhile). Any CLI agent with a headless mode, or one that speaks the [Agent Client Protocol](https://agentclientprotocol.com/), can handle mailbox requests in a throwaway copy, through an adapter |
 | The model behind brunna's decisions | Your agent's own login, Anthropic, any OpenAI-compatible API, or a local Ollama (`brunna llm setup`) |
 | The computer | macOS or Linux. An always-on machine is best; a laptop works |
 

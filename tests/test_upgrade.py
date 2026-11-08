@@ -129,10 +129,16 @@ class Upgrade(unittest.TestCase):
                               capture_output=True, text=True).stdout.strip()
 
     def steps(self, mark: str, scheduler: bool = True) -> list[str]:
-        return [f"{mark} setup-python", f"{mark} registry.py check", f"{mark} agenthub config apply",
+        return [f"{mark} setup-python", f"{mark} registry.py check",
+                *([f"{mark} agenthub config migrate"] if scheduler else []), f"{mark} agenthub config apply",
                 *([f"{mark} agenthub init --scheduler-only"] if scheduler else []), f"{mark} agenthub land",
                 *([f"{mark} agenthub user-settings --update"] if scheduler else []),
                 f"{mark} agenthub install-cli --dir {self.wrapper_dir}", f"{mark} agenthub doctor"]
+
+    def upto(self, mark: str, step: str) -> list[str]:
+        """The steps up to and including this one (where a failure stops them)."""
+        steps = self.steps(mark)
+        return steps[:steps.index(f"{mark} {step}") + 1]
 
     # ---------- the cases ----------
 
@@ -260,13 +266,13 @@ class Upgrade(unittest.TestCase):
     def test_a_failed_step_stops_the_rest_and_says_how_to_go_back(self):
         r = self.upgrade("--yes", env={"UPGRADE_FAIL": "v0.2.0 agenthub config apply"})
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertEqual(self.ran(), self.steps("v0.2.0")[:3])
+        self.assertEqual(self.ran(), self.upto("v0.2.0", "agenthub config apply"))
         self.assertIn("step config apply failed (exit 1)", r.stderr)
         self.assertIn("brunna upgrade --to v0.1.0", r.stderr)
         self.assertFalse((self.state / "upgrade.json").exists(), "not in step: not recorded")
         r = self.upgrade("--yes", env={"UPGRADE_FAIL": "v0.2.0 agenthub config apply"})   # still failing: no move
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertEqual(self.ran(), self.steps("v0.2.0")[:3])
+        self.assertEqual(self.ran(), self.upto("v0.2.0", "agenthub config apply"))
         self.assertIn("run brunna upgrade again (it reruns the steps)", r.stderr)
         self.assertNotIn("go back", r.stderr, "no record of an earlier version in step on this machine")
         r = self.upgrade("--yes")   # fixed: run again, the checkout is already there, the steps run

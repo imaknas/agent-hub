@@ -1,5 +1,5 @@
-"""E1 golden (docs/design/i18n.md) for the small adapters, on zh-Hant: runtime_command's run/complete/health errors
-(no template, command not found, timeout, no output), runtime_fake's login/resume/credential texts, provider_ollama's
+"""E1 golden (docs/design/i18n.md) for the small adapters, on zh-Hant: runtime_command's run errors (no template, command
+not found, timeout, no output, a run outside the throwaway copy) and why it has no completion interface, runtime_fake's login/resume/credential texts, provider_ollama's
 missing-model health note, provider_openai's no-choices error, and systemd_units' timer description.
 
 In-process; the command runtime runs real tiny commands (true, sleep), the providers' HTTP call is replaced.
@@ -31,8 +31,12 @@ UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
 ZH = {"AGENT_HUB_LANG_UI": golden_lang.LANG}
 
 
+COPY = None   # the throwaway copy the command runtime's runs are made in (setUpModule): it runs nowhere else
+
+
 def task(**kw):
-    t = dict(prompt="p", output_schema=None, model=None, cwd=None, env=None, timeout_s=10)
+    t = dict(point="mailbox-propose", prompt="p", output_schema=None, model=None, cwd=str(COPY),
+             env={**os.environ, runtime_command.COPY_VAR: str(COPY)}, timeout_s=10)
     t.update(kw)
     return types.SimpleNamespace(**t)
 
@@ -50,6 +54,9 @@ def setUpModule():
     p = mock.patch.object(hubconf, "secrets_dir", lambda: d)
     p.start()
     unittest.addModuleCleanup(p.stop)
+    global COPY
+    COPY = hubconf.throwaway_copy("golden")
+    COPY.mkdir()
 
 
 class Golden(unittest.TestCase):
@@ -72,24 +79,24 @@ class Golden(unittest.TestCase):
             return mock.patch.object(hubconf, "get", lambda key, default=None: c if key == "runtime.command" else default)
 
         with mock.patch.dict(os.environ, ZH):
+            out.append(("unsupported: completion", runtime_command.unsupported("completion")))
+            out.append(("unsupported: confine", runtime_command.unsupported("confine")))
+            with conf({"run": ["true"]}):
+                out.append(("run: another point", runtime_command.run(task(point="librarian-state", cwd="/", env={})).error))
+                out.append(("run: not in the copy", runtime_command.run(task(cwd="/")).error))
             with conf({}):
-                out.append(("health: no template", runtime_command.health({})))
                 try:
                     runtime_command.run(task())
                 except RuntimeError as e:
                     out.append(("run: no template", str(e)))
             with conf({"run": ["/nonexistent/agent-cli"]}):
-                out.append(("health: not found", runtime_command.health({})))
                 out.append(("run: not found", runtime_command.run(task()).error))
-                out.append(("complete: not found", runtime_command.complete(req(), {}).error))
             with conf({"run": ["sleep", "5"], "stdin": False}):
                 out.append(("run: timeout", runtime_command.run(task(timeout_s=1)).error))
             with conf({"run": ["true"]}):
                 out.append(("run: no output, empty stderr", runtime_command.run(task()).error))
-                out.append(("complete: no output", runtime_command.complete(req(), {}).error))
             with conf({"run": ["sh", "-c", "echo oops >&2"], "stdin": False}):
                 out.append(("run: no output, stderr", runtime_command.run(task()).error))
-                out.append(("complete: no output, stderr", runtime_command.complete(req(), {}).error))
         self.check("runtime_command", out)
 
     def test_runtime_fake(self):
