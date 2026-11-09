@@ -115,6 +115,69 @@ class LinksStayInside(Scratch):
             runtime_claude._flags(task)   # a real folder: runs
 
 
+class Folders(Scratch):
+    def flags(self, cwd, doc_extra=None):
+        doc = {"name": "proj", "paths": {"workspace": str(self.ws)}, **(doc_extra or {})}
+        spec = {"permission_mode": "dontAsk", "settings": "platform", "project_env": "AGENT_JOB_PROJECT",
+                "allow_from_env": "AGENT_JOB_ALLOW"}
+        env = {"PATH": "/usr/bin:/bin", "AGENT_JOB_PROJECT": "proj", "AGENT_JOB_ALLOW": json.dumps(["Edit(./data/**)"])}
+        task = runtime_ports.Task(point="mailbox-conversation", prompt="p", spec=spec, cwd=str(cwd), env=env)
+        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
+                mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: self.tmp / "s.json"), \
+                mock.patch("registry.refresh", lambda: {"projects": {"proj": doc}}), \
+                mock.patch("policy.notes_dir", lambda p: None):
+            return runtime_claude._flags(task)
+
+    def test_a_folder_of_the_project_that_is_a_link_out_is_refused(self):
+        # a fork resumes in a session's folder (hubbus session_cwd), which the project can turn into a link
+        home = self.tmp / "home"
+        home.mkdir()
+        (self.ws / "sub").symlink_to(home)
+        with self.assertRaisesRegex(ValueError, "outside the project's folders"):
+            self.flags(self.ws / "sub")
+        (self.ws / "real").mkdir()
+        self.flags(self.ws / "real")
+
+    def test_a_link_into_what_the_owner_let_it_write_is_followed(self):
+        media = self.tmp / "media"
+        media.mkdir()
+        (self.ws / "data").symlink_to(media)
+        with self.assertRaisesRegex(ValueError, "follows a link out"):
+            self.flags(self.ws)
+        cmd = self.flags(self.ws, {"allow_write": [str(media)]})
+        self.assertEqual(cmd[cmd.index("--add-dir") + 1], str(media))
+
+
+class StateFolders(unittest.TestCase):
+    def index(self, **projects):
+        return {"projects": {n: {"name": n, "jobs": js} for n, js in projects.items()}, "modules": {}}
+
+    def test_two_jobs_sharing_a_folder_are_refused_and_not_scheduled(self):
+        agent = {"kind": "agent", "at": "09:00"}
+        idx = self.index(a=[{**agent, "name": "b-c"}], **{"a-b": [{**agent, "name": "c"}],
+                                                         "mailbox": [{**agent, "name": "x"}],
+                                                         "fine": [{**agent, "name": "daily"}]})
+        clash = registry.state_name_clashes(idx)
+        self.assertEqual(sorted(clash), ["a-b-c", "mailbox-x"])
+        self.assertEqual(sorted(clash["a-b-c"]), ["a-b/c", "a/b-c"])
+        with mock.patch.object(registry, "job_prompt", lambda stem, job: pathlib.Path("/p.md")), \
+                mock.patch.object(registry, "dirs", lambda doc: {"workspace": pathlib.Path("/w"), "runtime": None}), \
+                mock.patch.object(registry, "nightly_test_jobs", lambda *a: []):
+            names = [j["name"] for j in registry.scheduler_jobs(idx, set())[0]]
+        self.assertEqual(names, ["fine/daily"])
+
+
+class RunAgentJobNames(unittest.TestCase):
+    def test_a_name_that_leads_out_of_the_state_folder_is_refused(self):
+        import subprocess
+        for bad in ("../x", "/etc", ".hidden", "a/../../b"):
+            with self.subTest(bad):
+                r = subprocess.run([str(ROOT / "bin" / "run-agent-job.sh"), bad, "/nonexistent"], capture_output=True,
+                                   text=True, timeout=30, env={"PATH": "/usr/bin:/bin", "HOME": "/nonexistent"})
+                self.assertEqual(r.returncode, 2, r.stderr)
+                self.assertIn(bad, r.stderr)   # its own refusal, naming it (not a failure further on)
+
+
 class JobPrompts(Scratch):
     def test_only_a_file_under_jobs(self):
         reg = self.tmp / "config" / "projects"

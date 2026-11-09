@@ -49,11 +49,16 @@ def load_hubbus():
     return m
 
 
-def flags(point: str, cwd, env: dict) -> list:
+def flags(point: str, cwd, env: dict, roots=None) -> list:
+    """roots: the project's folders (runtime_claude.project_roots); by default what it computes, plus the folder it runs
+    in (these tests' projects are scratch folders the registry doesn't hold)."""
     import runtime_claude
     import runtime_ports
     task = runtime_ports.Task(point, "x", points()[point], cwd=str(cwd), env=env)
-    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/platform/{p}.json")):
+    real = runtime_claude.project_roots
+    given = (lambda p: roots) if roots is not None else (lambda p: [pathlib.Path(cwd).resolve(), *real(p)])
+    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/platform/{p}.json")), \
+            mock.patch.object(runtime_claude, "project_roots", given):
         return runtime_claude._flags(task)
 
 
@@ -129,7 +134,8 @@ class Flags(unittest.TestCase):
         spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read,Edit",
                 "allowed_tools": ["Edit(./notes/**)"]}
         task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.ws), env={"P": "p"})
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path("/platform/p.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path("/platform/p.json")), \
+                mock.patch.object(runtime_claude, "project_roots", lambda p: [self.ws]):
             cmd = runtime_claude._flags(task)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Edit,Read")
 
@@ -150,11 +156,8 @@ class Flags(unittest.TestCase):
         wt.mkdir()
         (wt / ".agent-memory").symlink_to(main / ".agent-memory")
         # the main checkout's notes are the project's (policy.notes_dir): a link there is followed, one elsewhere isn't
-        import runtime_claude
-        roots = mock.patch.object(runtime_claude, "project_roots", lambda p: [self.ws, main / ".agent-memory"])
-        roots.start()
-        self.addCleanup(roots.stop)
-        cmd = flags("mailbox-conversation", wt, self.env("mailbox-conversation"))
+        roots = [self.ws, main / ".agent-memory"]
+        cmd = flags("mailbox-conversation", wt, self.env("mailbox-conversation"), roots)
         self.assertEqual(cmd[cmd.index("--add-dir") + 1], str(main / ".agent-memory"))
         self.assertIn(f"Edit(/{main}/.agent-memory/memory/**)", allowed(cmd))
         self.assertIn("Edit(./.agent-memory/memory/**)", allowed(cmd))

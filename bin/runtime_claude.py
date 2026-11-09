@@ -754,10 +754,15 @@ def project_roots(project: str) -> list[pathlib.Path]:
     out)."""
     import policy
     import registry
+    import hubconf
     doc = registry.refresh()["projects"].get(project) or {}
     d = registry.dirs(doc) if doc else {}
     notes = policy.notes_dir(project)
-    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), notes.parent if notes else None) if p]
+    # and what the owner let it write beyond them (allow_write, owner-only)
+    extra = [hubconf.path(p) for p in doc.get("allow_write") or []]
+    if project == hubconf.hub_project():   # the hub's own runs: its main checkout, whose worktrees its forks run in
+        extra.append(hubconf.MAIN)
+    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), notes.parent if notes else None, *extra) if p]
 
 
 def _inside(p: pathlib.Path, places) -> bool:
@@ -846,7 +851,14 @@ def _flags(task) -> list:
                 tools.add("Write")
         cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd), task.cwd)),
                 "--tools", ",".join(sorted(tools))]
-        dirs, extra = _linked_rules(allowed, task.cwd, project_roots(project))
+        roots = project_roots(project)
+        # the folder it runs in, where it resolves: a folder of the project's (a worktree, a session's folder) can be a
+        # link the project made, and every ./ rule is relative to it
+        here = pathlib.Path(task.cwd or os.getcwd()).resolve()
+        if not (_inside(here, roots) or job_folder(task.cwd)):
+            raise ValueError(f"judgment point {task.point}: its folder {task.cwd} resolves to {here}, outside the "
+                             "project's folders; a confined run never starts there")
+        dirs, extra = _linked_rules(allowed, task.cwd, roots)
         allowed += extra
         dirs += [d for d in _notes_rules(allowed, project, task.cwd) if d not in dirs]
         for d in dirs:

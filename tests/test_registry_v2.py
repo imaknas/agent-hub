@@ -121,6 +121,22 @@ class V2(unittest.TestCase):
         self.assertTrue(set(with_) <= set(without), with_)
 
 
+    def test_a_projects_job_text_is_refused_where_it_would_widen_a_run(self):
+        """docs/design/project-agent-calls.md, round 2 hardening: through validate() itself"""
+        base = {"name": "check", "kind": "agent", "at": "09:00", "allow": ["Read"]}
+        cases = {"an option as a rule": base | {"allow": ["Read", "--dangerously-skip-permissions"]},
+                 "a prompt outside jobs/": base | {"prompt": "../../other/jobs/a.md"},
+                 "a legacy_name that is a path": base | {"legacy_name": "../../.."}}
+        for what, job in cases.items():
+            with self.subTest(what), mock.patch.object(registry.hubconf, "registry_dir", lambda: self.ws):
+                (self.ws / "demo" / "jobs").mkdir(parents=True, exist_ok=True)
+                (self.ws / "demo" / "jobs" / "check.md").write_text("x")
+                errs = registry.validate(self.doc(jobs=[job]), "demo")
+                ok = registry.validate(self.doc(jobs=[base]), "demo")
+                self.assertEqual(ok, [])
+                self.assertEqual(len(errs), 1, errs)
+
+
 class UpgradeFiles(unittest.TestCase):
     """registry.py upgrade-files: v1 files rewritten as v2 by editing their text (comments stay), only when the result
     reads exactly as tiers.upgrade() of the old one."""

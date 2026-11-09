@@ -310,6 +310,24 @@ def connector_jobs(doc: dict) -> dict:
             for j in doc.get("jobs") or [] if isinstance(j, dict) and j.get("connectors") is True}
 
 
+def agent_state_name(project: str, job: dict) -> str:
+    """The folder an agent job keeps its reports, status and (cwd: state) working directory in, under
+    .state/agent-jobs/: its legacy_name, else <project>-<job>."""
+    return job.get("legacy_name") or f"{project}-{job.get('name')}"
+
+
+def state_name_clashes(index: dict) -> dict[str, list[str]]:
+    """State folder names two agent jobs would share (project a's job b-c and project a-b's job c), or that are a mailbox
+    handler's (mailbox-<project>, hubbus): {name: [jobs]}. A job could otherwise read and write another's folder, its
+    reports and STOP file, by its own project's letter; none of them is scheduled."""
+    by = {}
+    for name, doc in [*index["projects"].items(), *(index.get("modules") or {}).items()]:
+        for job in doc.get("jobs") or []:
+            if isinstance(job, dict) and job.get("kind") == "agent":
+                by.setdefault(agent_state_name(name, job), []).append(f"{name}/{job.get('name')}")
+    return {n: js for n, js in by.items() if len(js) > 1 or n.startswith("mailbox-")}
+
+
 def legacy_names(doc: dict) -> dict:
     """Each job's legacy_name: the name its state, reports and schedule state are kept under (the old schedule.yaml
     entry's). Set when a job moves into the registry, by the platform; a project's letter that sets or changes one could
@@ -630,7 +648,7 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: allow must be a list of permission rule strings", name=n))
         elif any(not rule_shaped(x) for x in job.get("allow") or []):
             # the project's own text, handed to the runtime as rules: never an option (the runtime's adapter refuses one too)
-            errs.append(_("job {name}: an allow rule is one line and never starts with - (a rule, not an option)", name=n))
+            errs.append(_("job {name}: each allow entry is one permission rule: a name (letters, digits, _ or -), optionally its argument in parentheses, on one line (never an option)", name=n))
         if job.get("legacy_name") is not None and not (isinstance(job["legacy_name"], str)
                                                        and LEGACY_NAME.fullmatch(job["legacy_name"])):
             # it names a state folder (run-agent-job.sh) and schedule state: a name, never a path
@@ -900,6 +918,10 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
     if (cycles := job_cycles(index)):
         errors["(jobs)"] = [_("after:/before: form a cycle, these jobs would wait for each other forever: {cycle}", cycle=c)
                             for c in cycles]
+    if (clash := state_name_clashes(index)):
+        errors.setdefault("(jobs)", []).extend(
+            _("agent jobs {jobs} would share the state folder {name} (or take a mailbox handler's): none of them runs "
+              "until one is renamed", jobs=", ".join(sorted(js)), name=n) for n, js in sorted(clash.items()))
     if live:
         tmp = CACHE / "index.json.tmp"
         tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
@@ -952,6 +974,7 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
     """Registry → scheduler.py's job dicts. Returns (jobs, the ones not used because their old name is still in
     schedule.yaml, new name → old name)."""
     out, skipped, renames = [], [], {}
+    clash = state_name_clashes(index)
     before: dict[str, list[str]] = {}
     docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
     for name, doc in docs:
@@ -965,12 +988,12 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 renames[full] = job["legacy_name"]
             cwd = d.get(job.get("cwd") or default_cwd(doc))
             if job.get("kind") == "agent" and job.get("cwd") == "state":
-                cwd = hubconf.STATE / "agent-jobs" / (job.get("legacy_name") or f"{name}-{job['name']}")
+                cwd = hubconf.STATE / "agent-jobs" / agent_state_name(name, job)
             if job.get("kind") == "agent":
                 prompt = job_prompt(name, job)
-                if prompt is None:   # validation refuses it; never a path the project chose
+                if prompt is None or agent_state_name(name, job) in clash:   # refused (refresh says why)
                     continue
-                agent_name = job.get("legacy_name") or f"{name}-{job['name']}"
+                agent_name = agent_state_name(name, job)
                 cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
                 # unattended permissions: only these rules and the platform's settings for the project (run-agent-job.sh

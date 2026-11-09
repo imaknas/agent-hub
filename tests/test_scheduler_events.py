@@ -379,6 +379,10 @@ class PlatformSettings(unittest.TestCase):
         env = {"AGENT_JOB_ALLOW": json.dumps(["Bash(git log:*)", "WebFetch(domain:example.org)"]),
                "AGENT_JOB_PROJECT": "p"}
         task = runtime_ports.Task("agent-job-event", "x", self.spec(), env=env)
+        # the project's folders (runtime_claude.project_roots): here, where the run starts (cwd None = this process's)
+        roots = mock.patch.object(runtime_claude, "project_roots", lambda p: [pathlib.Path.cwd().resolve()])
+        roots.start()
+        self.addCleanup(roots.stop)
         with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task)
         self.assertIn("--restricted", cmd)

@@ -154,8 +154,9 @@
  "{name} is reserved for the platform itself; pick another name": "{name} 保留給平台自己用;請換一個名字",
  "mailbox.wake must be true or false": "mailbox.wake 必須是 true 或 false",
  "a job with connectors: true": "connectors: true 的 job",
- "job {name}: an allow rule is one line and never starts with - (a rule, not an option)": "job {name}:allow 的規則只能是一行,不能以 - 開頭(是規則,不是選項)",
  "job {name}: prompt must be a file name under jobs/ in the config's projects/{project}/ (e.g. jobs/{name}.md): the prompt is the owner's text, never a file the project writes": "job {name}:prompt 只能是 config 的 projects/{project}/ 裡 jobs/ 底下的檔名(例如 jobs/{name}.md):prompt 是擁有者寫的,不能是專案自己寫的檔",
  "a job's legacy_name": "job 的 legacy_name",
- "job {name}: legacy_name is a name (lowercase letters, digits, -; a module's may have one /)": "job {name}:legacy_name 只能是名稱(小寫字母、數字、-;module 的可以有一個 /)"
+ "job {name}: legacy_name is a name (lowercase letters, digits, -; a module's may have one /)": "job {name}:legacy_name 只能是名稱(小寫字母、數字、-;module 的可以有一個 /)",
+ "job {name}: each allow entry is one permission rule: a name (letters, digits, _ or -), optionally its argument in parentheses, on one line (never an option)": "job {name}:allow 的每一項是一條權限規則:一個名稱(字母、數字、_ 或 -),可以加括號裡的參數,只能一行(不能是選項)",
+ "agent jobs {jobs} would share the state folder {name} (or take a mailbox handler's): none of them runs until one is renamed": "agent job {jobs} 會共用 state 資料夾 {name}(或佔用 mailbox 處理者的):改名之前都不會跑"
 }
