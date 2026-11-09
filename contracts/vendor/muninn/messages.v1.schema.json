@@ -18,12 +18,12 @@
           "project": {"type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[^/]+$"},
           "type": {
             "enum": ["question", "progress", "done", "task", "drop"],
-            "description": "question: for the user to answer (the answer comes back as a handoff with reply_to = id). progress, done: reports; done with handoff_id closes that handoff, done with task closes that task; done or drop with question closes that question, settled where it was asked. task: something only the user can do. drop: the task, or the question, is no longer needed (needs task or question)."
+            "description": "question: for the user to answer (the answer comes back as a handoff with reply_to = id). progress, done: reports; done with handoff_id closes that handoff, done with task closes that task; done or drop with question takes that question off the user's list (done: the user decided it where it was asked). task: something only the user can do. drop: the task, or the question, is no longer needed (needs task or question)."
           },
           "text": {"type": "string", "minLength": 1, "maxLength": 4000},
           "handoff_id": {"type": "integer"},
           "task": {"type": "string", "minLength": 1, "maxLength": 200, "description": "A task key (the id of the message that created it)."},
-          "question": {"type": "string", "minLength": 1, "maxLength": 200, "description": "For done and drop: the id of a question the project asked the user that is now settled where it was asked (the user answered it in the project's own session); it leaves the user's list, and no answer goes back."},
+          "question": {"type": "string", "minLength": 1, "maxLength": 200, "description": "For done and drop: the id of a question the project asked the user that it no longer asks. It leaves the user's list. done says the user answered it in the project's own session (text: what the user decided): Muninn asks the user once whether that is right; nothing goes back if it is, and if it is not, the user's own answer comes back as a handoff (answers, reply_to = the question) whose why asks the project to look again at what it did on the wrong one. drop says it is no longer needed."},
           "due": {"type": "string", "description": "YYYY-MM-DD, for task."},
           "context": {"type": "string"},
           "new_reason": {"type": "string", "description": "For task: why this is new although it looks like one already settled."},
