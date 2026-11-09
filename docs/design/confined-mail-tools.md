@@ -1,7 +1,8 @@
 # Confined runs send mail through the platform's tools, not a shell
 
-Status: fourth draft (11-10), after three rounds of blind review (feasibility and security each). This draft settles
-round 3's four blocking findings (two each) and its should-fix items. The owner decided the direction on 11-10, which
+Status: fifth draft (11-10), after four rounds of blind review (feasibility and security each). This draft settles
+round 4's findings: a `mail: true` job no longer reads mail (security), three false statements about the code
+(feasibility), and both reviews' should-fix items. The owner decided the direction on 11-10, which
 answers the question of 11-02 (m11020427-89ec, raised in `docs/design/mailbox-routing.md`, "11-02: the handlers are
 confined", paragraph **Bash**).
 
@@ -51,19 +52,26 @@ with `MAILBOX_LETTERS`), plus the new ones in M3.
 
 ## Depends on
 
-Two parts of `docs/design/project-agent-calls.md` A2, not built yet, are built first, as step 0 here (they are also
-step 1 of that design's build order; A2 is updated to the folder layout below):
+Two parts of `docs/design/project-agent-calls.md` A2, not built yet, are built first, as step 0 here (they are step 2
+of that design's build order, whose step 1, the prompt on stdin, is built; A2 is updated to the folder layout below):
 
 - **The run's folder.** `llm.py` reads the point's `project_env` first; when it is empty it makes nothing and lets the
   adapter's existing refusal decide (a dry run exits 2, a real run fails), so `llm-golden.json` keeps its sixteen
   entries. Otherwise it removes run folders older than a day that a crash left, then makes
   `<state>/agent-jobs/.settings/<project>.<point>.<run id>/` (`mkdir`, so two runs never share one; the run id is
-  `llm.py`'s) and puts it on the task as `Task.run_dir`, a neutral field. The adapter's `platform_settings` takes
+  `secrets.token_hex(8)`, made by `llm.py`) and puts it on the task as `Task.run_dir`, a neutral field. The adapter's `platform_settings` takes
   `run_dir` and writes the settings file in it (the fake's signature changes with it). The folder is removed on every
   way out of `llm.py run` and of a dry run, by a `try/finally` around everything after it is made, the adapter's
   `_flags` raising included.
 - **`rule_problems`**, the adapter port that checks a run's rules when it starts (never a registry validation error;
-  `registry.py check` and the status page list what a run would refuse). M6 and M7 add to it.
+  `registry.py check` and the status page list what a run would refuse). M6 and M7 add to it. It runs for **every
+  `settings: platform` point** (the mail handlers included; A2's list of three is updated to this). Since `llm.py`
+  doesn't read a point's rules (`{platform_mail}` and `allow_from_env` are the adapter's), the port takes the task:
+  `rule_problems(task, *, sandboxed, network, untrusted) -> [sentences]`, the adapter gathering the rules through
+  `_rules` as `servers_named` does; a second function, `rules_problems(rules, *, sandboxed, network, untrusted)`, takes a
+  job's `allow:` list for the registry's and the status page's listing. Both under a new `PORTS` key, `rule_check`.
+- **`project_roots`** moves from the adapter to `policy.py` (everything it reads is neutral), so M7's deny can use it;
+  the adapter imports it from there.
 
 ## M1. The declaration
 
@@ -76,14 +84,19 @@ Muninn, which vendors the schema, is told.
   used it).
 - `mail_from_env: <VAR>`: with `mail: tools`, the tools are given only when that variable is `1` (the jobs' opt-in,
   below). Without it, always.
-- `letters_env: <VAR>`: the run acts on given letters. `llm.py` refuses the run before it starts when the variable is
-  empty, lists no letter, or lists an id that doesn't `fullmatch` `hubbus.EVENT_ID` (a run whose every call would be
-  refused, or one where `run_letters()` would read "not a letter run" and turn `run_refusal` off).
+- `letters_env: <VAR>`: the run acts on given letters. Once the project is known (Depends on), `llm.py` refuses the
+  run before it starts when the variable is empty, lists no letter, or lists an id that doesn't `fullmatch`
+  `hubbus.EVENT_ID` (a run whose every call would be refused, or one where `run_letters()` would read "not a letter
+  run" and turn `run_refusal` off). On a dry run it prints the reason and exits 2, as the `tool_servers` branch does;
+  `fail()` only on a real run.
 - `prompt_source: untrusted`: the prompt is text anyone who can write the bus wrote (M6). Named apart from the existing
   `prompts:` key.
 
 `llm.py lint` gets the cross-field rules: `mail:` is required on every `settings: platform` point and refused on any
-other; `mail_from_env` and `letters_env` only with `mail: tools`.
+other; `mail_from_env` and `letters_env` only with `mail: tools`; every `mail: tools` point declares
+`tool_servers: allowed_only` (so the reserved-id check, M2, runs on every such run; for a sealed run it costs nothing,
+`ambient_servers` returning None). `mailbox-conversation` gains it, and doctor's mailbox follow-up row needs
+`tool_servers` with it. The schema descriptions of the new keys name no project or path (`test_contracts.py`).
 
 | point | mail | letters | prompt_source | tools |
 |---|---|---|---|---|
@@ -107,16 +120,23 @@ requests and questions as the project to any project, and the send is a channel 
 (the same reason M6 refuses the web). Scoping an event job's sends (replies to the triggering events' sources, as
 `run_refusal` does for letters) is left for when a project needs it.
 
-**Which tools**, one constant in `mcp_server.py` (`RUN_TOOLS`) that `llm.py` reads: a mail handler gets `inbox`,
-`show`, `thread`, `send`, `done`, `ask_owner` and `note`. A job with `mail: true` gets the same, except `note` unless
-its rules already write notes: otherwise the tool would give the job a way into the notes the librarian reads every
-night that its rules don't. Not offered to any run, and refused by `call()` whatever the client sends: `ack` and
-`pass` (refused for letter runs, a no-op for jobs), and `open-questions` (the reconciliation letter names its question;
-the owner's open questions are for the project's sessions).
+**Which tools**, constants in `mcp_server.py` that `llm.py` reads:
+
+- a mail handler (`letters_env`) gets `inbox`, `show`, `thread`, `send`, `done`, `ask_owner` and `note`;
+- a job with `mail: true` gets **only the sending tools**: `send` and `ask_owner`, and `note` when its rules already
+  write notes. Not `inbox`, `show`, `thread` or `done`: with no letters of its own, they would read the project's whole
+  mailbox, so any project's letter would reach a run that keeps its Bash and web rules (M6), and close any letter to
+  the project. A job that has to answer mail leaves it to the project's sessions and the mail handlers. Without the
+  notes rule, `note` would give the job a way into the notes the librarian reads every night that its rules don't.
+
+Not offered to any run, and refused by `call()` whatever the client sends: `ack` and `pass` (refused for letter runs,
+a no-op for jobs), and `open-questions` (the reconciliation letter names its question; the owner's open questions are
+for the project's sessions).
 
 `platform_settings` stops writing the mail commands into the settings file's allow list: the file holds the deny list
-and the sandbox only. `policy.platform_cli`'s `mail_only` and `MAIL_SUBCOMMANDS` lose their last callers (the sessions'
-rules use `platform_cli()` without it) and go, with their test in `test_mailbox_route.py`.
+and the sandbox only. `policy.platform_cli`'s `mail_only` loses its last callers (the sessions' rules use
+`platform_cli()` without it) and goes, with its test in `test_mailbox_route.py`; `MAIL_SUBCOMMANDS` stays, since
+`SESSION_SUBCOMMANDS` is built from it.
 
 ## M2. Attaching the server
 
@@ -130,9 +150,11 @@ Shaped like `deny_servers`: a neutral field on the task that the adapter transla
   its payload, would be expanded from the agent's own environment, the login token included, and the chain is stamped
   on every letter the run sends. So:
   - **`env`** holds only what the platform itself names and the server needs before it can read anything: `HOME`,
-    `PATH`, and the instance's locations (`names.env_set` of `ROOT`, `HOME` for the instance directory, `CONFIG`,
-    `STATE`, `DATA`, `SECRETS`, `EVALS` when set: `hubconf` reads them at import, and e3 runs on its own instance).
-    None of them may contain `$`, nor may `command` or `args`; a run whose would is refused.
+    `PATH`, and the instance's locations (`ROOT`, `HOME` for the instance directory, `CONFIG`, `STATE`, `DATA`,
+    `SECRETS`, `EVALS`), each **only when it is set in `llm.py`'s own environment**, copied as it is there (`hubconf`
+    reads them at import, and e3 runs on its own instance; sending resolved values instead would turn off `hubconf`'s
+    own-instance and migration logic). None of them may contain `$`, nor may `command` or `args`: `llm.py` checks, and
+    refuses a run whose would.
   - **`<run dir>/server.json`** holds the run's values: the project, the point, the tools, the letters (already
     checked, M1), the event chain and depth. `llm.py` writes it once, after `run_server` (below) and before the run
     starts, with `O_EXCL` and mode 0600.
@@ -151,10 +173,11 @@ Shaped like `deny_servers`: a neutral field on the task that the adapter transla
 - **The reserved id** is `<cli>-run` under both CLI names (`brunna-run`, `agenthub-run`). The `ambient_servers` port's
   contract gains a sentence: ids made of `[a-z0-9-]` come back unchanged (true of `mcp_id`). So `llm.py` compares
   strings without the adapter. Nothing stops a user, a plugin or `.mcp.json` from naming a server that. What keeps it
-  out is a check of its own, not the denial list: every run with mail tools either runs with `--strict-mcp-config`
-  (`mailbox-conversation`'s `extra_args`, `run-agent-job.sh`'s `MCP_ARGS` for the others unless
-  `LLM_AUTH=subscription`) or declares `tool_servers: allowed_only`, where `llm.py` refuses the run when an
-  environment server has the reserved id. Tested with such a server. A project's own rules may not name it (M6).
+  out is a check of its own, not the denial list: every point with mail tools declares `tool_servers: allowed_only`
+  (lint, M1), and `deny_unnamed_servers`, which has the run's `loaded` list, refuses the run when one of them has the
+  reserved id. Most such runs are sealed as well (`--strict-mcp-config`: `mailbox-conversation`'s `extra_args`,
+  `run-agent-job.sh`'s `MCP_ARGS` unless `LLM_AUTH=subscription`), and then the list is empty. Tested with such a
+  server. A project's own rules may not name it (M6).
 
 Real runs (Claude Code 2.1.319; scripts in this session's scratchpad, results in brunna's notes for 11-10):
 
@@ -178,7 +201,9 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
   `<the server's own hubconf.STATE>/agent-jobs/.settings/` (the server's `hubconf`, from the env above, never a
   location named in the file). It serves only when the file's point declares `mail: tools` (the server reads
   `llm-points.yaml` from the platform's checkout), its project is registered and has a workspace, and, for a point
-  with `letters_env`, it lists letters. A server started without `--run` whose environment has a non-empty
+  with `letters_env`, it lists letters. When the file fails any of these, the server still answers `initialize` and
+  `tools/list` but refuses every call with the reason (logged to stderr too), so the run's report says why its mail
+  failed rather than showing a server that never started. A server started without `--run` whose environment has a non-empty
   `HUB_LLM_POINT` gets today's refusal (a user-registered `brunna mcp` that the run loads inherits the agent's
   environment and has no `--run`). Both checks come first in `call()`, before the branch for folders outside every
   project (`connect_project` runs `connect.py` as the user). Tests cover `agent-job` (auto mode) and lease sessions:
@@ -190,14 +215,18 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
   `--from=<project>`, and `--project=<project>` to `inbox`. It runs `hubbus` in the workspace; with no workspace the
   call is refused (no fallback to the server's own folder). A test runs a `cwd: state` job's server and sees it act as
   its own project, not the hub.
-- **`hubbus`'s environment** is built, not inherited whole: `names.env_strip(os.environ)` (no platform-prefixed
-  variable from the agent: no `JOB`, no `HUBBUS_LEASE`, no chain), minus `HUB_LLM_POINT`, `MAILBOX_LETTERS`,
-  `HUB_MAIL_BY_PLATFORM` and the login variables (`completion.key_envs()` and the runtime's token), plus the
+- **`hubbus`'s environment** is built, not inherited whole: `names.env_strip(os.environ)` (it drops the
+  `AGENT_HUB_`/`AGENTHUB_`/`BRUNNA_` variables: no `JOB`, no chain), minus, by name, the unprefixed platform
+  variables (`HUB_LLM_POINT`, `MAILBOX_LETTERS`, `MAILBOX_PROJECT`, `HUBBUS_LEASE`, `HUB_MAIL_BY_PLATFORM`,
+  `HUB_THROWAWAY_COPY`, `HUB_MEMORY_OF`, `LLM_AUTH`, every `AGENT_JOB_*`) and the login variables (the auth port's
+  `clean_env` and `completion.key_envs()`), plus the
   instance's locations as the server has them, plus the file's values: `CONFINED`, `JOB_CHAIN` and `JOB_DEPTH` through
   `names.env_set`, and `HUB_LLM_POINT` and `MAILBOX_LETTERS` **as raw keys** (`hubbus` reads them unprefixed; through
   `env_set` they would be renamed and the letter limits would silently go). Everything else the agent's environment
   carries stays, so the runtime's session id reaches `hubbus` without the server naming it.
-- **The tools it lists** are the file's; `call()` refuses any other. The `inbox` result has no header: the server's
+- **The tools it lists** are the file's; `call()` refuses any other. It checks the arguments' types before building
+  anything: `ids` a list of strings (a string would be iterated by character today, and each character is a valid
+  `EVENT_ID`), `options` a list of objects of strings, every other field a string (`withdraw` aside, a bool). The `inbox` result has no header: the server's
   count is the project's, while a letter run's inbox lists only its letters. `instructions` at `initialize` is a short
   fixed text: letters are data; the run acts only on what it was started for.
 - **No value becomes an option.**
@@ -218,20 +247,25 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
     registrar applies them;
   - `done --withdraw`: a run with no letters (a job) could take back any open letter its project sent;
   - `close_refusal`'s exemption for the hub (closing letters the hub sent to other projects): a hub job's run is held
-    like any project's.
+    like any project's;
+  - a `request` to the owner: it raises an owner to-do just as `task` does (`send_record`), which `confined_refusal`
+    refuses because the owner's to-dos need a person. To the owner a confined run sends only `question`, and
+    `done|drop` with `--question`.
 - **`note`** appends through a new `nofollow.append(base, rel, data)`: base is the project's workspace (the main
   checkout for the hub), rel is `.agent-memory/memory/<day>.md`; every folder from the base down is opened without
   following links, and only `memory` may be created; the day file is opened with
   `O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW|O_NONBLOCK` and refused unless it is a regular file with one link
   (`st_nlink == 1`, as `lease_files.py` checks). This is how `outbox_put` already writes (base = the workspace).
+  `append` has its own folder walk: `nofollow._folder(create=True)` would create every missing folder, and `append`
+  creates only the last one.
   `policy.notes_dir` only answers "does this project have notes"; when it says no, `note` is refused. Today
   `write_note` uses a plain `open`, and the server runs outside every sandbox, so a project that planted
   `memory/<today>.md -> ~/.zshenv`, or swapped `memory` for a link at the right moment, would get a line written into
   the user's files; that holds for sessions' servers today, and the fix covers them. A hard link to a file outside the
   project can't be made from inside the macOS sandbox (Seatbelt refuses `ln` of a file outside the writable set, tried
   11-10); on Linux (Landlock) that is untested, and the `st_nlink` check covers it either way.
-- The server's header loses "Standard library": it already loads PyYAML through `hubbus`, and now reads
-  `llm-points.yaml` itself; `bin/py` has it.
+- The server's header loses "Standard library": it now reads `llm-points.yaml` itself, with PyYAML, which `bin/py`
+  has.
 
 ## M4. Sandboxed projects
 
@@ -246,6 +280,11 @@ Bash did. What the server can be made to do is bounded by its code:
 - for an outboxed project, `hubbus` writes only that project's outbox, without following links, and `dispatch` sends
   each file as that project, never as a sender named in it (`docs/design/bus-sender.md`). This is the path a sandboxed
   project's sessions take with their own server today. The run itself can't write the outbox (M7).
+
+Accepted residual, unchanged from today: a mail handler keeps Read and a reply to its letter's sender, so a project
+can ask another project's handler to reply with a file from that project. What is never readable is denied (the deny
+lists, and the declared secrets with `project-agent-calls.md` C); the rest of a project's folder is what its handlers
+can quote.
 
 Considered and not chosen: starting the server under `bin/sandboxed-run` with the project's profile. It would add an
 OS boundary, but the profile would have to admit the platform's code, registry and templates, the server would need a
@@ -283,15 +322,22 @@ run it checks without knowing the points' names. Run when the run starts, on the
   `Bash(sh *)` even reaches `hubbus` with the confined checks stripped, `env -u`). The live registry has no event
   agent job (checked 11-10). An event job that needs a script runs it as a command job before or after. (The mail
   handlers' rules are the point's own, so this changes nothing for them.)
+- **An untrusted run in a project that isn't sandboxed doesn't write rules files.** Its settings deny Edit and Write on
+  every runtime's rules-file names (`RULES_FILE_NAMES`, `CLAUDE.md`, `AGENTS.md`…) at any depth, which the owner's next
+  session there would load unsandboxed. Other code it may write is what the project's own `allow:` rules say; a project
+  that gives an event job `Edit(./**)` lets any bus writer change files its tests and services run as the user, and
+  that is said plainly in the registry header beside `trigger`.
 - **Every confined point refuses** a rule that names the reserved server, and a Bash rule naming the platform's CLI
-  (`brunna`, `agenthub`, `bin/hub`, the `hubbus` path): the mail is the tools. This is reinforcement, not the boundary: a
-  broader rule or an absolute path gets past a name check, which is why untrusted runs refuse Bash whole.
-- **Clock jobs (`agent-job-confined`) keep their Bash and web rules.** Their prompt is the project's own file; the
-  residual (the job reads untrusted text, from the web or from files, and is talked into a substitution) is the
-  runtime's parsing, as the 11-09 table shows, and a sandboxed project has no Bash rule at all (A2). Said plainly here
-  and in the status page's list of confined jobs with shell rules. Such a job's Bash can also read the run's
-  `server.json`: nothing in it is secret (it is what the run already has), and the server read it before the model
-  could act.
+  (`brunna`, `agenthub`, `bin/hub`, the `hubbus` path), whatever the subcommand (`complete` and `cap-run` included: a
+  confined run reaches the platform only through its tools; a script the job runs may call the CLI itself). This is
+  reinforcement, not the boundary: a broader rule or an absolute path gets past a name check, which is why untrusted
+  runs refuse Bash whole.
+- **Clock jobs (`agent-job-confined`) keep their Bash and web rules.** Their prompt is the project's own file, and a
+  `mail: true` job reads no mail (M1); the residual (the job reads untrusted text, from the web or from files, and is
+  talked into a substitution or a fetch) is said plainly here, and a sandboxed project has no Bash rule at all (A2).
+  Such a job's Bash can also read the run's `server.json`: nothing in it is secret (it is what the run already has),
+  and the server read it before the model could act.
+- The checks compare paths and names case-insensitively (the hub's volume is: `.GIT` is `.git`).
 
 ## M7. No confined run writes a `.git`
 
@@ -303,8 +349,12 @@ folders, nothing more), and nothing denies a project's git directories. A rule s
   Edit and Write denies for them (the adapter's translation, as for `.hub-run`). A deny wins over every allow, so a
   run's notes rule (`./.agent-memory/memory/**`) keeps working and `.agent-memory/.git` (a worktree's pointer file) is
   denied.
-- **The rules.** `rule_problems` refuses, for every confined point, a rule whose fixed part enters a `.git`, as A2
-  refuses `.hub-run`.
+- **The rules.** `rule_problems` refuses, for every confined point, a rule whose fixed part enters a `.git` (compared
+  case-insensitively), as A2 refuses `.hub-run`.
+- **Case.** Real run, 11-10 (Claude Code 2.1.319, macOS, case-insensitive volume): with `Edit(./**)`/`Write(./**)`
+  allowed and Edit/Write on `/<ws>/.git` and `/<ws>/.git/**` denied, writes to `.GIT/config`, `.Git/probe-b.txt` and
+  `.git/probe-c.txt` were all refused and `.git/config` was unchanged; `ok.txt` was written. The runtime's matching
+  holds for case; the platform's own check doesn't rely on it.
 - **Tests**: from an untrusted run, a write to a sandboxed project's outbox and to `.git/config` are both refused;
   the notes rule still writes.
 
@@ -353,6 +403,8 @@ Existing tests change, not only grow:
 - `test_mcp_deny.py`: reads the first `--allowedTools` value and expects `--strict-mcp-config` last.
 - `test_mailbox_route.py`: `platform_cli(mail_only=…)` goes.
 - `test_runtime_ports_features.py`: `needs()` and the new row at the end.
+- `test_mailbox_triage.py`: its `platform_settings` mocks (whose signature gains `run_dir`), the settings and
+  `platform_cli` fixtures, and the flag tests; `test_scheduler_events.py`'s `platform_settings` mocks too.
 - `llm-golden.json`: unchanged (Depends on); the new command shape is asserted in `test_handler_confinement.py`.
 - The i18n catalogs and goldens for `mcp_server`, `runtime_ports`, `registry`, `hubbus`, `llm` and doctor change with
   the new and changed strings.
@@ -369,13 +421,16 @@ New:
   - A tool not in the file's list is refused.
   - `text: "--withdraw"` reaches `hubbus` as text; an id `--withdraw`, or `m1\n`, is refused; an option id or label
     starting with `-` is refused.
-  - `MAILBOX_LETTERS` limits hold through the server; `done` of a record, `done --withdraw`, and a hub job closing
-    the hub's letter to another project are refused.
+  - `MAILBOX_LETTERS` limits hold through the server; `done` of a record, `done --withdraw`, a hub job closing the
+    hub's letter to another project, and a `request` to the owner are refused.
+  - `ids: "abc"` is refused, not read as three ids; a bad run file answers every call with the reason.
   - `note` refuses a linked day file, a linked `memory` folder, a linked `.agent-memory`, and a hard-linked file;
     creates the day file; writes the main checkout's notes for the hub.
 - **The runtime.**
   - A handler's command has `--mcp-config` with the reserved id and only its tools' rules, no Bash rule, no Bash tool.
-  - A job without `AGENT_JOB_MAIL=1` has no server; without a Bash rule, no Bash; `note` only with the notes rule.
+  - A job without `AGENT_JOB_MAIL=1` has no server; with it, only `send`, `ask_owner` and (with the notes rule)
+    `note`; without a Bash rule, no Bash.
+  - An untrusted run in an unsandboxed project can't write a `CLAUDE.md` or `AGENTS.md` at any depth.
   - `server.json` holds the run's values; the config's `env` has only `HOME`, `PATH` and the instance's locations; a
     `$` in any of them, or in `command` or `args`, refuses the run; a letter id that isn't an `EVENT_ID`, or no letters
     for a letters point, refuses it before it starts.

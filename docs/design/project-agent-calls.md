@@ -96,9 +96,10 @@ The run gets everything the hardening gave confined runs:
 
 ### A2. What a confined run's rules may be: checked when it runs
 
-The adapter gets a new optional port, `rule_problems(rules, *, sandboxed, network) -> [neutral sentences]`. **It runs
-when a run starts**, for every confined point (`agent-job-confined`, `agent-job-event`, `project-agent`), in
-`llm.py run`. A run whose rules it refuses fails with the sentences (job.failed, status page).
+The adapter gets a new optional port, `rule_problems(task, *, sandboxed, network, untrusted) -> [neutral sentences]`
+(the adapter gathers the run's rules itself; a second function takes a job's `allow:` list for listings;
+`docs/design/confined-mail-tools.md`, "Depends on"). **It runs when a run starts**, for every `settings: platform`
+point (`agent-job-confined`, `agent-job-event`, `project-agent`, and the mail handlers), in `llm.py run`. A run whose rules it refuses fails with the sentences (job.failed, status page).
 
 It is never a registry validation error. The registry checks only the shape (`rule_shaped`) and keeps every entry
 valid, so an owner who tightens `enforce.sandbox` or `network:`, or changes runtimes, is never held back by a project's
