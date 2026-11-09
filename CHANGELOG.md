@@ -3,6 +3,18 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.15.0 (2026-11-09)
+
+### New
+
+- **memlock:** One writer at a time in a memory copy
+- **state:** Restore keeps today's to-do list and publishes with a compare-and-swap
+- **librarian,registrar,consolidate:** Take the memory copy's writer lock
+
+### Fixed
+
+- **state:** Restore refuses a copy a fast-forward can't move, and lists every open item it leaves out
+
 ## v0.14.0 (2026-11-09)
 
 ### New
