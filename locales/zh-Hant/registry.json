@@ -152,5 +152,8 @@
  "type can only be project, idea or platform": "type 只能是 project、idea 或 platform",
  "type: platform is the platform's own entry only": "type: platform 只能用在平台自己的登錄",
  "{name} is reserved for the platform itself; pick another name": "{name} 保留給平台自己用;請換一個名字",
- "mailbox.wake must be true or false": "mailbox.wake 必須是 true 或 false"
+ "mailbox.wake must be true or false": "mailbox.wake 必須是 true 或 false",
+ "a job with connectors: true": "connectors: true 的 job",
+ "job {name}: an allow rule is one line and never starts with - (a rule, not an option)": "job {name}:allow 的規則只能是一行,不能以 - 開頭(是規則,不是選項)",
+ "job {name}: prompt must be a file name under jobs/ in the config's projects/{project}/ (e.g. jobs/{name}.md): the prompt is the owner's text, never a file the project writes": "job {name}:prompt 只能是 config 的 projects/{project}/ 裡 jobs/ 底下的檔名(例如 jobs/{name}.md):prompt 是擁有者寫的,不能是專案自己寫的檔"
 }

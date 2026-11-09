@@ -149,6 +149,11 @@ class Flags(unittest.TestCase):
         wt = self.ws / "wt"
         wt.mkdir()
         (wt / ".agent-memory").symlink_to(main / ".agent-memory")
+        # the main checkout's notes are the project's (policy.notes_dir): a link there is followed, one elsewhere isn't
+        import runtime_claude
+        roots = mock.patch.object(runtime_claude, "project_roots", lambda p: [self.ws, main / ".agent-memory" / "memory"])
+        roots.start()
+        self.addCleanup(roots.stop)
         cmd = flags("mailbox-conversation", wt, self.env("mailbox-conversation"))
         self.assertEqual(cmd[cmd.index("--add-dir") + 1], str(main / ".agent-memory"))
         self.assertIn(f"Edit(/{main}/.agent-memory/memory/**)", allowed(cmd))

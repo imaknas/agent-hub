@@ -170,8 +170,9 @@ def _user_config_file() -> pathlib.Path:
 def credential_paths() -> dict:
     """Its login (runtime_ports credential_paths), under its home as configured now: the credential file, not the folder
     it is in, whose other entries its sessions use (transcripts, plans, skills; docs/design/capabilities.md 11-08, A2 for
-    the finer rules there)."""
-    return {"dirs": [], "files": [str(_home() / ".credentials.json")]}
+    the finer rules there). And the headless token the platform's runs log in with (_token_file), which is not under
+    $CLAUDE_CONFIG_DIR."""
+    return {"dirs": [], "files": list(dict.fromkeys([str(_home() / ".credentials.json"), str(_token_file())]))}
 
 
 # What it loads settings, hooks and tools from for every session of the user, anywhere: never written by a sandboxed
@@ -704,6 +705,8 @@ def _rules(task) -> tuple:
 
 
 _GLOB = re.compile(r"[*?\[{]")
+# a permission rule: a tool name, optionally with its argument in parentheses, on one line (nothing that starts with "-")
+RULE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\([^\n\r\0]*\))?")
 
 
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -745,11 +748,24 @@ def own_state_dir(allowed, cwd) -> pathlib.Path | None:
     return None
 
 
-def _linked_rules(allowed, cwd) -> tuple[list[str], list[str]]:
+def project_roots(project: str) -> list[pathlib.Path]:
+    """Where a confined run of this project may follow a link to: its workspace, its runtime folder and its notes
+    (resolved; a folder the registry doesn't give is left out)."""
+    import policy
+    import registry
+    doc = registry.refresh()["projects"].get(project) or {}
+    d = registry.dirs(doc) if doc else {}
+    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), policy.notes_dir(project)) if p]
+
+
+def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
     """--restricted confines the file tools to the working directories, and it checks a path where it resolves: a
     worktree's .agent-memory is a link to the main checkout's (worktree-memory.sh), so a `./.agent-memory/…` rule
     matches nothing there (live probe 11-02, 2.1.316). For each `./` rule whose fixed part resolves outside the
-    folder: that directory as an extra working directory, and the same rule on the resolved path → (dirs, rules)."""
+    folder: that directory as an extra working directory, and the same rule on the resolved path → (dirs, rules).
+    roots (a confined run: project_roots): a rule whose link leads outside every one of them raises ValueError, and the
+    run doesn't happen. A project writes its own folder, links included: a `data -> ~` it planted would otherwise turn
+    `Edit(./data/.zshenv)` into an edit of the user's shell, by the file tools, which run outside any OS sandbox."""
     base = pathlib.Path(cwd or os.getcwd()).resolve()
     dirs, rules = [], []
     for r in allowed:
@@ -761,6 +777,9 @@ def _linked_rules(allowed, cwd) -> tuple[list[str], list[str]]:
         real = base.joinpath(*fixed).resolve() if fixed else base
         if real == base or base in real.parents:
             continue
+        if roots is not None and not any(real == x or x in real.parents for x in roots):
+            raise ValueError(f"the rule {r} follows a link out of the project's folders, to {real}; a confined run "
+                             "never follows one there")
         top = base.joinpath(fixed[0]).resolve()
         if str(top) not in dirs:
             dirs.append(str(top))
@@ -816,7 +835,7 @@ def _flags(task) -> list:
                 tools.add("Write")
         cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd), task.cwd)),
                 "--tools", ",".join(sorted(tools))]
-        dirs, extra = _linked_rules(allowed, task.cwd)
+        dirs, extra = _linked_rules(allowed, task.cwd, project_roots(project))
         allowed += extra
         dirs += [d for d in _notes_rules(allowed, project, task.cwd) if d not in dirs]
         for d in dirs:
@@ -826,6 +845,10 @@ def _flags(task) -> list:
     if spec.get("restricted") and spec.get("settings") != "platform":
         cmd += ["--restricted"]   # no settings file of the folder it runs in: its hooks would run as the user
     if allowed:
+        # a registry job's rules are the project's own text (manifest.update): one that isn't a rule must never reach
+        # the command line, where `--allowedTools` takes every following word that isn't an option
+        if (bad := [r for r in allowed if not RULE.fullmatch(r)]):
+            raise ValueError(f"judgment point {task.point}: not a permission rule: {', '.join(map(repr, bad[:3]))}")
         cmd += ["--allowedTools", *allowed]
     if task.deny_servers:
         # a whole server: `mcp__<id>` with no tool matches every tool it has (deny wins over any allow), and a tool

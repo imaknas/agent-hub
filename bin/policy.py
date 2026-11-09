@@ -71,7 +71,8 @@ CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOO
 CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
                "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
 # what the user's shell and git run outside any sandbox (11-08 A1 point 3)
-SHELL_FILES = ["~/.zshrc", "~/.zprofile", "~/.bashrc", "~/.bash_profile", "~/.profile"]
+SHELL_FILES = ["~/.zshenv", "~/.zshrc", "~/.zprofile", "~/.zlogin", "~/.zlogout", "~/.bashrc", "~/.bash_profile",
+               "~/.bash_login", "~/.bash_logout", "~/.profile"]
 GIT_USER_DIRS, GIT_USER_FILES = ["~/.config/git"], ["~/.gitconfig"]
 SERVICE_DIRS = ["~/Library/LaunchAgents", "~/.config/systemd/user"]
 CLI_DIR = "~/.local/bin"   # install-cli's default folder (bin/agenthub)

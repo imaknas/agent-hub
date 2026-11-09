@@ -302,6 +302,33 @@ PLATFORM_OWNED = ("type", "enforce", "network", "allow_write", "privacy", "meter
 PLATFORM_OWNED_NESTED = (("mailbox", "wake"),)
 
 
+def connector_jobs(doc: dict) -> dict:
+    """The jobs that use the owner's claude.ai connectors (connectors: true), whole: such a run logs in with the owner's
+    subscription and loads the connectors its allow: names, so the project can't add one, or change one's rules, prompt
+    or folder, by its own letter (owner-only, like PLATFORM_OWNED)."""
+    return {j.get("name"): j for j in doc.get("jobs") or [] if isinstance(j, dict) and j.get("connectors") is True}
+
+
+def rule_shaped(rule) -> bool:
+    """A permission rule as a project writes it: one line, never starting with "-" (an option). What a rule may say is the
+    runtime adapter's (it refuses one that isn't a rule before the run)."""
+    return isinstance(rule, str) and bool(rule) and not rule.startswith("-") and not any(c in rule for c in "\n\r\0")
+
+
+JOB_PROMPT = re.compile(r"jobs/[A-Za-z0-9_-][A-Za-z0-9._-]*\.md")
+
+
+def job_prompt(stem: str, job: dict) -> pathlib.Path | None:
+    """An agent job's prompt: a file under jobs/ in the config's projects/<project>/, the owner's text (a project can't
+    write the config repo). None when the registry entry names anything else (a path, .., another folder)."""
+    rel = job.get("prompt") or f"jobs/{job.get('name')}.md"
+    if not isinstance(rel, str) or not JOB_PROMPT.fullmatch(rel):
+        return None
+    home = (hubconf.registry_dir() / stem / "jobs").resolve()
+    p = (hubconf.registry_dir() / stem / rel)
+    return p if p.resolve().parent == home else None
+
+
 def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     """Security fields manifest.update can't change: list them when they differ from the current registry entry."""
     def nested(doc, top, key):
@@ -309,6 +336,8 @@ def platform_owned_changes(new: dict, cur: dict) -> list[str]:
 
     changed = [k for k in PLATFORM_OWNED if new.get(k) != cur.get(k)]
     changed += [f"{top}.{key}" for top, key in PLATFORM_OWNED_NESTED if nested(new, top, key) != nested(cur, top, key)]
+    if connector_jobs(new) != connector_jobs(cur):
+        changed.append(_("a job with connectors: true"))
     return [_("{key} is a security field that only brunna can change ({owner} confirms); this letter changes it", key=k,
               owner=hubconf.owner_tag()) for k in changed]
 
@@ -584,6 +613,9 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
         if job.get("allow") is not None and (not isinstance(job["allow"], list)
                                              or not all(isinstance(x, str) and x for x in job["allow"])):
             errs.append(_("job {name}: allow must be a list of permission rule strings", name=n))
+        elif any(not rule_shaped(x) for x in job.get("allow") or []):
+            # the project's own text, handed to the runtime as rules: never an option (the runtime's adapter refuses one too)
+            errs.append(_("job {name}: an allow rule is one line and never starts with - (a rule, not an option)", name=n))
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
         if job.get("connectors") is True and not job.get("allow"):
@@ -593,8 +625,12 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             errs.append(_("job {name}: allow has claude.ai connector tools; add connectors: true (the default headless token "
                            "loads no connectors)", name=n))
         if job.get("kind", "command") == "agent":
-            prompt = hubconf.registry_dir() / stem / (job.get("prompt") or f"jobs/{n}.md")
-            if not prompt.exists():
+            prompt = job_prompt(stem, job)
+            if prompt is None:
+                errs.append(_("job {name}: prompt must be a file name under jobs/ in the config's projects/{project}/ (e.g. "
+                              "jobs/{name}.md): the prompt is the owner's text, never a file the project writes",
+                              name=n, project=stem))
+            elif not prompt.exists():
                 errs.append(_("job {name}: prompt {prompt} does not exist", name=n, prompt=prompt))
         elif job.get("kind", "command") != "command":
             errs.append(_("job {name}: kind can only be command / agent", name=n))
@@ -911,7 +947,9 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
             if job.get("kind") == "agent" and job.get("cwd") == "state":
                 cwd = hubconf.STATE / "agent-jobs" / (job.get("legacy_name") or f"{name}-{job['name']}")
             if job.get("kind") == "agent":
-                prompt = hubconf.registry_dir() / name / (job.get("prompt") or f"jobs/{job['name']}.md")
+                prompt = job_prompt(name, job)
+                if prompt is None:   # validation refuses it; never a path the project chose
+                    continue
                 agent_name = job.get("legacy_name") or f"{name}-{job['name']}"
                 cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
