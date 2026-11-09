@@ -96,7 +96,8 @@ The run gets everything the hardening gave confined runs:
 
 ### A2. What a confined run's rules may be: checked when it runs
 
-The adapter gets a new optional port, `rule_problems(task, *, sandboxed, network, untrusted) -> [neutral sentences]`
+The adapter gets a new port (`rule_check`, not in `runtime_ports.OPTIONAL`),
+`rule_problems(task, *, sandboxed, network, untrusted) -> [neutral sentences]`
 (the adapter gathers the run's rules itself; a second function takes a job's `allow:` list for listings;
 `docs/design/confined-mail-tools.md`, "Depends on"). **It runs when a run starts**, for every `settings: platform`
 point (`agent-job-confined`, `agent-job-event`, `project-agent`, and the mail handlers), in `llm.py run`. A run whose rules it refuses fails with the sentences (job.failed, status page).
@@ -106,7 +107,7 @@ valid, so an owner who tightens `enforce.sandbox` or `network:`, or changes runt
 rules. `registry.py check` and the status page list the rules each run would refuse. A manifest.update may also get the
 list back as a note.
 
-A runtime without the port refuses every confined run that has rules, saying why.
+A runtime without the port refuses every `settings: platform` run, saying why.
 
 Refused, for every project:
 - any `~/`, `//`, absolute or `..` path in a rule (paths are relative to the run's folder);

@@ -1,8 +1,7 @@
 # Confined runs send mail through the platform's tools, not a shell
 
-Status: sixth draft (11-10), after five rounds of blind review (feasibility and security each). Round 5's feasibility
-review found nothing blocking; this draft settles round 5's two security findings (a job's reply to a letter it
-wasn't given; `.claude/rules/`) and both reviews' should-fix items. The owner decided the direction on 11-10, which
+Status: settled (11-10). Six rounds of blind review (feasibility and security each); round 6 found nothing blocking in
+either, and this seventh draft folds in its should-fix items. Ready to build. The owner decided the direction on 11-10, which
 answers the question of 11-02 (m11020427-89ec, raised in `docs/design/mailbox-routing.md`, "11-02: the handlers are
 confined", paragraph **Bash**).
 
@@ -78,9 +77,12 @@ of that design's build order, whose step 1, the prompt on stdin, is built; A2 is
   rules can't be checked there, as other unsupported features do. During the branch, A2's sandboxed-project check
   sees `_rules`' Bash mail rules until step 4 removes them; a sandboxed project's handler test written before then
   fails, as M6's would.
-- `platform_settings` without a `run_dir` raises: only `llm.py` calls it, always with one.
-- **`project_roots`** moves from the adapter to `policy.py` (everything it reads is neutral), so M7's deny can use it;
-  the adapter imports it from there.
+- `platform_settings(project, spec, run_dir, keep, cwd)`: it takes the point's spec too (M6's denies depend on
+  `prompt_source`), and raises without a `run_dir`. It is called only by `_flags`, which is reached only through
+  `llm.py`; the tests that call either directly pass a `run_dir` (listed under Tests).
+- **`project_roots`** moves from the adapter to `policy.py` as `policy.run_roots` (everything it reads is neutral; the
+  new name keeps it apart from `hubconf.project_roots()`), so M7's deny can use it. The adapter binds it at module
+  level as `project_roots = policy.run_roots`, so the tests that patch `runtime_claude.project_roots` keep applying.
 
 ## M1. The declaration
 
@@ -216,8 +218,9 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
   location named in the file). It serves only when the file's point declares `mail: tools` (the server reads
   `llm-points.yaml` from the platform's checkout), its project is registered and has a workspace, and, for a point
   with `letters_env`, it lists letters. When the file fails any of these, the server still answers `initialize` and
-  `tools/list` but refuses every call with the reason (logged to stderr too), so the run's report says why its mail
-  failed rather than showing a server that never started. A server started without `--run` whose environment has a non-empty
+  `tools/list` (the point's tools when the file names a point it can read, else the mail handlers' set) but refuses
+  every call with the reason (logged to stderr too), so the run's report says why its mail failed rather than showing
+  a server that never started. A server started without `--run` whose environment has a non-empty
   `HUB_LLM_POINT` gets today's refusal (a user-registered `brunna mcp` that the run loads inherits the agent's
   environment and has no `--run`). Both checks come first in `call()`, before the branch for folders outside every
   project (`connect_project` runs `connect.py` as the user). Tests cover `agent-job` (auto mode) and lease sessions:
@@ -252,8 +255,9 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
     `m…`, `qcheck-…`, handoff ids, outbox ids; `fullmatch`, since `EVENT_ID` ends in `$` and `.match` lets a final
     newline through). An id an unsandboxed sender chose with `--id` is not checked on the bus path today
     (`send_letter`); from now on `send_letter` refuses an `--id` that doesn't `fullmatch` `EVENT_ID`, and `dispatch`
-    leaves an older letter with such an id out of a handler's batch (it stays open for the project's sessions), so one
-    bad id never refuses a whole batch (M1's `letters_env` check).
+    leaves an older letter with such an id out of a handler's batch, and neither routes nor forks it (`resume`), so it
+    stays open for the project's sessions and one bad id never refuses a whole batch or spends a fork (M1's
+    `letters_env` check).
   - `ask_owner`'s options: `--option` takes two values (`nargs=2`), so each id must `fullmatch` `hubbus.OPTION_ID` and
     neither the id nor the label may start with `-`; a test pins it (a label `--text` would otherwise be read as that
     option).
@@ -270,9 +274,11 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
     like any project's;
   - a `request` to the owner (compared with `canon(a.to)`, so every owner alias counts): it raises an owner to-do just
     as `task` does (`send_record`), which `confined_refusal` refuses because the owner's to-dos need a person;
-  - for a run **without letters** (a job: `run_letters()` is None, so `run_refusal` doesn't apply): `--reply-to`,
-    `--question`, and the types `done` and `drop`. Such a run starts new letters only: `request`, `question`, `info`,
-    `progress` to a project; `question`, `info`, `progress` to the owner.
+  - for a run **without letters** (a job: `run_letters()` is None, so `run_refusal` doesn't apply): every command but
+    `send` (`inbox`, `show`, `thread`, `done`, `ack`, `open-questions`: today `inbox` lists the whole mailbox and
+    `done` closes any letter to the project, and a clock job keeps Bash, so the CLI path must hold the line the tools
+    hold), and on `send`, `--reply-to`, `--question`, and the types `done` and `drop`. Such a run starts new letters
+    only: `request`, `question`, `info`, `progress` to a project; `question`, `info`, `progress` to the owner.
 
   A run **with letters** (a mail handler) is held by `run_refusal` as today: replies to its own letters' senders
   (`done`, or `info` when the letter asks; a fork's ordinary types), questions to the owner, and `done|drop
@@ -357,14 +363,17 @@ run it checks without knowing the points' names. Run when the run starts, on the
     (Claude Code loads every `.md` under it like `CLAUDE.md`, code.claude.com/docs/en/memory.md). `.claude/rules` also
     joins the project-level `CONTROL` list (`runtime_claude.py`), which today has it only at user level, so sandboxed
     projects' sessions are covered too;
-  - `.agent-memory/**` except `memory/**` (`STATE.md`, `AGENT.md`, `RULES`): the registrar sends `STATE.md`'s owner
-    to-do lines every night.
+  - `.agent-memory/**` except `memory/**`: the registrar sends `STATE.md`'s owner to-do lines every night. A deny can't
+    be narrowed by an allow, so it is written as a list: `memory_paths.TOP` (`AGENT.md`, `RULES`, `STATE.md`) and
+    `.agent-memory/.git` by name, whether or not they exist (a run must not create a missing `STATE.md`), plus
+    `beside` for anything else present.
 
   What a name-based deny can't cover, said plainly: a project's existing `CLAUDE.md` can `@import` any relative file;
   the notes a handler writes feed the librarian, which writes `STATE.md`'s to-do section (unchanged from today). Other
-  code an untrusted run may write is what the project's own `allow:` rules say: a project that gives an event job
-  `Edit(./**)` lets any bus writer change files its tests and services run as the user, and that is said plainly in
-  the registry header beside `trigger`.
+  code an untrusted run may write is what the project's own `allow:` rules say: a project that gives an event job a
+  write rule over its whole folder lets any bus writer change files its tests and services run as the user, and that
+  is said plainly in the registry header beside `trigger` (in neutral words: the header is not in the ratchet's
+  baseline for rule syntax).
 - **Every confined point refuses** a rule that names the reserved server, and a Bash rule naming the platform's CLI
   (`brunna`, `agenthub`, `bin/hub`, the `hubbus` path), whatever the subcommand (`complete` and `cap-run` included: a
   confined run reaches the platform only through its tools; a script the job runs may call the CLI itself). This is
@@ -383,20 +392,25 @@ Open today: a confined run's file tools work outside the OS sandbox (`--restrict
 folders, nothing more), and nothing denies a project's git directories. A rule such as `Edit(./**)` passes `RULE`.
 
 - **The settings.** The policy gains a neutral entry, every `.git` (directory or pointer file) at any depth under
-  each of the run's folders (`project_roots`, the run's own working folder, and every folder `_linked_rules` adds), and
+  each of the run's folders (`run_roots`, the run's own working folder, and every folder `_linked_rules` adds), and
   the project's git common directory (found by reading the pointer files with `gitdirs`, never by running git in the
-  project's repo); `platform_settings` writes
+  project's repo). It is a pattern, not a list of what exists: for each folder the adapter writes Edit and Write denies
+  on `/<folder>/**/.git` and `/<folder>/**/.git/**`, so a run can't create a new nested `.git` either; `platform_settings` writes
   Edit and Write denies for them (the adapter's translation, as for `.hub-run`). A deny wins over every allow, so a
   run's notes rule (`./.agent-memory/memory/**`) keeps working and `.agent-memory/.git` (a worktree's pointer file) is
   denied.
 - **The rules.** `rule_problems` refuses, for every confined point, a rule whose fixed part enters a `.git` (compared
-  case-insensitively), as A2 refuses `.hub-run`.
+  case-insensitively), as A2 refuses `.hub-run`. The text alone isn't enough: a link the project planted
+  (`out -> .git/brunna/outbox`) turns `Edit(./out/**)` into a write there. So `_linked_rules`, which already resolves
+  every step of a `./` rule, also raises when a resolved step is or enters a `.git` or `.hub-run` (case-insensitively),
+  and `_notes_rules` checks its folder the same way.
 - **Case.** Real run, 11-10 (Claude Code 2.1.319, macOS, case-insensitive volume): with `Edit(./**)`/`Write(./**)`
   allowed and Edit/Write on `/<ws>/.git` and `/<ws>/.git/**` denied, writes to `.GIT/config`, `.Git/probe-b.txt` and
   `.git/probe-c.txt` were all refused and `.git/config` was unchanged; `ok.txt` was written. The runtime's matching
   holds for case; the platform's own check doesn't rely on it.
 - **Tests**: from an untrusted run, a write to a sandboxed project's outbox and to `.git/config` are both refused;
-  the notes rule still writes.
+  the notes rule still writes; creating a new `sub/.git` is refused; `Edit(./out/**)` with `out` linked into `.git`
+  refuses the run.
 
 This lands in step 0, with the run's folder: it doesn't wait for the mail.
 
@@ -445,7 +459,9 @@ Existing tests change, not only grow:
 - `test_runtime_ports_features.py`: `needs()` and the new row at the end.
 - `test_mailbox_triage.py`: its `platform_settings` mocks (whose signature gains `run_dir`), the settings and
   `platform_cli` fixtures, and the flag tests; the `platform_settings` mocks of `test_scheduler_events.py` and
-  `test_confined_hardening.py` too.
+  `test_confined_hardening.py` too. The direct calls of `platform_settings` (`test_handler_confinement.py`,
+  `test_scheduler_events.py`, `test_mailbox_triage.py`) and of `_flags` on confined tasks (`test_handler_confinement`'s
+  `flags()`, `test_scheduler_events.py`) pass a `run_dir` and the spec.
 - `test_runtime_contracts.py`: `PORTS`/`PORT_LABELS` gain `run_server` and `rule_check`.
 - `llm-golden.json`: unchanged (Depends on); the new command shape is asserted in `test_handler_confinement.py`.
 - The i18n catalogs and goldens for `mcp_server`, `runtime_ports`, `registry`, `hubbus`, `llm` and doctor change with
@@ -467,6 +483,8 @@ New:
     hub's letter to another project, and a `request` to the owner (under any alias) are refused.
   - A job's `send` with `--reply-to` (a `done` or `info` to an owner handoff), with `--question`, or of type `done` or
     `drop` is refused; a handler's `done` reply to its own asks letter still goes.
+  - Through the CLI under `CONFINED`, a run without letters gets `inbox`, `show`, `thread`, `done`, `ack` and
+    `open-questions` refused.
   - `send_letter` refuses an `--id` that isn't an `EVENT_ID`; `dispatch` leaves such an older letter out of a batch.
   - `ids: "abc"` is refused, not read as three ids; a bad run file answers every call with the reason.
   - `note` refuses a linked day file, a linked `memory` folder, a linked `.agent-memory`, and a hard-linked file;
@@ -476,7 +494,8 @@ New:
   - A job without `AGENT_JOB_MAIL=1` has no server; with it, only `send`, `ask_owner` and (with the notes rule)
     `note`; without a Bash rule, no Bash.
   - An untrusted run in an unsandboxed project can't write a `CLAUDE.md` or `AGENTS.md` at any depth, a file under
-    `.claude/rules/`, or `.agent-memory/STATE.md`; it still writes `.agent-memory/memory/`.
+    `.claude/rules/`, or `.agent-memory/STATE.md` (also when `STATE.md` doesn't exist yet); it still writes
+    `.agent-memory/memory/`.
   - The `.git` deny covers the run's working folder and every added one, not only the project's roots.
   - `server.json` holds the run's values; the config's `env` has only `HOME`, `PATH` and the instance's locations; a
     `$` in any of them, or in `command` or `args`, refuses the run; a letter id that isn't an `EVENT_ID`, or no letters
