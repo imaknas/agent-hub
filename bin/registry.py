@@ -935,11 +935,13 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
         errors.setdefault("(jobs)", []).extend(
             _("agent jobs {jobs} would share the state folder {name} (or take a mailbox handler's): none of them runs "
               "until one is renamed", jobs=", ".join(sorted(js)), name=n) for n, js in sorted(clash.items()))
-    if (loose := unconfined_sandboxed(index)):
-        errors.setdefault("(jobs)", []).extend(
-            _("agent job {job} belongs to a sandboxed project and declares no allow list, so it doesn't run until it "
-              "declares the tools it needs (an agent job without one loads the project's saved permissions)", job=j)
-            for j in loose)
+    # not an error: the entry stays valid and the config can still be committed and applied (an owner who turns a project's
+    # sandbox on is never held back by its jobs, nor can a project hold back the config); the job alone doesn't run, and
+    # `registry.py check` and the status page say why (docs/design/project-agent-calls.md A2)
+    index["refused"] = {
+        j: _("agent job {job} belongs to a sandboxed project and declares no allow list, so it doesn't run until it "
+             "declares the tools it needs (an agent job without one loads the project's saved permissions)", job=j)
+        for j in unconfined_sandboxed(index)}
     if live:
         tmp = CACHE / "index.json.tmp"
         tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
@@ -1311,6 +1313,10 @@ def main() -> int:
         else:
             bad += 1
             print(_("? {name}: not in the registry", name=n))
+    # jobs that don't run although their entry is valid (listed, not counted as invalid)
+    for job, why in sorted((index.get("refused") or {}).items()):
+        if not args or job.split("/", 1)[0] in names:
+            print(f"! {why}")
     return 1 if bad else 0
 
 

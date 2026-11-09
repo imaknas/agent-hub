@@ -106,7 +106,7 @@ def check(root: pathlib.Path) -> list[str]:
     index = registry.refresh()
     for name, es in sorted(index["errors"].items()):
         where = (f"modules/{name.split(':', 1)[1]}.yaml" if name.startswith("module:")
-                 else _("schedule (after/before)") if name == "(jobs)" else "registry" if name == "(registry)"
+                 else _("scheduled jobs") if name == "(jobs)" else "registry" if name == "(registry)"
                  else f"projects/{name}.yaml")
         errs += [_("{where}: {error}", where=where, error=e) for e in es]
 

@@ -518,6 +518,8 @@ def main() -> None:
                                 "not scheduled): {errors}{more}. `bin/registry.py check {project}`", project=proj,
                                 errors=_("; ").join(errs[:4]),
                                 more=_("; … ({n} in all)", n=len(errs)) if len(errs) > 4 else "")))
+    for why in (reg_info.get("refused") or {}).values():   # a valid entry whose job alone doesn't run
+        alerts.append(("notify", why))
 
     for job in jobs:
         name = job["name"]

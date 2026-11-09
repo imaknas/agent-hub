@@ -117,7 +117,7 @@ def all_jobs(log_errors: bool = False) -> tuple[list[dict], dict]:
         import registry
         index = registry.refresh()
         reg_jobs, skipped, renames = registry.scheduler_jobs(index, {j["name"] for j in legacy})
-        info.update(renames=renames, skipped=skipped, errors=index["errors"])
+        info.update(renames=renames, skipped=skipped, errors=index["errors"], refused=index.get("refused") or {})
         # module jobs have old names too
         for d in [*index["projects"].values(), *(index.get("modules") or {}).values()]:
             for j in d.get("jobs") or []:

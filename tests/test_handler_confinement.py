@@ -367,6 +367,23 @@ class Registry(unittest.TestCase):
             jobs = {j["name"] for j in registry.scheduler_jobs(index, set())[0]}
         self.assertEqual(jobs, {"p/a", "p/c", "q/b"})
 
+    def test_the_refusal_is_listed_not_a_config_error(self):
+        # an owner who turns a project's sandbox on, or a project's own manifest.update, must never block the config
+        import registry
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        (tmp / "p.yaml").write_text("v: 1\nname: p\npaths:\n  workspace: /tmp/p-ws\nenforce:\n  sandbox: true\njobs:\n"
+                                    "  - {name: b, at: '09:00', kind: agent}\n")
+        (tmp / "p" / "jobs").mkdir(parents=True)
+        (tmp / "p" / "jobs" / "b.md").write_text("x\n")
+        with mock.patch.object(registry.hubconf, "registry_dir", lambda: tmp), \
+                mock.patch.object(registry, "CACHE", tmp / "cache"), \
+                mock.patch.object(registry.hubconf, "worktree_lookup", lambda: True), \
+                mock.patch.object(registry, "load_modules", lambda: ({}, {})):
+            index = registry.refresh()
+        self.assertNotIn("(jobs)", index["errors"])
+        self.assertEqual(list(index["refused"]), ["p/b"])
+
 
 @unittest.skipIf(yaml is None, "needs PyYAML")
 class SandboxedProjectUnconfined(unittest.TestCase):
@@ -379,12 +396,13 @@ class SandboxedProjectUnconfined(unittest.TestCase):
 
         def past(*a, **k):   # the check is before the runtime is loaded: stop there
             raise LookupError("past the check")
-        for enforce, refused in (({"sandbox": True}, True), ({}, False)):
+        for enforce, refused in (({"sandbox": True}, True), ({}, False), (None, True)):
             with self.subTest(enforce=enforce):
                 failed = []
                 a = types.SimpleNamespace(cmd="run", point="agent-job", cwd=None, model=None, prompt_file=None,
-                                          dry_run=True, extra=[])
-                index = {"projects": {"p": {"name": "p", "enforce": enforce}}}
+                                          dry_run=False, extra=[])
+                # None: a project the registry doesn't have
+                index = {"projects": {} if enforce is None else {"p": {"name": "p", "enforce": enforce}}}
                 with mock.patch.object(llm, "fail", lambda point, spec, why: failed.append(why) or 1), \
                         mock.patch.object(registry, "refresh", lambda: index), \
                         mock.patch.object(runtime_ports, "load", past), \
@@ -397,6 +415,23 @@ class SandboxedProjectUnconfined(unittest.TestCase):
                         reached = True
                 self.assertEqual(reached, not refused)
                 self.assertEqual(len(failed), 1 if refused else 0, failed)   # the reason is in the UI language
+
+    def test_a_dry_run_only_says_why(self):
+        spec = importlib.util.spec_from_file_location("llm_conf_d", ROOT / "bin" / "llm.py")
+        llm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(llm)
+        import registry
+        failed = []
+        a = types.SimpleNamespace(cmd="run", point="agent-job", cwd=None, model=None, prompt_file=None, dry_run=True,
+                                  extra=[])
+        index = {"projects": {"p": {"name": "p", "enforce": {"sandbox": True}}}}
+        with mock.patch.object(llm, "fail", lambda point, spec, why: failed.append(why) or 1), \
+                mock.patch.object(registry, "refresh", lambda: index), \
+                mock.patch.dict(os.environ, {"AGENT_JOB_PROJECT": "p"}), \
+                mock.patch("sys.stdin", io.StringIO("x")), mock.patch("sys.stderr", io.StringIO()) as err:
+            self.assertEqual(llm.run(a), 2)
+        self.assertEqual(failed, [], "a dry run publishes no job.failed")
+        self.assertTrue(err.getvalue().strip())
 
 
 if __name__ == "__main__":

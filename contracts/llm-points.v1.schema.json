@@ -77,7 +77,7 @@
         "allow_from_env": {"type": "string", "description": "Unattended: when this environment variable is set, only those rules are allowed and everything else is denied"},
         "tool_servers": {"enum": ["allowed_only"], "description": "When the run loads the tool servers configured in its environment, deny each one whose tools its allow list doesn't name (found by the runtime for that run; when it can't be told, the run doesn't happen)"},
         "settings": {"enum": ["platform"], "description": "platform = load none of the user's, the project's or local tool settings: only the platform's own for the project named by the project_env variable (its sandbox when enforced, its deny list, the platform's commands), so the declared rules are the whole boundary"},
-        "project_env": {"type": "string", "description": "With settings: platform, the environment variable that names the project"},
+        "project_env": {"type": "string", "description": "The environment variable that names the run's project: required with settings: platform; on another point, a sandboxed project's run is refused"},
         "extra_args": {"type": "array", "items": {"type": "string"}},
         "stream": {"type": "boolean", "description": "A long-running streaming session (not one question, one answer)"},
         "timeout_s": {"type": "integer", "minimum": 1}

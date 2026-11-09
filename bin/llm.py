@@ -279,10 +279,17 @@ def run(a) -> int:
     # and hooks (registry.py doesn't schedule such a job either; docs/design/project-agent-calls.md A2)
     if not confined and spec.get("project_env") and (proj := os.environ.get(spec["project_env"])):
         import registry
-        if registry.sandbox_enforced(registry.refresh()["projects"].get(proj) or {}):
-            return fail(a.point, spec, _("{project} is sandboxed, and {point} would run with its saved permissions: a "
-                                         "sandboxed project's agent job declares allow: and runs confined",
-                                         project=proj, point=a.point))
+        doc = registry.refresh()["projects"].get(proj)
+        why = (_("{project} is not in the registry, so what it is held to can't be told; {point} doesn't run",
+                 project=proj, point=a.point) if doc is None
+               else _("{project} is sandboxed, and {point} would run with its saved permissions: a sandboxed project's "
+                      "agent job declares allow: and runs confined", project=proj, point=a.point)
+               if registry.sandbox_enforced(doc) else None)
+        if why:
+            if getattr(a, "dry_run", False):   # a dry run only shows, never publishes job.failed
+                print(why, file=sys.stderr)
+                return 2
+            return fail(a.point, spec, why)
     try:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
