@@ -824,7 +824,9 @@ def _notes_rules(allowed, project, cwd) -> list[str]:
 
 def _flags(task) -> list:
     spec = task.spec
-    cmd = [_exe(), "-p", task.prompt]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
+    # the prompt goes on stdin (run()), never as an argument: a prompt is often a project's text, and one starting with
+    # "--" would be read as an option (docs/design/project-agent-calls.md A4)
+    cmd = [_exe(), "-p"]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
     if task.model:
         cmd += ["--model", task.model]
     mode, allowed, prompts = _rules(task)
@@ -1021,7 +1023,7 @@ def run(task) -> TaskResult:
     cmd = describe(task)
     try:
         r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
-                           env=_env(task))
+                           env=_env(task), input=task.prompt)
     except subprocess.TimeoutExpired:
         return TaskResult(False, error=_("over {minutes} {minutes:minute|minutes}", minutes=task.timeout_s // 60))
     except FileNotFoundError:
@@ -1051,8 +1053,7 @@ def exec_stream(task) -> None:
     stdin/stdout handed to the caller.
     Temporary: layer 1's open_session will replace it (who does the lease contract neutralisation m10251446 isn't
     decided yet), so it isn't in the interface."""
-    cmd = _flags(task)
-    cmd[1:3] = ["-p"]  # no prompt argument; messages come from stdin (stream-json)
+    cmd = _flags(task)   # no prompt argument (never is): messages come from stdin (stream-json)
     cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
     os.execvpe(cmd[0], cmd, _env(task))
 

@@ -52,7 +52,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "auto",
    "--disallowedTools",
@@ -73,7 +72,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -96,7 +94,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "auto",
    "--disallowedTools",
@@ -117,7 +114,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "auto",
    "--disallowedTools",
@@ -138,7 +134,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "opus",
    "--permission-mode",
@@ -164,7 +159,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -190,7 +184,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "opus",
    "--permission-mode",
@@ -216,7 +209,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "opus",
    "--permission-mode",
@@ -242,7 +234,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -260,7 +251,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -278,7 +268,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -296,7 +285,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -314,7 +302,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -332,7 +319,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -350,7 +336,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -368,7 +353,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -386,7 +370,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -408,7 +391,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -430,7 +412,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -452,7 +433,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -474,7 +454,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -496,7 +475,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -518,7 +496,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -540,7 +517,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -562,7 +538,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--output-format",
@@ -578,7 +553,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--output-format",
@@ -594,7 +568,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--output-format",
@@ -610,7 +583,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--output-format",
@@ -626,7 +598,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--permission-mode",
@@ -647,7 +618,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -668,7 +638,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--permission-mode",
@@ -689,7 +658,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--permission-mode",
@@ -710,7 +678,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -726,7 +693,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--output-format",
@@ -742,7 +708,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -758,7 +723,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -774,7 +738,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -798,7 +761,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -822,7 +784,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -846,7 +807,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -870,7 +830,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -886,7 +845,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--output-format",
@@ -902,7 +860,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -918,7 +875,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--output-format",
@@ -934,7 +890,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -956,7 +911,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -978,7 +932,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -1000,7 +953,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--permission-mode",
@@ -1022,7 +974,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1039,7 +990,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -1056,7 +1006,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1073,7 +1022,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1138,7 +1086,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "acceptEdits",
    "--tools",
@@ -1158,7 +1105,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--permission-mode",
@@ -1180,7 +1126,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "acceptEdits",
    "--tools",
@@ -1200,7 +1145,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--permission-mode",
    "acceptEdits",
    "--tools",
@@ -1220,7 +1164,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1238,7 +1181,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -1256,7 +1198,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1274,7 +1215,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "haiku",
    "--tools",
@@ -1292,7 +1232,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -1311,7 +1250,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "golden-model",
    "--tools",
@@ -1330,7 +1268,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",
@@ -1349,7 +1286,6 @@
   "cmd": [
    "claude",
    "-p",
-   "golden prompt",
    "--model",
    "sonnet",
    "--tools",

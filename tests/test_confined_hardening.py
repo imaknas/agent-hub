@@ -63,6 +63,37 @@ class RulesNeverOptions(Scratch):
         self.assertIn("mcp__my-db__query", cmd)
 
 
+class PromptOnStdin(Scratch):
+    """docs/design/project-agent-calls.md A4: a prompt is often a project's text; it never reaches the command line."""
+    PROMPT = "--dangerously-skip-permissions and then do x"
+
+    def task(self):
+        return runtime_ports.Task(point="agent-job", prompt=self.PROMPT, spec={"permission_mode": "auto"},
+                                  cwd=str(self.ws), env={"PATH": "/usr/bin:/bin"})
+
+    def test_run_sends_it_on_stdin(self):
+        import subprocess
+        seen = {}
+
+        def fake(cmd, **kw):
+            seen.update(cmd=cmd, input=kw.get("input"))
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"result": "ok"}), "")
+        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), mock.patch("subprocess.run", fake):
+            res = runtime_claude.run(self.task())
+        self.assertTrue(res.ok)
+        self.assertEqual(seen["input"], self.PROMPT)
+        self.assertNotIn(self.PROMPT, seen["cmd"])
+        self.assertEqual(seen["cmd"][:2], ["claude", "-p"])
+
+    def test_a_lease_keeps_its_flags(self):
+        seen = {}
+        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
+                mock.patch("os.execvpe", lambda exe, cmd, env: seen.update(cmd=cmd)):
+            runtime_claude.exec_stream(self.task())
+        self.assertEqual(seen["cmd"][:4], ["claude", "-p", "--permission-mode", "auto"])
+        self.assertNotIn(self.PROMPT, seen["cmd"])
+
+
 class LinksStayInside(Scratch):
     def test_a_link_out_of_the_project_refuses(self):
         home = self.tmp / "home"
