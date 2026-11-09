@@ -204,8 +204,16 @@ TOOLS = [
          "ids": _ids(), "note": _str("how they were handled, or why they are taken back"),
          "withdraw": {"type": "boolean", "description": "take back letters this project sent"}}}},
     {"name": "ask_owner", "description": "Ask the owner (the person this platform belongs to) about something they need "
-                                         "to decide: say which project, what needs deciding and what the options are.",
-     "inputSchema": {"type": "object", "required": ["text"], "properties": {"text": _str("the question")}}},
+                                         "to decide. In the text, say in a sentence or two which work it is about and "
+                                         "what each option leads to. List the options when there are some; when this "
+                                         "project goes on with one of them while it waits, give it as default (it is "
+                                         "never taken as the answer).",
+     "inputSchema": {"type": "object", "required": ["text"], "properties": {
+         "text": _str("the question, with its background"),
+         "options": {"type": "array", "description": "the choices",
+                     "items": {"type": "object", "required": ["id", "label"], "properties": {
+                         "id": _str("a short id, no spaces, unique in this question"), "label": _str("what it means")}}},
+         "default": _str("what this project proceeds on until the answer comes: an option id, or a text")}}},
     {"name": "note", "description": "Add an entry to this project's memory notes for today (what was done, what was "
                                     "decided, what is unfinished; one matter per entry).",
      "inputSchema": {"type": "object", "required": ["text"], "properties": {"text": _str("the entry")}}},
@@ -344,8 +352,13 @@ def call(project: str | None, why: str, name: str, args: dict, client: "Client |
         return hubbus_cli(project, "done", *map(str, args["ids"]), *(["--note", str(args["note"])] if args.get("note") else []),
                           *(["--withdraw"] if args.get("withdraw") is True else []))
     if name == "ask_owner":
+        opts = args.get("options") or []
+        if not isinstance(opts, list) or not all(isinstance(o, dict) for o in opts):
+            return False, _("options must be a list of objects with id and label")
         return hubbus_cli(project, "send", "--from", project, "--to", hubconf.owner_address(), "--type", "question",
-                          "--text", str(args["text"]))
+                          "--text", str(args["text"]),
+                          *(x for o in opts for x in ("--option", str(o.get("id", "")), str(o.get("label", "")))),
+                          *(["--default", str(args["default"])] if args.get("default") is not None else []))
     if name == "note":
         return write_note(project, str(args["text"]))
     return False, _("no such tool: {name}", name=name)

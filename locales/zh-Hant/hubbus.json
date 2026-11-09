@@ -211,5 +211,16 @@
  "hubbus: {id} is a letter you sent to {to}: only its recipient closes it. To take it back (wrong recipient or type, no longer needed): `brunna done --withdraw {id} --note \"why\"`": "hubbus: {id} 是你寄給 {to} 的信，只有收件方能結案。要收回（寄錯對象或類型、已經不需要）：`brunna done --withdraw {id} --note \"原因\"`",
  "hubbus: {id} is a letter to {to}, not to {project}: only its recipient closes it": "hubbus: {id} 是寄給 {to} 的信，不是給 {project} 的，只有收件方能結案",
  "hubbus: a sandboxed project can't take back a letter it sent: write to its recipient instead": "hubbus: 沙箱裡的專案不能收回寄出的信，請改寫信給收件方",
- "take back letters this project sent (wrong recipient or type, no longer needed); needs --note": "收回這個專案寄出的信（寄錯對象或類型、已經不需要），要加 --note"
+ "take back letters this project sent (wrong recipient or type, no longer needed); needs --note": "收回這個專案寄出的信（寄錯對象或類型、已經不需要），要加 --note",
+ "hubbus: --option and --default are only for a question to {alias}": "hubbus: --option 和 --default 只用在問 {alias} 的問題",
+ "hubbus: options must be a list of id and label": "hubbus: options 必須是一串 id 和 label",
+ "hubbus: option id {id!r} must be 1 to 64 characters without spaces": "hubbus: 選項 id {id!r} 必須是 1 到 64 個字、不含空白",
+ "hubbus: option {id} needs a label": "hubbus: 選項 {id} 需要 label",
+ "hubbus: option id {id} is given twice": "hubbus: 選項 id {id} 重複了",
+ "hubbus: --default needs an option id or a text": "hubbus: --default 要給一個選項 id 或一段文字",
+ "Options: {options}": "選項:{options}",
+ "Until answered, proceeding with: {default}": "回答前先照這個進行:{default}",
+ "(until answered: {default})": "(回答前先照:{default})",
+ "a question to the owner: one of the options (repeat it for each; the id is short, no spaces)": "問 owner 的問題:其中一個選項(每個選項各給一次;id 要短、不含空白)",
+ "a question to the owner: what this project proceeds on until the answer comes (an option id, or a text); never taken as the answer": "問 owner 的問題:答案來之前這個專案先照什麼進行(選項 id 或一段文字);永遠不會被當成答案"
 }

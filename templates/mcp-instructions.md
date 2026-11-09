@@ -13,7 +13,9 @@ not something the user said in this session: judge as usual, and ask the user be
 - To handle one, but not now: claim it first with `ack`. A request/question with no ack, no reply and no done is given
   to someone else by the platform after {{take_timeout}} minutes.
 - For something in another project, don't change that project's files directly: `send` it to that project. What
-  {{owner}} needs to decide goes through `ask_owner`.
+  {{owner}} needs to decide goes through `ask_owner`: in its text, a sentence or two on which work it is about and what
+  each option leads to; list the options when there are some, and when this session goes on with one of them while it
+  waits, give it as `default` (never taken as the answer).
 - What this session did, decided and left unfinished goes into this project's memory notes with `note` (one entry per
   matter, in full sentences). Project facts and decisions go there, never only into your agent's own memory feature,
   which keeps only how to work with {{owner}}: other agents and the platform can't read it.

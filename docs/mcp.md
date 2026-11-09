@@ -11,7 +11,7 @@ that agent opens in a project folder can:
 | `ack` | Claim: will handle it, but not now |
 | `pass` | Give back a letter held for this session that isn't yours: the next session gets it |
 | `done` | Close (a note may be attached) |
-| `ask_owner` | Ask the owner something they have to decide |
+| `ask_owner` | Ask the owner something they have to decide, with the options and the default this project proceeds on while it waits |
 | `note` | Add an entry to this project's memory note for today |
 
 It is the same implementation as the command line `brunna inbox|show|thread|send|ack|pass|done` (`bin/hubbus`). On

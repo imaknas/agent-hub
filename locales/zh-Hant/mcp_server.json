@@ -27,5 +27,6 @@
  "none yet": "還沒有",
  "nowhere yet": "還沒有",
  "Connect it": "接上",
- "Connect {path} as an brunna project? Its notes are kept in a separate place, a folder without version history gets one, no GitHub repo is created, and a first summary is written from its README and recent commit titles by the AI model that makes brunna's decisions.": "要把 {path} 接成 brunna 的專案嗎?它的筆記會放在另一個地方;沒有版本紀錄的資料夾會幫它建一個;不會建 GitHub repo;幫 brunna 做判斷的 AI 模型會依它的 README 和最近的 commit 標題寫一份初步摘要。"
+ "Connect {path} as an brunna project? Its notes are kept in a separate place, a folder without version history gets one, no GitHub repo is created, and a first summary is written from its README and recent commit titles by the AI model that makes brunna's decisions.": "要把 {path} 接成 brunna 的專案嗎?它的筆記會放在另一個地方;沒有版本紀錄的資料夾會幫它建一個;不會建 GitHub repo;幫 brunna 做判斷的 AI 模型會依它的 README 和最近的 commit 標題寫一份初步摘要。",
+ "options must be a list of objects with id and label": "options 必須是一串帶 id 和 label 的物件"
 }

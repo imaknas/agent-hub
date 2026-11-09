@@ -57,6 +57,10 @@ project records its presence through the outbox too (op presence; taken in only 
 Usage (in a project directory; the sender defaults to the current directory's project):
   hubbus send --to <project|owner> --type <request|question|info|progress|done> --text "…" [--reply-to <id>]
   hubbus send --to owner --type task --text "…" [--due YYYY-MM-DD] [--context …] [--new-reason …] [--id …]
+  hubbus send --to owner --type question --text "…" [--option <id> "<label>"]... [--default <option id|text>]
+                                      Decisions terms options/default (decisions §2, §3); the default is what this
+                                      project proceeds on while it waits, never the answer (core R4); a question that
+                                      goes as a letter carries them in its text
   hubbus send --to owner --type done|drop --task <key> --text "…"   the owner finished it in this project / not needed
   hubbus send --to owner --type done|drop --question <id> --text "…"   this project's question to the owner was
                                       settled here / isn't needed (the owner answered directly in the session):
@@ -128,7 +132,7 @@ The personal assistant's interface (defined on the Muninn side; a change there m
   v2 (Principal Handoff 0.3 records, the assistant's contracts/records.v2.md; used only with {settings}
       mailbox.records on, off by default):
       send's task/request to the owner → acts raised, done --task → claimed, drop --task → withdrawn (not needed);
-      question → decisions raised (key = the letter id), done --question → claimed with the answer + withdrawn
+      question → decisions raised (key = the letter id; --option/--default into terms), done --question → claimed with the answer + withdrawn
       (settled), drop --question → withdrawn (not needed); no more v1 letters for these. info/progress stay v1, and so
       does a reply in an asks thread (asks is outside 0.3). The assistant's decisions settled come back as records
       with the asking session and the question on the event. dispatch, every minute: records to the owner are
@@ -267,7 +271,9 @@ OUTBOX_ID = re.compile(r"^m\d{8}-[0-9a-f]{12}$")
 # outbox:<project>:
 OUTBOX_PUBLISH = ("merge.done", "merge.failed", "session.report")
 EVENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
-SEND_FIELDS = ("to", "type", "text", "reply_to", "task", "question", "due", "context", "new_reason", "inferred")
+SEND_FIELDS = ("to", "type", "text", "reply_to", "task", "question", "due", "context", "new_reason", "inferred",
+               "options", "default")
+NOT_TEXT = ("inferred", "options")   # the send fields that are no text in an outbox file
 
 
 class Refused(Exception):
@@ -620,7 +626,8 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
         if not KEY_RE.match(mid):
             refuse(_("hubbus: {key!r} is not a valid question id", key=mid))
         rec = base | asker | {"id": f"r:{mid}", "type": "raised", "key": mid,
-                              "terms": {"text": a.text, **({"due": a.due} if a.due else {})}, "terms_rev": 1}
+                              "terms": {"text": a.text, **question_terms(a), **({"due": a.due} if a.due else {})},
+                              "terms_rev": 1}
         recs = [rec]
     elif a.type == "done":
         recs = [base | {"id": f"c:{a.question}:{mid}", "type": "claimed", "key": a.question, "origin": "agent",
@@ -642,12 +649,72 @@ def send_decision(c, a, sender: str, mid: str, p: dict) -> str | None:
     return mid if a.type == "question" else eids[0]   # a question: the id --question takes later
 
 
+OPTION_ID = re.compile(r"\S{1,64}")   # whole: fullmatch (a $ would let a final newline through)
+
+
+def question_terms(a) -> dict:
+    """--option/--default of a question to the owner, as Decisions terms members (decisions §2, §3): options
+    [{id, label}], ids unique; default an option's id or a text. The default is what the asking agent proceeds on while
+    it waits, never an answer (core R4): nothing closes a question by it. {} when neither is given. Normalizes
+    a.options (pairs from the command line, objects from an outbox file) to the objects the record carries."""
+    raw, default = getattr(a, "options", None) or [], getattr(a, "default", None)
+    if not raw and default is None:
+        return {}
+    if a.type != "question" or a.to != OWNER_ADDRESS:
+        refuse(_("hubbus: --option and --default are only for a question to {alias}", alias=OWNER_ALIAS))
+    if not isinstance(raw, list):
+        refuse(_("hubbus: options must be a list of id and label"))
+    options = []
+    for o in raw:
+        if isinstance(o, dict) and set(o) == {"id", "label"}:
+            oid, label = o["id"], o["label"]
+        elif isinstance(o, (list, tuple)) and len(o) == 2:
+            oid, label = o
+        else:
+            refuse(_("hubbus: options must be a list of id and label"))
+        if not isinstance(oid, str) or not OPTION_ID.fullmatch(oid):
+            refuse(_("hubbus: option id {id!r} must be 1 to 64 characters without spaces", id=oid))
+        if not isinstance(label, str) or not label.strip():
+            refuse(_("hubbus: option {id} needs a label", id=oid))
+        if oid in (x["id"] for x in options):
+            refuse(_("hubbus: option id {id} is given twice", id=oid))
+        options.append({"id": oid, "label": label})
+    if default is not None and (not isinstance(default, str) or not default.strip()):
+        refuse(_("hubbus: --default needs an option id or a text"))
+    a.options = options or None
+    return {**({"options": options} if options else {}), **({"default": default} if default is not None else {})}
+
+
+def terms_lines(terms: dict) -> list[str]:
+    """Options and default as lines of text: for a question that goes as a letter, which has no terms."""
+    out = []
+    if terms.get("options"):
+        out.append(_("Options: {options}", options="; ".join(f"{o['id']} = {o['label']}" for o in terms["options"])))
+    if terms.get("default"):
+        out.append(_("Until answered, proceeding with: {default}", default=terms["default"]))
+    return out
+
+
+def asked_text(p: dict) -> str | None:
+    """A question letter's text without the options and default send added to it (they are shown from the letter's
+    own fields)."""
+    text = p.get("text")
+    if text and (p.get("options") or p.get("default")):
+        text = text.split("\n\n" + (terms_lines(p) or [""])[0])[0]
+    return text
+
+
+def assumed(q: dict) -> str:
+    """The default a question is proceeding on, as a suffix for one line about it; '' when it has none."""
+    return " " + _("(until answered: {default})", default=q["default"]) if q.get("default") else ""
+
+
 def question_asked(c, key: str) -> dict | None:
     """The question to the owner with this key: the v1 letter (key = its id) or the Decisions raised record.
     {id: key, event, project, ts, text, from_session}; None when there is none."""
     r = c.execute("SELECT * FROM events WHERE type='message' AND id=?", (key,)).fetchone()
     if r is not None and r["to_project"] in OWNERS and payload(r).get("type") == "question":
-        return _question(r, key, payload(r).get("text"))
+        return _question(r, key, asked_text(payload(r)))
     suffix = f":r:{key}"
     for r in c.execute("SELECT * FROM events WHERE type='record' AND id LIKE 'rec:decisions/%' "
                        "AND (substr(id, -length(?)) = ? OR instr(id, ?) > 0) ORDER BY seq", (suffix, suffix, suffix + "~")):
@@ -662,9 +729,12 @@ def question_asked(c, key: str) -> dict | None:
 def _question(r, key: str, text, taken=None) -> dict:
     """project: the asking project as it is called now; filed: the name it asked under (a record's project field, a
     letter's sender), which records about the question keep."""
-    filed = (payload(r).get("record") or {}).get("project") or canon(r["source"])
+    rec = payload(r).get("record") or {}
+    filed = rec.get("project") or canon(r["source"])
+    terms = rec.get("terms") or payload(r)   # a letter's: what the asker gave, beside the text
     return {"id": key, "event": r["id"], "project": now_named(canon(r["source"]), taken), "filed": filed,
-            "ts": r["ts"], "text": text or "", "from_session": payload(r).get("from_session")}
+            "ts": r["ts"], "text": text or "", "from_session": payload(r).get("from_session"),
+            **{k: terms[k] for k in ("options", "default") if terms.get(k)}}
 
 
 def publish_record(c, rec: dict, source: str, to_project: str, extra: dict | None = None,
@@ -1293,7 +1363,7 @@ def open_questions(c, project=None) -> list[dict]:
             elif to_owner and p.get("question"):
                 closed.add(p["question"])            # done/drop --question (v1)
             elif to_owner and p.get("type") == "question":
-                asked.setdefault(r["id"], _question(r, r["id"], p.get("text"), taken))
+                asked.setdefault(r["id"], _question(r, r["id"], asked_text(p), taken))
             continue
         rec = p.get("record") or {}
         if ph_wire.family(rec.get("ext")) != "decisions":
@@ -1327,7 +1397,7 @@ def questions_note(c, project) -> str | None:
                '`brunna send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
                "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
-    lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')} {q['text'][:120]}" for q in qs[-5:]]
+    lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')} {q['text'][:120]}{assumed(q)}" for q in qs[-5:]]
     return "\n".join(lines)
 
 
@@ -3195,7 +3265,7 @@ def take(c, proj: str, entry, live=None) -> None:
     session = own_session(c, proj, entry.get("session"))
     op = entry.get("op")
     if op == "send":
-        _strings(entry, ("id", *(k for k in SEND_FIELDS if k != "inferred")))
+        _strings(entry, ("id", *(k for k in SEND_FIELDS if k not in NOT_TEXT)))
         if not OUTBOX_ID.match(entry.get("id") or ""):
             refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
         if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
@@ -3762,6 +3832,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
                      sender=sender, owner=OWNER))
     if a.inferred and not (a.type in ("done", "drop") and a.task):
         refuse(_("hubbus: --inferred is only for a done/drop with --task"))
+    terms = question_terms(a)
+    p |= terms   # on the bus only: a letter to the assistant carries TASK_FIELDS, so these go in its text (below)
     for k in TASK_FIELDS:
         if getattr(a, k):
             p[k] = getattr(a, k)
@@ -3776,6 +3848,8 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
                      "translate it"))
         if (eid := send_record(c, a, sender, mid, p)):
             return eid
+    if terms:   # a question that goes as a letter: its options and default in words, so they reach the owner
+        p["text"] = "\n".join([a.text, "", *terms_lines(terms)])
     publish(c, mid, "message", sender, a.to, a.reply_to, p)  # already sent with the same id: nothing happens
     return mid
 
@@ -3958,10 +4032,11 @@ def mail_command(a) -> None:
             project = box
         rows = open_questions(c, project)
         if a.json:
-            print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text")} for q in rows], ensure_ascii=False))
+            print(json.dumps([{k: q[k] for k in ("id", "project", "ts", "text", "options", "default") if k in q}
+                              for q in rows], ensure_ascii=False))
         else:
             for q in rows:
-                print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}")
+                print(f"[{q['id']}] {q['project']} {q['ts'][:16]} {q['text'][:100]}{assumed(q)}")
     elif box:   # ack, pass, done: only letters to this project
         if a.cmd == "done" and a.withdraw:
             refuse(_("hubbus: a sandboxed project can't take back a letter it sent: write to its recipient instead"))
@@ -4046,6 +4121,10 @@ def cli() -> None:
     s.add_argument("--task", help=_("task key (with done/drop: which one)"))
     s.add_argument("--question", help=_("with done/drop: which question this project asked the owner (letter id) was resolved "
                                         "here / is no longer needed"))
+    s.add_argument("--option", dest="options", nargs=2, action="append", metavar=("ID", "LABEL"),
+                   help=_("a question to the owner: one of the options (repeat it for each; the id is short, no spaces)"))
+    s.add_argument("--default", help=_("a question to the owner: what this project proceeds on until the answer comes "
+                                       "(an option id, or a text); never taken as the answer"))
     s.add_argument("--due", help="YYYY-MM-DD")
     s.add_argument("--context")
     s.add_argument("--new-reason", help=_("why it is a new task although it looks like one closed in the last 14 days"))

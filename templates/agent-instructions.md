@@ -105,6 +105,14 @@ does not simply disappear. To change what is asked, edit the text of that line a
 line**; don't remove, copy or move keys.
 To have {{owner}} do something new: `brunna send --to {{owner_alias}} --type task --text "…" [--due YYYY-MM-DD]`.
 
+To ask {{owner}} something only they can decide:
+`brunna send --to {{owner_alias}} --type question --text "…" [--option <id> "<label>"]... [--default <id|text>]`.
+In the text, say in a sentence or two which work it is about and what each option leads to. When there are options,
+list them with `--option` (a short id without spaces, then what it means). When you go on with one of them while you
+wait, always give it with `--default` (an option's id, or a text when there are no options): it is your working
+assumption, recorded so {{owner}} can see what you proceeded on; it is never taken as the answer, and nothing closes the
+question by it.
+
 When {{owner}} has answered, directly in this session, a question this project asked with `--type question` (or it is
 no longer needed), close it, or {{assistant}} keeps showing it as "waiting for you":
 `brunna send --to {{owner_alias}} --type done --question <id of that letter> --text "how it was resolved"`

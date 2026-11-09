@@ -63,8 +63,8 @@ def projects() -> list[str]:
 
 
 def open_items(only: str | None = None) -> list[dict]:
-    """[{kind: task, project, key, text, since} | {kind: question, project, id, text, since}]: since is when it was
-    raised (the first need record's ts; the question's ts)."""
+    """[{kind: task, project, key, text, since} | {kind: question, project, id, text, since, options?, default?}]: since
+    is when it was raised (the first need record's ts; the question's ts)."""
     reg = _registrar()
     out = []
     only = _hubbus().now_named(only) if only else None   # a name it had before a rename: the same project
@@ -79,7 +79,8 @@ def open_items(only: str | None = None) -> list[dict]:
     hb = _hubbus()
     c = hb.db()
     for q in hb.open_questions(c, only):
-        out.append({"kind": "question", "project": q["project"], "id": q["id"], "text": q["text"], "since": q.get("ts") or ""})
+        out.append({"kind": "question", "project": q["project"], "id": q["id"], "text": q["text"], "since": q.get("ts") or "",
+                    **{k: q[k] for k in ("options", "default") if k in q}})
     return out
 
 
@@ -213,7 +214,8 @@ def main(argv: list[str]) -> int:
         items = open_items(a.project)
         for it in items:
             ref = it.get("key") or it.get("id")
-            print(f"{'❓' if it['kind'] == 'question' else '☐'} {it['project']:<24} {ref}  {it['text'][:100]}")
+            print(f"{'❓' if it['kind'] == 'question' else '☐'} {it['project']:<24} {ref}  {it['text'][:100]}"
+                  f"{_hubbus().assumed(it)}")
         print(_("({n} open)", n=len(items)))
         return 0
     if hubconf.owner_side() != "builtin":
