@@ -181,6 +181,11 @@ class Rule(unittest.TestCase):
                                                  ("project", "lease-1-task-0", "Own ask"),
                                                  ("nokey", "", "Never keyed"), ("unknown", "task-u", "Unknown key")]))
 
+    def test_a_ticked_box_that_day_is_neither_brought_back_nor_listed(self):
+        t = doc("then", owner("Renew", "task-a").replace("- [ ]", "- [x]", 1), "- [x] [owner] Paid")
+        r = self.rebuild(t, doc("now", agent("A")), book(open_bound=["task-a"], terms={"task-a": "Renew"}))
+        self.assertEqual((r.readded, r.left), ([], []))
+
     def test_zh_hant(self):
         t = doc("then", owner("Renew the domain", "task-a", "zh-Hant"), lang="zh-Hant")
         c = doc("now", agent("Rewrite the notes", "zh-Hant"), lang="zh-Hant")
