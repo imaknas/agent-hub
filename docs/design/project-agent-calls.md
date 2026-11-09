@@ -1,7 +1,12 @@
 # A project's own confined agent calls, per-job model tiers, declared secrets kept from confined runs
 
 > **Status**: design, 11-09, second draft after the first cold review (a security reading and a feasibility reading,
-> both blind; what each found and what changed is under "Review, round 1"). Not built.
+> both blind; what each found and what changed is under "Review, round 1"). Not built. Round 2 found holes in today's
+> confined runs, fixed on their own first (the three `fix(confine)` commits of 11-09: rules never options, links and
+> folders kept inside the project, prompts, connectors jobs and legacy_name the owner's, state folders not shared);
+> and two blocking points here (every confined run already has Bash for the mail commands, so A3's condition never
+> fires; A5's fallback can't run), to be settled in the third draft: no Bash for a sandboxed project's agent, no
+> fallback without `confine`.
 
 Source: a project's request (11-09). Its research jobs (a Python runner) ran the coding agent themselves with
 allow/deny flags, and failed from 10-26 because the agent's binary is not on a command job's PATH. It asked the
