@@ -396,7 +396,7 @@ class SandboxedProjectUnconfined(unittest.TestCase):
                     except LookupError:
                         reached = True
                 self.assertEqual(reached, not refused)
-                self.assertEqual(bool([w for w in failed if "sandboxed" in w]), refused, failed)
+                self.assertEqual(len(failed), 1 if refused else 0, failed)   # the reason is in the UI language
 
 
 if __name__ == "__main__":

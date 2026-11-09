@@ -52,7 +52,8 @@ class Fixture(unittest.TestCase):
                     "services": [{"name": "viewer", "run": "bin/serve.sh", "keepalive": True,
                                   "expose": {"tailnet_https": 8445, "local_port": 18123}}],
                     "jobs": [{"name": "nightly", "at": "03:00", "run": "python3 x.py"},
-                             {"name": "think", "at": "04:00", "kind": "agent"}]}
+                             # a sandboxed project's agent job runs only confined, so it declares allow:
+                             {"name": "think", "at": "04:00", "kind": "agent", "allow": ["Read"]}]}
 
 
 class Render(Fixture):
