@@ -13,6 +13,7 @@ import importlib.machinery
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -349,8 +350,53 @@ class Registry(unittest.TestCase):
         with mock.patch.object(registry.isolation, "sandboxed", lambda doc: False):
             jobs = {j["name"]: j["command"] for j in registry.scheduler_jobs(index, set())[0]}
         self.assertIn("AGENT_JOB_ALLOW=", jobs["p/a"])
-        self.assertIn(" AGENT_JOB_PROJECT=p ", jobs["p/a"])
+        self.assertIn("AGENT_JOB_PROJECT=p ", jobs["p/a"])
         self.assertNotIn("AGENT_JOB_ALLOW", jobs["p/b"])
+        self.assertTrue(jobs["p/b"].startswith("AGENT_JOB_PROJECT=p "), "every agent job names its project")
+
+    def test_a_sandboxed_projects_agent_job_without_allow_is_left_out(self):
+        import registry
+        index = {"projects": {"p": {"name": "p", "paths": {"workspace": "/tmp/p-ws"}, "enforce": {"sandbox": True},
+                                    "jobs": [{"name": "a", "at": "08:00", "kind": "agent", "allow": ["Read"]},
+                                             {"name": "b", "at": "09:00", "kind": "agent"},
+                                             {"name": "c", "at": "09:00", "run": "true"}]},
+                              "q": {"name": "q", "paths": {"workspace": "/tmp/q-ws"},
+                                    "jobs": [{"name": "b", "at": "09:00", "kind": "agent"}]}}}
+        self.assertEqual(registry.unconfined_sandboxed(index), ["p/b"])
+        with mock.patch.object(registry.isolation, "sandboxed", lambda doc: False):
+            jobs = {j["name"] for j in registry.scheduler_jobs(index, set())[0]}
+        self.assertEqual(jobs, {"p/a", "p/c", "q/b"})
+
+
+@unittest.skipIf(yaml is None, "needs PyYAML")
+class SandboxedProjectUnconfined(unittest.TestCase):
+    def test_agent_job_refuses_a_sandboxed_project(self):
+        spec = importlib.util.spec_from_file_location("llm_conf_s", ROOT / "bin" / "llm.py")
+        llm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(llm)
+        import registry
+        import runtime_ports
+
+        def past(*a, **k):   # the check is before the runtime is loaded: stop there
+            raise LookupError("past the check")
+        for enforce, refused in (({"sandbox": True}, True), ({}, False)):
+            with self.subTest(enforce=enforce):
+                failed = []
+                a = types.SimpleNamespace(cmd="run", point="agent-job", cwd=None, model=None, prompt_file=None,
+                                          dry_run=True, extra=[])
+                index = {"projects": {"p": {"name": "p", "enforce": enforce}}}
+                with mock.patch.object(llm, "fail", lambda point, spec, why: failed.append(why) or 1), \
+                        mock.patch.object(registry, "refresh", lambda: index), \
+                        mock.patch.object(runtime_ports, "load", past), \
+                        mock.patch.dict(os.environ, {"AGENT_JOB_PROJECT": "p"}), \
+                        mock.patch("sys.stdin", io.StringIO("x")):
+                    try:
+                        llm.run(a)
+                        reached = False
+                    except LookupError:
+                        reached = True
+                self.assertEqual(reached, not refused)
+                self.assertEqual(bool([w for w in failed if "sandboxed" in w]), refused, failed)
 
 
 if __name__ == "__main__":

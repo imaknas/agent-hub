@@ -275,6 +275,14 @@ def run(a) -> int:
     # declared permissions (unattended allow:, settings: platform) must be honoured, never dropped by a runtime that
     # can't (docs/design/event-jobs.md section 3.2)
     confined = spec.get("settings") or (spec.get("allow_from_env") and os.environ.get(spec["allow_from_env"]))
+    # a sandboxed project's agent work runs only confined: an unconfined point loads the project's saved permissions
+    # and hooks (registry.py doesn't schedule such a job either; docs/design/project-agent-calls.md A2)
+    if not confined and spec.get("project_env") and (proj := os.environ.get(spec["project_env"])):
+        import registry
+        if registry.sandbox_enforced(registry.refresh()["projects"].get(proj) or {}):
+            return fail(a.point, spec, _("{project} is sandboxed, and {point} would run with its saved permissions: a "
+                                         "sandboxed project's agent job declares allow: and runs confined",
+                                         project=proj, point=a.point))
     try:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out

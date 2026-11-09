@@ -166,6 +166,9 @@ points:
     # bypassPermissions.
     permission_mode: auto
     tool_servers: allowed_only
+    # which project the job is (registry.py sets it for every agent job): a sandboxed project's is refused here, since
+    # this point loads the project's saved permissions (llm.py; docs/design/project-agent-calls.md A2)
+    project_env: AGENT_JOB_PROJECT
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red

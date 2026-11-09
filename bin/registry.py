@@ -328,6 +328,19 @@ def state_name_clashes(index: dict) -> dict[str, list[str]]:
     return {n: js for n, js in by.items() if len(js) > 1 or n.startswith("mailbox-")}
 
 
+def sandbox_enforced(doc: dict) -> bool:
+    """The registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)."""
+    return (doc.get("enforce") or {}).get("sandbox") is True
+
+
+def unconfined_sandboxed(index: dict) -> list[str]:
+    """Agent jobs of a sandboxed project that declare no allow: (project/job). Such a job would run on judgment point
+    agent-job, with the project's saved permissions and hooks, outside the confinement the project is held to; none of
+    them is scheduled, and llm.py refuses one at run time too (docs/design/project-agent-calls.md A2)."""
+    return [f"{name}/{job.get('name')}" for name, doc in sorted(index["projects"].items()) if sandbox_enforced(doc)
+            for job in doc.get("jobs") or [] if isinstance(job, dict) and job.get("kind") == "agent" and not job.get("allow")]
+
+
 def legacy_names(doc: dict) -> dict:
     """Each job's legacy_name: the name its state, reports and schedule state are kept under (the old schedule.yaml
     entry's). Set when a job moves into the registry, by the platform; a project's letter that sets or changes one could
@@ -922,6 +935,11 @@ def refresh(only: list[str] | None = None, rebuild: bool = False) -> dict:
         errors.setdefault("(jobs)", []).extend(
             _("agent jobs {jobs} would share the state folder {name} (or take a mailbox handler's): none of them runs "
               "until one is renamed", jobs=", ".join(sorted(js)), name=n) for n, js in sorted(clash.items()))
+    if (loose := unconfined_sandboxed(index)):
+        errors.setdefault("(jobs)", []).extend(
+            _("agent job {job} belongs to a sandboxed project and declares no allow list, so it doesn't run until it "
+              "declares the tools it needs (an agent job without one loads the project's saved permissions)", job=j)
+            for j in loose)
     if live:
         tmp = CACHE / "index.json.tmp"
         tmp.write_text(json.dumps(index, ensure_ascii=False, indent=1, default=str))
@@ -975,6 +993,7 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
     schedule.yaml, new name → old name)."""
     out, skipped, renames = [], [], {}
     clash = state_name_clashes(index)
+    loose = set(unconfined_sandboxed(index))
     before: dict[str, list[str]] = {}
     docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
     for name, doc in docs:
@@ -991,16 +1010,17 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 cwd = hubconf.STATE / "agent-jobs" / agent_state_name(name, job)
             if job.get("kind") == "agent":
                 prompt = job_prompt(name, job)
-                if prompt is None or agent_state_name(name, job) in clash:   # refused (refresh says why)
+                if prompt is None or agent_state_name(name, job) in clash or full in loose:   # refused (refresh says why)
                     continue
                 agent_name = agent_state_name(name, job)
-                cmd = (f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
+                # every agent job names its project, so the run can check what the project is held to (llm.py)
+                cmd = (f"AGENT_JOB_PROJECT={shlex.quote(name)} "
+                       f"{shlex.quote(str(hubconf.ROOT / 'bin' / 'run-agent-job.sh'))} {shlex.quote(agent_name)} "
                        f"{shlex.quote(str(cwd))} {shlex.quote(str(prompt))}")
                 # unattended permissions: only these rules and the platform's settings for the project (run-agent-job.sh
                 # runs it under judgment point agent-job-confined; docs/design/event-jobs.md 3.2)
                 if job.get("allow"):
-                    cmd = (f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} "
-                           f"AGENT_JOB_PROJECT={shlex.quote(name)} {cmd}")
+                    cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
                 # needs claude.ai connectors: use the subscription login, not the default headless token
                 if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"
