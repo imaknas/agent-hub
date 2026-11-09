@@ -270,7 +270,7 @@ def main(argv: list[str]) -> int:
             print(_("✓ {path} removed", path=wrapper))
         copies = hubconf.p("memory_copies", "~/.memory-copies")
         for p in data:
-            if p.parent == copies:   # a memory copy goes holding its writer lock (bin/memlock.py)
+            if p.parent == copies and (p / ".git").is_dir():   # a memory copy goes holding its writer lock (memlock)
                 with memlock.hold(p, "uninstall") as got:
                     if not got:
                         print(memlock.busy_message(p) + " " + _("(left; run brunna uninstall --purge again)"),

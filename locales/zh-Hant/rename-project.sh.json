@@ -24,5 +24,6 @@
  "where it was before the rename ({old})": "改名前({old})的位置",
  "Done: {old} → {new}. Open a new agent session in {path} (the old session's working directory is gone).": "完成:{old} → {new}。在 {path} 開新的 Claude session(舊 session 的工作目錄已經不在了)。",
  "a restore of {name} didn't finish; run brunna state restore {name} first": "{name} 有一次還原沒做完;先執行 brunna state restore {name}",
- "the memory repo and copy on the hub machine were not moved (see above)": "hub 機器上的 memory repo 和副本沒有搬(見上方)"
+ "nothing was moved on the hub machine (see above); try again": "hub 機器上什麼都沒搬(見上方);請再試一次",
+ "moving the memory repo and copy on the hub machine stopped partway (see above): check ~/git-origin and ~/.memory-copies there before trying again": "在 hub 機器上搬 memory repo 和副本時中途停了(見上方):再試之前先檢查那邊的 ~/git-origin 和 ~/.memory-copies"
 }

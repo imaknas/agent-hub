@@ -186,6 +186,20 @@ class Rule(unittest.TestCase):
         r = self.rebuild(t, doc("now", agent("A")), book(open_bound=["task-a"], terms={"task-a": "Renew"}))
         self.assertEqual((r.readded, r.left), ([], []))
 
+    def test_a_line_not_yet_stamped_that_day(self):
+        """the registrar stamps a line later the night it appears: its text is the open item's terms"""
+        r = self.rebuild(doc("then", owner("Renew the domain")), doc("now", agent("A")),
+                         book(open_bound=["task-a"], terms={"task-a": "Renew the domain"}))
+        self.assertEqual((r.readded, r.left), (["task-a"], []))
+
+    def test_every_open_item_left_out_is_listed(self):
+        """raised after that day and deleted since, or on an agent line that day: still open, said"""
+        t = doc("then", owner("A", "task-a"), "- [ ] [agent] Renew" + todo_tokens.stamp("en", TAG, "task-g"))
+        r = self.rebuild(t, doc("now", owner("A", "task-a")),
+                         book(open_bound=["task-a", "task-c", "task-g"], terms={"task-a": "A", "task-c": "C",
+                                                                                 "task-g": "Renew"}))
+        self.assertEqual(sorted(r.left), [("open", "task-c", "C"), ("open", "task-g", "Renew")])
+
     def test_zh_hant(self):
         t = doc("then", owner("Renew the domain", "task-a", "zh-Hant"), lang="zh-Hant")
         c = doc("now", agent("Rewrite the notes", "zh-Hant"), lang="zh-Hant")
@@ -410,6 +424,32 @@ class Run(unittest.TestCase):
     def test_a_copy_mid_merge(self):
         (self.copy / ".git" / "MERGE_HEAD").write_text(self.day1 + "\n")
         self.refused("restore", P, "2026-10-01", "--apply")
+
+    def test_a_stale_index_lock_or_a_detached_head(self):
+        """a killed git in the copy: the fast-forward after publishing would fail, so nothing is published"""
+        (self.copy / ".git" / "index.lock").write_text("")
+        self.refused("restore", P, "2026-10-01", "--apply")
+        (self.copy / ".git" / "index.lock").unlink()
+        self.git(self.copy, "checkout", "-q", "--detach")
+        self.refused("restore", P, "2026-10-01", "--apply")
+
+    def test_an_untracked_file_that_doesnt_get_in_the_way(self):
+        (self.copy / ".DS_Store").write_text("x")
+        r = self.state_py("restore", P, "2026-10-01", "--apply")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_crlf_is_kept(self):
+        self.session_push("STATE.md", DAY2.replace("\n", "\r\n"))
+        self.git(self.copy, "pull", "-q")
+        r = self.state_py("restore", P, "2026-10-01", "--apply")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        raw = subprocess.run(["git", "--git-dir", str(self.bare), "show", "agent-memory:STATE.md"],
+                             capture_output=True).stdout
+        self.assertIn(b"The demo runs on the shared box.\n", raw)   # that day's lines as that day had them
+
+    def test_an_unpublished_record_doesnt_hold_the_librarian(self):
+        self.state_py("restore", P, "2026-10-01", "--apply", crash="record")
+        self.assertFalse(self.pending())
 
     def test_the_lock(self):
         with memlock.hold(self.copy, "librarian") as got:

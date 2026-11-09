@@ -124,11 +124,13 @@ case "$HUB" in
   *) hubdir=$(printf %q "$HUB") ;;
 esac
 unfinished=$(printf %q "$(hub_msg "a restore of {name} didn't finish; run brunna state restore {name} first" name="$OLD")")
-mini_bash_stdin <<EOF || fail "$(hub_msg "the memory repo and copy on the hub machine were not moved (see above)")"
+# exit 75 from memlock (busy) or 74 (a restore to finish): nothing was moved; anything else may have moved part of it
+mini_bash_stdin <<EOF || { rc=$?; [ $rc = 75 ] || [ $rc = 74 ] && fail "$(hub_msg "nothing was moved on the hub machine (see above); try again")"; fail "$(hub_msg "moving the memory repo and copy on the hub machine stopped partway (see above): check ~/git-origin and ~/.memory-copies there before trying again")"; }
 set -euo pipefail
-[ ! -e $ckpt/restore/$OLD/record.json ] || { echo $unfinished >&2; exit 1; }
+export RENAME_UNFINISHED=$unfinished
 $hubdir/bin/py $hubdir/bin/memlock.py hold ~/.memory-copies/$OLD --who rename -- bash -c '
 set -euo pipefail
+[ ! -e $ckpt/restore/$OLD/record.json ] || { echo "\$RENAME_UNFINISHED" >&2; exit 74; }
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
 mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
 git -C ~/.memory-copies/$NEW remote set-url origin ~/git-origin/$NEW-memory.git

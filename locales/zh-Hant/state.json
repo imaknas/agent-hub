@@ -29,7 +29,6 @@
  "{project}: {why}; nothing changed": "{project}:{why};什麼都沒改",
  "brought back, still open: {key}": "拿回來了,還沒結:{key}",
  "{project}: the memory copy has uncommitted changes (a stopped nightly run?); nothing changed": "{project}:memory 副本有沒 commit 的改動(夜間工作中途停了?);什麼都沒改",
- "{project}: the memory copy is in the middle of a merge; nothing changed": "{project}:memory 副本正在 merge 到一半;什麼都沒改",
  "{project}: the memory copy has commits the memory repo doesn't (it diverged); nothing changed": "{project}:memory 副本有 memory repo 沒有的 commit(分岔了);什麼都沒改",
  "{project}: STATE.md changed since the preview; preview again": "{project}:預覽之後 STATE.md 變了;請重新預覽",
  "{project}: STATE.md changed meanwhile; preview again": "{project}:這期間 STATE.md 變了;請重新預覽",
@@ -47,8 +46,13 @@
  "not brought back, raised by the project itself (it re-adds it): {key} {text}": "沒拿回來,是專案自己提的(由它重新加):{key} {text}",
  "not brought back, a key the bus doesn't know: {key} {text}": "沒拿回來,bus 不認得這個 key:{key} {text}",
  "not brought back, an owner item without a key (add it again by hand if still wanted): {text}": "沒拿回來,沒有 key 的 owner 項目(還要的話請手動加回):{text}",
- "The claim that this to-do was done (c:{key}:r{n}) came from a wrong nightly edit of STATE.md, which brunna state restore undid: the item is still open and back in the to-do list.": "說這項待辦已完成的推斷(c:{key}:r{n})來自一次錯誤的夜間 STATE.md 修改,已用 brunna state restore 還原:這項還沒結,已回到待辦清單。",
  "{key}, an open item, is outside the to-do list on line {line} of that day's STATE.md": "還沒結的 {key} 在那天 STATE.md 第 {line} 行,不在待辦清單裡",
  "{key}, an open item, is outside the to-do list on line {line} of today's STATE.md; move it back into the to-do list first": "還沒結的 {key} 在今天 STATE.md 第 {line} 行,不在待辦清單裡;請先把它移回待辦清單",
- "{project}: no stopped restore to finish": "{project}:沒有中途停下、要做完的還原"
+ "{project}: no stopped restore to finish": "{project}:沒有中途停下、要做完的還原",
+ "still open on the bus but in neither list (add it again by hand if still wanted): {key} {text}": "bus 上還沒結,但兩邊的清單都沒有(還要的話請手動加回):{key} {text}",
+ "This to-do is back in STATE.md's to-do list: brunna state restore brought back an earlier day's file, after a nightly edit deleted its line, and the registrar's claim that it was done (c:{key}:r{n}) came from that deletion. If it really is done, settle it as usual.": "這項待辦回到了 STATE.md 的待辦清單:有一次夜間修改刪掉了它那行,brunna state restore 把較早那天的檔案拿了回來;registrar 說它已完成的推斷(c:{key}:r{n})就是來自那次刪除。如果它真的做完了,照常結掉。",
+ "{project}: the memory copy is in the middle of a git operation, or not on its branch (a stopped nightly run?); nothing changed": "{project}:memory 副本正在做一半的 git 操作,或不在它的分支上(夜間工作中途停了?);什麼都沒改",
+ "{project}: the memory copy has untracked files the fast-forward would overwrite; nothing changed": "{project}:memory 副本有未追蹤的檔案會被 fast-forward 蓋掉;什麼都沒改",
+ "{project}: git failed ({error}); run brunna state restore {project} to finish it": "{project}:git 失敗了({error});執行 brunna state restore {project} 把它做完",
+ "{project}: git failed ({error}); nothing changed": "{project}:git 失敗了({error});什麼都沒改"
 }

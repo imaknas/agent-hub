@@ -78,10 +78,12 @@ def refuse(msg: str) -> int:
 def git(*args: str, cwd: pathlib.Path | None = None, bare: pathlib.Path | None = None, check: bool = True,
         **kw) -> str:
     cmd = ["git", *(["--git-dir", str(bare)] if bare else ["-C", str(cwd)] if cwd else []), *hublib.NO_SYMLINKS, *args]
-    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    if isinstance(kw.get("input"), str):
+        kw["input"] = kw["input"].encode()
+    r = subprocess.run(cmd, capture_output=True, **kw)   # bytes: a CRLF file stays CRLF (text mode would fold it)
     if check and r.returncode != 0:
-        raise RuntimeError(r.stderr.strip() or f"git {args[0]} failed")
-    return r.stdout
+        raise RuntimeError(r.stderr.decode(errors="replace").strip() or f"git {args[0]} failed")
+    return r.stdout.decode(errors="replace")
 
 
 def ancestor(bare: pathlib.Path, a: str, b: str) -> bool:
@@ -106,7 +108,8 @@ def copy_of(project: str) -> pathlib.Path | None:
 def bare_of(copy: pathlib.Path) -> pathlib.Path | None:
     """The memory bare repo the copy pulls from (its origin), when it is a repo on this machine."""
     url = git("remote", "get-url", "origin", cwd=copy, check=False).strip()
-    p = pathlib.Path(url).expanduser() if url and ":" not in url.split("/")[0] else None
+    url = url.removeprefix("file://")
+    p = (copy / pathlib.Path(url).expanduser()).resolve() if url and ":" not in url.split("/")[0] else None
     return p if p and git("rev-parse", "--verify", "-q", BRANCH, bare=p, check=False).strip() else None
 
 
@@ -220,6 +223,11 @@ def rebuild(t: str, c: str, book: Book, read, write) -> Rebuilt:
     for e in dt.entries:
         if e.owner == "principal" and not acts_md.TICKED.match(dt.lines[e.i]):
             then.setdefault(dt.carries(e.i) or ("", acts_md.norm(e.text)), e.text)
+    # an owner line that day without its key yet (the registrar stamps it later that night) is the open item whose
+    # latest terms it says
+    by_text = {acts_md.norm(t): k for k, t in book.terms.items() if k in book.open_bound and k not in seen_c}
+    for k in [k for k in then if isinstance(k, tuple) and k[1] in by_text]:
+        then.setdefault(by_text[k[1]], then.pop(k))
     for k in sorted(k for k in then if isinstance(k, str) and k in book.open_bound and k in book.terms):
         if k in seen_c or acts_md.norm(book.terms[k]) in c_texts or k in acts_md.Doc(out_.text, read).mentioned():
             continue   # today's has it, or asks it without the key (the registrar relinks it)
@@ -238,6 +246,9 @@ def rebuild(t: str, c: str, book: Book, read, write) -> Rebuilt:
         elif k not in in_r and k not in book.open_bound:
             out_.left.append(("closed" if k in book.closed else "project" if k in book.raised_here else "unknown",
                               k, text))
+    ticked = {dt.carries(e.i) for e in dt.entries if acts_md.TICKED.match(dt.lines[e.i])}
+    for k in sorted(book.open_bound - set(in_r) - set(then) - ticked):   # open, in neither that day's list nor R
+        out_.left.append(("open", k, book.terms.get(k, "")))
     return out_
 
 
@@ -332,6 +343,8 @@ def show(project: str, p: Plan) -> None:
                "project": _("not brought back, raised by the project itself (it re-adds it): {key} {text}", key=k,
                             text=text),
                "unknown": _("not brought back, a key the bus doesn't know: {key} {text}", key=k, text=text),
+               "open": _("still open on the bus but in neither list (add it again by hand if still wanted): {key} "
+                         "{text}", key=k, text=text),
                "nokey": _("not brought back, an owner item without a key (add it again by hand if still wanted): "
                           "{text}", text=text)}[why])
 
@@ -361,7 +374,12 @@ def save(project: str, rec: dict) -> None:
 def pending(project: str) -> bool:
     """A restore stopped before its checkpoint step: the librarian leaves the project alone until it is finished."""
     rec = load(project)
-    return bool(rec) and "checkpoint" in rec.get("todo", [])
+    if not rec or "checkpoint" not in rec.get("todo", []):
+        return False
+    copy = copy_of(project)
+    bare = bare_of(copy) if copy else None
+    tip = git("rev-parse", BRANCH, bare=bare, check=False).strip() if bare else ""
+    return not tip or tip == rec["new"] or ancestor(bare, rec["new"], tip)   # unpublished: the next run drops it
 
 
 def build(project: str, bare: pathlib.Path, p: Plan) -> str:
@@ -371,6 +389,7 @@ def build(project: str, bare: pathlib.Path, p: Plan) -> str:
     git("read-tree", p.base, bare=bare, env=env)
     blob = git("hash-object", "-w", "--stdin", bare=bare, input=p.rebuilt.text).strip()
     mode = (git("ls-tree", p.base, "--", "STATE.md", bare=bare).split() or ["100644"])[0]
+    mode = mode if mode in ("100644", "100755") else "100644"   # a plain file, whatever was there
     git("update-index", "--add", "--cacheinfo", f"{mode},{blob},STATE.md", bare=bare, env=env)
     tree = git("write-tree", bare=bare, env=env).strip()
     (d / "index").unlink(missing_ok=True)
@@ -381,12 +400,20 @@ def build(project: str, bare: pathlib.Path, p: Plan) -> str:
 def check_copy(project: str, copy: pathlib.Path, bare: pathlib.Path, tip: str) -> None:
     """Step 2: a copy whose next fast-forward could fail (changes, a merge left open, commits the bare repo hasn't)
     would let the registrar merge its stale file over the restore."""
-    if git("status", "--porcelain", cwd=copy).strip():
+    if git("status", "--porcelain", "--untracked-files=no", cwd=copy).strip():
         raise Refused(_("{project}: the memory copy has uncommitted changes (a stopped nightly run?); nothing changed",
                         project=project))
-    if (copy / ".git" / "MERGE_HEAD").exists():
-        raise Refused(_("{project}: the memory copy is in the middle of a merge; nothing changed", project=project))
+    g = copy / ".git"
+    if any((g / f).exists() for f in ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply",
+                                       "index.lock")) \
+            or git("symbolic-ref", "-q", "HEAD", cwd=copy, check=False).strip() != BRANCH:
+        raise Refused(_("{project}: the memory copy is in the middle of a git operation, or not on its branch (a "
+                        "stopped nightly run?); nothing changed", project=project))
     head = git("rev-parse", "HEAD", cwd=copy).strip()
+    coming = set(git("diff", "--name-only", head, tip, bare=bare, check=False).split("\n")) | {"STATE.md"}
+    if coming & set(git("ls-files", "--others", "--exclude-standard", cwd=copy).split("\n")) - {""}:
+        raise Refused(_("{project}: the memory copy has untracked files the fast-forward would overwrite; nothing "
+                        "changed", project=project))
     if not ancestor(bare, head, tip):
         raise Refused(_("{project}: the memory copy has commits the memory repo doesn't (it diverged); nothing changed",
                         project=project))
@@ -425,9 +452,9 @@ def apply_(project: str, copy: pathlib.Path, bare: pathlib.Path, ref: str, frm: 
 def finish_steps(project: str, copy: pathlib.Path, bare: pathlib.Path, rec: dict) -> int:
     """Steps 6-10, each recorded as done before the next."""
     def done(step):
+        stop(step)   # a crash here, the step done and not recorded: the next run does it again, harmlessly
         rec["todo"].remove(step)
         save(project, rec)
-        stop(step)
     if "pull" in rec["todo"]:
         hublib.harden_copy(copy)
         r = subprocess.run(["git", *hublib.NO_SYMLINKS, "pull", "--ff-only", "-q"], cwd=copy, capture_output=True,
@@ -457,7 +484,8 @@ def finish_steps(project: str, copy: pathlib.Path, bare: pathlib.Path, rec: dict
                 os.close(fd)
         done("log")
     if "notes" in rec["todo"]:
-        if not notes(project, git("show", f"{rec['new']}:STATE.md", bare=bare)):
+        if not notes(project, git("show", f"{rec['new']}:STATE.md", bare=bare),
+                     git("show", f"{rec['base']}:STATE.md", bare=bare, check=False)):
             raise Refused(_("{project}: STATE.md is restored, but a note to {assistant} could not be sent; run brunna "
                             "state restore {project} to send it", project=project,
                             assistant=hubconf.assistant_name()))
@@ -471,23 +499,24 @@ def finish_steps(project: str, copy: pathlib.Path, bare: pathlib.Path, rec: dict
     return 0
 
 
-def notes(project: str, text: str) -> bool:
-    """The registrar's claim for an item brought back came from a wrong edit: one note per claim, decided from the
-    ledger and the restored file (so a rerun sends what a stopped run didn't, and nothing twice)."""
+def notes(project: str, text: str, before: str) -> bool:
+    """An item restore brought back (in the restored file's first to-do list, not in the file it replaced) that the
+    registrar had claimed done: one note per claim, decided from the ledger and the two files (so a rerun sends what
+    a stopped run didn't, and nothing twice)."""
     import registrar
     led = ledger(project)
-    book, d = Book.of(led), acts_md.Doc(text, acts_md.profiles(hubconf.owner_tag()))
+    read = acts_md.profiles(hubconf.owner_tag())
+    book, d, was = Book.of(led), acts_md.Doc(text, read), acts_md.Doc(before, read).mentioned()
     recs = []
     for k in sorted(book.open_bound):
         n = led.reopens(k)
-        if not any(e.owner == "principal" and e.kind == "task" and d.carries(e.i) == k for e in d.entries) \
-                or ("registrar", "claimed", f"c:{k}:r{n}") not in led.sent:
+        if k in was or not d.holding(k) or ("registrar", "claimed", f"c:{k}:r{n}") not in led.sent:
             continue
         recs.append(registrar.record(
             led.filed(k), "note", k, f"x:{k}:r{n}", origin="registrar", about={"key": k},
-            note=_c("The claim that this to-do was done (c:{key}:r{n}) came from a wrong nightly edit of STATE.md, "
-                    "which brunna state restore undid: the item is still open and back in the to-do list.", key=k,
-                    n=n)))
+            note=_c("This to-do is back in STATE.md's to-do list: brunna state restore brought back an earlier day's "
+                    "file, after a nightly edit deleted its line, and the registrar's claim that it was done "
+                    "(c:{key}:r{n}) came from that deletion. If it really is done, settle it as usual.", key=k, n=n)))
     res = registrar.publish(recs, led.sent)
     return all(res.get(r["id"]) in ("accepted", "duplicate") for r in recs)
 
@@ -524,7 +553,7 @@ def restore(project: str, ref: str | None, apply: bool, keep_checkpoint: bool, f
                 return 0
             show(project, p)
             print(_("Nothing changed. To bring this version back (as a new commit; history stays):"))
-            print(f"  brunna state restore {project} {ref} --apply --from {p.blob}"
+            print(f"  brunna state restore {project} {ref} --apply" + (f" --from {p.blob}" if p.blob else "")
                   + (" --keep-checkpoint" if keep_checkpoint else ""))
             return 0
         with memlock.hold(copy, "restore") as got:
@@ -538,6 +567,10 @@ def restore(project: str, ref: str | None, apply: bool, keep_checkpoint: bool, f
             return apply_(project, copy, bare, ref, frm, keep_checkpoint)
     except Refused as e:
         return refuse(str(e))
+    except RuntimeError as e:   # git itself failed
+        return refuse(_("{project}: git failed ({error}); run brunna state restore {project} to finish it", project=project,
+                        error=str(e)[-300:]) if load(project) else
+                      _("{project}: git failed ({error}); nothing changed", project=project, error=str(e)[-300:]))
 
 
 def positive(text: str) -> int:

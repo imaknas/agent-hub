@@ -45,11 +45,14 @@ registrar uses; never `todo_tokens.Patterns.section`, which ignores fences.
    terms appended to R's first to-do section, exactly as the registrar's reopen step writes it (`acts_md.apply`: a
    labelled line after the section's last non-blank line, content language). Not when C has an owner entry whose
    normalised text equals that key's latest terms (the key was only dropped from the line: the registrar relinks it).
-   Each re-added line is named in the output, so the owner sees it if it duplicates a rewritten item.
+   Each re-added line is named in the output, so the owner sees it if it duplicates a rewritten item. An unticked
+   owner line of T without a key (the registrar stamps a new line later that night) whose normalised text is the
+   latest terms of such a key counts as that key's line. A ticked box in T was done: never re-added or listed.
 4. **Said, not done:** restore lists what it doesn't bring back, with L's view of each: owner items in T's to-do
    sections that are not in C and that L calls closed (by key) or doesn't know (no key: their text, for the owner to
-   re-add by hand), and open keys a project raised itself (known keys) whose line is gone (the registrar doesn't re-add
-   those either).
+   re-add by hand), open keys a project raised itself (known keys) whose line is gone (the registrar doesn't re-add
+   those either), and every other bound key L calls open that R doesn't mention (raised after T and deleted since, or
+   on an agent line in T).
 
 **What the owner can predict, for the docs:** "your to-do list stays exactly as it is today and everything else goes back
 to that day; an item you were waiting on that was in the list that day and was deleted since, still open, comes back.
@@ -66,13 +69,14 @@ no key is on two lines that C didn't already have; R has no unclosed fence or co
 
 When an open bound key's line vanished, the registrar claimed the item done that same night (step 5, `claimed`, id
 `c:<key>:r<reopens>`). Principal Handoff can't withdraw a claim (`claimed` changes no register; `supersedes` names
-records of the same register only: core R3); a `note` from the registrar is the only means. Restore sends one note
-(origin registrar, project `led.filed(key)`, id `x:<key>:r<n>`, about the key) for **every** bound key that L calls open,
-that is on an open (unticked) entry of R, whose `c:<key>:r<n>` the project sent, and whose `x:<key>:r<n>` it hasn't:
-decided from the ledger and R, not from what this run changed, so a run after a crash still sends it, and a second run
-doesn't send it again.
+records of the same register only: core R3); a `note` from the registrar is the only means. restore sends one note
+(origin registrar, project `led.filed(key)`, id `x:<key>:r<n>`, about the key) for every bound key that L calls open,
+that is on an owner line of R's first to-do section and not mentioned in the file R replaced (restore brought it
+back), whose `c:<key>:r<n>` the project sent, and whose `x:<key>:r<n>` it hasn't: decided from the ledger and the two
+files in the record, so a run after a crash still sends it, and a second run doesn't send it again.
 
-The note is advisory: it tells the owner side the claim came from a wrong nightly edit. An assistant reading it should
+The note is advisory and doesn't assert the claim was wrong (the line may have been deleted because the item was done):
+it says the line is back after a nightly deletion and the claim came from that deletion, to settle as usual if done. An assistant reading it should
 not accept that claim; the built-in owner side doesn't read claims or notes at all (`bin/owner.py`), so there the item
 simply stays open. If the claim is accepted anyway, the registrar strikes the line the next night, and the owner reopens
 the item on their side. Restore never sends settlements or reopenings.
