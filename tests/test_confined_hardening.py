@@ -52,9 +52,15 @@ class RulesNeverOptions(Scratch):
         self.assertIn("Edit(./data/**)", cmd[i + 1:])
 
     def test_the_registry_refuses_them_too(self):
-        self.assertFalse(registry.rule_shaped("--dangerously-skip-permissions"))
-        self.assertFalse(registry.rule_shaped("Read\nWrite"))
+        for bad in ("--dangerously-skip-permissions", "Read\nWrite", " Read", "Read(x)\0", ""):
+            self.assertFalse(registry.rule_shaped(bad), bad)
         self.assertTrue(registry.rule_shaped("Bash(npm run build:*)"))
+        self.assertTrue(registry.rule_shaped("mcp__my-db__query"))
+
+    def test_a_tool_servers_id_keeps_its_dash(self):
+        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"):
+            cmd = runtime_claude._flags(self.task(["mcp__my-db__query"]))
+        self.assertIn("mcp__my-db__query", cmd)
 
 
 class LinksStayInside(Scratch):
@@ -70,13 +76,43 @@ class LinksStayInside(Scratch):
         (main / ".agent-memory" / "memory").mkdir(parents=True)
         (self.ws / ".agent-memory").symlink_to(main / ".agent-memory")
         dirs, rules = runtime_claude._linked_rules(["Edit(./.agent-memory/memory/**)"], self.ws,
-                                                   [self.ws, (main / ".agent-memory" / "memory").resolve()])
+                                                   [self.ws, (main / ".agent-memory").resolve()])
         self.assertEqual(dirs, [str((main / ".agent-memory").resolve())])
         self.assertEqual(rules, [f"Edit(/{(main / '.agent-memory' / 'memory').resolve()}/**)"])
 
     def test_inside_the_folder_is_untouched(self):
         (self.ws / "data").mkdir()
         self.assertEqual(runtime_claude._linked_rules(["Edit(./data/**)"], self.ws, [self.ws]), ([], []))
+
+    def test_a_path_that_ends_inside_but_passes_through_home_refuses(self):
+        # a runtime folder the project's deploy fills: data -> ~, and the rule ends in its own workspace, but the folder
+        # that would become a working directory is the whole home
+        home = self.tmp / "home"
+        ws = home / "workspace" / "proj"
+        ws.mkdir(parents=True)
+        rt = self.tmp / "services" / "proj"
+        rt.mkdir(parents=True)
+        (rt / "data").symlink_to(home)
+        with self.assertRaisesRegex(ValueError, "follows a link out"):
+            runtime_claude._linked_rules(["Edit(./data/workspace/proj/**)"], rt, [ws, rt])
+
+    def test_a_confined_runs_flags_check_the_projects_own_folders(self):
+        """Through _flags itself (settings: platform), with project_roots computed from the registry."""
+        (self.ws / "data").symlink_to(self.tmp)
+        doc = {"name": "proj", "paths": {"workspace": str(self.ws)}}
+        spec = {"permission_mode": "dontAsk", "settings": "platform", "project_env": "AGENT_JOB_PROJECT",
+                "allow_from_env": "AGENT_JOB_ALLOW"}
+        env = {"PATH": "/usr/bin:/bin", "AGENT_JOB_PROJECT": "proj", "AGENT_JOB_ALLOW": json.dumps(["Edit(./data/x)"])}
+        task = runtime_ports.Task(point="agent-job-confined", prompt="p", spec=spec, cwd=str(self.ws), env=env)
+        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
+                mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: self.tmp / "s.json"), \
+                mock.patch("registry.refresh", lambda: {"projects": {"proj": doc}}), \
+                mock.patch("policy.notes_dir", lambda p: None):
+            with self.assertRaisesRegex(ValueError, "follows a link out"):
+                runtime_claude._flags(task)
+            (self.ws / "data").unlink()
+            (self.ws / "data").mkdir()
+            runtime_claude._flags(task)   # a real folder: runs
 
 
 class JobPrompts(Scratch):
@@ -113,15 +149,39 @@ class ConnectorJobsAreTheOwners(unittest.TestCase):
         turned_on["jobs"][0]["connectors"] = True
         reprompted = json.loads(json.dumps(self.BASE))
         reprompted["jobs"][1]["prompt"] = "jobs/other.md"
-        for new in (widened, turned_on, reprompted):
+        moved = {**json.loads(json.dumps(self.BASE)), "runtime": {"deploy": "bin/deploy.sh"}}   # its default folder
+        for new in (widened, turned_on, reprompted, moved):
             with self.subTest(new=new):
                 self.assertEqual(len(self.changes(new)), 1)
 
 
+class LegacyNames(unittest.TestCase):
+    CUR = {"name": "p", "jobs": [{"name": "tick", "legacy_name": "p-tick", "every": "15m", "run": "x"},
+                                 {"name": "old", "legacy_name": "p-old", "every": "1h", "run": "x"}]}
+
+    def test_a_project_can_drop_a_job_but_not_set_or_change_a_legacy_name(self):
+        dropped = {**self.CUR, "jobs": self.CUR["jobs"][:1]}
+        self.assertEqual(registry.platform_owned_changes(dropped, self.CUR), [])
+        taken = json.loads(json.dumps(self.CUR))
+        taken["jobs"][0]["legacy_name"] = "other-project-daily-check"
+        added = json.loads(json.dumps(self.CUR))
+        added["jobs"].append({"name": "new", "legacy_name": "q-x", "every": "1h", "run": "x"})
+        for new in (taken, added):
+            with self.subTest(new=new):
+                self.assertEqual(len(registry.platform_owned_changes(new, self.CUR)), 1)
+
+    def test_it_is_a_name_never_a_path(self):
+        for ok in ("short-run", "agent-hub/backup", "a1"):
+            self.assertTrue(registry.LEGACY_NAME.fullmatch(ok), ok)
+        for bad in ("../../..", "/etc", "a/b/c", ".hidden", "A", "a b", "a/../b"):
+            self.assertFalse(registry.LEGACY_NAME.fullmatch(bad), bad)
+
+
 class DenyLists(unittest.TestCase):
-    def test_the_headless_token_is_a_credential(self):
-        files = runtime_claude.credential_paths()["files"]
-        self.assertIn(str(pathlib.Path.home() / ".claude" / "headless-oauth-token"), files)
+    def test_the_headless_token_is_a_credential_every_policy_denies(self):
+        token = pathlib.Path.home() / ".claude" / "headless-oauth-token"
+        with mock.patch.object(runtime_ports, "default_name", lambda: "claude"):
+            self.assertIn(token, policy.credentials()[1])
 
     def test_every_startup_file_of_the_shells(self):
         for f in ("~/.zshenv", "~/.zlogin", "~/.bash_login", "~/.zshrc", "~/.profile"):

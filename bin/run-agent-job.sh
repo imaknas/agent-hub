@@ -35,6 +35,8 @@ set -uo pipefail
 HUB="${AGENT_HUB_ROOT:-${BRUNNA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}}"
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 NAME="${1:?$(hub_msg "usage: run-agent-job.sh <name> [workdir] [prompt name]")}"
+# the name is a folder under .state/agent-jobs/: never a path out of it (the registry checks legacy_name too)
+case "$NAME" in /* | .* | */.* ) hub_say "run-agent-job: {name}: not a job name" name="$NAME" >&2; exit 2 ;; esac
 PROMPT="$HUB/agent-jobs/${3:-$NAME}.md"
 case "${3:-}" in /*) PROMPT="$3" ;; esac  # registry agent job: the prompt is the full path of projects/<name>/jobs/*.md
 OUT="$HUB/.state/agent-jobs/$NAME"

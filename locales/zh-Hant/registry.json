@@ -155,5 +155,7 @@
  "mailbox.wake must be true or false": "mailbox.wake 必須是 true 或 false",
  "a job with connectors: true": "connectors: true 的 job",
  "job {name}: an allow rule is one line and never starts with - (a rule, not an option)": "job {name}:allow 的規則只能是一行,不能以 - 開頭(是規則,不是選項)",
- "job {name}: prompt must be a file name under jobs/ in the config's projects/{project}/ (e.g. jobs/{name}.md): the prompt is the owner's text, never a file the project writes": "job {name}:prompt 只能是 config 的 projects/{project}/ 裡 jobs/ 底下的檔名(例如 jobs/{name}.md):prompt 是擁有者寫的,不能是專案自己寫的檔"
+ "job {name}: prompt must be a file name under jobs/ in the config's projects/{project}/ (e.g. jobs/{name}.md): the prompt is the owner's text, never a file the project writes": "job {name}:prompt 只能是 config 的 projects/{project}/ 裡 jobs/ 底下的檔名(例如 jobs/{name}.md):prompt 是擁有者寫的,不能是專案自己寫的檔",
+ "a job's legacy_name": "job 的 legacy_name",
+ "job {name}: legacy_name is a name (lowercase letters, digits, -; a module's may have one /)": "job {name}:legacy_name 只能是名稱(小寫字母、數字、-;module 的可以有一個 /)"
 }

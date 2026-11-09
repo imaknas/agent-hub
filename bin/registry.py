@@ -303,16 +303,28 @@ PLATFORM_OWNED_NESTED = (("mailbox", "wake"),)
 
 
 def connector_jobs(doc: dict) -> dict:
-    """The jobs that use the owner's claude.ai connectors (connectors: true), whole: such a run logs in with the owner's
-    subscription and loads the connectors its allow: names, so the project can't add one, or change one's rules, prompt
-    or folder, by its own letter (owner-only, like PLATFORM_OWNED)."""
-    return {j.get("name"): j for j in doc.get("jobs") or [] if isinstance(j, dict) and j.get("connectors") is True}
+    """The jobs that use the owner's claude.ai connectors (connectors: true), whole, with the folder they run in: such
+    a run logs in with the owner's subscription and loads the connectors its allow: names, so the project can't add
+    one, or change one's rules, prompt or folder, by its own letter (owner-only, like PLATFORM_OWNED)."""
+    return {j.get("name"): {**j, "cwd": j.get("cwd") or default_cwd(doc)}
+            for j in doc.get("jobs") or [] if isinstance(j, dict) and j.get("connectors") is True}
+
+
+def legacy_names(doc: dict) -> dict:
+    """Each job's legacy_name: the name its state, reports and schedule state are kept under (the old schedule.yaml
+    entry's). Set when a job moves into the registry, by the platform; a project's letter that sets or changes one could
+    take over another job's state, so it is owner-only."""
+    return {j.get("name"): j.get("legacy_name") for j in doc.get("jobs") or [] if isinstance(j, dict) and j.get("legacy_name")}
+
+
+# a permission rule as a project writes it: a name (a tool, or a tool server's id with -), optionally one argument in
+# parentheses, on one line; never an option. What a rule may say is the runtime adapter's, which refuses the same shape
+RULE_SHAPE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(\([^\n\r\0]*\))?")
+LEGACY_NAME = re.compile(r"[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)?")
 
 
 def rule_shaped(rule) -> bool:
-    """A permission rule as a project writes it: one line, never starting with "-" (an option). What a rule may say is the
-    runtime adapter's (it refuses one that isn't a rule before the run)."""
-    return isinstance(rule, str) and bool(rule) and not rule.startswith("-") and not any(c in rule for c in "\n\r\0")
+    return isinstance(rule, str) and bool(RULE_SHAPE.fullmatch(rule))
 
 
 JOB_PROMPT = re.compile(r"jobs/[A-Za-z0-9_-][A-Za-z0-9._-]*\.md")
@@ -338,6 +350,9 @@ def platform_owned_changes(new: dict, cur: dict) -> list[str]:
     changed += [f"{top}.{key}" for top, key in PLATFORM_OWNED_NESTED if nested(new, top, key) != nested(cur, top, key)]
     if connector_jobs(new) != connector_jobs(cur):
         changed.append(_("a job with connectors: true"))
+    old = legacy_names(cur)
+    if any(old.get(job) != name for job, name in legacy_names(new).items()):   # dropping one with its job is the project's
+        changed.append(_("a job's legacy_name"))
     return [_("{key} is a security field that only brunna can change ({owner} confirms); this letter changes it", key=k,
               owner=hubconf.owner_tag()) for k in changed]
 
@@ -616,6 +631,11 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
         elif any(not rule_shaped(x) for x in job.get("allow") or []):
             # the project's own text, handed to the runtime as rules: never an option (the runtime's adapter refuses one too)
             errs.append(_("job {name}: an allow rule is one line and never starts with - (a rule, not an option)", name=n))
+        if job.get("legacy_name") is not None and not (isinstance(job["legacy_name"], str)
+                                                       and LEGACY_NAME.fullmatch(job["legacy_name"])):
+            # it names a state folder (run-agent-job.sh) and schedule state: a name, never a path
+            errs.append(_("job {name}: legacy_name is a name (lowercase letters, digits, -; a module's may have one /)",
+                          name=n))
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
         if job.get("connectors") is True and not job.get("allow"):

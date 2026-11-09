@@ -706,7 +706,7 @@ def _rules(task) -> tuple:
 
 _GLOB = re.compile(r"[*?\[{]")
 # a permission rule: a tool name, optionally with its argument in parentheses, on one line (nothing that starts with "-")
-RULE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\([^\n\r\0]*\))?")
+RULE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(\([^\n\r\0]*\))?")   # - : a tool server's id keeps it (mcp_id)
 
 
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -749,13 +749,19 @@ def own_state_dir(allowed, cwd) -> pathlib.Path | None:
 
 
 def project_roots(project: str) -> list[pathlib.Path]:
-    """Where a confined run of this project may follow a link to: its workspace, its runtime folder and its notes
-    (resolved; a folder the registry doesn't give is left out)."""
+    """Where a confined run of this project may follow a link to: its workspace, its runtime folder and the folder its
+    notes are in (the .agent-memory a worktree's link leads to; resolved; a folder the registry doesn't give is left
+    out)."""
     import policy
     import registry
     doc = registry.refresh()["projects"].get(project) or {}
     d = registry.dirs(doc) if doc else {}
-    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), policy.notes_dir(project)) if p]
+    notes = policy.notes_dir(project)
+    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), notes.parent if notes else None) if p]
+
+
+def _inside(p: pathlib.Path, places) -> bool:
+    return any(p == x or x in p.parents for x in places)
 
 
 def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
@@ -777,10 +783,15 @@ def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
         real = base.joinpath(*fixed).resolve() if fixed else base
         if real == base or base in real.parents:
             continue
-        if roots is not None and not any(real == x or x in real.parents for x in roots):
-            raise ValueError(f"the rule {r} follows a link out of the project's folders, to {real}; a confined run "
-                             "never follows one there")
         top = base.joinpath(fixed[0]).resolve()
+        if roots is not None:
+            # every step of the path, not only where it ends: the first one becomes a working directory (--add-dir), and
+            # `data -> ~` with `./data/workspace/<project>/**` ends inside the project while opening the whole home
+            for i in range(1, len(fixed) + 1):
+                step = base.joinpath(*fixed[:i]).resolve()
+                if not _inside(step, [base, *roots]):
+                    raise ValueError(f"the rule {r} follows a link out of the project's folders, to {step}; a confined "
+                                     "run never follows one there")
         if str(top) not in dirs:
             dirs.append(str(top))
         rules.append(f"{m.group(1)}(/{real}/{'/'.join(parts[len(fixed):])})" if len(fixed) < len(parts)
