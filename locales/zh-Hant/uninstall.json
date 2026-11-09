@@ -29,5 +29,6 @@
  "✓ {path} removed": "✓ 已移除 {path}",
  "✓ {project}: {part}": "✓ {project}:{part}",
  "✓ {what} removed": "✓ 已移除{what}",
- "{runtime}'s hooks for brunna stay: it can't remove them; remove them by hand": "{runtime} 給 brunna 的 hook 會留著：它沒辦法移除，請手動移除"
+ "{runtime}'s hooks for brunna stay: it can't remove them; remove them by hand": "{runtime} 給 brunna 的 hook 會留著：它沒辦法移除，請手動移除",
+ "(left; run brunna uninstall --purge again)": "(留著;再執行一次 brunna uninstall --purge)"
 }

@@ -38,6 +38,8 @@ For each project (the STATE.md of its memory copy, plus the platform's own openc
   6. If anything changed, commit + push (memory copies through git-safe-push; the platform's file through
      commit-hub-files.sh), and only after that succeeds `hubbus done` the applied records; on failure, wait for the
      next night.
+  Each memory copy is read and written holding its writer lock (bin/memlock.py); a copy another writer holds for over
+  a minute is left for the next night (the records it didn't mark done are applied then).
 
 Records: reads acts 0.3 to 0.6, sends the version {settings} principal_handoff.send_version names (bin/ph_wire.py).
 
@@ -61,6 +63,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import acts_md  # noqa: E402
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import memlock  # noqa: E402
 import ph_records  # noqa: E402
 import ph_wire  # noqa: E402
 import todo_tokens  # noqa: E402
@@ -415,7 +418,16 @@ def main() -> int:
         warned = set()
     failed = total = 0
     for project, path, how in targets():
-        ok, sent = run_project(project, path, how, warned)
+        if how == "copy":   # one writer at a time in a memory copy (bin/memlock.py): reading STATE.md to hubbus done
+            with memlock.hold(path.parent, "registrar", memlock.night()) as got:
+                if not got:
+                    who, since = memlock.holder(path.parent)
+                    log(_("{project}: {who} has been writing in the memory copy since {since}; left for the next "
+                          "night", project=project, who=who or "?", since=since or "?"))
+                    continue
+                ok, sent = run_project(project, path, how, warned)
+        else:
+            ok, sent = run_project(project, path, how, warned)
         failed += not ok
         total += sent
     if not DRY:

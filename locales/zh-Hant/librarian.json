@@ -37,5 +37,7 @@
   "the edit list is invalid: {error}": "編輯清單不合規:{error}",
   "the edits touch the roster block": "編輯動到了名冊區塊",
   "index.md: not updated: {error}": "index.md: 沒有更新:{error}",
-  "completion version in charge: {points}": "由 completion 版負責:{points}"
+  "completion version in charge: {points}": "由 completion 版負責:{points}",
+  "{project}: {who} has been writing in the memory copy since {since}; left for the next night": "{project}:{who} 從 {since} 起在寫 memory 副本;留到下一晚",
+  "{project}: a restore didn't finish; run brunna state restore {project} to finish it (left alone until then)": "{project}:有一次還原沒做完;執行 brunna state restore {project} 把它做完(在那之前不動這個專案)"
 }

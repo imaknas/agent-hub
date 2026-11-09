@@ -47,7 +47,9 @@ import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
 import llm_ready  # noqa: E402
+import memlock  # noqa: E402
 import prompts  # noqa: E402
+import state  # noqa: E402
 import state_anchors  # noqa: E402
 import todo_tokens  # noqa: E402
 
@@ -970,7 +972,19 @@ def main() -> int:
     handoffs = load_handoffs()
     digest: list[str] = []
     for d in sorted(p for p in copies.glob("*/") if (p / ".git").is_dir()):
-        process(d.name, d, handoffs, digest)
+        # one writer at a time in a copy (bin/memlock.py), for the whole run: who committed is told by comparing HEAD
+        # before and after the model call
+        with memlock.hold(d, "librarian", memlock.night()) as got:
+            if not got:
+                who, since = memlock.holder(d)
+                log(_("{project}: {who} has been writing in the memory copy since {since}; left for the next night",
+                      project=d.name, who=who or "?", since=since or "?"))
+                continue
+            if state.pending(d.name):
+                log(_("{project}: a restore didn't finish; run brunna state restore {project} to finish it (left "
+                      "alone until then)", project=d.name))
+                continue
+            process(d.name, d, handoffs, digest)
 
     # Today's digest: the project-summary section, then ask the model to mark the relations between projects
     # (index.md). The digest is written in sections (hublib.digest_append): each job writes its own, and a rerun

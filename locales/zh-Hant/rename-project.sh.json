@@ -22,5 +22,7 @@
  "[local] remote / folder / worktree updated": "[本機] remote / 資料夾 / worktree 已更新",
  "renaming the registry entry failed (projects/{old}.yaml → {new}.yaml); the other steps are done, so fix the registry entry by hand": "專案登錄改名失敗(projects/{old}.yaml → {new}.yaml),其他步驟已經做完,手動補登錄",
  "where it was before the rename ({old})": "改名前({old})的位置",
- "Done: {old} → {new}. Open a new agent session in {path} (the old session's working directory is gone).": "完成:{old} → {new}。在 {path} 開新的 Claude session(舊 session 的工作目錄已經不在了)。"
+ "Done: {old} → {new}. Open a new agent session in {path} (the old session's working directory is gone).": "完成:{old} → {new}。在 {path} 開新的 Claude session(舊 session 的工作目錄已經不在了)。",
+ "a restore of {name} didn't finish; run brunna state restore {name} first": "{name} 有一次還原沒做完;先執行 brunna state restore {name}",
+ "the memory repo and copy on the hub machine were not moved (see above)": "hub 機器上的 memory repo 和副本沒有搬(見上方)"
 }

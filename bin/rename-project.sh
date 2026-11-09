@@ -116,13 +116,25 @@ case "$HUB_STATE" in
   "$HOME"/*) on_mini && ckpt=$(printf %q "$HUB_STATE") || ckpt="~/$(printf %q "${HUB_STATE#"$HOME"/}")" ;;
   *) ckpt=$(printf %q "$HUB_STATE") ;;
 esac
-mini_bash_stdin <<EOF
+# The copy is moved holding its writer lock (bin/memlock.py: refused at once while the librarian, the registrar,
+# consolidate or a restore writes in it), and not while a restore that stopped waits to be finished (its record is
+# named after the old name). The hub's own scripts on the hub machine: the same assumption as the checkpoint's
+case "$HUB" in
+  "$HOME"/*) on_mini && hubdir=$(printf %q "$HUB") || hubdir="~/$(printf %q "${HUB#"$HOME"/}")" ;;
+  *) hubdir=$(printf %q "$HUB") ;;
+esac
+unfinished=$(printf %q "$(hub_msg "a restore of {name} didn't finish; run brunna state restore {name} first" name="$OLD")")
+mini_bash_stdin <<EOF || fail "$(hub_msg "the memory repo and copy on the hub machine were not moved (see above)")"
+set -euo pipefail
+[ ! -e $ckpt/restore/$OLD/record.json ] || { echo $unfinished >&2; exit 1; }
+$hubdir/bin/py $hubdir/bin/memlock.py hold ~/.memory-copies/$OLD --who rename -- bash -c '
 set -euo pipefail
 mv ~/git-origin/$OLD-memory.git ~/git-origin/$NEW-memory.git
 mv ~/.memory-copies/$OLD ~/.memory-copies/$NEW
 git -C ~/.memory-copies/$NEW remote set-url origin ~/git-origin/$NEW-memory.git
 git -C ~/.memory-copies/$NEW fetch -q origin
 [ -f $ckpt/$OLD.sha ] && mv $ckpt/$OLD.sha $ckpt/$NEW.sha || true
+'
 EOF
 # The mirror is renamed only when origin really is a URL. A project without a remote has origin "(native)": it used
 # to be expanded straight into the remote script above, giving `[ -d …/(native).git ]` -> a bash syntax error, after

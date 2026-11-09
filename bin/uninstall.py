@@ -33,6 +33,7 @@ import hubconf  # noqa: E402
 import names  # noqa: E402
 import i18n  # noqa: E402
 import init_dialogue  # noqa: E402
+import memlock  # noqa: E402
 
 _ = i18n.domain(__file__)
 CORE = tuple(names.unit_label(s, sp) for sp in names.all("unit") for s in names.CORE_UNITS)
@@ -267,8 +268,17 @@ def main(argv: list[str]) -> int:
         for wrapper in wrappers:
             wrapper.unlink(missing_ok=True)
             print(_("✓ {path} removed", path=wrapper))
+        copies = hubconf.p("memory_copies", "~/.memory-copies")
         for p in data:
-            shutil.rmtree(p, ignore_errors=True)
+            if p.parent == copies:   # a memory copy goes holding its writer lock (bin/memlock.py)
+                with memlock.hold(p, "uninstall") as got:
+                    if not got:
+                        print(memlock.busy_message(p) + " " + _("(left; run brunna uninstall --purge again)"),
+                              file=sys.stderr)
+                        continue
+                    shutil.rmtree(p, ignore_errors=True)
+            else:
+                shutil.rmtree(p, ignore_errors=True)
             print(_("✓ {path} removed", path=p))
         if purge:
             hubconf.POINTER.unlink(missing_ok=True)

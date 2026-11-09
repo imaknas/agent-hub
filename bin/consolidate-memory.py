@@ -29,7 +29,9 @@ What it does for each project:
      review-log for a person to spot-check
 5. commit -> git-safe-push.sh (a divergence from a project session pushing at the same time is merged and retried
    automatically; a real conflict gives up, the patch is kept in .state/consolidate/failed/) -> update
-   ~/.memory-copies/<project> under with-lock.sh.
+   ~/.memory-copies/<project> under with-lock.sh. The whole run of a project holds the copy's writer lock
+   (bin/memlock.py), taken before that; a copy another writer holds for over a minute waits for the next night, which
+   doesn't count as the project's turn.
 6. Every change (reason, corrections, diff, warnings from the mechanical checks) is written to review-log.md and
    committed with commit-hub-files.sh. When the librarian's checkpoint sits exactly at this run's starting point it is
    advanced too, so the librarian does not read the consolidation diff again.
@@ -61,6 +63,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import hublib  # noqa: E402
 import i18n  # noqa: E402
+import memlock  # noqa: E402
 import todo_tokens  # noqa: E402
 
 _ = i18n.domain(__file__)
@@ -635,7 +638,16 @@ def main() -> int:
         if time.monotonic() - start > BUDGET_MINUTES * 60:
             log(_("over {minutes} minutes; the rest runs tomorrow", minutes=BUDGET_MINUTES))
             break
-        r = consolidate(s, model, args.dry_run, args.keep)
+        if args.dry_run:
+            r = consolidate(s, model, args.dry_run, args.keep)
+        else:   # one writer at a time in the copy (bin/memlock.py): from the fold's base to the checkpoint check
+            with memlock.hold(COPIES / s["name"], "consolidate", memlock.night()) as got:
+                if not got:
+                    who, since = memlock.holder(COPIES / s["name"])
+                    log(_("{project}: {who} has been writing in the memory copy since {since}; left for the next "
+                          "night", project=s["name"], who=who or "?", since=since or "?"))
+                    continue   # not its turn used up: last_try is not set
+                r = consolidate(s, model, args.dry_run, args.keep)
         if args.dry_run:
             if r["entry"]:
                 ddir = STATE_DIR / "consolidate" / "dry-run"
