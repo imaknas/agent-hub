@@ -128,19 +128,19 @@ Not refused, and said plainly:
 - **Reading.** Read, Glob and Grep are always on in a confined run, and the runtime reads its working folders without a
   rule. Everything in the run's folder is readable except the deny lists (and with C, the declared secrets). A
   `Read(./x/**)` rule doesn't narrow it.
-- **The mail commands.** The other confined points keep them. Whether a dontAsk prefix rule (`Bash(brunna send *)`)
-  refuses `$(…)` and `$VAR` in its arguments is the runtime's matching, unprobed. It is the probe that also gates any
-  later shell for sandboxed projects; the probe also checks that the login variable is absent from a tool's
-  environment.
+- **The mail.** No confined run has the mail commands any more: the other confined points get the mail through the
+  platform's tools (`docs/design/confined-mail-tools.md`, decided 11-10 after the probes of 11-09).
 
-`mail: none` (new point flag): `platform_settings` and `_flags` add no mail rules, and Bash is not in `--tools` unless a
-`Bash(...)` rule is declared. To make this possible, `platform_settings` takes the point's spec, and the fake runtime's
-signature changes with it.
+`mail: none` (point key, `confined-mail-tools.md` M1): no mail tools, and Bash is not in `--tools` unless a `Bash(...)`
+rule is declared.
 
-**Settings file per run.** `platform_settings` writes `<state>/agent-jobs/.settings/<project>.<point>.<run id>.json`,
-removed when the run ends, instead of today's one file per project. Runs with different contents never share one.
+**The run's folder.** `llm.py` makes `<state>/agent-jobs/.settings/<project>.<point>.<run id>/` for each confined run
+(`Task.run_dir`), and `platform_settings` writes the settings file in it; it is removed on every way out of the run,
+instead of today's one file per project. Runs with different contents never share one. `confined-mail-tools.md`
+"Depends on" has the details.
 
-Edit and Write on `<workspace|runtime>/.hub-run/**` are denied in every confined run's settings.
+Edit and Write on `<workspace|runtime>/.hub-run/**`, and on every `.git` (`confined-mail-tools.md` M7), are denied in
+every confined run's settings.
 
 ### A3. Edits in place (owner's decision, 11-09)
 
