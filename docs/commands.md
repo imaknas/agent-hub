@@ -28,8 +28,13 @@ brunna state restore garden-app 2026-11-01       # the difference to how it was 
 brunna state restore garden-app 2026-11-01 --apply
 ```
 
-`--apply` writes that version back as a new commit (history is never rewritten) and logs it in `review-log.md`; if
-the commit or the push fails, nothing changes. Your to-do items keep their keys exactly as they are now: one you closed
-since is not brought back, one added since stays. The librarian then folds the notes written since that day into the
-restored file on its next run; add `--keep-checkpoint` when those notes are what it misread. Run it on the hub machine,
-outside the nightly jobs.
+Your to-do list stays exactly as it is today and everything else goes back to that day; an item you were waiting on
+that was in the list that day and was deleted since, still open, comes back. Anything else restore leaves out, it
+lists. The preview ends with the command to apply it, `--from` naming the version it was computed from: if `STATE.md`
+changes before you run it, it refuses and you preview again.
+
+`--apply` writes the result as a new commit (history is never rewritten) and logs it in `review-log.md`. The librarian
+then folds the notes written since that day into the restored file on its next run; add `--keep-checkpoint` when those
+notes are what it misread. While a nightly job is writing in the project's memory it refuses at once; try again later.
+If a restore is stopped halfway (the machine slept), `brunna state restore garden-app` finishes it. Run it on the hub
+machine.

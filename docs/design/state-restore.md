@@ -1,6 +1,7 @@
 # Bringing back an earlier STATE.md: the to-do list and the lock
 
-Status: design, fourth version (2026-11-09), after three rounds of blind review (round 1: the rule against the registrar
+Status: implemented (2026-11-09; `bin/state.py`, `bin/memlock.py`, tests `tests/test_state_restore.py`,
+`tests/test_memlock.py`); design's fourth version, after three rounds of blind review (round 1: the rule against the registrar
 and the Principal Handoff spec, locking and failure, scope; rounds 2 and 3: the rule against `acts_md` and the registrar,
 concurrency, recovery and the git mechanics, tried in throwaway repos). Replaces the key handling and adds the locking of `bin/state.py restore`
 (shipped in v0.9.0, hardened in v0.10.0).
@@ -127,12 +128,15 @@ CLI for the shell scripts (`memlock.py hold <copy> --who <name> [--timeout s] --
 | registrar, `run_project` | from reading STATE.md to its push and `hubbus done` | the same (it runs in the foreground: a long wait would block the tick) |
 | consolidate, one project | from the fold's base to its checkpoint check after the push | the same |
 | restore `--apply` | steps 1-10 | refuses at once, naming the holder and since when |
-| rename / recover / onboard of an existing copy, `uninstall --purge` | around moving, removing or recreating the copy; rename also refuses while a restore record exists | refuses at once |
+| rename, `uninstall --purge` | around moving or removing the copy; rename also refuses while a restore record exists | refuses at once (uninstall leaves that copy and says so) |
 
 Rules: the writer lock is always taken before `with-lock.sh`'s op lock, never after; no hook and no `with-lock.sh` user
 takes it (a librarian run's agent fires the project's hooks inside the copy); it is not re-entrant, so no path takes it
 twice; a script that removes or re-clones a copy holds it while doing so, and the new copy's lock file is a new file
 (nothing else holds the old one by then).
+
+Onboard and recover never touch an existing copy (onboard clones a new one where none is; recover attaches the
+workspace to the bare repo), so they don't take it.
 
 A project the registrar skips for a night is harmless: the records it didn't mark done are applied the next night and
 its claim ids stop duplicates; todo.md shows that project's items as of the night before. A night consolidate skips for

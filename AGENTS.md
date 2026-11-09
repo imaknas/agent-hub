@@ -88,8 +88,13 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
 - **A project's current state, which services it is bound to, what its STATE.md says**:
   `bin/overview.sh [project name]` (no argument lists all of them)
 - **A night's STATE.md got it wrong**: `brunna state history <project>`, then `brunna state restore <project>
-  <date|commit> [--apply]` (`bin/state.py`: a new commit in the platform's memory copy, the owner's to-do keys kept as
-  they are now, the librarian's checkpoint back to that day; never rebuilt from the notes)
+  <date|commit> [--apply --from <blob>]` (`bin/state.py`, design `docs/design/state-restore.md`: that day's file with
+  today's to-do list, an open item deleted since brought back; a new commit on the memory bare repo, published with a
+  compare-and-swap; the librarian's checkpoint back to that day; never rebuilt from the notes; `brunna state restore
+  <project>` finishes a stopped run)
+- **Who may write in a memory copy**: one writer at a time, `bin/memlock.py` (a flock in the copy's `.git`): the
+  librarian, the registrar, consolidate, restore, rename, `uninstall --purge`; taken before `with-lock.sh`, never by a
+  hook
 - **Which projects have been onboarded**: the project registry (`projects/<name>.yaml` in config; `paths.workspace` is
   its location on the hub machine; `bin/hubconf.py roster` lists one project per line with name/path/origin/memory bare
   repo, which is how shell scripts read it)
