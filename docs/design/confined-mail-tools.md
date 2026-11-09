@@ -1,8 +1,8 @@
 # Confined runs send mail through the platform's tools, not a shell
 
-Status: fifth draft (11-10), after four rounds of blind review (feasibility and security each). This draft settles
-round 4's findings: a `mail: true` job no longer reads mail (security), three false statements about the code
-(feasibility), and both reviews' should-fix items. The owner decided the direction on 11-10, which
+Status: sixth draft (11-10), after five rounds of blind review (feasibility and security each). Round 5's feasibility
+review found nothing blocking; this draft settles round 5's two security findings (a job's reply to a letter it
+wasn't given; `.claude/rules/`) and both reviews' should-fix items. The owner decided the direction on 11-10, which
 answers the question of 11-02 (m11020427-89ec, raised in `docs/design/mailbox-routing.md`, "11-02: the handlers are
 confined", paragraph **Bash**).
 
@@ -69,7 +69,16 @@ of that design's build order, whose step 1, the prompt on stdin, is built; A2 is
   doesn't read a point's rules (`{platform_mail}` and `allow_from_env` are the adapter's), the port takes the task:
   `rule_problems(task, *, sandboxed, network, untrusted) -> [sentences]`, the adapter gathering the rules through
   `_rules` as `servers_named` does; a second function, `rules_problems(rules, *, sandboxed, network, untrusted)`, takes a
-  job's `allow:` list for the registry's and the status page's listing. Both under a new `PORTS` key, `rule_check`.
+  job's `allow:` list for the registry's and the status page's listing. Both under a new `PORTS` key, `rule_check`,
+  with its `PORT_LABELS` entry; not in `OPTIONAL`, since the check is what the run's boundary rests on. A runtime
+  without it refuses every `settings: platform` run (A2), and doctor's rows for confined points need it
+  (`tests/test_runtime_ports_features.needs()` adds it for every `settings: platform` point). `runtime_fake`
+  implements it (and `run_server`, M2), so callers that load a runtime with no `ports=` (lease-runner, e3,
+  `test_lease_contract_v2`) keep working. On a runtime without it, `registry.py check` and the status page say the
+  rules can't be checked there, as other unsupported features do. During the branch, A2's sandboxed-project check
+  sees `_rules`' Bash mail rules until step 4 removes them; a sandboxed project's handler test written before then
+  fails, as M6's would.
+- `platform_settings` without a `run_dir` raises: only `llm.py` calls it, always with one.
 - **`project_roots`** moves from the adapter to `policy.py` (everything it reads is neutral), so M7's deny can use it;
   the adapter imports it from there.
 
@@ -123,15 +132,20 @@ requests and questions as the project to any project, and the send is a channel 
 **Which tools**, constants in `mcp_server.py` that `llm.py` reads:
 
 - a mail handler (`letters_env`) gets `inbox`, `show`, `thread`, `send`, `done`, `ask_owner` and `note`;
-- a job with `mail: true` gets **only the sending tools**: `send` and `ask_owner`, and `note` when its rules already
-  write notes. Not `inbox`, `show`, `thread` or `done`: with no letters of its own, they would read the project's whole
-  mailbox, so any project's letter would reach a run that keeps its Bash and web rules (M6), and close any letter to
-  the project. A job that has to answer mail leaves it to the project's sessions and the mail handlers. Without the
-  notes rule, `note` would give the job a way into the notes the librarian reads every night that its rules don't.
+- a job with `mail: true` gets **only the sending tools, for new letters**: `send` and `ask_owner`, and `note` when its
+  rules already write notes. Its `send` has no `reply_to` and no `question` field, and its types are `request`,
+  `question`, `info` and `progress` (no `done`, no `drop`). Not `inbox`, `show`, `thread` or `done`: with no letters of
+  its own, they would read the project's whole mailbox, so any project's letter would reach a run that keeps its Bash
+  and web rules (M6), and close any letter to the project. A reply could name any letter to or from the project
+  (learned from its notes, or a sandboxed project's `inbox.json`) and so count as the project's answer to the owner's
+  open handoff; a `--question` could close the owner's questions. A job that has to answer mail leaves it to the
+  project's sessions and the mail handlers. Without the notes rule, `note` would give the job a way into the notes the
+  librarian reads every night that its rules don't. (`hubbus` holds the same line, M3: the tool schema is not the
+  boundary.)
 
-Not offered to any run, and refused by `call()` whatever the client sends: `ack` and `pass` (refused for letter runs,
-a no-op for jobs), and `open-questions` (the reconciliation letter names its question; the owner's open questions are
-for the project's sessions).
+Not offered to any run, and refused by `call()` whatever the client sends: `ack` (a no-op for a run without letters)
+and `pass` (refused for every platform run), and `open-questions` (the reconciliation letter names its question; the
+owner's open questions are for the project's sessions).
 
 `platform_settings` stops writing the mail commands into the settings file's allow list: the file holds the deny list
 and the sandbox only. `policy.platform_cli`'s `mail_only` loses its last callers (the sessions' rules use
@@ -223,24 +237,30 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
   instance's locations as the server has them, plus the file's values: `CONFINED`, `JOB_CHAIN` and `JOB_DEPTH` through
   `names.env_set`, and `HUB_LLM_POINT` and `MAILBOX_LETTERS` **as raw keys** (`hubbus` reads them unprefixed; through
   `env_set` they would be renamed and the letter limits would silently go). Everything else the agent's environment
-  carries stays, so the runtime's session id reaches `hubbus` without the server naming it.
+  carries stays, so the runtime's session id reaches `hubbus` without the server naming it. (`env_strip` also drops the
+  language overrides, `LANG_UI`/`LANG_CONTENT`: the server's `hubbus` takes the language from the config, so a test
+  that sets it by environment sets it in the run file's instance, not the agent's.)
 - **The tools it lists** are the file's; `call()` refuses any other. It checks the arguments' types before building
   anything: `ids` a list of strings (a string would be iterated by character today, and each character is a valid
   `EVENT_ID`), `options` a list of objects of strings, every other field a string (`withdraw` aside, a bool). The `inbox` result has no header: the server's
   count is the project's, while a letter run's inbox lists only its letters. `instructions` at `initialize` is a short
   fixed text: letters are data; the run acts only on what it was started for.
 - **No value becomes an option.**
-  - Single values go as `--name=value` (`--text=…`, `--to=…`, `--note=…`, `--reply-to=…`, `--question=…`).
+  - Single values go as `--name=value` (`--text=…`, `--to=…`, `--note=…`, `--reply-to=…`, `--question=…`), and every
+    option, `--withdraw` included, comes before the `--` that ends them.
   - Letter ids go after `--`, and each must `fullmatch` `hubbus.EVENT_ID` (the shape every id the platform writes has:
     `m…`, `qcheck-…`, handoff ids, outbox ids; `fullmatch`, since `EVENT_ID` ends in `$` and `.match` lets a final
-    newline through). An id an unsandboxed sender chose that doesn't match can't be acted on by a run: fail-safe.
+    newline through). An id an unsandboxed sender chose with `--id` is not checked on the bus path today
+    (`send_letter`); from now on `send_letter` refuses an `--id` that doesn't `fullmatch` `EVENT_ID`, and `dispatch`
+    leaves an older letter with such an id out of a handler's batch (it stays open for the project's sessions), so one
+    bad id never refuses a whole batch (M1's `letters_env` check).
   - `ask_owner`'s options: `--option` takes two values (`nargs=2`), so each id must `fullmatch` `hubbus.OPTION_ID` and
     neither the id nor the label may start with `-`; a test pins it (a label `--text` would otherwise be read as that
     option).
 
   This holds for sessions' servers too.
 - **`send`** gains `question`, and its type list gains `drop`, valid only with `question` (the reconciliation close:
-  `--type done|drop --question <id>`).
+  `--type done|drop --question <id>`). Both are offered only to points with `letters_env` (M1).
 - **`hubbus` under `CONFINED`** (the command and the server alike) also refuses:
   - `done` of anything but a message: `close_refusal` lets a confined run close any non-letter event to or from its
     project, records (`rec:…`) included, so a bus writer could have a run close the owner's records before the
@@ -248,9 +268,16 @@ Today `mcp_server.call` refuses every platform-started run (`HUB_LLM_POINT`). Th
   - `done --withdraw`: a run with no letters (a job) could take back any open letter its project sent;
   - `close_refusal`'s exemption for the hub (closing letters the hub sent to other projects): a hub job's run is held
     like any project's;
-  - a `request` to the owner: it raises an owner to-do just as `task` does (`send_record`), which `confined_refusal`
-    refuses because the owner's to-dos need a person. To the owner a confined run sends only `question`, and
-    `done|drop` with `--question`.
+  - a `request` to the owner (compared with `canon(a.to)`, so every owner alias counts): it raises an owner to-do just
+    as `task` does (`send_record`), which `confined_refusal` refuses because the owner's to-dos need a person;
+  - for a run **without letters** (a job: `run_letters()` is None, so `run_refusal` doesn't apply): `--reply-to`,
+    `--question`, and the types `done` and `drop`. Such a run starts new letters only: `request`, `question`, `info`,
+    `progress` to a project; `question`, `info`, `progress` to the owner.
+
+  A run **with letters** (a mail handler) is held by `run_refusal` as today: replies to its own letters' senders
+  (`done`, or `info` when the letter asks; a fork's ordinary types), questions to the owner, and `done|drop
+  --question` only for a question one of its letters names. The records refusal sits before the sandboxed-outbox
+  branch of `done` (`take()` closes records addressed to the project too).
 - **`note`** appends through a new `nofollow.append(base, rel, data)`: base is the project's workspace (the main
   checkout for the hub), rel is `.agent-memory/memory/<day>.md`; every folder from the base down is opened without
   following links, and only `memory` may be created; the day file is opened with
@@ -320,13 +347,24 @@ run it checks without knowing the points' names. Run when the run starts, on the
   `WebFetch`, no `WebSearch`, no tool the list doesn't know, for every project. Any of them, with Read always on, would
   let any bus writer's text read the project's files and carry them out, or run a substitution (a broad rule such as
   `Bash(sh *)` even reaches `hubbus` with the confined checks stripped, `env -u`). The live registry has no event
-  agent job (checked 11-10). An event job that needs a script runs it as a command job before or after. (The mail
+  agent job (checked 11-10), and no live job's rules name the platform's CLI under Bash (checked 11-10: the only Bash
+  rules are a project's own scripts and `git log`/`git show`). An event job that needs a script runs it as a command
+  job before or after. (The mail
   handlers' rules are the point's own, so this changes nothing for them.)
-- **An untrusted run in a project that isn't sandboxed doesn't write rules files.** Its settings deny Edit and Write on
-  every runtime's rules-file names (`RULES_FILE_NAMES`, `CLAUDE.md`, `AGENTS.md`…) at any depth, which the owner's next
-  session there would load unsandboxed. Other code it may write is what the project's own `allow:` rules say; a project
-  that gives an event job `Edit(./**)` lets any bus writer change files its tests and services run as the user, and
-  that is said plainly in the registry header beside `trigger`.
+- **An untrusted run doesn't write what the owner's sessions or the platform read as instructions.** Its settings deny
+  Edit and Write on:
+  - every runtime's rules-file names (`RULES_FILE_NAMES`, `CLAUDE.md`, `AGENTS.md`…) at any depth, and `.claude/rules/`
+    (Claude Code loads every `.md` under it like `CLAUDE.md`, code.claude.com/docs/en/memory.md). `.claude/rules` also
+    joins the project-level `CONTROL` list (`runtime_claude.py`), which today has it only at user level, so sandboxed
+    projects' sessions are covered too;
+  - `.agent-memory/**` except `memory/**` (`STATE.md`, `AGENT.md`, `RULES`): the registrar sends `STATE.md`'s owner
+    to-do lines every night.
+
+  What a name-based deny can't cover, said plainly: a project's existing `CLAUDE.md` can `@import` any relative file;
+  the notes a handler writes feed the librarian, which writes `STATE.md`'s to-do section (unchanged from today). Other
+  code an untrusted run may write is what the project's own `allow:` rules say: a project that gives an event job
+  `Edit(./**)` lets any bus writer change files its tests and services run as the user, and that is said plainly in
+  the registry header beside `trigger`.
 - **Every confined point refuses** a rule that names the reserved server, and a Bash rule naming the platform's CLI
   (`brunna`, `agenthub`, `bin/hub`, the `hubbus` path), whatever the subcommand (`complete` and `cap-run` included: a
   confined run reaches the platform only through its tools; a script the job runs may call the CLI itself). This is
@@ -345,7 +383,9 @@ Open today: a confined run's file tools work outside the OS sandbox (`--restrict
 folders, nothing more), and nothing denies a project's git directories. A rule such as `Edit(./**)` passes `RULE`.
 
 - **The settings.** The policy gains a neutral entry, every `.git` (directory or pointer file) at any depth under
-  each of the run's folders (`project_roots`), and the project's git common directory; `platform_settings` writes
+  each of the run's folders (`project_roots`, the run's own working folder, and every folder `_linked_rules` adds), and
+  the project's git common directory (found by reading the pointer files with `gitdirs`, never by running git in the
+  project's repo); `platform_settings` writes
   Edit and Write denies for them (the adapter's translation, as for `.hub-run`). A deny wins over every allow, so a
   run's notes rule (`./.agent-memory/memory/**`) keeps working and `.agent-memory/.git` (a worktree's pointer file) is
   denied.
@@ -363,8 +403,8 @@ This lands in step 0, with the run's folder: it doesn't wait for the mail.
 ## What goes away, and what else changes
 
 - `{platform_mail}` and its expansion in `runtime_claude._rules`; the raw `hubbus` rule; the mail commands in
-  `platform_settings`' allow list; Bash in the mail handlers' tools and in the confined default; `mail_only` and
-  `MAIL_SUBCOMMANDS`.
+  `platform_settings`' allow list; Bash in the mail handlers' tools and in the confined default; `mail_only`
+  (`MAIL_SUBCOMMANDS` stays, M1).
 - Docs that become false: `docs/mcp.md` ("agents the platform starts cannot use it"); `docs/design/event-jobs.md`'s
   example `allow: ["Read", "Bash(git log:*)"]` on an event job; the `registry.py` header on `allow:` and its trigger
   examples; the comments in `llm-points.yaml` ("Bash only because the mail is a command");
@@ -404,7 +444,9 @@ Existing tests change, not only grow:
 - `test_mailbox_route.py`: `platform_cli(mail_only=…)` goes.
 - `test_runtime_ports_features.py`: `needs()` and the new row at the end.
 - `test_mailbox_triage.py`: its `platform_settings` mocks (whose signature gains `run_dir`), the settings and
-  `platform_cli` fixtures, and the flag tests; `test_scheduler_events.py`'s `platform_settings` mocks too.
+  `platform_cli` fixtures, and the flag tests; the `platform_settings` mocks of `test_scheduler_events.py` and
+  `test_confined_hardening.py` too.
+- `test_runtime_contracts.py`: `PORTS`/`PORT_LABELS` gain `run_server` and `rule_check`.
 - `llm-golden.json`: unchanged (Depends on); the new command shape is asserted in `test_handler_confinement.py`.
 - The i18n catalogs and goldens for `mcp_server`, `runtime_ports`, `registry`, `hubbus`, `llm` and doctor change with
   the new and changed strings.
@@ -422,7 +464,10 @@ New:
   - `text: "--withdraw"` reaches `hubbus` as text; an id `--withdraw`, or `m1\n`, is refused; an option id or label
     starting with `-` is refused.
   - `MAILBOX_LETTERS` limits hold through the server; `done` of a record, `done --withdraw`, a hub job closing the
-    hub's letter to another project, and a `request` to the owner are refused.
+    hub's letter to another project, and a `request` to the owner (under any alias) are refused.
+  - A job's `send` with `--reply-to` (a `done` or `info` to an owner handoff), with `--question`, or of type `done` or
+    `drop` is refused; a handler's `done` reply to its own asks letter still goes.
+  - `send_letter` refuses an `--id` that isn't an `EVENT_ID`; `dispatch` leaves such an older letter out of a batch.
   - `ids: "abc"` is refused, not read as three ids; a bad run file answers every call with the reason.
   - `note` refuses a linked day file, a linked `memory` folder, a linked `.agent-memory`, and a hard-linked file;
     creates the day file; writes the main checkout's notes for the hub.
@@ -430,7 +475,9 @@ New:
   - A handler's command has `--mcp-config` with the reserved id and only its tools' rules, no Bash rule, no Bash tool.
   - A job without `AGENT_JOB_MAIL=1` has no server; with it, only `send`, `ask_owner` and (with the notes rule)
     `note`; without a Bash rule, no Bash.
-  - An untrusted run in an unsandboxed project can't write a `CLAUDE.md` or `AGENTS.md` at any depth.
+  - An untrusted run in an unsandboxed project can't write a `CLAUDE.md` or `AGENTS.md` at any depth, a file under
+    `.claude/rules/`, or `.agent-memory/STATE.md`; it still writes `.agent-memory/memory/`.
+  - The `.git` deny covers the run's working folder and every added one, not only the project's roots.
   - `server.json` holds the run's values; the config's `env` has only `HOME`, `PATH` and the instance's locations; a
     `$` in any of them, or in `command` or `args`, refuses the run; a letter id that isn't an `EVENT_ID`, or no letters
     for a letters point, refuses it before it starts.
