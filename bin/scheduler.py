@@ -61,13 +61,11 @@ from __future__ import annotations  # the system python3 (3.9) must be able to i
 
 import contextlib
 import datetime
-import fcntl
 import json
 import os
 import pathlib
 import subprocess
 import sys
-import time
 
 import yaml
 
@@ -76,6 +74,7 @@ import event_jobs  # noqa: E402
 import hubconf  # noqa: E402
 import names  # noqa: E402
 import i18n  # noqa: E402
+import memlock  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -153,16 +152,9 @@ def state_lock(timeout: float = 0, path: pathlib.Path | None = None):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o644)
     try:
-        deadline = time.monotonic() + timeout
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if time.monotonic() >= deadline:
-                    yield False
-                    return
-                time.sleep(0.2)
+        if not memlock.flock(fd, timeout):
+            yield False
+            return
         LOCK_FD = fd
         yield True
     finally:
