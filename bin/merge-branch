@@ -193,8 +193,9 @@ def main() -> int:
             if r.returncode != 0:
                 return fail("dry-run", _("can't make a temporary worktree to try the rebase in: {output}",
                                          output=(r.stderr or r.stdout).strip()))
-        # 2. rebase
-        r = git(work, "rebase", base)
+        # 2. rebase (a dry run's with update-refs off, whatever the config says: it would move other branches that
+        # point into the commits rebased)
+        r = git(work, *(["-c", "rebase.updateRefs=false"] if a.dry_run else []), "rebase", base)
         if r.returncode != 0:
             conflicts = git(work, "diff", "--name-only", "--diff-filter=U").stdout.split()
             git(work, "rebase", "--abort")

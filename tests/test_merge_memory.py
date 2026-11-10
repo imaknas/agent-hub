@@ -107,11 +107,18 @@ class MemoryBranchRefused(Project):
         self.refused(wt, why=why)
 
     def test_a_branch_holding_the_memory_branch_itself(self):
-        """the memory branch's own commits under code (a branch started from the rebased memory branch)"""
+        """the memory branch's own commits, not copies: the memory branch rebased onto main (as on 11-10), and a
+        branch started from it with code of its own"""
+        self.git(self.mem, "rebase", "-q", "main")
         wt = self.worktree("mixed", "agent-memory")
-        self.git(wt, "merge", "-q", "--allow-unrelated-histories", "-m", "chore: join", "main")
-        self.git(wt, "rebase", "-q", "main")
-        self.refused(wt, why="3")
+        self.commit(wt, "b", "feat: b")
+        why = i18n.translate("merge-branch", "{n} of the {total} {total:commit|commits} {branch} would bring into "
+                             "{base} are the memory branch's ({mem}) or copies of them, e.g. {sha}: rebuild the branch "
+                             "on {base} with only its own commits (`git rebase -i {base}` and drop the others, or "
+                             "cherry-pick its own onto a new branch from {base})",
+                             {"n": 3, "total": 4, "branch": "mixed", "base": "main", "mem": "agent-memory",
+                              "sha": self.git(self.ws, "rev-parse", "agent-memory")[:10]}, "zh-Hant")
+        self.refused(wt, why=why)
 
     def test_a_branch_with_no_history_in_common(self):
         wt = self.tmp / "other"
@@ -172,6 +179,13 @@ class DryRunMovesNothing(Project):
                                      "into {base}; tests: {tests}", {"n": 1, "branch": "feature", "base": "main",
                                                                      "tests": True}, "zh-Hant"), r.stdout)
         self.assertNotIn("merge-dry-run", self.git(self.ws, "worktree", "list"))
+
+    def test_update_refs_moves_no_other_branch(self):
+        """with rebase.updateRefs on, a rebase moves every branch pointing into what it rebases: a dry run's doesn't"""
+        self.git(self.ws, "config", "rebase.updateRefs", "true")
+        self.git(self.ws, "branch", "parked", "feature")
+        r = self.dry_run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_a_conflict_moves_nothing(self):
         (self.ws / "b").write_text("main's b")
