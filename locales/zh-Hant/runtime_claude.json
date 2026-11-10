@@ -49,5 +49,9 @@
  "{rule} names a path that isn't relative to the run's folder (write ./… or a name in it)": "{rule} 寫的路徑不是相對於這次執行的資料夾(請寫 ./… 或資料夾裡的名字)",
  "{rule} enters a .git or {folder} folder, which no confined run writes": "{rule} 進到 .git 或 {folder} 資料夾,受限執行從不寫那裡",
  "{rule}: a sandboxed project's confined run fetches only from the domains in its own network: list": "{rule}:有沙箱的專案,受限執行只能從它自己 network: 清單裡的網域抓取",
- "{rule}: a sandboxed project's confined run may name only reading and editing files, and WebFetch to its own domains": "{rule}:有沙箱的專案,受限執行只能列讀寫檔案的工具,以及到它自己網域的 WebFetch"
+ "{rule}: a sandboxed project's confined run may name only reading and editing files, and WebFetch to its own domains": "{rule}:有沙箱的專案,受限執行只能列讀寫檔案的工具,以及到它自己網域的 WebFetch",
+ "{rule} runs the platform's command line, which a confined run reaches only through the platform's tools": "{rule} 會跑平台的指令列,受限執行只能透過平台的工具碰到平台",
+ "{rule} names the platform's own tool server, which only the platform gives a run": "{rule} 指名平台自己的工具伺服器,那只有平台能給一次執行",
+ "{rule}: a run whose prompt anyone can write fetches only from the domains in its project's network: list": "{rule}:prompt 誰都能寫的執行,只能從專案 network: 清單裡的網域抓取",
+ "{rule}: a run whose prompt anyone can write (an event job, a mail handler) may name only reading and editing files, and WebFetch to its project's own domains": "{rule}:prompt 誰都能寫的執行(事件 job、信箱處理者)只能列讀寫檔案的工具,以及到專案自己網域的 WebFetch"
 }

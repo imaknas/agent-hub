@@ -453,7 +453,7 @@ def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
         return _("{point} did not start: it acts on the letters ${var} lists, and that lists no letter id",
                  point=point, var=spec["letters_env"])
     problems = rt.rule_problems(task, sandboxed=registry.sandbox_enforced(doc), network=list(doc.get("network") or []),
-                                untrusted=False)
+                                untrusted=spec.get("prompt_source") == "untrusted")
     if not problems:
         return None
     return _("{point} did not start: its rules aren't what a confined run of {project} may have: {problems}",

@@ -75,7 +75,11 @@ schema v1 (contracts/project.v1.md has the full description):
       project and modules may name others or *. Bus events are their writers' claims: the platform's event jobs are
       never agent jobs, and a project's agent event job must declare allow: (its boundary) and run in the workspace
       (cwd: workspace); it runs under judgment point agent-job-event, which loads only the platform's settings for
-      the project (no accumulated project or user permissions). message.delivered, message.routed, message.passed, message.woken and message.done are refused like record.
+      the project (no accumulated project or user permissions). Its prompt carries any bus writer's text, so its
+      allow: may name only reading and editing files and fetching from the project's own network: domains (no shell,
+      no open web), and its run writes no rules file, STATE.md or other memory file but the notes; what its editing
+      rules reach is what that text can change, so a rule over the whole folder lets any bus writer change files the
+      project's tests and services run as the user. message.delivered, message.routed, message.passed, message.woken and message.done are refused like record.
       max_attempts_per_day defaults to 12; an agent event job always runs as the scheduler's background job, in
       place, so the scheduler sees its outcome. legacy_name is refused
     after: [job] (same project) or [project/job]
@@ -363,8 +367,9 @@ def rules_refused(index: dict) -> dict[str, str]:
     out = {}
     for name, doc, job in jobs:
         cwd = hubconf.STATE / "agent-jobs" / agent_state_name(name, job) if job.get("cwd") == "state" else None
+        # an event job's prompt carries any bus writer's text (agent-job-event: prompt_source untrusted)
         problems = rt.rules_problems(job["allow"], sandboxed=sandbox_enforced(doc), network=list(doc.get("network") or []),
-                                     untrusted=False, cwd=cwd)
+                                     untrusted="trigger" in job, cwd=cwd)
         if problems:
             out[f"{name}/{job.get('name')}"] = _("agent job {job} doesn't run until its allow: changes: {problems}",
                                                  job=f"{name}/{job.get('name')}", problems="; ".join(problems))

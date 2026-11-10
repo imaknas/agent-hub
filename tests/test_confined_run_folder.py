@@ -210,6 +210,68 @@ class RuleCheck(unittest.TestCase):
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")
+class Untrusted(unittest.TestCase):
+    """confined-mail-tools.md M6: a run whose prompt anyone can write (an event job, a mail handler)."""
+
+    def problems(self, rules, untrusted=True, sandboxed=False, network=()):
+        import runtime_claude
+        return runtime_claude.rules_problems(rules, sandboxed=sandboxed, network=list(network), untrusted=untrusted)
+
+    def test_it_gets_a_sandboxed_projects_list_in_every_project(self):
+        ok = ["Read", "Glob(src/**)", "Edit(./out/**)", "WebFetch(domain:api.example.org)"]
+        self.assertEqual(self.problems(ok, network=["api.example.org"]), [])
+        for bad in ("Bash(git log *)", "WebFetch", "WebFetch(domain:github.com)", "WebSearch", "Task", "mcp__db__query"):
+            with self.subTest(bad):
+                self.assertEqual(len(self.problems([bad], network=["api.example.org"])), 1)
+                self.assertEqual(self.problems([bad], untrusted=False), [], "a clock job keeps it")
+
+    def test_no_confined_run_names_the_cli_or_the_platforms_server(self):
+        for bad in ("Bash(brunna send *)", "Bash(agenthub complete *)", "Bash(~/.local/bin/brunna cap-run *)",
+                    "Bash(/opt/hub/bin/hub *)", "Bash(sh -c 'brunna send x')", "Bash(/opt/hub/bin/hubbus *)",
+                    "Bash(BRUNNA send *)", "mcp__brunna-run__send", "mcp__agenthub-run", "mcp__Brunna-run__note"):
+            with self.subTest(bad):
+                self.assertTrue(self.problems([bad], untrusted=False))
+        self.assertEqual(self.problems(["Bash(git log *)", "Bash(.venv/bin/python tools/x.py *)", "mcp__db__query",
+                                        "Bash(hubble *)"], untrusted=False), [])
+
+    def deny(self, ws, spec):
+        import runtime_claude
+        pol = {"other_projects": [], "deny_write": [], "deny_read": [], "platform_commands": [], "platform_cli": [],
+               "write": [str(ws)], "network": [], "credential_files": [], "credentials": [], "workspace": str(ws)}
+        doc = {"name": "p", "paths": {"workspace": str(ws)}}
+        with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}), \
+                mock.patch.object(runtime_claude, "project_roots", lambda p: [ws]), \
+                mock.patch("policy.notes_dir", lambda p: ws / ".agent-memory" / "memory"):
+            f = runtime_claude.platform_settings("p", spec, tmpdir(self), None, ws)
+        return json.loads(f.read_text())["permissions"]["deny"]
+
+    def test_it_writes_nothing_read_as_instructions(self):
+        import runtime_claude
+        ws = tmpdir(self)
+        (ws / ".agent-memory" / "memory").mkdir(parents=True)
+        (ws / ".agent-memory" / "AGENT.md").write_text("x")
+        (ws / ".agent-memory" / "extra.md").write_text("x")
+        rule = runtime_claude._rule_path
+        deny = self.deny(ws, {"prompt_source": "untrusted"})
+        for want in (f"Edit({rule(ws)}/**/CLAUDE.md)", f"Write({rule(ws)}/CLAUDE.md)", f"Edit({rule(ws)}/**/AGENTS.md)",
+                     f"Edit({rule(ws)}/**/.claude/rules/**)", f"Write({rule(ws)}/.claude/rules/**)",
+                     f"Edit({rule(ws / '.agent-memory' / 'STATE.md')})", f"Write({rule(ws / '.agent-memory' / 'STATE.md')})",
+                     f"Edit({rule(ws / '.agent-memory' / '.git')})", f"Edit({rule(ws / '.agent-memory' / 'extra.md')})"):
+            self.assertIn(want, deny)
+        self.assertFalse([r for r in deny if "/.agent-memory/memory" in r], "its notes stay writable")
+        clock = self.deny(ws, {})
+        self.assertNotIn(f"Edit({rule(ws)}/**/CLAUDE.md)", clock, "a clock job's prompt is the project's own")
+
+    def test_the_registry_holds_an_event_job_to_it(self):
+        import registry
+        index = {"projects": {"q": {"name": "q", "jobs": [
+            {"name": "e", "kind": "agent", "trigger": {"events": ["merge.done"]}, "allow": ["Read", "Bash(make *)"]},
+            {"name": "c", "kind": "agent", "at": "08:00", "allow": ["Read", "Bash(make *)"]}]}}}
+        with mock.patch("runtime_ports.default_name", lambda: "claude"):
+            self.assertEqual(sorted(registry.rules_refused(index)), ["q/e"])
+
+
+@unittest.skipIf(yaml is None, "needs PyYAML")
 class GitDenied(unittest.TestCase):
     """M7: open before, a confined run's file tools could write a project's .git (a sandboxed project's outbox, or
     .git/config, whose core.fsmonitor the platform's next git command there runs as the user)."""

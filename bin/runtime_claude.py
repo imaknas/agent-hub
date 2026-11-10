@@ -294,6 +294,8 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
     deny = lease_settings(pol)["permissions"]["deny"]
     deny += [r for x in hidden if not x.is_dir() for r in (f"Read({_rule_path(x)})",) if r not in deny]
     deny += [r for r in run_write_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
+    if spec.get("prompt_source") == "untrusted":
+        deny += [r for r in instructions_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
     # no allow list: the run's own rules are its whole boundary, and its mail is the platform's tools, never a command
     out = {"permissions": {"deny": deny}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
@@ -306,6 +308,35 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
     with os.fdopen(fd, "w") as f:
         f.write(json.dumps(out, ensure_ascii=False))
     return p
+
+
+def instructions_denied(project: str, folders) -> list[str]:
+    """What a run whose prompt anyone can write may not write (docs/design/confined-mail-tools.md M6): what the owner's
+    sessions or the platform read as instructions. Every runtime's rules-file names at any depth and .claude/rules under
+    each folder it works in; and .agent-memory but its notes: the registrar sends STATE.md's owner to-do lines every
+    night. A deny can't be narrowed by an allow, so .agent-memory is written as a list: its top files and .git by name,
+    whether they exist or not (a missing STATE.md must not be made), and anything else in it now."""
+    import memory_paths
+    import policy
+    import runtime_ports
+    places = list(dict.fromkeys(pathlib.Path(os.path.realpath(f)) for f in [*project_roots(project), *folders] if f))
+    rules = []
+    for f in places:
+        base = _rule_path(f)
+        for name in runtime_ports.rules_file_names():
+            rules += [f"{t}({base}{mid}{name})" for mid in ("/", "/**/") for t in ("Edit", "Write")]
+        rules += [f"{t}({base}{mid}.claude/rules{tail})" for mid in ("/", "/**/") for tail in ("", "/**")
+                  for t in ("Edit", "Write")]
+    notes = policy.notes_dir(project)
+    mems = {pathlib.Path(os.path.realpath(f)) / ".agent-memory" for f in places}
+    if notes:
+        mems.add(notes.parent)
+    for mem in sorted(mems):
+        named = [mem / n for n in memory_paths.TOP] + [mem / ".git"]
+        present = policy.beside(mem, [mem / memory_paths.TREE, *named]) if mem.is_dir() else []
+        for p in [*named, *present]:
+            rules += [f"{t}({_rule_path(p)}{tail})" for tail in ("", "/**") for t in ("Edit", "Write")]
+    return list(dict.fromkeys(rules))
 
 
 HUB_RUN = ".hub-run"   # the platform's request folder in a project's workspace and runtime folder (cap-runner.py)
@@ -857,10 +888,33 @@ def _outside_path(path: str, cwd) -> bool:
     return not (target == base or base in target.parents)
 
 
+def _cli_words() -> set[str]:
+    """The platform's commands by name, as a Bash rule could run them (lowercase)."""
+    import names
+    return {*(c.lower() for c in names.all("cli")), "hubbus"}
+
+
+def _names_cli(arg: str) -> bool:
+    """A Bash rule's argument that runs the platform's CLI (brunna, agenthub, bin/hub, hubbus), whatever the subcommand."""
+    for word in re.split(r"[\s;&|()]+", arg.lower()):
+        word = word.strip("'\"`")
+        base = word.rsplit("/", 1)[-1]
+        if base in _cli_words() or word.endswith("bin/hub") or word == "hub":
+            return True
+    return False
+
+
+def _reserved_server(tool: str) -> bool:
+    import names
+    parts = tool.split("__")
+    return parts[0] == "mcp" and len(parts) > 1 and parts[1].lower() in {f"{c}-run" for c in names.all("cli")}
+
+
 def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list[str]:
     """Why a confined run with these rules (the point's and the job's own, never what the platform adds) doesn't start,
-    one sentence each; [] = it may. untrusted: its prompt is text anyone who can write the bus wrote (M6, not yet
-    checked)."""
+    one sentence each; [] = it may. untrusted: its prompt is text anyone who can write the bus wrote, so it is held to the
+    same list as a sandboxed project's run (docs/design/confined-mail-tools.md M6): a shell or the open web, with Read
+    always on, would let that text read the project's files and carry them out."""
     out = []
     for r in rules:
         m = _PARTS.fullmatch(r)
@@ -876,15 +930,26 @@ def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None
             if any(p.lower() in FORBIDDEN_PARTS for p in fixed):
                 out.append(_("{rule} enters a .git or {folder} folder, which no confined run writes", rule=r,
                              folder=HUB_RUN))
-        if sandboxed:
+        # reinforcement, not the boundary (a broader rule or a path gets past a name): a confined run reaches the
+        # platform only through its tools; a script the job runs may call the CLI itself
+        if tool == "Bash" and arg is not None and _names_cli(arg):
+            out.append(_("{rule} runs the platform's command line, which a confined run reaches only through the "
+                         "platform's tools", rule=r))
+        if _reserved_server(tool):
+            out.append(_("{rule} names the platform's own tool server, which only the platform gives a run", rule=r))
+        if sandboxed or untrusted:
             if tool == "WebFetch":
                 domain = arg[len("domain:"):] if arg and arg.startswith("domain:") else None
                 if domain is None or domain not in (network or []):
                     out.append(_("{rule}: a sandboxed project's confined run fetches only from the domains in its own "
-                                 "network: list", rule=r))
+                                 "network: list", rule=r) if sandboxed else
+                               _("{rule}: a run whose prompt anyone can write fetches only from the domains in its "
+                                 "project's network: list", rule=r))
             elif tool not in SANDBOXED_TOOLS:
                 out.append(_("{rule}: a sandboxed project's confined run may name only reading and editing files, and "
-                             "WebFetch to its own domains", rule=r))
+                             "WebFetch to its own domains", rule=r) if sandboxed else
+                           _("{rule}: a run whose prompt anyone can write (an event job, a mail handler) may name only "
+                             "reading and editing files, and WebFetch to its project's own domains", rule=r))
     return out
 
 
@@ -1573,7 +1638,8 @@ def user_cleanup(apply: bool) -> list[str]:
 RULES_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md")   # at any depth: a nested one is loaded when a file beside it is read
 CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settings.local.json", True),
            (".claude/hooks", True), (".claude/skills", True), (".claude/agents", True), (".claude/commands", True),
-           (".mcp.json", True))
+           # every .md under it is loaded like CLAUDE.md (code.claude.com/docs/en/memory.md)
+           (".claude/rules", True), (".mcp.json", True))
 WORKTREES = ".claude/worktrees"
 
 
