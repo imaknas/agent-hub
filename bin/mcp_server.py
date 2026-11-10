@@ -184,17 +184,17 @@ def run_env(run: Run) -> dict:
     for k in list(env):
         if k in UNPREFIXED or k.startswith("AGENT_JOB_"):
             del env[k]
+    # the login's variables: removed, or the call fails saying why (run_call), never passed on unseen
+    import completion
+    import runtime_ports
+    for k in completion.key_envs():
+        env.pop(k, None)
     try:
-        import completion
-        for k in completion.key_envs():
-            env.pop(k, None)
-    except Exception:
-        pass
-    try:
-        import runtime_ports
-        env = dict(runtime_ports.load(None, ports=("auth",)).clean_env(env))
-    except Exception:
-        pass
+        auth = runtime_ports.load(None, ports=("auth",))
+    except runtime_ports.Unsupported:   # a runtime with no login port: it keeps its login itself, nothing named here
+        auth = None
+    if auth is not None:
+        env = dict(auth.clean_env(env))
     for k in LOCATIONS:
         if (v := names.env(k)):
             names.env_set(env, k, v)

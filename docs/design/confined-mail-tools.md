@@ -411,6 +411,14 @@ folders, nothing more), and nothing denies a project's git directories. A rule s
   allowed and Edit/Write on `/<ws>/.git` and `/<ws>/.git/**` denied, writes to `.GIT/config`, `.Git/probe-b.txt` and
   `.git/probe-c.txt` were all refused and `.git/config` was unchanged; `ok.txt` was written. The runtime's matching
   holds for case; the platform's own check doesn't rely on it.
+- **Links and folding** (code review of the build, probed 11-10 on the same version): with the same denies, a write
+  through `out -> .git/brunna` and an edit of `.agent-memory/memory/today.md -> ../../.git/config` were refused (the
+  runtime matches where a path resolves), so a link anywhere under an allowed tree, not only in a rule's fixed part,
+  meets the `.git` deny. The volume also folds the long s (U+017F) to s: with no `STATE.md`, a write to `ſTATE.md` made a
+  file the volume serves as `STATE.md`. M6's name denies are therefore written in every such spelling (`_folds`); with
+  them `ſTATE.md`, `AGENTſ.md` and `.claude/ruleſ/x.md` were refused. `.git`, `.hub-run` and `CLAUDE.md` have no
+  letter any character folds to. The project-level control denies (`.claude/settings.json` and the like) predate this
+  and are left as they are here.
 - **Tests**: from an untrusted run, a write to a sandboxed project's outbox and to `.git/config` are both refused;
   the notes rule still writes; creating a new `sub/.git` is refused; `Edit(./out/**)` with `out` linked into `.git`
   refuses the run.

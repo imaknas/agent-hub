@@ -262,6 +262,18 @@ class Untrusted(unittest.TestCase):
         clock = self.deny(ws, {})
         self.assertNotIn(f"Edit({rule(ws)}/**/CLAUDE.md)", clock, "a clock job's prompt is the project's own")
 
+    def test_the_long_s_spellings_are_denied_too(self):
+        """APFS opens ſTATE.md as STATE.md: a run writing it while no STATE.md exists made one (probe 11-10)."""
+        import runtime_claude
+        ws = tmpdir(self)
+        (ws / ".agent-memory" / "memory").mkdir(parents=True)
+        rule = runtime_claude._rule_path
+        deny = self.deny(ws, {"prompt_source": "untrusted"})
+        for want in (f"Write({rule(ws / '.agent-memory')}/\u017fTATE.md)", f"Write({rule(ws)}/**/AGENT\u017f.md)",
+                     f"Write({rule(ws)}/**/.claude/rule\u017f/**)", f"Edit({rule(ws / '.agent-memory')}/RULE\u017f)"):
+            self.assertIn(want, deny)
+        self.assertEqual(len(runtime_claude._folds("settings")), 4)
+
     def test_in_a_worktree_its_notes_stay_writable(self):
         """A worktree's .agent-memory is a link to the main checkout's (worktree-memory.sh)."""
         import runtime_claude

@@ -310,12 +310,23 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
     return p
 
 
+def _folds(name: str) -> list[str]:
+    """name and every spelling a case-insensitive volume opens as it: on APFS the long s (U+017F) folds to s, and a run
+    that writes `ſTATE.md` while no STATE.md exists makes a file the volume serves as STATE.md (probe 11-10). No other
+    character folds to a letter these names use."""
+    out = [""]
+    for ch in name:
+        out = [x + c for x in out for c in ((ch, "\u017f") if ch in "sS" else (ch,))]
+    return out
+
+
 def instructions_denied(project: str, folders) -> list[str]:
     """What a run whose prompt anyone can write may not write (docs/design/confined-mail-tools.md M6): what the owner's
     sessions or the platform read as instructions. Every runtime's rules-file names at any depth and .claude/rules under
     each folder it works in; and .agent-memory but its notes: the registrar sends STATE.md's owner to-do lines every
     night. A deny can't be narrowed by an allow, so .agent-memory is written as a list: its top files and .git by name,
-    whether they exist or not (a missing STATE.md must not be made), and anything else in it now."""
+    whether they exist or not (a missing STATE.md must not be made), and anything else in it now. Each name in every
+    spelling the volume folds to it (_folds)."""
     import memory_paths
     import policy
     import runtime_ports
@@ -324,9 +335,9 @@ def instructions_denied(project: str, folders) -> list[str]:
     for f in places:
         base = _rule_path(f)
         for name in runtime_ports.rules_file_names():
-            rules += [f"{t}({base}{mid}{name})" for mid in ("/", "/**/") for t in ("Edit", "Write")]
-        rules += [f"{t}({base}{mid}.claude/rules{tail})" for mid in ("/", "/**/") for tail in ("", "/**")
-                  for t in ("Edit", "Write")]
+            rules += [f"{t}({base}{mid}{n})" for n in _folds(name) for mid in ("/", "/**/") for t in ("Edit", "Write")]
+        rules += [f"{t}({base}{mid}.claude/{n}{tail})" for n in _folds("rules") for mid in ("/", "/**/")
+                  for tail in ("", "/**") for t in ("Edit", "Write")]
     notes = policy.notes_dir(project)
     # resolved: in a worktree .agent-memory is a link to the main checkout's, and beside() keeps only paths under the
     # resolved folder, so a link spelling would deny the notes folder itself
@@ -334,7 +345,7 @@ def instructions_denied(project: str, folders) -> list[str]:
     if notes:
         mems.add(notes.parent)
     for mem in sorted(mems):
-        named = [mem / n for n in memory_paths.TOP] + [mem / ".git"]
+        named = [mem / f for n in memory_paths.TOP for f in _folds(n)] + [mem / ".git"]
         present = policy.beside(mem, [mem / memory_paths.TREE, *named]) if mem.is_dir() else []
         for p in [*named, *present]:
             rules += [f"{t}({_rule_path(p)}{tail})" for tail in ("", "/**") for t in ("Edit", "Write")]

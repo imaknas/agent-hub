@@ -3288,7 +3288,7 @@ def take(c, proj: str, entry, live=None) -> None:
     op = entry.get("op")
     if op == "send":
         _strings(entry, ("id", *(k for k in SEND_FIELDS if k not in NOT_TEXT)))
-        if not OUTBOX_ID.match(entry.get("id") or ""):
+        if not OUTBOX_ID.fullmatch(entry.get("id") or ""):
             refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
         if entry.get("type") not in TYPES or not entry.get("to") or not entry.get("text"):
             refuse(_("hubbus: a letter needs to, text and a type of {types}", types="/".join(TYPES)))
@@ -3993,7 +3993,7 @@ def mail_command(a) -> None:
         mid = None
         if box:
             # the letter id is picked here; --id only as such an id (a task's key from an outbox is its text's)
-            if a.id and not OUTBOX_ID.match(a.id):
+            if a.id and not OUTBOX_ID.fullmatch(a.id):   # $ lets a final newline through .match
                 refuse(_("hubbus: a letter id from an outbox has the form m<MMDDhhmm>-<12 hex digits>"))
             mid, a.id = a.id or outbox_id(), None
         out = send_letter(c, a, a.sender or here, session, here, boxed=bool(box), mid=mid)
