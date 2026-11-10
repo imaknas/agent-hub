@@ -1,15 +1,15 @@
 === port labels
-[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'map of where sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('rule_check', "check of what a confined run's own rules may be"), ('session_status', 'way to tell whether a session is busy, idle or waiting on a dialog'), ('session_summary', "way to read how a session's last reply ended"), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('tool_servers', 'way to tell which tool servers a run loads'), ('wake', 'way to wake an idle session')]
+[('agent', 'agent runs'), ('auth', 'login state'), ('completion', 'completion interface'), ('confine', 'confined runs (declared permissions only)'), ('control', 'map of where sessions load settings and hooks from'), ('instructions', 'rules file'), ('lifecycle', 'session events (hooks)'), ('rule_check', "check of what a confined run's own rules may be"), ('run_server', "way to give a run the platform's mail tools"), ('session_status', 'way to tell whether a session is busy, idle or waiting on a dialog'), ('session_summary', "way to read how a session's last reply ended"), ('sessions', 'session state'), ('stream', 'long-running streaming sessions'), ('tool_servers', 'way to tell which tool servers a run loads'), ('wake', 'way to wake an idle session')]
 === feature (none)
 judgment points (librarian, index, weekly report analysis) | False | completion interface
 === feature (none)
 memory consolidation (the consolidate module) | False | agent runs
 === feature (none)
-mailbox tasks (the platform sends an agent for letters nobody picked up) | False | agent runs, session state, confined runs (declared permissions only), check of what a confined run's own rules may be, or way to tell which tool servers a run loads
+mailbox tasks (the platform sends an agent for letters nobody picked up) | False | agent runs, session state, confined runs (declared permissions only), check of what a confined run's own rules may be, way to tell which tool servers a run loads, or way to give a run the platform's mail tools
 === feature (none)
 unattended agent jobs with allow:, and event-triggered agent jobs | False | agent runs, confined runs (declared permissions only), check of what a confined run's own rules may be, or way to tell which tool servers a run loads
 === feature (none)
-mailbox follow-up (replying with an idle session's context) | False | agent runs, session state, confined runs (declared permissions only), check of what a confined run's own rules may be, or way to tell which tool servers a run loads
+mailbox follow-up (replying with an idle session's context) | False | agent runs, session state, confined runs (declared permissions only), check of what a confined run's own rules may be, way to tell which tool servers a run loads, or way to give a run the platform's mail tools
 === feature (none)
 channel leasing (also needs the assistant module) | False | long-running streaming sessions, session state, agent runs, or login state
 === feature (none)
@@ -20,10 +20,12 @@ an idle open session is woken when a letter arrives for it | False | session sta
 platform rules written into the project's rules file | False | rules file
 === feature (none)
 a sandboxed project can't write what its sessions load hooks and settings from | False | map of where sessions load settings and hooks from
+=== feature (none)
+scheduled agent jobs that send mail (mail: true) | False | agent runs, confined runs (declared permissions only), check of what a confined run's own rules may be, way to tell which tool servers a run loads, or way to give a run the platform's mail tools
 === unknown runtime
 no registered runtime: nosuch (have: claude, fake, none, command, acp)
-=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'rule_check', 'wake', 'session_status', 'session_summary')
-runtime none has no agent runs, session events (hooks), rules file, map of where sessions load settings and hooks from, session state, long-running streaming sessions, login state, completion interface, confined runs (declared permissions only), way to tell which tool servers a run loads, check of what a confined run's own rules may be, way to wake an idle session, way to tell whether a session is busy, idle or waiting on a dialog, or way to read how a session's last reply ended (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
+=== unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'rule_check', 'run_server', 'wake', 'session_status', 'session_summary')
+runtime none has no agent runs, session events (hooks), rules file, map of where sessions load settings and hooks from, session state, long-running streaming sessions, login state, completion interface, confined runs (declared permissions only), way to tell which tool servers a run loads, check of what a confined run's own rules may be, way to give a run the platform's mail tools, way to wake an idle session, way to tell whether a session is busy, idle or waiting on a dialog, or way to read how a session's last reply ended (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
 === unsupported ('completion',)
 runtime none has no completion interface (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
 === missing functions (runtime)

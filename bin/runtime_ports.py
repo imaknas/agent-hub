@@ -57,6 +57,12 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          happen
     servers_named(task) -> list[str]                     the servers the run's allow list names a tool of (same ids)
     The servers to deny go back in Task.deny_servers; the runtime denies each one whole.
+  run_server: the platform's own tool server attached to a run (docs/design/confined-mail-tools.md M2): a confined run
+  sends its mail through it, never a shell
+    run_server(task) -> task                             task.servers made final for this runtime (a tool the run's own
+                                                         rules give no use for taken out); the runtime then starts each
+                                                         server for the run, allows only its tools, and adds no other rule.
+                                                         A runtime without it runs no point that would get the mail tools
   rule_check: what a confined run's own rules may be (docs/design/project-agent-calls.md A2): checked when every
   settings: platform run starts, never a registry validation error; a runtime without it runs none of them
     rule_problems(task, *, sandboxed, network, untrusted) -> list[str]   why this run's own rules (the point's, the
@@ -203,7 +209,8 @@ def port_labels() -> dict[str, str]:
             "session_status": _("way to tell whether a session is busy, idle or waiting on a dialog"),
             "session_summary": _("way to read how a session's last reply ended"),
             "tool_servers": _("way to tell which tool servers a run loads"),
-            "rule_check": _("check of what a confined run's own rules may be")}
+            "rule_check": _("check of what a confined run's own rules may be"),
+            "run_server": _("way to give a run the platform's mail tools")}
 
 
 def _feature_settings() -> tuple[bool, bool]:
@@ -242,20 +249,23 @@ def features(providers: bool | None = None, propose: bool | None = None) -> tupl
         # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus);
         # mailbox-escalation is confined (settings: platform) and denies tool servers it doesn't name
         (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"),
-         ("agent", "sessions") if propose else ("agent", "sessions", "confine", "rule_check", "tool_servers")),
+         ("agent", "sessions") if propose
+         else ("agent", "sessions", "confine", "rule_check", "tool_servers", "run_server")),
         # agent-job-confined / agent-job-event: settings: platform, allow_from_env, tool_servers: allowed_only
         (_("unattended agent jobs with allow:, and event-triggered agent jobs"),
          ("agent", "confine", "rule_check", "tool_servers")),
         # mailbox-conversation: settings: platform, tool_servers: allowed_only, resumed with the default runtime's own
         # arguments
         (_("mailbox follow-up (replying with an idle session's context)"),
-         ("agent", "sessions", "confine", "rule_check", "tool_servers")),
+         ("agent", "sessions", "confine", "rule_check", "tool_servers", "run_server")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         # reinforcement only: without it a letter waits for the session's next hook (docs/design/mailbox-runtimes.md)
         (_("an idle open session is woken when a letter arrives for it"), ("sessions", "wake")),
         (_("platform rules written into the project's rules file"), ("instructions",)),
         (_("a sandboxed project can't write what its sessions load hooks and settings from"), ("control",)),
+        # appended: the rows above keep their places. agent-job-confined with mail: true (registry), mail_from_env
+        (_("scheduled agent jobs that send mail (mail: true)"), ("agent", "confine", "rule_check", "tool_servers", "run_server")),
     )
 
 
@@ -344,6 +354,7 @@ PORTS = {
     "tool_servers": ("ambient_servers", "servers_named"),
     # rule_check: what the run's boundary rests on, so not OPTIONAL: a runtime without it runs no settings: platform point
     "rule_check": ("rule_problems", "rules_problems"),
+    "run_server": ("run_server",),
     "wake": ("wake", "can_wake"),
     "session_status": ("session_status",),
     "session_summary": ("session_summary",),
@@ -427,6 +438,17 @@ class Credential(NamedTuple):
     note: str | None = None                         # a note to print when checking (e.g. the expiry date can't be seen)
 
 
+class ToolServer(NamedTuple):
+    """A tool server the platform attaches to one run (its mail, docs/design/confined-mail-tools.md M2). env holds only what
+    the platform itself names and the server needs before it reads anything; the run's own values are in a file the server
+    is pointed at (args), never in env or args: a runtime may expand variables there."""
+    id: str                  # reserved (llm.RESERVED_SERVERS); [a-z0-9-], so the runtime keeps it as it is
+    command: str
+    args: tuple
+    env: dict
+    tools: tuple             # the only tools of it the run may call
+
+
 class Task(NamedTuple):
     point: str               # judgment point name
     prompt: str
@@ -441,6 +463,7 @@ class Task(NamedTuple):
                              # replaced by a resume interface
     deny_servers: tuple = ()  # tool servers this run may not use at all, each one whole (llm.py:
                               # policy.tool_server_denials over the tool_servers interface)
+    servers: tuple = ()      # ToolServer: what the platform attaches to this run (its mail tools)
     run_dir: str | None = None  # a confined run's own folder (llm.py makes it and removes it when the run ends): what
                                 # the runtime writes for this run alone goes there
 

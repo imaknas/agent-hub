@@ -38,6 +38,8 @@ ROWS = {
     4: (("mailbox-conversation",), True),
 }
 LEASING = 5
+# the last row: agent-job-confined when a job opts in to the mail (mail_from_env)
+JOB_MAIL = -1
 
 
 def needs(points, providers: bool) -> set:
@@ -54,6 +56,8 @@ def needs(points, providers: bool) -> set:
             out.add("confine")
         if spec.get("settings") == "platform":                   # llm.py: and "rule_check"
             out.add("rule_check")
+        if spec.get("mail") == "tools" and not spec.get("mail_from_env"):   # llm.mail_tools: always, "run_server"
+            out.add("run_server")
         if spec.get("tool_servers") == "allowed_only":           # llm.deny_unnamed_servers
             out.add("tool_servers")
     return out
@@ -67,6 +71,11 @@ class FeatureNeeds(unittest.TestCase):
                 with self.subTest(table[i][0], providers=providers):
                     want = needs(points, providers) | ({"sessions"} if dispatched else set())
                     self.assertEqual(set(table[i][1]), want)
+
+    def test_a_job_that_sends_mail_needs_the_server(self):
+        for providers in (False, True):
+            table = runtime_ports.features(providers=providers, propose=False)
+            self.assertEqual(set(table[JOB_MAIL][1]), needs(("agent-job-confined",), providers) | {"run_server"})
 
     def test_no_row_asks_for_a_login_but_leasing(self):
         """llm.py takes auth_env only from a runtime that has the port: without it the tool logs in itself."""

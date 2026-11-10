@@ -33,6 +33,7 @@ $ agenthub doctor    # launchd, problems
 ✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒,閒置超過 14 天就叫不醒;agent view 的背景 session 沒釘選的話大約一小時後可能就停了,停了就叫不醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
+✓ 會寄信的排程 agent job(mail: true):可以用
 ✗ agent 登入(headless token):沒有
     → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
 ! agent 登入(~/.claude/.credentials.json):沒有
@@ -80,6 +81,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ 有信來時叫醒開著但閒置的 session:可以用(session 跑完第一輪之後才叫得醒,閒置超過 14 天就叫不醒;agent view 的背景 session 沒釘選的話大約一小時後可能就停了,停了就叫不醒)
 ✓ 平台規則寫進專案的規則檔:可以用
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
+✓ 會寄信的排程 agent job(mail: true):可以用
 ! 最近 7 天有 2 封信叫醒了 session,那個 session 卻沒接(最近一封:<ID>,給 beta);coding agent 處理叫醒的方式可能變了
     → 狀態頁的信箱區列出每封信怎麼走的;hub-event.log 記著每個等待程序怎麼結束
 ✓ agent 登入(headless token):有
@@ -175,11 +177,11 @@ $ agenthub doctor    # two coding agents
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 記憶整併(consolidate 模組):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
-! 信箱交辦(沒人收的信由平台派 agent):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器)
+! 信箱交辦(沒人收的信由平台派 agent):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器、給一次執行平台信件工具的方法)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
-! 信箱接續(用閒置 session 的 context 回信):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器)
+! 信箱接續(用閒置 session 的 context 回信):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器、給一次執行平台信件工具的方法)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 通道租借(另外要助理模組):claude 可以用;acp 關掉(沒有長駐串流 session、session 狀態、在平台拋棄式 worktree 以外跑 agent)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
@@ -189,6 +191,8 @@ $ agenthub doctor    # two coding agents
 ! 平台規則寫進專案的規則檔:claude 可以用;acp 關掉(沒有規則檔)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:claude 可以用;acp 關掉(沒有session 載入設定跟 hook 的檔案)
+    → 某個 runtime 關掉的功能,只是它自己的 session 沒有
+! 會寄信的排程 agent job(mail: true):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器、給一次執行平台信件工具的方法)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ✓ claude:平台規則寫進 CLAUDE.local.md
 · acp:沒有規則檔;它的 session 從 MCP server 的 instructions(brunna mcp)或 session 開始的 hook 拿到平台規則
@@ -204,5 +208,5 @@ $ agenthub doctor    # two coding agents
 ! 排程器還沒 tick 過,這台也沒有服務管理員在跑它(看上面排程器那一行)
 ✓ 背景服務、專案設定:跟 config 一致
 
-1 個問題、12 個提醒
+1 個問題、13 個提醒
 --- stderr

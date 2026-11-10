@@ -26,6 +26,9 @@ PATTERNS = [
     (re.compile(r"\bclaude\s+-p\b|[\"']claude[\"']\s*,"), "calling claude directly"),
     (re.compile(r"--(resume|session-id|permission-prompt-tool|allowedTools|append-system-prompt)\b"), "claude's flags"),
     (re.compile(r"\bCLAUDE_[A-Z_]+"), "Claude's environment variables"),
+    # its tool servers' names in rules and its flag for them (docs/design/confined-mail-tools.md, "What goes away")
+    (re.compile(r"\bmcp__"), "Claude's tool server rule names"),
+    (re.compile(r"--mcp-config\b"), "Claude's tool server flag"),
 ]
 
 

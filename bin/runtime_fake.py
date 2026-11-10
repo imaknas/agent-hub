@@ -346,3 +346,9 @@ def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None
 
 def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list:
     return list(_rule_problems)
+
+
+# ---------- the platform's tool server ----------
+def run_server(task):
+    """run_server: the fake keeps the servers as given (it starts nothing)."""
+    return task

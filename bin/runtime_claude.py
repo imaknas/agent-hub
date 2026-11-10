@@ -898,6 +898,30 @@ def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None
     return out
 
 
+def run_server(task):
+    """The platform's tool servers for this run, made final: note only for a run whose own rules write the notes (the
+    neutral question "do these rules write the notes?" is answered here, MEMORY_RULE). It adds no rule; _flags allows
+    exactly each server's tools."""
+    if not task.servers:
+        return task
+    notes = MEMORY_RULE in _rules(task)[1]
+    return task._replace(servers=tuple(s._replace(tools=tuple(t for t in s.tools if t != "note" or notes))
+                                       for s in task.servers))
+
+
+def _server_config(task) -> pathlib.Path:
+    """The run's --mcp-config file, in its own folder: each server's command, arguments and env as given (none of them
+    holds a $: llm.py checks, since Claude Code expands ${…} there)."""
+    if not task.run_dir:
+        raise ValueError(f"judgment point {task.point}: a run with the platform's tools needs its run folder")
+    p = pathlib.Path(task.run_dir) / "mcp.json"
+    body = {"mcpServers": {s.id: {"command": s.command, "args": list(s.args), "env": dict(s.env)} for s in task.servers}}
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(body, ensure_ascii=False))
+    return p
+
+
 def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list[str]:
     """rules_problems over the run's own rules: the point's and the caller's and the job's (_rules), in its folder."""
     return rules_problems(_rules(task)[1], sandboxed=sandboxed, network=network, untrusted=untrusted, cwd=task.cwd)
@@ -972,6 +996,11 @@ def _flags(task) -> list:
             cmd += ["--add-dir", d]
     elif "tools" in spec:
         cmd += ["--tools", spec["tools"]]
+    if task.servers:
+        # the platform's own servers, by --mcp-config; only their tools allowed, added after every check of the run's
+        # own rules (rule_problems and servers_named see the point's and the job's rules only)
+        cmd += ["--mcp-config", str(_server_config(task))]
+        allowed += [f"mcp__{mcp_id(s.id)}__{t}" for s in task.servers for t in s.tools]
     if spec.get("restricted") and spec.get("settings") != "platform":
         cmd += ["--restricted"]   # no settings file of the folder it runs in: its hooks would run as the user
     if allowed:

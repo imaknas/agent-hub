@@ -232,6 +232,10 @@ def deny_unnamed_servers(point: str, task):
         loaded = rt.ambient_servers(task)
         if loaded is None:
             return task, None, False
+        if (taken := sorted(set(loaded) & set(RESERVED_SERVERS))):
+            # the platform's own id: a server the user, a plugin or the folder named so would take its tools' place
+            return task, _("{point} did not run: a tool server it would load is named {name}, the id of the platform's "
+                           "own server", point=point, name=", ".join(taken)), False
         return task._replace(deny_servers=tuple(policy.tool_server_denials(loaded, rt.servers_named(task)))), None, True
     except Exception as e:   # whatever goes wrong here, the answer is "can't tell" (a bug included): no run
         return task, _("{point} did not run: which tool servers it would load could not be told, and it never runs "
@@ -294,8 +298,10 @@ def run(a) -> int:
                 return 2
             return fail(a.point, spec, why)
     try:
-        # a settings: platform run's rules are checked when it starts: a runtime that can't check them runs none
-        ports = ("agent",) + (("confine",) if confined else ()) + (("rule_check",) if spec.get("settings") == "platform" else ())
+        # a settings: platform run's rules are checked when it starts: a runtime that can't check them runs none; a run
+        # that gets the mail tools needs the runtime to attach the platform's server
+        ports = ("agent",) + (("confine",) if confined else ()) + (("rule_check",) if spec.get("settings") == "platform" else ()) \
+            + (("run_server",) if mail_tools(spec, os.environ) else ())
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports)
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
@@ -375,6 +381,50 @@ def make_run_dir(point: str, spec: dict) -> pathlib.Path | None:
 EVENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}")
 
 
+def mail_tools(spec: dict, env) -> bool:
+    """Whether this run gets the platform's mail tools (docs/design/confined-mail-tools.md M1): mail: tools, and the
+    caller's opt-in when the point asks for one (a registry job's mail: true)."""
+    if spec.get("mail") != "tools":
+        return False
+    return not spec.get("mail_from_env") or (env or {}).get(spec["mail_from_env"]) == "1"
+
+
+# the id the platform's own tool server has in a run, under both CLI names: no other server may load under it
+RESERVED_SERVERS = tuple(f"{cli}-run" for cli in names.all("cli"))
+
+
+def attach_server(point: str, spec: dict, rt, task, run_dir) -> tuple:
+    """The platform's MCP server for this run (M2): → (task, None), or (task, why it can't run). The server reads the run's
+    values from server.json, written here once the runtime has made the tools final, never from its env or arguments,
+    where the runtime expands variables: a letter id a sender chose could otherwise read the agent's login."""
+    import mcp_server
+    import runtime_ports
+    if not run_dir:
+        return task, None   # no project: the runtime's own refusal says so
+    env = {k: os.environ[k] for k in ("HOME", "PATH") if k in os.environ}
+    for loc in mcp_server.LOCATIONS:   # copied as they are here: e3 runs on its own instance
+        for k in names.env_names(loc):
+            if k in os.environ:
+                env[k] = os.environ[k]
+    run_file = pathlib.Path(run_dir) / "server.json"
+    server = runtime_ports.ToolServer(id=f"{names.current('cli')}-run", command=sys.executable,
+                                      args=(str(hubconf.ROOT / "bin" / "mcp_server.py"), "--run", str(run_file)),
+                                      env=env, tools=tuple(mcp_server.run_tools(spec)))
+    if any("$" in x for x in (server.command, *server.args, *env.values())):
+        return task, _("{point} did not start: the platform's tool server for it would be given a $ in its command, "
+                       "arguments or environment, which the runtime may expand", point=point)
+    task = rt.run_server(task._replace(servers=(server,)))
+    tools = [t for s in task.servers for t in s.tools]
+    body = {"project": (task.env or {}).get(spec.get("project_env") or ""), "point": point, "tools": tools,
+            "chain": names.env("JOB_CHAIN"), "depth": names.env("JOB_DEPTH")}
+    if spec.get("letters_env"):
+        body["letters"] = run_letters(task.env, spec["letters_env"])
+    fd = os.open(run_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(body, ensure_ascii=False))
+    return task, None
+
+
 def run_letters(env, var: str) -> list[str] | None:
     """The letters a mail handler's run is started for (a JSON list in env[var]): None when there is none, or when any
     entry isn't a letter id."""
@@ -421,6 +471,13 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir) -> int:
             print(why, file=sys.stderr)
             return 2
         return fail(a.point, spec, why)
+    if mail_tools(spec, env):
+        task, why = attach_server(a.point, spec, rt, task, run_dir)
+        if why:
+            if getattr(a, "dry_run", False):
+                print(why, file=sys.stderr)
+                return 2
+            return fail(a.point, spec, why)
     if spec.get("tool_servers") == "allowed_only":
         task, why, checked = deny_unnamed_servers(a.point, task)
         real = a.cmd == "run" and not getattr(a, "dry_run", False)   # a dry run only shows, never alerts
