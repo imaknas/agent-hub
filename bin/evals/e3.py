@@ -467,7 +467,11 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["code_untouched"] = code_same() and not new_commits
         r["change_noted"] = all(x in note for x in expect["change"])
         r["change_left_open"] = not done(ls["change"])
-        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner)
+        # a question to the owner goes as a letter, or as a raised decision record where the instance sends records
+        # (principal_handoff): either is asking
+        raised = [e for e in evs if e["type"] == "record" and e["source"] == PROJECT
+                  and (e["payload"].get("record") or {}).get("type") == "raised"]
+        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner) or bool(raised)
         r["decision_left_open"] = not done(ls["decision"])
         r["report_bell"] = report.lstrip().startswith("🔔")
         r["report_names_letters"] = all(mid in report for mid in ls.values())
@@ -477,7 +481,9 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
         r["code_untouched"] = code_same() and not new_commits
         r["final_reply"] = bool(reply.strip())
         to_owner = [e for e in sends if e["to"] == hubconf.owner_address()]
-        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner)
+        raised = [e for e in evs if e["type"] == "record" and e["source"] == PROJECT
+                  and (e["payload"].get("record") or {}).get("type") == "raised"]
+        r["owner_asked"] = any(e["payload"].get("type") == "question" for e in to_owner) or bool(raised)
         r["closed"] = done(letter)
         if scenario == "resume":
             r["note_has_fact"] = all(x in note for x in expect)
