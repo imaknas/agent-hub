@@ -116,18 +116,16 @@ class Flags(unittest.TestCase):
                 self.assertEqual(cmd[cmd.index("--permission-prompts") + 1], "none")
                 self.assertFalse(set(SAVED) & set(cmd), "a saved project rule reached the command line")
 
-    def test_a_mailbox_handlers_bash_reaches_only_the_mail_commands(self):
+    def test_a_mailbox_handler_has_no_shell(self):
+        """Its mail is the platform's tools (docs/design/confined-mail-tools.md): no Bash tool and no Bash rule."""
         for point in MAILBOX:
             with self.subTest(point):
                 cmd = flags(point, self.ws, self.env(point))
                 tools = set(cmd[cmd.index("--tools") + 1].split(","))
                 self.assertLessEqual(tools, set(points()[point]["tools"].split(",")))
-                bash = [r for r in allowed(cmd) if r.startswith("Bash(")]
-                self.assertTrue(bash)
-                self.assertTrue(all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in bash), bash)   # no raw hubbus
-                self.assertNotIn("Bash", [r for r in allowed(cmd)])
-                others = [r for r in allowed(cmd) if not r.startswith("Bash(")]
-                self.assertEqual(others, ["Edit(./.agent-memory/memory/**)"])
+                self.assertNotIn("Bash", tools)
+                self.assertFalse([r for r in allowed(cmd) if r.startswith("Bash")])
+                self.assertEqual(allowed(cmd), ["Edit(./.agent-memory/memory/**)"])
 
     def test_declared_tools_without_bash_give_no_bash(self):
         import runtime_claude
@@ -166,11 +164,13 @@ class Flags(unittest.TestCase):
         cmd = flags("mailbox-conversation", self.ws, self.env("mailbox-conversation"))
         self.assertNotIn("--add-dir", cmd)
 
-    def test_an_unconfined_point_keeps_the_raw_mail_rule_out_of_confined_ones_only(self):
-        # mailbox-propose has no Bash at all; nothing else declares {platform_mail}
+    def test_no_point_has_the_mail_as_commands(self):
+        """docs/design/confined-mail-tools.md: the mail is the platform's tools; no point names a mail command, and no
+        point that gets the tools has a shell."""
         for name, spec in points().items():
-            if "{platform_mail}" in (spec.get("allowed_tools") or []):
-                self.assertEqual(spec.get("settings"), "platform", name)
+            self.assertNotIn("{platform_mail}", spec.get("allowed_tools") or [], name)
+            if spec.get("mail") == "tools" and "tools" in spec:
+                self.assertNotIn("Bash", spec["tools"].split(","), name)
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")
@@ -190,9 +190,8 @@ class PlatformSettingsFile(unittest.TestCase):
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", state), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
             d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
-        allow = d["permissions"]["allow"]
-        self.assertFalse(set(SAVED) & set(allow))
-        self.assertTrue(allow and all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in allow), allow)
+        self.assertNotIn("allow", d["permissions"], "the run's own rules are its whole boundary")
+        self.assertFalse(set(SAVED) & set(d["permissions"]["deny"]))
         self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)
 
 

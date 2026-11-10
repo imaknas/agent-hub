@@ -393,7 +393,8 @@ class PlatformSettings(unittest.TestCase):
         env2 = {**env, "AGENT_JOB_ALLOW": json.dumps(["mcp__claude_ai_x__y", "Edit(./a/**)"])}
         with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task._replace(env=env2))
-        self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read,Write")   # no MCP names in --tools
+        # no MCP names in --tools, and no Bash without a rule naming it (the mail is the platform's tools)
+        self.assertEqual(cmd[cmd.index("--tools") + 1], "Edit,Glob,Grep,Read,Write")
         with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load
             runtime_claude._flags(task._replace(env={"AGENT_JOB_ALLOW": "[]"}))
 
@@ -411,8 +412,7 @@ class PlatformSettings(unittest.TestCase):
                     mock.patch.object(hubconf, "get", lambda k, d=None: ["p"] if k == "service_sandbox_exempt" else d):
                 d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
             self.assertIn("Read(//w/q/**)", d["permissions"]["deny"])
-            self.assertIn("Bash(agenthub send *)", d["permissions"]["allow"])
-            self.assertFalse(any("merge-branch" in r or "hubbus" in r or "cap-run" in r for r in d["permissions"]["allow"]))
+            self.assertNotIn("allow", d["permissions"], "no command is allowed by the settings: the run's rules decide")
             self.assertEqual("sandbox" in d, enforced)
             if enforced:   # the CLI's default (true) would approve sandboxed Bash before allow: is consulted
                 self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)

@@ -113,7 +113,6 @@ class PassLists(unittest.TestCase):
         import policy
         self.assertIn("pass", policy.SESSION_SUBCOMMANDS)
         self.assertNotIn("pass", policy.MAIL_SUBCOMMANDS)
-        self.assertFalse(any(c.endswith(" pass") for c in policy.platform_cli(mail_only=True)))
         self.assertTrue(any(c.endswith(" pass") for c in policy.platform_cli()))
 
     def test_no_event_job_can_loop_on_it(self):

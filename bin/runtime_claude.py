@@ -262,8 +262,8 @@ def lease_settings(pol: dict) -> dict:
 def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | None = None, cwd=None,
                       folders=()) -> pathlib.Path:
     """A judgment point with settings: platform: the only settings file the run loads (with --restricted, Claude Code
-    reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
-    the platform's commands, all from the policy, never from what is rendered in the workspace. keep: an unattended
+    reads none of the user's, project's or local files): the project's sandbox when it's enforced and the deny list,
+    both from the policy, never from what is rendered in the workspace. keep: an unattended
     job's own state folder that its allow rules write (own_state_dir), left out of the deny list; cwd: the run's working
     directory, which when it is the job's folder (job_folder) stays readable even with no rule writing it; folders: every
     folder the run works in (its own, the project's, those its rules add), none of whose git directories it writes
@@ -290,13 +290,12 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
         if place:
             carved = policy.write_except(carved, place)
     pol = {**pol, "deny_write": carved}
-    # only the mail commands (read, send, close letters): not raw hubbus, merging or running code through the platform
-    allow = _cli_rules(policy.platform_cli(mail_only=True))
     # each carved entry is denied as itself too (settings: a file beside the path, not only a folder's contents)
     deny = lease_settings(pol)["permissions"]["deny"]
     deny += [r for x in hidden if not x.is_dir() for r in (f"Read({_rule_path(x)})",) if r not in deny]
     deny += [r for r in run_write_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
-    out = {"permissions": {"deny": deny, "allow": allow}}
+    # no allow list: the run's own rules are its whole boundary, and its mail is the platform's tools, never a command
+    out = {"permissions": {"deny": deny}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
         # autoAllowBashIfSandboxed defaults to true: a sandboxed Bash command would be approved before allow: is
@@ -722,15 +721,6 @@ def _rules(task) -> tuple:
     a registry job's allow list (which makes it unattended)."""
     spec = task.spec
     mode, allowed, prompts = spec.get("permission_mode"), list(spec.get("allowed_tools") or []), spec.get("prompts")
-    # the judgment point declares "the platform's mailbox commands": the old hubbus path + the agenthub mail
-    # subcommands on PATH
-    if "{platform_mail}" in allowed:
-        import policy
-        i = allowed.index("{platform_mail}")
-        hub_bin = pathlib.Path(__file__).resolve().parent
-        # a confined run gets only the mail subcommands (its platform settings allow the same), never raw hubbus
-        raw = [] if spec.get("settings") == "platform" else [f"Bash({_tilde(hub_bin / 'hubbus')} *)"]
-        allowed[i:i + 1] = [*raw, *_cli_rules(policy.platform_cli(mail_only=True))]
     env = os.environ if task.env is None else task.env
     if spec.get("extra_allow_env") and env.get(spec["extra_allow_env"]):
         allowed += json.loads(env[spec["extra_allow_env"]])  # adds rules only, doesn't change the permission mode
@@ -969,11 +959,12 @@ def _flags(task) -> list:
             raise ValueError(f"judgment point {task.point}: settings: platform needs the project in "
                              f"${spec.get('project_env')}")
         # built-in tools only (MCP tools aren't named in --tools): the point's own list when it declares one (a mailbox
-        # handler), else reading, Bash for the mail commands, and the tools the rules use (an allow: job)
+        # handler), else reading and the tools the rules use (an allow: job): Bash only when a rule names it, the mail
+        # being the platform's tools (docs/design/confined-mail-tools.md)
         if "tools" in spec:
             tools = {t for t in spec["tools"].split(",") if t}
         else:
-            tools = {"Read", "Glob", "Grep", "Bash"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
+            tools = {"Read", "Glob", "Grep"} | {r.split("(", 1)[0] for r in allowed if not r.startswith("mcp__")}
             # an Edit rule governs every file-writing tool: a new file (or a whole one rewritten) needs Write
             if "Edit" in tools:
                 tools.add("Write")

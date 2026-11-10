@@ -235,16 +235,15 @@ points:
     purpose: "a request in a project mailbox nobody picked up (nobody is using the project, or it waited a few minutes): open a headless session in that project that only writes memory notes, replies, asks the owner"
     # Anyone who can write the bus can start it with their text: confined like agent-job-event (docs/design/
     # mailbox-routing.md, "11-02"). settings: platform = none of the project's saved permissions, the user's or the
-    # project's hooks; dontAsk, so the rules below are the whole boundary. Bash only because the mail is a command:
-    # the platform settings and the rules allow nothing but `agenthub` mail subcommands (no raw hubbus), and those act only
-    # on the letters it was started for (MAILBOX_LETTERS, hubbus run_refusal; mailbox-session-first.md, "Triage"). It takes
-    # nothing: what it leaves stays open for sessions.
+    # project's hooks; dontAsk, so the rules below are the whole boundary. No shell: the mail is the platform's tools
+    # (mail: tools, docs/design/confined-mail-tools.md), which act only as its project and on the letters it was started
+    # for (MAILBOX_LETTERS, hubbus run_refusal; mailbox-session-first.md, "Triage"). It takes nothing: what it leaves
+    # stays open for sessions.
     permission_mode: dontAsk
     prompts: none
-    tools: Read,Edit,Write,Glob,Grep,Bash
-    # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own
-    # rules); Write is covered by the Edit rule (a new day's note file)
-    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
+    tools: Read,Edit,Write,Glob,Grep
+    # Write is covered by the Edit rule (a new day's note file)
+    allowed_tools: ["Edit(./.agent-memory/memory/**)"]
     tool_servers: allowed_only
     settings: platform
     project_env: MAILBOX_PROJECT
@@ -295,15 +294,13 @@ points:
     shape: agent
     model_group: standard
     purpose: "a reply in a conversation reaches an idle session: continue in the background with its context (a branched copy, the original session untouched), only writing notes, replies, asking the owner"
-    # Same confinement as mailbox-escalation (settings: platform, dontAsk, Bash only for the mail subcommands); the
-    # original session's permission mode and saved permissions are not carried over (it may be acceptEdits/auto, with
+    # Same confinement as mailbox-escalation (settings: platform, dontAsk, no shell: the mail is the platform's tools);
+    # the original session's permission mode and saved permissions are not carried over (it may be acceptEdits/auto, with
     # rules a person approved while watching)
     permission_mode: dontAsk
     prompts: none
-    tools: Read,Edit,Write,Glob,Grep,Bash
-    # {platform_mail}: the platform's commands to read, send and close letters (the runtime turns them into its own
-    # rules)
-    allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
+    tools: Read,Edit,Write,Glob,Grep
+    allowed_tools: ["Edit(./.agent-memory/memory/**)"]
     settings: platform
     project_env: MAILBOX_PROJECT
     mail: tools

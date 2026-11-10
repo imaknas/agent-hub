@@ -1079,8 +1079,9 @@ class Prompts(unittest.TestCase):
     def test_the_replies_they_ask_for_are_the_ones_allowed(self):
         for name in self.NAMES:
             with self.subTest(name):
-                self.assertIn("--type done", self.text(name))
-        self.assertNotIn("--type done|info", self.text("mailbox"))
+                self.assertIn("type: done", " ".join(self.text(name).split()))
+                self.assertIn("no shell", self.text(name))
+        self.assertNotIn("type: done, info", " ".join(self.text("mailbox").split()))
         self.assertIn("(type done; info only", " ".join(self.text("mailbox-propose").split()))
 
 

@@ -345,15 +345,15 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 # SESSION_COMMANDS): permissions let only these subcommands through, not agenthub's admin commands (config apply,
 # onboard…)
 MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
-# pass: a session's word, never a mailbox agent's (not in MAIL_SUBCOMMANDS: mail_only leaves it out)
+# pass: a session's word, never a mailbox agent's (not in MAIL_SUBCOMMANDS; a confined run has no mail command at all)
 SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "pass", "merge-branch", "test", "cap-run", "complete")
 
 
-def platform_cli(mail_only: bool = False) -> list[str]:
-    """mail_only: a mailbox agent dispatched by the platform can only read, send and close letters (no merging, no
-    platform-run commands)."""
+def platform_cli() -> list[str]:
+    """The platform's commands a sandboxed project's sessions run (a confined run has none: its mail is the platform's
+    tools, docs/design/confined-mail-tools.md)."""
     # both names of the CLI (docs/design/rename-brunna.md): rules files written by either release name one of them
-    return [f"{cli} {c}" for cli in names.all("cli") for c in (MAIL_SUBCOMMANDS if mail_only else SESSION_SUBCOMMANDS)]
+    return [f"{cli} {c}" for cli in names.all("cli") for c in SESSION_SUBCOMMANDS]
 
 
 # ---------- the environment's tool servers in an unattended run (docs/design/evaluators.md step 0) ----------
