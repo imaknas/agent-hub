@@ -262,6 +262,19 @@ class Untrusted(unittest.TestCase):
         clock = self.deny(ws, {})
         self.assertNotIn(f"Edit({rule(ws)}/**/CLAUDE.md)", clock, "a clock job's prompt is the project's own")
 
+    def test_in_a_worktree_its_notes_stay_writable(self):
+        """A worktree's .agent-memory is a link to the main checkout's (worktree-memory.sh)."""
+        import runtime_claude
+        ws, wt = tmpdir(self), tmpdir(self)
+        (ws / ".agent-memory" / "memory").mkdir(parents=True)
+        (ws / ".agent-memory" / "STATE.md").write_text("x")
+        (wt / ".agent-memory").symlink_to(ws / ".agent-memory")
+        with mock.patch.object(runtime_claude, "project_roots", lambda p: [ws]), \
+                mock.patch("policy.notes_dir", lambda p: ws / ".agent-memory" / "memory"):
+            deny = runtime_claude.instructions_denied("p", [wt])
+        self.assertFalse([r for r in deny if "/.agent-memory/memory" in r], deny)
+        self.assertIn(f"Edit({runtime_claude._rule_path(ws / '.agent-memory' / 'STATE.md')})", deny)
+
     def test_the_registry_holds_an_event_job_to_it(self):
         import registry
         index = {"projects": {"q": {"name": "q", "jobs": [

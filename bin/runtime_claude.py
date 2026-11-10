@@ -328,7 +328,9 @@ def instructions_denied(project: str, folders) -> list[str]:
         rules += [f"{t}({base}{mid}.claude/rules{tail})" for mid in ("/", "/**/") for tail in ("", "/**")
                   for t in ("Edit", "Write")]
     notes = policy.notes_dir(project)
-    mems = {pathlib.Path(os.path.realpath(f)) / ".agent-memory" for f in places}
+    # resolved: in a worktree .agent-memory is a link to the main checkout's, and beside() keeps only paths under the
+    # resolved folder, so a link spelling would deny the notes folder itself
+    mems = {pathlib.Path(os.path.realpath(pathlib.Path(f) / ".agent-memory")) for f in places}
     if notes:
         mems.add(notes.parent)
     for mem in sorted(mems):

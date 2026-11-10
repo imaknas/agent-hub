@@ -197,7 +197,9 @@ class Served(Base):
         self.assertEqual([e for e, _ in res], [True, True, True, True, False], res)
 
     def test_a_record_is_no_letter_to_close(self):
-        mid = self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "x")
+        """Even when the run's letter list names it: run_refusal holds this (it reads letters only); hubbus's own
+        "closes only letters" check under CONFINED is reinforcement behind it."""
+        mid =self.hubbus("send", "--from", "other", "--to", "demo", "--type", "request", "--text", "x")
         self.hubbus("publish", "job.failed", "--source", "other", "--to", "demo", "--id", "rec-like", "--payload", "{}")
         _, _, res = self.serve(self.run_file(letters=[mid, "rec-like"]), [("done", {"ids": ["rec-like"]})])
         self.assertTrue(res[0][0], res)
