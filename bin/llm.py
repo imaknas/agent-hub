@@ -294,7 +294,9 @@ def run(a) -> int:
                 return 2
             return fail(a.point, spec, why)
     try:
-        rt = runtime_ports.load(point_runtime(a.point, spec), ports=("agent", "confine") if confined else ("agent",))
+        # a settings: platform run's rules are checked when it starts: a runtime that can't check them runs none
+        ports = ("agent",) + (("confine",) if confined else ()) + (("rule_check",) if spec.get("settings") == "platform" else ())
+        rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports)
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
         return fail(a.point, spec, str(e))
     # works_in: memory: the folder is a copy of a project's memory branch, so an agent started there loads what the project wrote. What
@@ -368,12 +370,36 @@ def make_run_dir(point: str, spec: dict) -> pathlib.Path | None:
     return d
 
 
+def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
+    """Why a settings: platform run's own rules don't let it start (the runtime's rule_check port, A2 of
+    docs/design/project-agent-calls.md), as one sentence; None when they do, or when the point isn't one, or names no
+    project (the runtime's own refusal says so then)."""
+    if spec.get("settings") != "platform" or not (project := (task.env or {}).get(spec.get("project_env") or "")):
+        return None
+    import registry
+    doc = registry.refresh()["projects"].get(project)
+    if doc is None:
+        return _("{project} is not in the registry, so what it is held to can't be told; {point} doesn't run",
+                 project=project, point=point)
+    problems = rt.rule_problems(task, sandboxed=registry.sandbox_enforced(doc), network=list(doc.get("network") or []),
+                                untrusted=False)
+    if not problems:
+        return None
+    return _("{point} did not start: its rules aren't what a confined run of {project} may have: {problems}",
+             point=point, project=project, problems="; ".join(problems))
+
+
 def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir) -> int:
     import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
                               extra=tuple(a.extra or ()), run_dir=str(run_dir) if run_dir else None)
+    if (why := rule_refusal(a.point, spec, rt, task)):
+        if getattr(a, "dry_run", False):   # a dry run only shows, never publishes job.failed
+            print(why, file=sys.stderr)
+            return 2
+        return fail(a.point, spec, why)
     if spec.get("tool_servers") == "allowed_only":
         task, why, checked = deny_unnamed_servers(a.point, task)
         real = a.cmd == "run" and not getattr(a, "dry_run", False)   # a dry run only shows, never alerts

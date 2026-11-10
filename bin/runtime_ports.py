@@ -57,6 +57,13 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          happen
     servers_named(task) -> list[str]                     the servers the run's allow list names a tool of (same ids)
     The servers to deny go back in Task.deny_servers; the runtime denies each one whole.
+  rule_check: what a confined run's own rules may be (docs/design/project-agent-calls.md A2): checked when every
+  settings: platform run starts, never a registry validation error; a runtime without it runs none of them
+    rule_problems(task, *, sandboxed, network, untrusted) -> list[str]   why this run's own rules (the point's, the
+                                                         caller's, the job's; never what the platform adds) don't start,
+                                                         one sentence each for people; [] = it may start
+    rules_problems(rules, *, sandboxed, network, untrusted, cwd=None) -> list[str]   the same for a job's allow: list
+                                                         alone (registry.py check and the status page list them)
   control: the files in a project folder the runtime loads settings, hooks and tools from. A sandboxed project's own
   processes must never write them (its sessions would run what it put there, outside its sandbox); the platform
   writes the settings itself
@@ -195,7 +202,8 @@ def port_labels() -> dict[str, str]:
             "wake": _("way to wake an idle session"),
             "session_status": _("way to tell whether a session is busy, idle or waiting on a dialog"),
             "session_summary": _("way to read how a session's last reply ended"),
-            "tool_servers": _("way to tell which tool servers a run loads")}
+            "tool_servers": _("way to tell which tool servers a run loads"),
+            "rule_check": _("check of what a confined run's own rules may be")}
 
 
 def _feature_settings() -> tuple[bool, bool]:
@@ -234,11 +242,12 @@ def features(providers: bool | None = None, propose: bool | None = None) -> tupl
         # dispatch needs the session state too: it must know which sessions are live before it delegates (hubbus);
         # mailbox-escalation is confined (settings: platform) and denies tool servers it doesn't name
         (_("mailbox tasks (the platform sends an agent for letters nobody picked up)"),
-         ("agent", "sessions") if propose else ("agent", "sessions", "confine", "tool_servers")),
+         ("agent", "sessions") if propose else ("agent", "sessions", "confine", "rule_check", "tool_servers")),
         # agent-job-confined / agent-job-event: settings: platform, allow_from_env, tool_servers: allowed_only
-        (_("unattended agent jobs with allow:, and event-triggered agent jobs"), ("agent", "confine", "tool_servers")),
+        (_("unattended agent jobs with allow:, and event-triggered agent jobs"),
+         ("agent", "confine", "rule_check", "tool_servers")),
         # mailbox-conversation: settings: platform, resumed with the default runtime's own arguments
-        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions", "confine")),
+        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions", "confine", "rule_check")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         # reinforcement only: without it a letter waits for the session's next hook (docs/design/mailbox-runtimes.md)
@@ -331,6 +340,8 @@ PORTS = {
     # A point that declares them refuses to run on a runtime without it (llm.py)
     "confine": ("platform_settings",),
     "tool_servers": ("ambient_servers", "servers_named"),
+    # rule_check: what the run's boundary rests on, so not OPTIONAL: a runtime without it runs no settings: platform point
+    "rule_check": ("rule_problems", "rules_problems"),
     "wake": ("wake", "can_wake"),
     "session_status": ("session_status",),
     "session_summary": ("session_summary",),

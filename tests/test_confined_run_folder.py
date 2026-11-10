@@ -103,7 +103,9 @@ class RunFolder(unittest.TestCase):
         runtime_fake.set_ambient(None)
         a = types.SimpleNamespace(cmd="run", point="agent-job-confined", cwd=None, model=None, prompt_file=None,
                                   dry_run=True, extra=[])
+        import registry
         with mock.patch.object(self.llm, "point_runtime", lambda point, spec: "fake"), \
+                mock.patch.object(registry, "refresh", lambda: {"projects": {"p": {"name": "p"}}}), \
                 mock.patch.object(self.llm, "auth_env", lambda spec, rt: (dict(os.environ), None)), \
                 mock.patch.object(runtime_fake, "describe", recording), \
                 mock.patch.dict(os.environ, {"AGENT_JOB_PROJECT": "p", "AGENT_JOB_ALLOW": '["Read"]'}), \
@@ -130,6 +132,81 @@ class RunFolder(unittest.TestCase):
             self.llm.run(a)
         base = self.state / "agent-jobs" / ".settings"
         self.assertFalse(base.exists() and any(base.iterdir()))
+
+
+@unittest.skipIf(yaml is None, "needs PyYAML")
+class RuleCheck(unittest.TestCase):
+    """The rule_check port (project-agent-calls.md A2): a confined run's own rules, checked when it starts."""
+
+    def problems(self, rules, sandboxed=False, network=(), cwd=None):
+        import runtime_claude
+        return runtime_claude.rules_problems(rules, sandboxed=sandboxed, network=list(network), untrusted=False, cwd=cwd)
+
+    def test_paths_are_relative_to_the_run(self):
+        for bad in ("Edit(~/x/**)", "Read(//etc/**)", "Edit(/x/**)", "Read(./../other/**)", "Edit(../x)"):
+            with self.subTest(bad):
+                self.assertEqual(len(self.problems([bad])), 1)
+        self.assertEqual(self.problems(["Read(data/**)", "Edit(./out/**)", "Glob(*)", "Read", "Bash(git log *)"]), [])
+
+    def test_a_jobs_own_state_folder_may_be_named_by_its_full_path(self):
+        state = tmpdir(self)
+        job = state / "agent-jobs" / "p-check"
+        job.mkdir(parents=True)
+        with mock.patch.object(hubconf, "STATE", state):
+            self.assertEqual(self.problems([f"Edit(/{job}/**)"], cwd=job), [])
+            self.assertEqual(len(self.problems([f"Edit(/{state}/**)"], cwd=job)), 1, "beyond its own folder")
+            self.assertEqual(len(self.problems([f"Edit(/{job}/**)"], cwd=state)), 1, "not a job's folder")
+
+    def test_git_and_the_request_folder(self):
+        for bad in ("Edit(./.git/config)", "Write(./sub/.GIT/**)", "Edit(.hub-run/**)", "Edit(./.Hub-Run/x)"):
+            with self.subTest(bad):
+                self.assertEqual(len(self.problems([bad])), 1)
+        self.assertEqual(self.problems(["Edit(./**/x)"]), [], "a glob part isn't checked here: the deny covers it")
+
+    def test_a_sandboxed_project_names_only_files_and_its_own_domains(self):
+        ok = ["Read", "Glob(src/**)", "Edit(./out/**)", "Write(./out/**)", "MultiEdit", "NotebookEdit",
+              "WebFetch(domain:api.example.org)"]
+        self.assertEqual(self.problems(ok, sandboxed=True, network=["api.example.org"]), [])
+        for bad in ("Bash(ls *)", "WebFetch", "WebFetch(domain:github.com)", "WebSearch", "mcp__x__y", "Task"):
+            with self.subTest(bad):
+                self.assertEqual(len(self.problems([bad], sandboxed=True, network=["api.example.org"])), 1)
+            self.assertEqual(self.problems([bad]), [], "allowed for a project that isn't sandboxed")
+
+    def test_the_mail_handlers_rules_pass_today_in_a_project_that_isnt_sandboxed(self):
+        import runtime_claude
+        import runtime_ports
+        pts = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
+        for point in ("mailbox-escalation", "mailbox-conversation"):
+            task = runtime_ports.Task(point, "x", pts[point], env={"MAILBOX_PROJECT": "p"})
+            self.assertEqual(runtime_claude.rule_problems(task, sandboxed=False, network=[], untrusted=False), [], point)
+
+    def test_llm_refuses_a_run_whose_rules_are_refused(self):
+        import registry
+        import runtime_fake
+        llm = load_llm("llm_rule_refusal")
+        runtime_fake.set_rule_problems(["Bash(x) is not allowed here"])
+        self.addCleanup(runtime_fake.set_rule_problems, [])
+        task = types.SimpleNamespace(env={"AGENT_JOB_PROJECT": "p"})
+        with mock.patch.object(registry, "refresh", lambda: {"projects": {"p": {"name": "p"}}}):
+            why = llm.rule_refusal("agent-job-confined", SPEC, runtime_fake, task)
+            self.assertIn("Bash(x) is not allowed here", why)
+            runtime_fake.set_rule_problems([])
+            self.assertIsNone(llm.rule_refusal("agent-job-confined", SPEC, runtime_fake, task))
+            self.assertIsNone(llm.rule_refusal("agent-job", {"project_env": "AGENT_JOB_PROJECT"}, runtime_fake, task))
+        with mock.patch.object(registry, "refresh", lambda: {"projects": {}}):
+            self.assertTrue(llm.rule_refusal("agent-job-confined", SPEC, runtime_fake, task), "not in the registry")
+
+    def test_the_registry_lists_what_a_job_would_refuse(self):
+        import registry
+        index = {"projects": {
+            "p": {"name": "p", "enforce": {"sandbox": True}, "jobs": [
+                {"name": "a", "kind": "agent", "allow": ["Read", "Bash(ls *)"]},
+                {"name": "b", "kind": "agent", "allow": ["Read"]}]},
+            "q": {"name": "q", "jobs": [{"name": "c", "kind": "agent", "allow": ["Bash(ls *)"]},
+                                        {"name": "d", "kind": "command", "run": "x"}]}}}
+        with mock.patch("runtime_ports.default_name", lambda: "claude"):
+            out = registry.rules_refused(index)
+        self.assertEqual(sorted(out), ["p/a"])
 
 
 @unittest.skipIf(yaml is None, "needs PyYAML")

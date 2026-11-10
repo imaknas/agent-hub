@@ -23,5 +23,6 @@
  "{point} works in a copy of a memory branch, and this one holds what a memory branch may not: {paths}. No agent starts there until a commit on that branch removes it": "{point} 在 memory 分支的副本裡工作,而這份副本有 memory 分支不該有的東西:{paths}。在那條分支上有 commit 移除它之前,不會在那裡啟動 agent",
  "the memory copy of {project} holds only notes again": "{project} 的 memory 副本又只剩筆記了",
  "{project} is sandboxed, and {point} would run with its saved permissions: a sandboxed project's agent job declares allow: and runs confined": "{project} 有沙箱,而 {point} 會帶著它存下的權限執行:有沙箱的專案的 agent 工作要宣告 allow:,在限制下執行",
- "{project} is not in the registry, so what it is held to can't be told; {point} doesn't run": "{project} 不在 registry 裡,看不出它受哪些限制;{point} 不執行"
+ "{project} is not in the registry, so what it is held to can't be told; {point} doesn't run": "{project} 不在 registry 裡,看不出它受哪些限制;{point} 不執行",
+ "{point} did not start: its rules aren't what a confined run of {project} may have: {problems}": "{point} 沒有啟動:它的規則不是 {project} 的受限執行可以有的:{problems}"
 }

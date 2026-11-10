@@ -32,5 +32,6 @@
  "way to read how a session's last reply ended": "讀取 session 最後回覆結尾的方法",
  "agent runs outside the platform's throwaway worktree": "在平台拋棄式 worktree 以外跑 agent",
  "judgment points (librarian, index, weekly report analysis)": "判斷點(librarian、index、週報分析)",
- "memory consolidation (the consolidate module)": "記憶整併(consolidate 模組)"
+ "memory consolidation (the consolidate module)": "記憶整併(consolidate 模組)",
+ "check of what a confined run's own rules may be": "檢查受限執行自己的規則"
 }

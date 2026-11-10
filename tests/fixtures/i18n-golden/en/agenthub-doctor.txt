@@ -175,11 +175,11 @@ $ agenthub doctor    # two coding agents
     → a runtime that is off for a feature only lacks it for its own sessions
 ! memory consolidation (the consolidate module): claude available; acp off (has no agent runs outside the platform's throwaway worktree)
     → a runtime that is off for a feature only lacks it for its own sessions
-! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, confined runs (declared permissions only), or way to tell which tool servers a run loads)
+! mailbox tasks (the platform sends an agent for letters nobody picked up): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, confined runs (declared permissions only), check of what a confined run's own rules may be, or way to tell which tool servers a run loads)
     → a runtime that is off for a feature only lacks it for its own sessions
-! unattended agent jobs with allow:, and event-triggered agent jobs: claude available; acp off (has no agent runs outside the platform's throwaway worktree, confined runs (declared permissions only), or way to tell which tool servers a run loads)
+! unattended agent jobs with allow:, and event-triggered agent jobs: claude available; acp off (has no agent runs outside the platform's throwaway worktree, confined runs (declared permissions only), check of what a confined run's own rules may be, or way to tell which tool servers a run loads)
     → a runtime that is off for a feature only lacks it for its own sessions
-! mailbox follow-up (replying with an idle session's context): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, or confined runs (declared permissions only))
+! mailbox follow-up (replying with an idle session's context): claude available; acp off (has no agent runs outside the platform's throwaway worktree, session state, confined runs (declared permissions only), or check of what a confined run's own rules may be)
     → a runtime that is off for a feature only lacks it for its own sessions
 ! channel leasing (also needs the assistant module): claude available; acp off (has no long-running streaming sessions, session state, or agent runs outside the platform's throwaway worktree)
     → a runtime that is off for a feature only lacks it for its own sessions

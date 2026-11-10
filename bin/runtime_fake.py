@@ -39,6 +39,7 @@ def reset() -> None:
     _woken.clear()
     _context.clear()
     _ambient.clear()
+    _rule_problems.clear()
 
 
 # ---------- putting data in, for tests ----------
@@ -328,3 +329,20 @@ def ambient_servers(task) -> list | None:
 
 def servers_named(task) -> list:
     return list(_ambient.get("named") or ())
+
+
+# ---------- rule check ----------
+_rule_problems: list = []
+
+
+def set_rule_problems(problems: list) -> None:
+    """What rule_problems / rules_problems answer (the fake checks nothing itself)."""
+    _rule_problems[:] = list(problems)
+
+
+def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list:
+    return list(_rule_problems)
+
+
+def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list:
+    return list(_rule_problems)

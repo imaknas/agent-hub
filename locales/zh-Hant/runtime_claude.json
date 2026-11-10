@@ -44,5 +44,10 @@
  "everything: letters and note reminders inside your chats, and work in the background": "全部:對話中直接收到信和寫筆記的提醒,還有背景工作",
  "the worktree hooks in {file}": "{file} 裡的 worktree hook",
  "a session can be woken once its first turn has ended, while it has been idle under {days} days; a background session from the agent view can stop after about an hour unless pinned, and then can't be": "session 跑完第一輪之後才叫得醒,閒置超過 {days} 天就叫不醒;agent view 的背景 session 沒釘選的話大約一小時後可能就停了,停了就叫不醒",
- "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}"
+ "could not make a folder for the run: {e}": "沒辦法替這次執行建資料夾:{e}",
+ "{rule} is not a permission rule": "{rule} 不是權限規則",
+ "{rule} names a path that isn't relative to the run's folder (write ./… or a name in it)": "{rule} 寫的路徑不是相對於這次執行的資料夾(請寫 ./… 或資料夾裡的名字)",
+ "{rule} enters a .git or {folder} folder, which no confined run writes": "{rule} 進到 .git 或 {folder} 資料夾,受限執行從不寫那裡",
+ "{rule}: a sandboxed project's confined run fetches only from the domains in its own network: list": "{rule}:有沙箱的專案,受限執行只能從它自己 network: 清單裡的網域抓取",
+ "{rule}: a sandboxed project's confined run may name only reading and editing files, and WebFetch to its own domains": "{rule}:有沙箱的專案,受限執行只能列讀寫檔案的工具,以及到它自己網域的 WebFetch"
 }

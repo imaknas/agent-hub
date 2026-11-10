@@ -52,6 +52,8 @@ def needs(points, providers: bool) -> set:
         out.add("agent")
         if spec.get("settings") or spec.get("allow_from_env"):   # llm.py: ports=("agent", "confine")
             out.add("confine")
+        if spec.get("settings") == "platform":                   # llm.py: and "rule_check"
+            out.add("rule_check")
         if spec.get("tool_servers") == "allowed_only":           # llm.deny_unnamed_servers
             out.add("tool_servers")
     return out

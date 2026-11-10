@@ -843,6 +843,66 @@ def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
     return dirs, rules
 
 
+# ---------- what a confined run's own rules may be (runtime_ports' rule_check; project-agent-calls.md A2) ----------
+FILE_TOOLS = ("Read", "Glob", "Grep", *WRITE_TOOLS)
+# all a sandboxed project's confined run may name: its shell can't be kept from the user's Keychain, so it has none
+SANDBOXED_TOOLS = ("Read", "Glob", "Grep", *WRITE_TOOLS)
+_PARTS = re.compile(r"([A-Za-z][A-Za-z0-9_-]*)(?:\((.*)\))?", re.S)
+
+
+def _outside_path(path: str, cwd) -> bool:
+    """A rule's path that isn't relative to the run's folder: ~/…, //… or /… (the settings file's folder), or one with
+    ..; except an absolute one whose fixed part is the run's own job folder or inside it (registry `cwd: state`: what
+    own_state_dir already reads)."""
+    if ".." in path.split("/"):
+        return True
+    if not path.startswith(("~", "/")):
+        return False
+    base = job_folder(cwd)
+    if base is None or not path.startswith(("~/", "//")):
+        return True
+    root = pathlib.Path.home() if path.startswith("~/") else pathlib.Path("/")
+    parts = path[2:].split("/")
+    target = root.joinpath(*itertools.takewhile(lambda p: not _GLOB.search(p), parts)).resolve()
+    return not (target == base or base in target.parents)
+
+
+def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list[str]:
+    """Why a confined run with these rules (the point's and the job's own, never what the platform adds) doesn't start,
+    one sentence each; [] = it may. untrusted: its prompt is text anyone who can write the bus wrote (M6, not yet
+    checked)."""
+    out = []
+    for r in rules:
+        m = _PARTS.fullmatch(r)
+        if not m:
+            out.append(_("{rule} is not a permission rule", rule=r))
+            continue
+        tool, arg = m.group(1), m.group(2)
+        if tool in FILE_TOOLS and arg is not None:
+            if _outside_path(arg, cwd):
+                out.append(_("{rule} names a path that isn't relative to the run's folder (write ./… or a name in it)",
+                             rule=r))
+            fixed = itertools.takewhile(lambda p: not _GLOB.search(p), arg.split("/"))
+            if any(p.lower() in FORBIDDEN_PARTS for p in fixed):
+                out.append(_("{rule} enters a .git or {folder} folder, which no confined run writes", rule=r,
+                             folder=HUB_RUN))
+        if sandboxed:
+            if tool == "WebFetch":
+                domain = arg[len("domain:"):] if arg and arg.startswith("domain:") else None
+                if domain is None or domain not in (network or []):
+                    out.append(_("{rule}: a sandboxed project's confined run fetches only from the domains in its own "
+                                 "network: list", rule=r))
+            elif tool not in SANDBOXED_TOOLS:
+                out.append(_("{rule}: a sandboxed project's confined run may name only reading and editing files, and "
+                             "WebFetch to its own domains", rule=r))
+    return out
+
+
+def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list[str]:
+    """rules_problems over the run's own rules: the point's and the caller's and the job's (_rules), in its folder."""
+    return rules_problems(_rules(task)[1], sandboxed=sandboxed, network=network, untrusted=untrusted, cwd=task.cwd)
+
+
 MEMORY_RULE = "Edit(./.agent-memory/memory/**)"
 
 

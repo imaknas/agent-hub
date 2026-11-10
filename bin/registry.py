@@ -341,6 +341,32 @@ def unconfined_sandboxed(index: dict) -> list[str]:
             for job in doc.get("jobs") or [] if isinstance(job, dict) and job.get("kind") == "agent" and not job.get("allow")]
 
 
+def rules_refused(index: dict) -> dict[str, str]:
+    """{project/job: why} for the confined agent jobs (allow:) whose rules their runs would refuse (the runtime's
+    rule_check port; docs/design/project-agent-calls.md A2). Listed, never a validation error: an owner who tightens
+    enforce.sandbox or network:, or changes runtimes, is never held back by a project's rules. A runtime without the port
+    is said once: none of those runs happens there."""
+    jobs = [(name, doc, job) for name, doc in sorted(index["projects"].items()) for job in doc.get("jobs") or []
+            if isinstance(job, dict) and job.get("kind") == "agent" and job.get("allow")]
+    if not jobs:
+        return {}
+    import runtime_ports
+    try:
+        rt = runtime_ports.load(None, ports=("rule_check",))
+    except (runtime_ports.Unsupported, runtime_ports.MissingFunctions, LookupError, ImportError) as e:
+        return {"*": _("the rules of confined agent jobs can't be checked on this runtime, so none of them runs: {why}",
+                       why=e)}
+    out = {}
+    for name, doc, job in jobs:
+        cwd = hubconf.STATE / "agent-jobs" / agent_state_name(name, job) if job.get("cwd") == "state" else None
+        problems = rt.rules_problems(job["allow"], sandboxed=sandbox_enforced(doc), network=list(doc.get("network") or []),
+                                     untrusted=False, cwd=cwd)
+        if problems:
+            out[f"{name}/{job.get('name')}"] = _("agent job {job} doesn't run until its allow: changes: {problems}",
+                                                 job=f"{name}/{job.get('name')}", problems="; ".join(problems))
+    return out
+
+
 def legacy_names(doc: dict) -> dict:
     """Each job's legacy_name: the name its state, reports and schedule state are kept under (the old schedule.yaml
     entry's). Set when a job moves into the registry, by the platform; a project's letter that sets or changes one could
@@ -1314,7 +1340,7 @@ def main() -> int:
             bad += 1
             print(_("? {name}: not in the registry", name=n))
     # jobs that don't run although their entry is valid (listed, not counted as invalid)
-    for job, why in sorted((index.get("refused") or {}).items()):
+    for job, why in sorted({**(index.get("refused") or {}), **rules_refused(index)}.items()):
         if not args or job.split("/", 1)[0] in names:
             print(f"! {why}")
     return 1 if bad else 0
