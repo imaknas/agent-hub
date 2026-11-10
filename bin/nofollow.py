@@ -9,6 +9,7 @@ workspace) is opened normally: its parent is not the project's to change. Standa
 
   read(base, rel, cap) → bytes | None        None: the file or a folder on the way is missing
   replace(base, rel, data)                   creates missing folders
+  append(base, rel, data)                    adds to the end; creates the file and only the folder it is in
   entries(base, rel) → [name] | None         the names in a folder (None: missing); what each is isn't looked at
   remove(base, rel)                          unlink one entry (a link is removed, never what it points to); missing
                                              is fine
@@ -100,6 +101,36 @@ def replace(base, rel, data: bytes) -> None:
         except OSError:
             pass
         raise
+    finally:
+        os.close(d)
+
+
+def append(base, rel, data: bytes) -> None:
+    """Add data to the end of a file, creating it and only its own folder when missing (every folder above that must be
+    there already: a project's notes go into its .agent-memory, never one this makes). The file must be a regular file
+    with one link: a hard link to a file outside the project would otherwise take the write (lease_files.py checks the
+    same)."""
+    parts = _parts(rel)
+    d = _folder(base, parts[:-2], create=False)
+    try:
+        if len(parts) > 1:
+            try:
+                nd = os.open(parts[-2], DIR | FLAGS, dir_fd=d)
+            except FileNotFoundError:
+                os.mkdir(parts[-2], 0o755, dir_fd=d)
+                nd = os.open(parts[-2], DIR | FLAGS, dir_fd=d)
+            os.close(d)
+            d = nd
+        f = os.open(parts[-1], os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NONBLOCK | FLAGS, 0o644, dir_fd=d)
+        try:
+            st = os.fstat(f)
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                raise OSError(errno.EINVAL, f"{rel} is not a regular file with one link")
+            view = memoryview(data)
+            while view:
+                view = view[os.write(f, view):]
+        finally:
+            os.close(f)
     finally:
         os.close(d)
 

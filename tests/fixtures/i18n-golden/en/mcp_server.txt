@@ -8,7 +8,7 @@ written to memory/<DATE>.md of demo (the platform syncs it)
 === unknown tool
 no such tool: nope
 === bad arguments
-wrong arguments: 'id'
+wrong arguments: id must be text
 === note without memory
 nowhere has no memory folder (.agent-memory); this project is not set up for memory tracking
 === stderr unknown project

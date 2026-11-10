@@ -1021,10 +1021,11 @@ class OwnerQuestion(tmt.Base):
         self.ask(tmt.with_letters(tmt.FORK, "asks"))
         self.assertNotIn("handoff_id", self.m.to_assistant(self.c, self.question()))
 
-    def test_a_confined_run_with_no_letters_too(self):
+    def test_a_confined_run_with_no_letters_cant_reply_at_all(self):
+        """It starts new letters only (confined-mail-tools.md M3): a reply could stand as the project's answer."""
         self.asks()
-        self.ask(tmt.EVENT_JOB)
-        self.assertNotIn("handoff_id", self.m.to_assistant(self.c, self.question()))
+        with self.assertRaises(SystemExit):
+            self.ask(tmt.EVENT_JOB)
 
     def test_as_a_record_it_is_a_question_the_owner_side_can_answer(self):
         self.m.RECORDS = True

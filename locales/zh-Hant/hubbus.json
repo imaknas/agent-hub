@@ -222,5 +222,11 @@
  "Until answered, proceeding with: {default}": "回答前先照這個進行:{default}",
  "(until answered: {default})": "(回答前先照:{default})",
  "a question to the owner: one of the options (repeat it for each; the id is short, no spaces)": "問 owner 的問題:其中一個選項(每個選項各給一次;id 要短、不含空白)",
- "a question to the owner: what this project proceeds on until the answer comes (an option id, or a text); never taken as the answer": "問 owner 的問題:答案來之前這個專案先照什麼進行(選項 id 或一段文字);永遠不會被當成答案"
+ "a question to the owner: what this project proceeds on until the answer comes (an option id, or a text); never taken as the answer": "問 owner 的問題:答案來之前這個專案先照什麼進行(選項 id 或一段文字);永遠不會被當成答案",
+ "hubbus: a confined run can't take back a letter (--withdraw)": "hubbus:受限執行不能收回信(--withdraw)",
+ "hubbus: a confined run asks {alias} with a question, not a request (a request is a to-do for a person)": "hubbus:受限執行要問 {alias} 請用 question,不能用 request(request 是給人做的待辦)",
+ "hubbus: this run only starts new letters ({cmd} is for the project's sessions and its mail handlers)": "hubbus:這次執行只能寄新的信({cmd} 是專案的 session 和信箱處理者用的)",
+ "hubbus: this run only starts new letters: request, question, info or progress, with no --reply-to or --question": "hubbus:這次執行只能寄新的信:request、question、info 或 progress,不能加 --reply-to 或 --question",
+ "hubbus: {id!r} is not a valid letter id": "hubbus:{id!r} 不是合法的信件 id",
+ "hubbus: a confined run closes only letters ({id} is not one)": "hubbus:受限執行只能結掉信({id} 不是信)"
 }

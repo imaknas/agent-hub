@@ -463,6 +463,10 @@ class ConfinedMail(unittest.TestCase):
                                                                  "question": None, **a}), "p")
 
     def test_refusals(self):
+        """A run with letters (a mail handler): run_refusal holds the rest."""
+        p = mock.patch.object(self.hb, "run_letters", lambda: ["m1"])
+        p.start()
+        self.addCleanup(p.stop)
         self.assertIsNone(self.refused(cmd="send", type="info"))
         self.assertIsNone(self.refused(cmd="send", type="question"))
         self.assertIsNone(self.refused(cmd="inbox"))
@@ -482,8 +486,27 @@ class ConfinedMail(unittest.TestCase):
                   {"cmd": "send", "type": "info", "id": "x:done"},
                   {"cmd": "publish"}, {"cmd": "record-publish"}, {"cmd": "dispatch"}):
             self.assertTrue(self.refused(**a), a)
+        for a in ({"cmd": "done", "withdraw": True, "ids": ["m1"]},
+                  {"cmd": "send", "type": "request", "to": "owner"}):
+            self.assertTrue(self.refused(**a), a)
         with self.assertRaises(self.hb.Refused):   # the CLI exits with it
             self.hb.confined_letter({"to_project": "q", "source": "r"}, "p")
+
+    def test_a_run_without_letters_only_starts_new_letters(self):
+        """A job (confined-mail-tools.md M3)."""
+        p = mock.patch.object(self.hb, "run_letters", lambda: None)
+        p.start()
+        self.addCleanup(p.stop)
+        for t in ("request", "question", "info", "progress"):
+            self.assertIsNone(self.refused(cmd="send", type=t, to="q", reply_to=None))
+        self.assertIsNone(self.refused(cmd="send", type="question", to="owner", reply_to=None))
+        for a in ({"cmd": "inbox"}, {"cmd": "show", "id": "m1"}, {"cmd": "thread", "id": "m1"},
+                  {"cmd": "done", "ids": ["m1"], "withdraw": False}, {"cmd": "ack", "ids": ["m1"]},
+                  {"cmd": "open-questions"},
+                  {"cmd": "send", "type": "info", "to": "q", "reply_to": "m1"},
+                  {"cmd": "send", "type": "drop", "to": "owner", "question": "m1", "reply_to": None},
+                  {"cmd": "send", "type": "done", "to": "q", "reply_to": None}):
+            self.assertTrue(self.refused(**a), a)
         self.hb.confined_letter({"to_project": "p", "source": "r"}, "p")
         with mock.patch.dict(os.environ, {"AGENT_HUB_CONFINED": ""}):
             self.assertIsNone(self.refused(cmd="send", type="manifest.update", sender="q"))

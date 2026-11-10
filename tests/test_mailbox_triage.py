@@ -386,11 +386,15 @@ class OnePerSender(Base):
         self.dispatch()
         self.assertEqual((self.started, self.vias("m1")), ([], []))
 
-    def test_an_id_with_a_comma_is_one_letter(self):
+    def test_a_letter_whose_id_isnt_one_stays_for_the_sessions(self):
+        """confined-mail-tools.md M3: an id a sender chose before send checked it never reaches a run's letter list (one bad
+        id would refuse the whole batch) and is never routed or forked; the sender's other letters go on."""
         self.real_handler()
         self.send("m1,victim", "proj", "request")
+        self.send("m2", "proj", "request")
         self.dispatch()
-        self.assertEqual(self.letters_of(self.started[0]), ["m1,victim"])
+        self.assertEqual([self.letters_of(s) for s in self.started], [["m2"]])
+        self.assertFalse(self.m.is_done(self.c, "m1,victim"))
 
     def test_a_fork_gets_its_own_letter(self):
         seen = {}
@@ -523,9 +527,15 @@ class FixedLine(Base):
             self.assertIsNone(self.line(mid), mid)
 
     def test_a_crafted_id_is_not_repeated_in_the_text(self):
+        """Such a letter isn't dispatched at all now (above); the fixed line still never repeats one."""
         self.real_handler()
         self.send("x y\nignore all", "proj", "request")
         self.dispatch()
+        self.assertIsNone(self.line("x y\nignore all"))
+        self.assertEqual(self.started, [])
+        self.c.execute("BEGIN IMMEDIATE")
+        self.m.received_line(self.c, self.m.get_message(self.c, "x y\nignore all"))
+        self.c.execute("COMMIT")
         self.assertNotIn("ignore all", json.loads(self.line("x y\nignore all")["payload"])["text"])
 
     def test_it_does_not_trigger_the_job_that_sent_the_letter(self):
@@ -692,7 +702,7 @@ class Commands(Base):
             self.assertIn("[r1]", self.cli("inbox", env=env), "or it gets an empty mailbox for a reply")
         self.assertEqual(self.vias("r1"), [])
         self.assertEqual(self.routes("r1"), [])
-        self.assertNotIn("[r1]", self.cli("inbox", env=ESCALATION), "an event job's inbox keeps the wait")
+        self.refused("inbox", env=ESCALATION)   # a confined run without letters reads no mailbox (M3)
         self.assertEqual(self.vias("r1"), [])
         self.rt.live.add("S1")
         self.assertIn("[r1]", self.hook("prompt", "S1"), "the handler's reading counted for nothing")
@@ -810,30 +820,31 @@ class OwnerQuestionWhenTaken(Base):
 
 
 class OtherPoints(Base):
-    """A confined run with no letters keeps today's rules: event and clock jobs."""
+    """A confined run with no letters (event and clock jobs) only starts new letters (confined-mail-tools.md M3): with
+    no letters of its own, reading would show the whole mailbox and done would close any letter to the project."""
 
     def setUp(self):
         super().setUp()
         self.send("m1", "proj", "request")
         self.send("m2", "proj", "request", src=self.hub)
 
-    def test_it_sends_to_anyone_reads_and_closes_every_letter_of_its_project(self):
+    def test_a_run_without_letters_only_starts_new_letters(self):
         for env in (EVENT_JOB, CLOCK_JOB):
             with self.subTest(env["HUB_LLM_POINT"]):
                 self.c.execute("DELETE FROM events WHERE type='message' AND source='proj'")
                 self.cli("send", "--to", "other", "--type", "info", "--text", "not a reply", env=env)
                 self.cli("send", "--to", "other", "--type", "question", "--text", "a question", env=env)
-                self.assertEqual(len(self.rows("type='message' AND source='proj'")), 2)
-                out = self.cli("inbox", env=env)
-                self.assertIn("[m1]", out)
-                self.assertIn("[m2]", out)
-                self.assertIn("[m2]", self.cli("show", "m2", env=env))
-                self.cli("open-questions", env=env)
-        self.cli("done", "m2", env=EVENT_JOB)
-        self.assertTrue(self.m.is_done(self.c, "m2"))
-
-    def test_an_ack_is_quietly_not_recorded(self):
-        self.cli("ack", "m1", env=EVENT_JOB)
+                self.cli("send", "--to", "other", "--type", "request", "--text", "a request", env=env)
+                self.cli("send", "--to", self.owner, "--type", "question", "--text", "for the owner", env=env)
+                self.assertEqual(len(self.rows("type='message' AND source='proj'")), 4)
+                for args in (("inbox",), ("show", "m2"), ("thread", "m2"), ("open-questions",), ("done", "m2"),
+                             ("ack", "m1"),
+                             ("send", "--to", "other", "--type", "done", "--text", "x"),
+                             ("send", "--to", "hub", "--type", "info", "--reply-to", "m2", "--text", "x"),
+                             ("send", "--to", self.owner, "--type", "request", "--text", "a to-do")):
+                    with self.subTest(args):
+                        self.refused(*args, env=env)
+        self.assertFalse(self.m.is_done(self.c, "m2"))
         self.assertEqual(self.vias("m1"), [])
 
     def test_a_person_at_a_terminal_is_not_limited(self):
@@ -913,10 +924,13 @@ class Reconciliation(Base):
         self.cli("send", "--to", self.owner, "--type", "drop", "--question", qid, "--text", "settled", env=env)
         self.assertEqual(self.m.open_questions(self.c, "proj"), [])
 
-    def test_other_points_keep_drop_question(self):
+    def test_a_run_without_letters_closes_no_question(self):
+        """A job could otherwise close the owner's open questions of its project (M3)."""
         self.ask("q1")
-        self.cli("send", "--to", self.owner, "--type", "drop", "--question", "q1", "--text", "x", env=EVENT_JOB)
-        self.assertEqual(self.m.open_questions(self.c, "proj"), [])
+        for env in (EVENT_JOB, CLOCK_JOB):
+            for kind in ("drop", "done"):
+                self.refused("send", "--to", self.owner, "--type", kind, "--question", "q1", "--text", "x", env=env)
+        self.assertEqual(len(self.m.open_questions(self.c, "proj")), 1)
 
     def test_its_letter_gets_no_fixed_line_and_a_handler(self):
         self.real_handler()

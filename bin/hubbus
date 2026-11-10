@@ -2361,6 +2361,23 @@ def confined_refusal(a, here) -> str | None:
         return _("hubbus: a confined run reads only its own project's mailbox")
     if a.cmd in ("publish", "record-publish", "bridge", "dispatch", "reconcile-questions", "pass"):
         return _("hubbus: a confined run can't use {cmd}", cmd=a.cmd)
+    # docs/design/confined-mail-tools.md M3: a run could take back any open letter its project sent
+    if a.cmd == "done" and getattr(a, "withdraw", False):
+        return _("hubbus: a confined run can't take back a letter (--withdraw)")
+    # a request to the owner raises an owner to-do as task does (send_record), and those need a person
+    if a.cmd == "send" and a.type == "request" and canon(a.to) == OWNER_ADDRESS:
+        return _("hubbus: a confined run asks {alias} with a question, not a request (a request is a to-do for a person)",
+                 alias=OWNER_ALIAS)
+    if run_letters() is None:
+        # a run without letters (a job): it starts new letters only. With no letters of its own, reading would show the
+        # whole mailbox, done would close any letter to the project, a reply could stand as the project's answer to an
+        # open handoff, and --question could close the owner's questions
+        if a.cmd in ("inbox", "show", "thread", "done", "ack", "open-questions"):
+            return _("hubbus: this run only starts new letters ({cmd} is for the project's sessions and its mail "
+                     "handlers)", cmd=a.cmd)
+        if a.cmd == "send" and (getattr(a, "reply_to", None) or getattr(a, "question", None) or a.type in ("done", "drop")):
+            return _("hubbus: this run only starts new letters: request, question, info or progress, with no --reply-to "
+                     "or --question")
     return None
 
 
@@ -3009,6 +3026,11 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
                         and t.of_project(to_s, proj) and t.wake_on(proj) and t.can_wake(to_s) \
                         and (to_s in t.owed or t.room(proj)) and t.status(to_s) != "waiting":
                     t.owe(proj, to_s, r)
+                continue
+            if not EVENT_ID.fullmatch(r["id"]):
+                # an id a sender chose before send checked it: never in a run's letter list (one bad id would refuse the
+                # whole batch), never routed or forked. Its project's sessions still see it
+                waiting += 1
                 continue
             st = letter_state(c, r, alive)
             if st.ended == "closed":
@@ -3841,6 +3863,9 @@ def send_letter(c, a, sender: str, session, here, boxed: bool = False, mid: str 
         orig = must_message(c, a.reply_to)
         confined_letter(orig, here, boxed)   # a reply carries the original's handoff and session
         p |= reply_fields(orig, a.to)
+    if a.id and not EVENT_ID.fullmatch(a.id):
+        # it becomes a run's letter list and a tool's argument: an id never carries a newline, a space or a leading -
+        refuse(_("hubbus: {id!r} is not a valid letter id", id=a.id))
     mid = mid or a.id or new_id()
     if RECORDS and a.to == OWNER_ADDRESS:
         if a.inferred:
@@ -3912,7 +3937,8 @@ def close_refusal(c, r, here, session, withdraw: bool, note) -> str | None:
         return None
     if not here or to in own_names(here):
         return None
-    if here == hubconf.hub_project() and (not session or names.env("JOB") or sender in OWNERS):
+    # a hub job's confined run is held like any project's
+    if here == hubconf.hub_project() and not names.env("CONFINED") and (not session or names.env("JOB") or sender in OWNERS):
         return None
     if mine:
         return _("hubbus: {id} is a letter you sent to {to}: only its recipient closes it. To take it back (wrong "
@@ -3945,6 +3971,13 @@ def mail_command(a) -> None:
         refuse(why)
     if (letters is not None or names.env("CONFINED")) and not_the_answer(c, a):
         a.reply_to = None
+    if names.env("CONFINED") and a.cmd == "done":
+        # records (rec:…) and other events to or from the project aren't a confined run's to close: a bus writer could
+        # have one close the owner's records before the registrar applies them (confined-mail-tools.md M3)
+        for i in a.ids:
+            r = get_event(c, i)
+            if r is not None and r["type"] != "message":
+                refuse(_("hubbus: a confined run closes only letters ({id} is not one)", id=i))
     if a.cmd == "publish":
         pl = json.loads(a.payload)
         if box:

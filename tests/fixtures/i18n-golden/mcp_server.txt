@@ -8,7 +8,7 @@ demo 的信箱是空的
 === unknown tool
 沒有這個工具:nope
 === bad arguments
-參數不對:'id'
+參數不對:id 要是文字
 === note without memory
 nowhere 沒有 memory 資料夾(.agent-memory);這個專案沒有接上 memory 追蹤
 === stderr unknown project
