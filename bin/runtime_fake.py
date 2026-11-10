@@ -301,7 +301,7 @@ def complete(req, conf) -> CompletionResult:
     return queue.pop(0) if len(queue) > 1 else queue[0]
 
 
-def platform_settings(project: str, keep=None):
+def platform_settings(project: str, spec: dict, run_dir, keep=None, cwd=None, folders=()):
     """confine: the fake honours declared permissions by construction (it runs nothing)."""
     return None
 

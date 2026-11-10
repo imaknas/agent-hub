@@ -58,7 +58,7 @@ def flags(point: str, cwd, env: dict, roots=None) -> list:
     task = runtime_ports.Task(point, "x", points()[point], cwd=str(cwd), env=env)
     real = runtime_claude.project_roots
     given = (lambda p: roots) if roots is not None else (lambda p: [pathlib.Path(cwd).resolve(), *real(p)])
-    with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/platform/{p}.json")), \
+    with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path(f"/platform/{p}.json")), \
             mock.patch.object(runtime_claude, "project_roots", given):
         return runtime_claude._flags(task)
 
@@ -135,7 +135,7 @@ class Flags(unittest.TestCase):
         spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read,Edit",
                 "allowed_tools": ["Edit(./notes/**)"]}
         task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.ws), env={"P": "p"})
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path("/platform/p.json")), \
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path("/platform/p.json")), \
                 mock.patch.object(runtime_claude, "project_roots", lambda p: [self.ws]):
             cmd = runtime_claude._flags(task)
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Edit,Read")
@@ -189,7 +189,7 @@ class PlatformSettingsFile(unittest.TestCase):
         doc = {"name": "p", "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}}
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", state), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
-            d = json.loads(runtime_claude.platform_settings("p").read_text())
+            d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
         allow = d["permissions"]["allow"]
         self.assertFalse(set(SAVED) & set(allow))
         self.assertTrue(allow and all(r.startswith(("Bash(agenthub ", "Bash(brunna ")) for r in allow), allow)
@@ -243,7 +243,8 @@ class JobStateFolder(unittest.TestCase):
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
                 mock.patch.object(hubconf, "MAIN", self.hub), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
-            whole, own = runtime_claude.platform_settings("p"), runtime_claude.platform_settings("p", self.job)
+            whole, own = (runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()),
+                         runtime_claude.platform_settings("p", {}, tempfile.mkdtemp(), self.job))
         self.assertNotEqual(whole, own)
         deny_whole = json.loads(whole.read_text())["permissions"]["deny"]
         deny_own = json.loads(own.read_text())["permissions"]["deny"]
@@ -269,8 +270,9 @@ class JobStateFolder(unittest.TestCase):
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
                 mock.patch.object(hubconf, "MAIN", self.hub), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
-            f = runtime_claude.platform_settings("p", None, self.job)
-        self.assertEqual(f.name, "p--p-check.json", "one file per job folder")
+            run_dir = tempfile.mkdtemp()
+            f = runtime_claude.platform_settings("p", {}, run_dir, None, self.job)
+        self.assertEqual(f.parent, pathlib.Path(run_dir), "in the run's own folder")
         deny = json.loads(f.read_text())["permissions"]["deny"]
         rule = runtime_claude._rule_path
         self.assertFalse([r for r in deny if r.startswith("Read(") and (str(self.job) in r or r in (

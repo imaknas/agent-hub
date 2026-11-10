@@ -383,7 +383,7 @@ class PlatformSettings(unittest.TestCase):
         roots = mock.patch.object(runtime_claude, "project_roots", lambda p: [pathlib.Path.cwd().resolve()])
         roots.start()
         self.addCleanup(roots.stop)
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/s/{p}.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task)
         self.assertIn("--restricted", cmd)
         self.assertEqual(cmd[cmd.index("--settings") + 1], "/s/p.json")
@@ -391,7 +391,7 @@ class PlatformSettings(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("--permission-mode") + 1], "dontAsk")
         self.assertIn("Bash(git log:*)", cmd)
         env2 = {**env, "AGENT_JOB_ALLOW": json.dumps(["mcp__claude_ai_x__y", "Edit(./a/**)"])}
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path(f"/s/{p}.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path(f"/s/{p}.json")):
             cmd = runtime_claude._flags(task._replace(env=env2))
         self.assertEqual(cmd[cmd.index("--tools") + 1], "Bash,Edit,Glob,Grep,Read,Write")   # no MCP names in --tools
         with self.assertRaises(ValueError):   # no project: never a run with whatever settings happen to load
@@ -409,7 +409,7 @@ class PlatformSettings(unittest.TestCase):
             with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", tmp), \
                     mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}), \
                     mock.patch.object(hubconf, "get", lambda k, d=None: ["p"] if k == "service_sandbox_exempt" else d):
-                d = json.loads(runtime_claude.platform_settings("p").read_text())
+                d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
             self.assertIn("Read(//w/q/**)", d["permissions"]["deny"])
             self.assertIn("Bash(agenthub send *)", d["permissions"]["allow"])
             self.assertFalse(any("merge-branch" in r or "hubbus" in r or "cap-run" in r for r in d["permissions"]["allow"]))

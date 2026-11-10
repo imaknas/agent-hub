@@ -136,7 +136,7 @@ class LinksStayInside(Scratch):
         env = {"PATH": "/usr/bin:/bin", "AGENT_JOB_PROJECT": "proj", "AGENT_JOB_ALLOW": json.dumps(["Edit(./data/x)"])}
         task = runtime_ports.Task(point="agent-job-confined", prompt="p", spec=spec, cwd=str(self.ws), env=env)
         with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
-                mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: self.tmp / "s.json"), \
+                mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: self.tmp / "s.json"), \
                 mock.patch("registry.refresh", lambda: {"projects": {"proj": doc}}), \
                 mock.patch("policy.notes_dir", lambda p: None):
             with self.assertRaisesRegex(ValueError, "follows a link out"):
@@ -154,7 +154,7 @@ class Folders(Scratch):
         env = {"PATH": "/usr/bin:/bin", "AGENT_JOB_PROJECT": "proj", "AGENT_JOB_ALLOW": json.dumps(["Edit(./data/**)"])}
         task = runtime_ports.Task(point="mailbox-conversation", prompt="p", spec=spec, cwd=str(cwd), env=env)
         with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
-                mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: self.tmp / "s.json"), \
+                mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: self.tmp / "s.json"), \
                 mock.patch("registry.refresh", lambda: {"projects": {"proj": doc}}), \
                 mock.patch("policy.notes_dir", lambda p: None):
             return runtime_claude._flags(task)

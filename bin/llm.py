@@ -41,8 +41,11 @@ import json
 import os
 import pathlib
 import re
+import secrets
+import shutil
 import subprocess
 import sys
+import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
@@ -329,10 +332,48 @@ def run(a) -> int:
     # agents the platform starts can reach `agenthub …` (the rules file and mailbox prompt name only the command, not
     # where the hub is installed)
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")
+    run_dir = make_run_dir(a.point, spec)
+    try:
+        return _launch(a, spec, rt, env, prompt, model, run_dir)
+    finally:
+        if run_dir:
+            shutil.rmtree(run_dir, ignore_errors=True)
+
+
+RUN_DIR_MAX_AGE_S = 86400   # a run folder older than this was left by a crash (no run takes a day)
+
+
+def run_dirs() -> pathlib.Path:
+    return hubconf.STATE / "agent-jobs" / ".settings"
+
+
+def make_run_dir(point: str, spec: dict) -> pathlib.Path | None:
+    """A confined run's own folder (docs/design/confined-mail-tools.md, "Depends on"): what the runtime writes for this run
+    alone (its settings file) goes there, and it is removed on every way out of run(). None when the point isn't confined or
+    names no project: the adapter's own refusal then decides. Folders a crash left are removed first."""
+    project = os.environ.get(spec.get("project_env") or "") if spec.get("settings") == "platform" else None
+    if not project or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", project):   # a registry name, never a path
+        return None
+    base = run_dirs()
+    base.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in base.iterdir():
+        try:
+            if old.is_dir() and not old.is_symlink() and now - old.lstat().st_mtime > RUN_DIR_MAX_AGE_S:
+                shutil.rmtree(old, ignore_errors=True)
+        except OSError:
+            pass
+    d = base / f"{project}.{point}.{secrets.token_hex(8)}"
+    d.mkdir(mode=0o700)   # never an existing one: two runs never share a folder
+    return d
+
+
+def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir) -> int:
+    import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
                               output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
-                              extra=tuple(a.extra or ()))
+                              extra=tuple(a.extra or ()), run_dir=str(run_dir) if run_dir else None)
     if spec.get("tool_servers") == "allowed_only":
         task, why, checked = deny_unnamed_servers(a.point, task)
         real = a.cmd == "run" and not getattr(a, "dry_run", False)   # a dry run only shows, never alerts

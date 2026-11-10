@@ -428,6 +428,8 @@ class Task(NamedTuple):
                              # replaced by a resume interface
     deny_servers: tuple = ()  # tool servers this run may not use at all, each one whole (llm.py:
                               # policy.tool_server_denials over the tool_servers interface)
+    run_dir: str | None = None  # a confined run's own folder (llm.py makes it and removes it when the run ends): what
+                                # the runtime writes for this run alone goes there
 
 
 class TaskResult(NamedTuple):

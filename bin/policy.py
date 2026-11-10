@@ -198,6 +198,21 @@ def notes_dir(project: str) -> pathlib.Path | None:
     return mem.resolve() / "memory"
 
 
+def run_roots(project: str) -> list[pathlib.Path]:
+    """Where a confined run of this project may follow a link to: its workspace, its runtime folder and the folder its
+    notes are in (the .agent-memory a worktree's link leads to; resolved; a folder the registry doesn't give is left
+    out), and what the owner let it write beyond them (allow_write, owner-only). The hub's own runs: its main checkout
+    too, whose worktrees its forks run in. Not hubconf.project_roots (where projects live)."""
+    import registry
+    doc = registry.refresh()["projects"].get(project) or {}
+    d = registry.dirs(doc) if doc else {}
+    notes = notes_dir(project)
+    extra = [hubconf.path(p) for p in doc.get("allow_write") or []]
+    if project == hubconf.hub_project():
+        extra.append(hubconf.MAIN)
+    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), notes.parent if notes else None, *extra) if p]
+
+
 def run_state_denied(project: str, keep: pathlib.Path | None = None) -> list[pathlib.Path]:
     """What a confined run of the hub may not read: its working directory is the hub root, where other projects' runs left
     fork logs and reports, and it could quote them to a sandboxed sender. keep: the run's own job folder. Other projects'

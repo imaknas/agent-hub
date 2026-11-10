@@ -259,16 +259,20 @@ def lease_settings(pol: dict) -> dict:
     return {"permissions": {"deny": list(dict.fromkeys(deny))}}
 
 
-def platform_settings(project: str, keep: pathlib.Path | None = None, cwd=None) -> pathlib.Path:
+def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | None = None, cwd=None,
+                      folders=()) -> pathlib.Path:
     """A judgment point with settings: platform: the only settings file the run loads (with --restricted, Claude Code
     reads none of the user's, project's or local files): the project's sandbox when it's enforced, the deny list and
     the platform's commands, all from the policy, never from what is rendered in the workspace. keep: an unattended
     job's own state folder that its allow rules write (own_state_dir), left out of the deny list; cwd: the run's working
-    directory, which when it is the job's folder (job_folder) stays readable even with no rule writing it. One file per
-    such job."""
-    import hubconf
+    directory, which when it is the job's folder (job_folder) stays readable even with no rule writing it; folders: every
+    folder the run works in (its own, the project's, those its rules add), none of whose git directories it writes
+    (docs/design/confined-mail-tools.md M7). Written in the run's own folder (Task.run_dir), which llm.py removes."""
     import policy
     import registry
+    if not run_dir:
+        raise ValueError(f"the confined run of {project} has no run folder (llm.py makes one): its settings are never "
+                         "written anywhere shared")
     index = registry.refresh()
     doc = index["projects"][project]
     pol = policy.policy(project, doc, index)
@@ -291,18 +295,51 @@ def platform_settings(project: str, keep: pathlib.Path | None = None, cwd=None) 
     # each carved entry is denied as itself too (settings: a file beside the path, not only a folder's contents)
     deny = lease_settings(pol)["permissions"]["deny"]
     deny += [r for x in hidden if not x.is_dir() for r in (f"Read({_rule_path(x)})",) if r not in deny]
+    deny += [r for r in run_write_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
     out = {"permissions": {"deny": deny, "allow": allow}}
     # the registry's enforce.sandbox, as render-project-settings decides it (not the services-only exemption)
     if (doc.get("enforce") or {}).get("sandbox") is True:
         # autoAllowBashIfSandboxed defaults to true: a sandboxed Bash command would be approved before allow: is
         # consulted, so allow: would stop being the boundary exactly in the sandboxed projects
         out["sandbox"] = {**sandbox, "autoAllowBashIfSandboxed": False}
-    p = hubconf.STATE / "agent-jobs" / ".settings" / (f"{project}--{folder.name}.json" if folder else f"{project}.json")
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(f".{p.name}.{os.getpid()}")
-    tmp.write_text(json.dumps(out, ensure_ascii=False))
-    tmp.replace(p)
+    p = pathlib.Path(run_dir) / "settings.json"
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(out, ensure_ascii=False))
     return p
+
+
+HUB_RUN = ".hub-run"   # the platform's request folder in a project's workspace and runtime folder (cap-runner.py)
+
+
+def _git_rules(folder) -> list[str]:
+    """Edit and Write denied on every git directory or pointer file at any depth under folder, whether it exists yet or
+    not (a run can't make a new one either)."""
+    f = _rule_path(folder)
+    return [f"{t}({f}{tail})" for tail in ("/.git", "/.git/**", "/**/.git", "/**/.git/**") for t in ("Edit", "Write")]
+
+
+def run_write_denied(project: str, folders) -> list[str]:
+    """What no confined run writes, wherever its rules reach (docs/design/confined-mail-tools.md M7, project-agent-calls.md
+    A2): a git directory under any folder it works in (its own, the project's, the ones its rules add), the project's git
+    common directory (from the pointer files, never by running git in the project's repo), and the platform's request
+    folder in the project's workspace and runtime folder. The runtime matches these as the volume does (case, too)."""
+    import gitdirs
+    import registry
+    places = list(dict.fromkeys(pathlib.Path(os.path.realpath(f)) for f in [*project_roots(project), *folders] if f))
+    rules = [r for f in places for r in _git_rules(f)]
+    for f in places:
+        found = gitdirs.dirs(f)
+        if found:
+            common = _rule_path(found.common)
+            rules += [f"{t}({common}{tail})" for tail in ("", "/**") for t in ("Edit", "Write")]
+    doc = registry.refresh()["projects"].get(project) or {}
+    d = registry.dirs(doc) if doc else {}
+    for base in (d.get("workspace"), d.get("runtime")):
+        if base:
+            hub_run = _rule_path(pathlib.Path(os.path.realpath(base)) / HUB_RUN)
+            rules += [f"{t}({hub_run}{tail})" for tail in ("", "/**") for t in ("Edit", "Write")]
+    return list(dict.fromkeys(rules))
 
 
 def settings_path(ws: pathlib.Path) -> pathlib.Path:
@@ -749,20 +786,17 @@ def own_state_dir(allowed, cwd) -> pathlib.Path | None:
 
 
 def project_roots(project: str) -> list[pathlib.Path]:
-    """Where a confined run of this project may follow a link to: its workspace, its runtime folder and the folder its
-    notes are in (the .agent-memory a worktree's link leads to; resolved; a folder the registry doesn't give is left
-    out)."""
+    """Where a confined run of a project may follow a link to: the policy's (neutral), named here so the tests that patch
+    it apply; imported when called, as this module's other platform imports are."""
     import policy
-    import registry
-    import hubconf
-    doc = registry.refresh()["projects"].get(project) or {}
-    d = registry.dirs(doc) if doc else {}
-    notes = policy.notes_dir(project)
-    # and what the owner let it write beyond them (allow_write, owner-only)
-    extra = [hubconf.path(p) for p in doc.get("allow_write") or []]
-    if project == hubconf.hub_project():   # the hub's own runs: its main checkout, whose worktrees its forks run in
-        extra.append(hubconf.MAIN)
-    return [p.resolve() for p in (d.get("workspace"), d.get("runtime"), notes.parent if notes else None, *extra) if p]
+    return policy.run_roots(project)
+
+
+FORBIDDEN_PARTS = (".git", HUB_RUN)   # no confined run writes into one, compared case-insensitively (the volume may be)
+
+
+def _forbidden_part(p) -> bool:
+    return any(part.lower() in FORBIDDEN_PARTS for part in pathlib.PurePath(p).parts)
 
 
 def _inside(p: pathlib.Path, places) -> bool:
@@ -786,9 +820,6 @@ def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
         parts = m.group(2).split("/")
         fixed = list(itertools.takewhile(lambda p: not _GLOB.search(p), parts))
         real = base.joinpath(*fixed).resolve() if fixed else base
-        if real == base or base in real.parents:
-            continue
-        top = base.joinpath(fixed[0]).resolve()
         if roots is not None:
             # every step of the path, not only where it ends: the first one becomes a working directory (--add-dir), and
             # `data -> ~` with `./data/workspace/<project>/**` ends inside the project while opening the whole home
@@ -797,6 +828,14 @@ def _linked_rules(allowed, cwd, roots=None) -> tuple[list[str], list[str]]:
                 if not _inside(step, [base, *roots]):
                     raise ValueError(f"the rule {r} follows a link out of the project's folders, to {step}; a confined "
                                      "run never follows one there")
+                # a link the project planted inside its own folder (`out -> .git/brunna/outbox`) turns a plain rule into
+                # a write there (M7)
+                if _forbidden_part(step.relative_to(base) if base in step.parents else step):
+                    raise ValueError(f"the rule {r} leads into {step}; a confined run never writes a .git or "
+                                     f"{HUB_RUN} folder")
+        if real == base or base in real.parents:
+            continue
+        top = base.joinpath(fixed[0]).resolve()
         if str(top) not in dirs:
             dirs.append(str(top))
         rules.append(f"{m.group(1)}(/{real}/{'/'.join(parts[len(fixed):])})" if len(fixed) < len(parts)
@@ -815,6 +854,9 @@ def _notes_rules(allowed, project, cwd) -> list[str]:
     notes = policy.notes_dir(project) if MEMORY_RULE in allowed else None
     if not notes:
         return []
+    if _forbidden_part(notes):
+        raise ValueError(f"the notes of {project} resolve to {notes}; a confined run never writes a .git or {HUB_RUN} "
+                         "folder")
     rule = f"Edit(/{notes}/**)"
     if rule not in allowed:
         allowed.append(rule)
@@ -851,8 +893,7 @@ def _flags(task) -> list:
             # an Edit rule governs every file-writing tool: a new file (or a whole one rewritten) needs Write
             if "Edit" in tools:
                 tools.add("Write")
-        cmd += ["--restricted", "--settings", str(platform_settings(project, own_state_dir(allowed, task.cwd), task.cwd)),
-                "--tools", ",".join(sorted(tools))]
+        keep = own_state_dir(allowed, task.cwd)
         roots = project_roots(project)
         # the folder it runs in, where it resolves: a folder of the project's (a worktree, a session's folder) can be a
         # link the project made, and every ./ rule is relative to it
@@ -863,6 +904,10 @@ def _flags(task) -> list:
         dirs, extra = _linked_rules(allowed, task.cwd, roots)
         allowed += extra
         dirs += [d for d in _notes_rules(allowed, project, task.cwd) if d not in dirs]
+        # written once every folder it works in is known: nothing under a .git of any of them is written (M7)
+        cmd += ["--restricted", "--settings",
+                str(platform_settings(project, spec, task.run_dir, keep, task.cwd, folders=[here, *dirs])),
+                "--tools", ",".join(sorted(tools))]
         for d in dirs:
             cmd += ["--add-dir", d]
     elif "tools" in spec:

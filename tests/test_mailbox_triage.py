@@ -1098,7 +1098,7 @@ class Settings(unittest.TestCase):
                "workspace": str(ws)}
         doc = {"name": project, "paths": {"workspace": str(ws)}}
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch("registry.refresh", lambda: {"projects": {project: doc}}):
-            return json.loads(runtime_claude.platform_settings(project, keep).read_text())["permissions"]["deny"]
+            return json.loads(runtime_claude.platform_settings(project, {}, tempfile.mkdtemp(), keep).read_text())["permissions"]["deny"]
 
     def tilde(self, p):
         import runtime_claude
@@ -1180,7 +1180,7 @@ class Settings(unittest.TestCase):
         spec = {"settings": "platform", "project_env": "P", "permission_mode": "dontAsk", "tools": "Read",
                 "allowed_tools": ["Read(./**)"]}
         task = runtime_ports.Task("synthetic", "x", spec, cwd=str(self.hub), env={"P": self.name})
-        with mock.patch.object(runtime_claude, "platform_settings", lambda p, keep=None, cwd=None: pathlib.Path("/platform/p.json")):
+        with mock.patch.object(runtime_claude, "platform_settings", lambda p, *a, **k: pathlib.Path("/platform/p.json")):
             cmd = runtime_claude._flags(task)
         self.assertFalse([r for r in thc.allowed(cmd) if ".agent-memory" in r])
 
