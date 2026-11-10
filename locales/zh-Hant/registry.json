@@ -161,5 +161,7 @@
  "agent jobs {jobs} would share the state folder {name} (or take a mailbox handler's): none of them runs until one is renamed": "agent job {jobs} 會共用 state 資料夾 {name}(或佔用 mailbox 處理者的):改名之前都不會跑",
  "agent job {job} belongs to a sandboxed project and declares no allow list, so it doesn't run until it declares the tools it needs (an agent job without one loads the project's saved permissions)": "agent 工作 {job} 屬於有沙箱的專案,卻沒宣告 allow 清單:宣告它需要的工具之前不會執行(沒有 allow 的 agent 工作會載入專案存下的權限)",
  "the rules of confined agent jobs can't be checked on this runtime, so none of them runs: {why}": "這個 runtime 無法檢查受限 agent 工作的規則,所以它們都不會執行:{why}",
- "agent job {job} doesn't run until its allow: changes: {problems}": "agent 工作 {job} 在它的 allow: 改掉之前不會執行:{problems}"
+ "agent job {job} doesn't run until its allow: changes: {problems}": "agent 工作 {job} 在它的 allow: 改掉之前不會執行:{problems}",
+ "job {name}: mail must be true/false": "job {name}:mail 只能是 true/false",
+ "job {name}: mail: true is only for a scheduled agent job with an allow: list (on an event job any bus writer's text would send letters as the project)": "job {name}:mail: true 只能用在有 allow: 清單的排程 agent job(放在事件 job 上,任何能寫 bus 的人寫的字都會用這個專案的名義寄信)"
 }

@@ -179,7 +179,7 @@ $ agenthub doctor    # two coding agents
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 宣告 allow: 的無人值守 agent job、事件觸發的 agent job:claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
-! 信箱接續(用閒置 session 的 context 回信):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則)
+! 信箱接續(用閒置 session 的 context 回信):claude 可以用;acp 關掉(沒有在平台拋棄式 worktree 以外跑 agent、session 狀態、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有
 ! 通道租借(另外要助理模組):claude 可以用;acp 關掉(沒有長駐串流 session、session 狀態、在平台拋棄式 worktree 以外跑 agent)
     → 某個 runtime 關掉的功能,只是它自己的 session 沒有

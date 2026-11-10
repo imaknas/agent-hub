@@ -24,5 +24,10 @@
  "the memory copy of {project} holds only notes again": "{project} 的 memory 副本又只剩筆記了",
  "{project} is sandboxed, and {point} would run with its saved permissions: a sandboxed project's agent job declares allow: and runs confined": "{project} 有沙箱,而 {point} 會帶著它存下的權限執行:有沙箱的專案的 agent 工作要宣告 allow:,在限制下執行",
  "{project} is not in the registry, so what it is held to can't be told; {point} doesn't run": "{project} 不在 registry 裡,看不出它受哪些限制;{point} 不執行",
- "{point} did not start: its rules aren't what a confined run of {project} may have: {problems}": "{point} 沒有啟動:它的規則不是 {project} 的受限執行可以有的:{problems}"
+ "{point} did not start: its rules aren't what a confined run of {project} may have: {problems}": "{point} 沒有啟動:它的規則不是 {project} 的受限執行可以有的:{problems}",
+ "{point} did not start: it acts on the letters ${var} lists, and that lists no letter id": "{point} 沒有啟動:它處理 ${var} 列出的信,而那裡沒有任何信的 id",
+ "judgment point {name}: settings: platform needs mail: tools or mail: none": "判斷點 {name}:settings: platform 要寫 mail: tools 或 mail: none",
+ "judgment point {name}: mail: is only for settings: platform points": "判斷點 {name}:mail: 只用在 settings: platform 的點",
+ "judgment point {name}: {key} needs mail: tools": "判斷點 {name}:{key} 要搭配 mail: tools",
+ "judgment point {name}: mail: tools needs tool_servers: allowed_only (a server under the platform's own id would otherwise go unchecked)": "判斷點 {name}:mail: tools 要搭配 tool_servers: allowed_only(不然用平台自己 id 的伺服器沒人檢查)"
 }

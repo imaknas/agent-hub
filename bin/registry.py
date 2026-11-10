@@ -86,6 +86,10 @@ schema v1 (contracts/project.v1.md has the full description):
     connectors: true (agent jobs only): needs claude.ai connectors (Upwork etc.) → uses the subscription login, not
       the default headless token (tools in allow with mcp__claude_ai_ but this not set: invalid). Such a run loads the
       machine's tool servers; every one whose tools allow doesn't name is denied for it (tool_servers: allowed_only)
+    mail: true (a scheduled agent job with allow: only, never an event job): its run gets the platform's mail tools to
+      start new letters (send a request, question, info or progress; ask the owner; write notes when its rules write
+      them), never to read the mailbox, reply or close (docs/design/confined-mail-tools.md M1). Without it a confined job
+      sends no mail. On an event job it is refused: any bus writer's text would then send as the project
     legacy_name: the old name in schedule.yaml: while the old name is still in schedule.yaml this job isn't used
                  (during the switch the old one wins; delete that entry from schedule.yaml to switch over; the state
                  moves over from the old name too)
@@ -157,7 +161,7 @@ ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "timeout", "legacy_name", "allow",
-       "connectors", "catch_up"}
+       "connectors", "catch_up", "mail"}
 TRIGGER = {"events", "projects", "sources", "where", "debounce"}
 # the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
 # letters without a chain): no event job reacts to them (event-jobs.md 3.5)
@@ -693,6 +697,11 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
             # it names a state folder (run-agent-job.sh) and schedule state: a name, never a path
             errs.append(_("job {name}: legacy_name is a name (lowercase letters, digits, -; a module's may have one /)",
                           name=n))
+        if "mail" in job and not isinstance(job["mail"], bool):
+            errs.append(_("job {name}: mail must be true/false", name=n))
+        elif job.get("mail") is True and (job.get("kind") != "agent" or not job.get("allow") or "trigger" in job):
+            errs.append(_("job {name}: mail: true is only for a scheduled agent job with an allow: list (on an event job "
+                          "any bus writer's text would send letters as the project)", name=n))
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
         if job.get("connectors") is True and not job.get("allow"):
@@ -1049,6 +1058,9 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 # runs it under judgment point agent-job-confined; docs/design/event-jobs.md 3.2)
                 if job.get("allow"):
                     cmd = f"AGENT_JOB_ALLOW={shlex.quote(json.dumps(job['allow'], ensure_ascii=False))} {cmd}"
+                # the platform's mail tools, only for a job that asks (llm-points mail_from_env)
+                if job.get("mail") is True:
+                    cmd = f"AGENT_JOB_MAIL=1 {cmd}"
                 # needs claude.ai connectors: use the subscription login, not the default headless token
                 if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"

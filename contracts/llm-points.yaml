@@ -187,6 +187,10 @@ points:
     tool_servers: allowed_only
     settings: platform
     project_env: AGENT_JOB_PROJECT
+    # the platform's mail tools only for a job that declares mail: true (registry), and only to start new letters
+    # (docs/design/confined-mail-tools.md M1)
+    mail: tools
+    mail_from_env: AGENT_JOB_MAIL
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
@@ -205,6 +209,9 @@ points:
     tool_servers: allowed_only
     settings: platform
     project_env: AGENT_JOB_PROJECT
+    # no mail: any bus writer's text would send as the project (confined-mail-tools.md M1)
+    mail: none
+    prompt_source: untrusted
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the run fails, its events wait for the next attempt
@@ -241,6 +248,9 @@ points:
     tool_servers: allowed_only
     settings: platform
     project_env: MAILBOX_PROJECT
+    mail: tools
+    letters_env: MAILBOX_LETTERS
+    prompt_source: untrusted
     timeout_s: 1800
     output: {format: text}
     on_failure: say_so      # the bridge reports the escalation failure
@@ -296,6 +306,12 @@ points:
     allowed_tools: ["Edit(./.agent-memory/memory/**)", "{platform_mail}"]
     settings: platform
     project_env: MAILBOX_PROJECT
+    mail: tools
+    letters_env: MAILBOX_LETTERS
+    prompt_source: untrusted
+    # a point with mail tools checks the run loads no server under the platform's own id (sealed below, so nothing is
+    # asked: confined-mail-tools.md M2)
+    tool_servers: allowed_only
     # don't load the project's MCP servers (e.g. the project's production database); the background copy doesn't need
     # them
     extra_args: ["--strict-mcp-config"]

@@ -246,8 +246,10 @@ def features(providers: bool | None = None, propose: bool | None = None) -> tupl
         # agent-job-confined / agent-job-event: settings: platform, allow_from_env, tool_servers: allowed_only
         (_("unattended agent jobs with allow:, and event-triggered agent jobs"),
          ("agent", "confine", "rule_check", "tool_servers")),
-        # mailbox-conversation: settings: platform, resumed with the default runtime's own arguments
-        (_("mailbox follow-up (replying with an idle session's context)"), ("agent", "sessions", "confine", "rule_check")),
+        # mailbox-conversation: settings: platform, tool_servers: allowed_only, resumed with the default runtime's own
+        # arguments
+        (_("mailbox follow-up (replying with an idle session's context)"),
+         ("agent", "sessions", "confine", "rule_check", "tool_servers")),
         (_("channel leasing (also needs the assistant module)"), ("stream", "sessions", "agent", "auth")),
         (_("letters seen live in the session, reminders to write notes"), ("lifecycle",)),
         # reinforcement only: without it a letter waits for the session's next hook (docs/design/mailbox-runtimes.md)

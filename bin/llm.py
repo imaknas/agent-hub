@@ -370,6 +370,23 @@ def make_run_dir(point: str, spec: dict) -> pathlib.Path | None:
     return d
 
 
+# the shape of every id the platform writes (hubbus EVENT_ID, whose pattern ends in $: matched whole here, so a final
+# newline never passes; tests check the two agree)
+EVENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}")
+
+
+def run_letters(env, var: str) -> list[str] | None:
+    """The letters a mail handler's run is started for (a JSON list in env[var]): None when there is none, or when any
+    entry isn't a letter id."""
+    try:
+        ids = json.loads((env or {}).get(var) or "")
+    except ValueError:
+        return None
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) and EVENT_ID.fullmatch(i) for i in ids):
+        return None
+    return ids
+
+
 def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
     """Why a settings: platform run's own rules don't let it start (the runtime's rule_check port, A2 of
     docs/design/project-agent-calls.md), as one sentence; None when they do, or when the point isn't one, or names no
@@ -381,6 +398,10 @@ def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
     if doc is None:
         return _("{project} is not in the registry, so what it is held to can't be told; {point} doesn't run",
                  project=project, point=point)
+    if spec.get("mail") == "tools" and spec.get("letters_env") and not run_letters(task.env, spec["letters_env"]):
+        # every call it made would be refused, or hubbus would read "not a letter run" and lift the letters' limits
+        return _("{point} did not start: it acts on the letters ${var} lists, and that lists no letter id",
+                 point=point, var=spec["letters_env"])
     problems = rt.rule_problems(task, sandboxed=registry.sandbox_enforced(doc), network=list(doc.get("network") or []),
                                 untrusted=False)
     if not problems:
@@ -470,6 +491,24 @@ def lint() -> list[str]:
         if output_schema(spec) and not (POINTS.parent / output_schema(spec)).exists():
             bad.append(_("judgment point {name}: output.schema {schema} does not exist", name=name,
                          schema=output_schema(spec)))
+        bad += mail_problems(name, spec)
+    return bad
+
+
+def mail_problems(name: str, spec: dict) -> list[str]:
+    """The mail keys' cross-field rules (docs/design/confined-mail-tools.md M1)."""
+    bad = []
+    confined = spec.get("settings") == "platform"
+    if confined and spec.get("mail") not in ("tools", "none"):
+        bad.append(_("judgment point {name}: settings: platform needs mail: tools or mail: none", name=name))
+    if not confined and "mail" in spec:
+        bad.append(_("judgment point {name}: mail: is only for settings: platform points", name=name))
+    for key in ("mail_from_env", "letters_env"):
+        if key in spec and spec.get("mail") != "tools":
+            bad.append(_("judgment point {name}: {key} needs mail: tools", name=name, key=key))
+    if spec.get("mail") == "tools" and spec.get("tool_servers") != "allowed_only":
+        bad.append(_("judgment point {name}: mail: tools needs tool_servers: allowed_only (a server under the platform's "
+                     "own id would otherwise go unchecked)", name=name))
     return bad
 
 
