@@ -1,7 +1,7 @@
 $ agenthub modules
 [exit 0]
 --- stdout
-  assistant    Personal assistant: question reconciliation, channel leases
+  assistant    Muninn, an optional personal assistant: question reconciliation, channel leases
 ✓ backup       Nightly encrypted cloud backup + monthly restore test
   claude       Claude Code login check, updates, headless token expiry reminders
   codex        your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)

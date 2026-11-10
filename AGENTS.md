@@ -442,7 +442,7 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
 - `modules/`: **features that can stay off** (docs/design/new-user.md 3.2): `<name>.yaml` in the same
   jobs/services/secrets/consumes format as the registry (`type: module`, cwd always hub), adopted only with `brunna.json`
   `modules.<name>: true`; their jobs are called `<module>/<job>` in the schedule. Current: assistant
-  (reconcile-questions, lease-runner), backup, claude, consolidate, mirror, owner, reflect, sandbox (cap-runner).
+  (the integration with Muninn, an optional personal assistant: reconcile-questions, lease-runner), backup, claude, consolidate, mirror, owner, reflect, sandbox (cap-runner).
   A module inserts itself into the core flow with `before: [<project>/<job>]` (the core does not need to know about
   it); when it is off it is as if it did not exist (someone else's after: pointing at it does not wait either); cycles
   in `after:`/`before:` are rejected by the registry. A job moved into a module keeps its schedule state with

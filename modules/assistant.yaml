@@ -1,6 +1,10 @@
-# The personal assistant (hub.json assistant; an optional tool, docs/design/tool-agnostic.md): reconciling questions to
-# the owner, and channel leases that let the assistant lend its conversation to a project session. A deployment without
-# an assistant leaves this module off (the owner side uses the built-in owner module).
+# The integration with Muninn, a personal assistant that is a separate, optional open-source project (hub.json
+# assistant; docs/design/tool-agnostic.md): reconciling questions to the owner, and channel leases that let the assistant
+# lend its conversation to a project session. brunna needs none of it: a deployment without an assistant leaves this
+# module off, and the owner side is the built-in one (bin/owner.py): the owner's to-dos, questions and the registrar work
+# the same. The formats it reads (consumes, below) are that assistant's own, so another assistant needs an integration
+# of its own, as each coding agent has its runtime_<name>.py. What any assistant can speak without one is the open Principal
+# Handoff protocol (owner_side: assistant), which is not tied to this module.
 # The owner to-do registrar moved back to the core on 10-29 (registrar in projects/agent-hub.yaml): it runs whoever
 # the owner side is.
 # The letters reconcile-questions sends are dispatched right away by the mailbox dispatch; it runs only once at night,
@@ -8,7 +12,7 @@
 v: 1
 name: assistant
 type: module
-description: "Personal assistant: question reconciliation, channel leases"
+description: "Muninn, an optional personal assistant: question reconciliation, channel leases"
 requires_config: [assistant.api]
 jobs:
 - name: reconcile-questions

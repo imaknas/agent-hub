@@ -13,7 +13,7 @@
   "bin/worktrees.py": 1,
   "integrations/herdr/RECIPE.md": 1,
   "integrations/herdr/mods/brunna/main.js": 3,
-  "modules/assistant.yaml": 15,
+  "modules/assistant.yaml": 17,
   "tests/fixtures/i18n-golden/backup.txt": 2,
   "tests/fixtures/i18n-golden/create-idea-sandbox.txt": 2,
   "tests/fixtures/i18n-golden/guard.txt": 4,
@@ -28,7 +28,9 @@
   "tests/test_hubbus_questions.py": 7,
   "tests/test_lease_relay_approvals.py": 2,
   "tests/test_mailbox_dispatch.py": 1,
-  "tests/test_new_user.py": 3
+  "tests/test_new_user.py": 3,
+  "tests/fixtures/i18n-golden/agenthub-modules.txt": 1,
+  "tests/fixtures/i18n-golden/en/agenthub-modules.txt": 1
  },
  "secrets-path": {},
  "public-docs": {
