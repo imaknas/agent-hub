@@ -1,7 +1,10 @@
 # Confined runs send mail through the platform's tools, not a shell
 
-Status: settled (11-10). Six rounds of blind review (feasibility and security each); round 6 found nothing blocking in
-either, and this seventh draft folds in its should-fix items. Ready to build. The owner decided the direction on 11-10, which
+Status: built (11-10), on one branch merged at once. Settled after six rounds of blind review (feasibility and
+security each). What the build changed from the text below: `rule_problems` lets an absolute path through when it is the
+run's own job folder (a live job names its state folder so; `project-agent-calls.md` A2 says so too), and the
+`runtime_claude.project_roots` binding is a small function calling `policy.run_roots` rather than a module-level name
+(the adapter imports the platform's modules only when called). The owner decided the direction on 11-10, which
 answers the question of 11-02 (m11020427-89ec, raised in `docs/design/mailbox-routing.md`, "11-02: the handlers are
 confined", paragraph **Bash**).
 

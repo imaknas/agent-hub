@@ -314,6 +314,9 @@ agent while the user was working there. Now:
 
 ## 11-02: the handlers are confined (`docs/design/event-jobs.md` 3.2, section 11)
 
+Since 11-10 the handlers have no shell: their mail is the platform's MCP server, attached to the run
+(`docs/design/confined-mail-tools.md`). What follows about Bash and the mail subcommands is how it was until then.
+
 **The gap.** A request or question to a project, from anyone who can write the bus, starts a handler there. Until
 now the handlers loaded the project's saved settings: every allow rule a person had approved in that project's
 sessions (`Bash(npm:*)`, `Bash(git push:*)`…), the user's, the project's hooks, and in a sandboxed project the CLI's

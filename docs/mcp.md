@@ -76,8 +76,11 @@ PATH).
 
 ## Known limitations
 
-- **Agents the platform starts cannot use it** (environment variable `HUB_LLM_POINT`): that kind of work writes the
-  letters it wants sent into its output, and the platform sends them.
+- **Agents the platform starts cannot use a server you registered** (environment variable `HUB_LLM_POINT`). The
+  platform attaches its own to the runs that send mail (the mail handlers, and scheduled agent jobs that declare
+  `mail: true`), started as `mcp_server.py --run <file>`: such a run's project, tools and letters come from a file the
+  platform writes for it, never from its environment or folder (docs/design/confined-mail-tools.md). Other platform
+  work writes the letters it wants sent into its output, and the platform sends them.
 - The MCP server is a process separate from the agent, so **the agent's own sandbox does not restrict it** (e.g. with
   Codex `--sandbox read-only`, `note` can still write to memory). It only writes this project's memory notes and the
   bus.

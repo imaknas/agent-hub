@@ -163,8 +163,9 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   reply to a closed session is resumed in a background fork (context small enough, not to a sandboxed sender), a session of a
   runtime with no wake port gets that fork, and only then a headless agent triages
   (`templates/prompts/mailbox.md`, once per letter, one run per sender: it only writes notes, replies `done` to its
-  letters and asks the owner, never changes code, and what it leaves stays open for sessions; its commands are limited
-  to its letters, `MAILBOX_LETTERS`, as a background branch's are to its one, though a branch may reply with any ordinary type; the sender gets one fixed line once it has started; with `mailbox.handler: propose` it
+  letters and asks the owner, never changes code, and what it leaves stays open for sessions; it has no shell, its
+  mail is the platform's MCP server attached to the run (docs/design/confined-mail-tools.md), limited to its letters,
+  `MAILBOX_LETTERS`, as a background branch's are to its one, though a branch may reply with any ordinary type; the sender gets one fixed line once it has started; with `mailbox.handler: propose` it
   runs in a throwaway worktree instead and the platform sends for it, `bin/propose_apply.py`; that is off for a sandboxed project, and says so, whose letters wait for sessions). brunna's own letters work
   the same way. Anyone who can write the bus can start these
   handlers, so the background branch and the headless agent load only the platform's settings for the project, never

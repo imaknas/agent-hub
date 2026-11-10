@@ -39,6 +39,10 @@ Arms: `old` = templates/ (and, for mcp, the branch copies and the lease, the who
 sends before the translation (--old-ref: the texts moved out of code were still Chinese at a later commit);
 `new` = the working tree; `new-en` = the working tree on an instance whose languages are English (the run's config
 says so, the inputs are locales/en.e3.json; scored on the same checks and on language).
+
+The mail handlers' scenarios (mailbox and the branch copies) run with the platform's mail tools attached by llm.py, on
+the run's own instance (docs/design/confined-mail-tools.md M5): they have no shell, so the `old` arm, whose prompts name
+the mail commands, isn't run for them; they are compared as `new` against `new-en`.
 """
 from __future__ import annotations
 
@@ -72,6 +76,8 @@ PROJECT = "rates"
 SENDER = "dashboard"
 FAKE_SESSION = "e3e3e3e3-0000-4000-8000-000000000000"   # the session the resume scenario's letter was sent from
 BRANCH = {"resume": "resume", "delegate_question": "delegate", "delegate_decision": "delegate"}
+# the mail handlers' scenarios: the old prompts name commands a run with the mail tools can't use (no shell)
+TOOLS_ONLY = ("mailbox", *BRANCH)
 LEASE = {"lease_question": "discuss", "lease_change": "discuss"}
 RULES = ("engineering", "conventional-commits")
 GIT_ENV = {"GIT_AUTHOR_NAME": "owner", "GIT_AUTHOR_EMAIL": "owner@example.invalid",
@@ -501,6 +507,10 @@ def check(scenario: str, out: pathlib.Path, lang: str = "zh-Hant") -> dict:
 
 def cmd_run(a) -> int:
     scen = [a.scenario] if a.scenario else list(data(lang_of(a.arm))["scenarios"])
+    if a.arm == "old" and (skipped := [s for s in scen if s in TOOLS_ONLY]):
+        print(f"e3: the old arm isn't run for {', '.join(skipped)}: its prompts name the mail commands, and these runs "
+              "have only the platform's mail tools (compare new with new-en)")
+        scen = [s for s in scen if s not in TOOLS_ONLY]
     run_id = a.run or f"{datetime.datetime.now():%Y%m%d-%H%M}-e3"
     run_dir = e2.root() / "runs" / run_id
     run_dir.mkdir(parents=True, exist_ok=True)

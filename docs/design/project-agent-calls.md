@@ -110,7 +110,9 @@ list back as a note.
 A runtime without the port refuses every `settings: platform` run, saying why.
 
 Refused, for every project:
-- any `~/`, `//`, absolute or `..` path in a rule (paths are relative to the run's folder);
+- any `~/`, `//`, absolute or `..` path in a file tool's rule (paths are relative to the run's folder), except an
+  absolute one whose fixed part is the run's own job folder (`cwd: state`) or inside it: a live job names its state
+  folder that way (found when building, 11-10), and it is the run's own folder;
 - a rule whose fixed part enters `.hub-run/` (a run never writes the platform's request folder, A1);
 - for `project-agent`, any `mcp__` rule: the run loads no tool servers.
 

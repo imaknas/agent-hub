@@ -89,7 +89,8 @@ jobs:
         branch: "claude/*"
       debounce: 10m                        # optional, default 0m: quiet period before a run (5)
     kind: agent
-    allow: ["Read", "Bash(git log:*)"]     # required for an agent event job (3.2)
+    allow: ["Read", "Edit(./reports/**)"]  # required for an agent event job (3.2): file tools and WebFetch to the
+                                           # project's own domains only (docs/design/confined-mail-tools.md M6)
     max_attempts_per_day: 6                # optional for event jobs, default 12 (5)
 ```
 
