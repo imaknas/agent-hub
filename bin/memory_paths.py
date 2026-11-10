@@ -19,6 +19,8 @@ only name that starts with a dot.
                                                             again counts, and a merge needs no reasoning. What old's own tree holds is
                                                             not new: a repo that already holds such a path goes on taking notes, and a
                                                             commit removing it, while agents stay out (folder_problems)
+  is_memory_tree(repo, rev) → bool                          rev's tree is a memory branch's: not empty, and nothing in it a memory
+                                                            branch may not hold (merge-branch refuses to merge one into a main)
   folder_problems(folder) → [entry text]                    the files themselves, at the point of use: llm.py asks it before an agent
                                                             starts in a copy of a memory branch (works_in: memory), on every runtime
 
@@ -33,6 +35,7 @@ import subprocess
 import sys
 import unicodedata
 
+BRANCH = "agent-memory"   # the memory branch's name in a project's repo (its .agent-memory worktree)
 TOP = ("AGENT.md", "RULES", "STATE.md")
 TREE = "memory"
 KEEP = ".gitkeep"
@@ -135,6 +138,12 @@ def tree_problems(repo, rev: str, inert_ok: bool = False) -> list[str]:
         return _shown(_problems(_entries(repo, rev), inert_ok=inert_ok))
     except Unreadable as e:
         return [f"can't be read: {e}"]
+
+
+def is_memory_tree(repo, rev: str) -> bool:
+    """rev's tree is a memory branch's (raises Unreadable when git can't tell)."""
+    entries = _entries(repo, rev)
+    return bool(entries) and not _problems(entries)
 
 
 def new_commit_problems(repo, old: str | None, new: str) -> list[str]:

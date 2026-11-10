@@ -6,8 +6,18 @@ Run in the session's own worktree:
   merge-branch [--project P] [--branch B] [--note "what was done"] [--question "something for the owner to decide"]...
                [--dry-run]
 
+  0. What is merged is the branch checked out in this folder (--branch, if given, must name it), and the folder must be
+     a linked worktree of the project's repo: not its main checkout, not its .agent-memory worktree. A project's
+     memory branch never goes into its main (11-10: one did, into a public main), so it is refused by name
+     (memory_paths.BRANCH), by what it holds (a tree that is a memory branch's, memory_paths.is_memory_tree) and by
+     where it comes from: a branch that shares no history with main (a memory branch starts on its own), or that would
+     bring commits of the memory branch, or copies of them (`git cherry`: a branch rebased onto a main that briefly
+     held them). Each refusal says why; nothing is recorded.
   1. Lock (one merge per repo at a time). The worktree must be clean (commit or discard uncommitted changes first).
-  2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop.
+  2. `git rebase <main>`: on a conflict, abort, list the conflicting files, record merge.failed, stop. --dry-run does
+     all of it in a temporary detached worktree in the repo's git dir, removed afterwards, and tests the rebased
+     commit there with `--rev`: it moves no ref and touches no worktree (11-10: a dry run that rebased in place left
+     the branch on a main that was rewound afterwards).
   2b. Registry `commits: conventional`: every commit title on this branch must pass (bin/commit_title.py); stop if
       one doesn't.
   2c. The platform's own repo: no commit message names a private project (bin/private_names.py), hooks
@@ -27,6 +37,7 @@ The report's format is in contracts/hubbus.v1.schema.json (the session.report ev
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -38,6 +49,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import commit_title  # noqa: E402
 import hubconf  # noqa: E402
+import memory_paths  # noqa: E402
 import names  # noqa: E402
 import i18n  # noqa: E402
 
@@ -56,6 +68,38 @@ def git(cwd, *args, check=False) -> subprocess.CompletedProcess:
 def publish(etype: str, project: str, eid: str, payload: dict) -> None:
     subprocess.run([*HUBBUS, "publish", etype, "--source", project, "--to", project, "--id", eid,
                     "--payload", json.dumps(payload, ensure_ascii=False)], capture_output=True)
+
+
+def memory_problem(wt: pathlib.Path, main_dir: pathlib.Path, base: str, branch: str, head: str) -> str | None:
+    """Why this branch is the project's memory branch, or carries it, or None."""
+    mem = memory_paths.BRANCH
+    if branch == mem:
+        return _("{branch} is the project's memory branch", branch=branch)
+    try:
+        if memory_paths.is_memory_tree(wt, head):
+            return _("{branch} holds only what a memory branch holds (AGENT.md, RULES, STATE.md, notes under memory/)",
+                     branch=branch)
+    except memory_paths.Unreadable as e:
+        return _("{branch}'s tree can't be read ({error})", branch=branch, error=e)
+    if git(wt, "merge-base", base, head).returncode != 0:
+        return _("{branch} shares no history with {base}: merging it would bring all of its history (a memory branch "
+                 "starts on its own)", branch=branch, base=base)
+    if git(wt, "rev-parse", "--verify", "-q", f"refs/heads/{mem}").returncode == 0:
+        brought = git(wt, "rev-list", f"{base}..{head}").stdout.split()
+        # commits on the memory branch are left out of cherry's list, copies of them are marked "-": the branch's own
+        # are the "+" ones
+        cherry = git(wt, "cherry", f"refs/heads/{mem}", head, base)
+        if cherry.returncode != 0:
+            return _("can't tell whether {branch} carries the memory branch's commits: {output}", branch=branch,
+                     output=(cherry.stderr or cherry.stdout).strip())
+        own = {line[2:].strip() for line in cherry.stdout.splitlines() if line.startswith("+ ")}
+        if theirs := [c for c in brought if c not in own]:
+            return _("{n} of the {total} {total:commit|commits} {branch} would bring into {base} are the memory "
+                     "branch's ({mem}) or copies of them, e.g. {sha}: rebuild the branch on {base} with only its own "
+                     "commits (`git rebase -i {base}` and drop the others, or cherry-pick its own onto a new branch "
+                     "from {base})", n=len(theirs), total=len(brought), branch=branch, base=base, mem=mem,
+                     sha=theirs[0][:10])
+    return None
 
 
 def project_of(cwd: pathlib.Path) -> tuple[str | None, pathlib.Path | None]:
@@ -97,19 +141,34 @@ def main() -> int:
     if not named or named.resolve() != main_dir:
         sys.exit(_("merge-branch: {project}'s folder is not this repo ({path}); nothing was merged", project=proj,
                    path=main_dir))
-    branch = a.branch or git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    # 0. what is merged is what is checked out here: the rebase, the checks and the tests all work on this folder's
+    # HEAD, so a --branch naming another branch would fast-forward main to something none of them saw
+    here = git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    branch = a.branch or here
     base = next((b for b in ("main", "master") if git(main_dir, "rev-parse", "--verify", "-q", b).returncode == 0), None)
     if not base:
         sys.exit(_("merge-branch: no main / master branch"))
     if branch in (base, "HEAD"):
         sys.exit(_("merge-branch: you are on {branch}; run this in your own branch/worktree "
                    "(the main checkout is for merging)", branch=branch))
-    if wt.resolve() == main_dir:
+    if branch != here:
+        sys.exit(_("merge-branch: --branch names {branch}, but this folder has {here} checked out; the gate rebases "
+                   "and tests what is checked out here, so run it in {branch}'s own worktree; nothing was merged",
+                   branch=branch, here=here))
+    top = pathlib.Path(git(wt, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
+    if top == main_dir:
         sys.exit(_("merge-branch: this is the main checkout; run it in that branch's worktree"))
+    head0 = git(wt, "rev-parse", "HEAD").stdout.strip()
+    if top == (main_dir / ".agent-memory").resolve():
+        why = _("this folder is the project's memory worktree ({path})", path=top)
+    else:
+        why = memory_problem(wt, main_dir, base, branch, head0)
+    if why:
+        sys.exit(_("merge-branch: {why}. A project's memory branch never goes into its main (memory notes live only on "
+                   "{mem}, in the .agent-memory worktree); nothing was merged", why=why, mem=memory_paths.BRANCH))
     if git(wt, "status", "--porcelain").stdout.strip():
         sys.exit(_("merge-branch: the worktree has uncommitted changes; commit (or discard) them before merging"))
 
-    head0 = git(wt, "rev-parse", "HEAD").stdout.strip()
     eid = f"merge-{proj}-{branch.replace('/', '_')}-{head0[:10]}"
     report = {"project": proj, "branch": branch, "base": base, "note": a.note, "open_questions": a.question,
               "merged": False, "pushed": False}
@@ -121,18 +180,28 @@ def main() -> int:
         print(_("✗ {stage}: {detail}", stage=stage, detail=detail[-1500:]))
         return 1
 
-    lock_path = pathlib.Path(git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()) / "merge-branch.lock"
-    with open(lock_path, "w") as lock:
+    common = pathlib.Path(git(wt, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip())
+    with open(common / "merge-branch.lock", "w") as lock, contextlib.ExitStack() as cleanup:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        work = wt   # where the rebase happens
+        if a.dry_run:
+            # a dry run rebases a detached copy of the branch's commit in a temporary worktree in the repo's git dir (a
+            # sandboxed session can write there), removed whatever happens: no ref moves, no worktree changes
+            work = names.repo_dir(common) / f"merge-dry-run-{os.getpid()}"
+            cleanup.callback(lambda: (git(wt, "worktree", "remove", "--force", str(work)), git(wt, "worktree", "prune")))
+            r = git(wt, "worktree", "add", "-q", "--detach", str(work), head0)
+            if r.returncode != 0:
+                return fail("dry-run", _("can't make a temporary worktree to try the rebase in: {output}",
+                                         output=(r.stderr or r.stdout).strip()))
         # 2. rebase
-        r = git(wt, "rebase", base)
+        r = git(work, "rebase", base)
         if r.returncode != 0:
-            conflicts = git(wt, "diff", "--name-only", "--diff-filter=U").stdout.split()
-            git(wt, "rebase", "--abort")
+            conflicts = git(work, "diff", "--name-only", "--diff-filter=U").stdout.split()
+            git(work, "rebase", "--abort")
             return fail("rebase", _("conflicts with {base}: {conflicts} — resolve them in this worktree with "
                                     "`git rebase {base}` and run again", base=base,
                                     conflicts=", ".join(conflicts) or (r.stderr or r.stdout).strip()))
-        head = git(wt, "rev-parse", "HEAD").stdout.strip()
+        head = git(work, "rev-parse", "HEAD").stdout.strip()
         commits = [dict(zip(("sha", "subject"), l.split("\t", 1)))
                    for l in git(wt, "log", "--format=%h\t%s", f"{base}..{head}").stdout.splitlines()]
         # merge.done records full shas (for detection)
@@ -172,7 +241,9 @@ def main() -> int:
             cmd = f"{names.current('cli')} test --when merge"
             t0 = time.monotonic()
             # the runner's run log counts this as the merge's run, not the agent's own (the waiting report, B7)
-            t = subprocess.run([*hubconf.launch(hubconf.MAIN / "bin" / "test-runner.py"), "--when", "merge"], cwd=wt,
+            # (a dry run's rebased commit is tested by its id: the temporary worktree is not the session's)
+            rev = ["--rev", head] if a.dry_run else []
+            t = subprocess.run([*hubconf.launch(hubconf.MAIN / "bin" / "test-runner.py"), "--when", "merge", *rev], cwd=wt,
                                capture_output=True, text=True, env=names.env_set(dict(os.environ), "TEST_CALLER", "merge-branch"))
             tail = "\n".join((t.stdout + t.stderr).strip().splitlines()[-40:])
             report["tests"] = {"cmd": cmd, "ok": t.returncode == 0, "tail": tail,

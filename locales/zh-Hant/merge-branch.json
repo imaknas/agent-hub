@@ -24,5 +24,15 @@
  "the registry entry declares no tests; no tests were run": "登錄沒有宣告測試,沒跑測試",
  "{sha} {subject}: {names}": "{sha} {subject}:{names}",
  "these commit messages name a private project, and the platform's history is public:\n{commits}\n— reword them (say \"a project\"): the last commit with `git commit --amend -m …`, an earlier one by rebuilding the branch from its parent with `git cherry-pick` and an amend; then run again": "這些 commit 訊息提到了私人專案,而平台的歷史是公開的:\n{commits}\n——改寫訊息(改說「一個專案」):最後一個 commit 用 `git commit --amend -m …`,較早的就從它的上一個 commit 用 `git cherry-pick` 重建 branch 再 amend;然後再跑一次",
- "the private-names list can't be read ({error}); fix it and run again": "私人專案名單讀不到({error});修好再跑一次"
+ "the private-names list can't be read ({error}); fix it and run again": "私人專案名單讀不到({error});修好再跑一次",
+ "{branch} is the project's memory branch": "{branch} 是這個專案的記憶分支",
+ "{branch} holds only what a memory branch holds (AGENT.md, RULES, STATE.md, notes under memory/)": "{branch} 裡只有記憶分支會有的東西(AGENT.md、RULES、STATE.md、memory/ 底下的筆記)",
+ "{branch}'s tree can't be read ({error})": "讀不到 {branch} 的內容({error})",
+ "{branch} shares no history with {base}: merging it would bring all of its history (a memory branch starts on its own)": "{branch} 跟 {base} 沒有共同的歷史:合併會把它整段歷史帶進來(記憶分支是獨立起頭的)",
+ "can't tell whether {branch} carries the memory branch's commits: {output}": "看不出 {branch} 有沒有帶著記憶分支的 commit:{output}",
+ "{n} of the {total} {total:commit|commits} {branch} would bring into {base} are the memory branch's ({mem}) or copies of them, e.g. {sha}: rebuild the branch on {base} with only its own commits (`git rebase -i {base}` and drop the others, or cherry-pick its own onto a new branch from {base})": "{branch} 會帶進 {base} 的 {total} 個 commit 裡,有 {n} 個是記憶分支({mem})的或它們的複本,例如 {sha}:在 {base} 上只用它自己的 commit 重建這個 branch(`git rebase -i {base}` 把其他的 drop 掉,或從 {base} 開新 branch 把自己的 cherry-pick 過去)",
+ "merge-branch: --branch names {branch}, but this folder has {here} checked out; the gate rebases and tests what is checked out here, so run it in {branch}'s own worktree; nothing was merged": "merge-branch:--branch 指定的是 {branch},但這個資料夾 checkout 的是 {here};合併閘門 rebase 跟測試的是這裡 checkout 的東西,所以要在 {branch} 自己的 worktree 裡跑;什麼都沒合併",
+ "this folder is the project's memory worktree ({path})": "這個資料夾是專案的記憶 worktree({path})",
+ "merge-branch: {why}. A project's memory branch never goes into its main (memory notes live only on {mem}, in the .agent-memory worktree); nothing was merged": "merge-branch:{why}。專案的記憶分支絕不能進到它的 main(記憶筆記只放在 {mem},在 .agent-memory worktree 裡);什麼都沒合併",
+ "can't make a temporary worktree to try the rebase in: {output}": "沒辦法開暫時的 worktree 來試 rebase:{output}"
 }
