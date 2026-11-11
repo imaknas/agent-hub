@@ -205,13 +205,20 @@ class Jobs(Base):
         early.mkdir()
         cli = names.current("cli")
         log = self.tmp / "log"
-        for path, want in (("/usr/bin:/bin", str(self.cli / cli)), (f"{early}:/usr/bin:/bin", str(early / cli))):
+        # An earlier one comes from the user's profile, as on a real machine: a login shell may set PATH from scratch
+        # (Debian's /etc/profile does), so a PATH handed in through the environment proves nothing there.
+        profiles = [self.tmp / ".profile", self.tmp / ".zprofile"]       # bash/sh, zsh
+        for earlier, want in ((False, str(self.cli / cli)), (True, str(early / cli))):
             (early / cli).unlink(missing_ok=True)
-            if str(early) in path:
+            for p in profiles:
+                p.unlink(missing_ok=True)
+            if earlier:
                 (early / cli).write_text("#!/bin/sh\n")
                 (early / cli).chmod(0o755)
-            with self.subTest(path=path), open(log, "w") as f:
-                env = {"PATH": path, "HOME": str(self.tmp)}
+                for p in profiles:
+                    p.write_text(f'PATH="{early}:$PATH"; export PATH\n')
+            with self.subTest(earlier=earlier), open(log, "w") as f:
+                env = {"PATH": "/usr/bin:/bin", "HOME": str(self.tmp)}
                 self.assertEqual(scheduler.run_bounded(f"command -v {cli}", f, 1, env), 0)
             self.assertEqual(log.read_text().strip().splitlines()[-1], want)
 
