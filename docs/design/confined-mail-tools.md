@@ -417,8 +417,12 @@ folders, nothing more), and nothing denies a project's git directories. A rule s
   meets the `.git` deny. The volume also folds the long s (U+017F) to s: with no `STATE.md`, a write to `ſTATE.md` made a
   file the volume serves as `STATE.md`. M6's name denies are therefore written in every such spelling (`_folds`); with
   them `ſTATE.md`, `AGENTſ.md` and `.claude/ruleſ/x.md` were refused. `.git`, `.hub-run` and `CLAUDE.md` have no
-  letter any character folds to. The project-level control denies (`.claude/settings.json` and the like) predate this
-  and are left as they are here.
+  letter any character folds to. The older denies need no such spellings (probes 11-11, Claude Code 2.1.319): a rule
+  matches a path that exists as resolved (`ſample.txt` beside a denied `sample.txt`, `hookſ3/` beside a denied
+  existing `hooks3/`: refused), Claude Code refuses `.claude/`, `.mcp.json` and the shell's startup files under any
+  spelling with no rule naming them, upper case is refused everywhere, and the platform's Seatbelt profile refuses
+  `.claude/SETTINGS.json` and `.claude/ſettings.json` by its control regex. What only a missing name's long-s spelling
+  gets past is a rule the runtime adds nothing to: that is M6's names, denied in every spelling above.
 - **Tests**: from an untrusted run, a write to a sandboxed project's outbox and to `.git/config` are both refused;
   the notes rule still writes; creating a new `sub/.git` is refused; `Edit(./out/**)` with `out` linked into `.git`
   refuses the run.
