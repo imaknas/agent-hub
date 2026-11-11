@@ -220,6 +220,52 @@ def project_call(project: str, point: str, request: pathlib.Path) -> int:
     return 0
 
 
+AGENT_POINT = "project-agent"
+
+
+def project_agent(project: str, name: str, request: pathlib.Path, cwd: str) -> int:
+    """A project's declared agent call (brunna agent → cap-runner → here, outside the project's sandbox;
+    docs/design/project-agent-calls.md A1): request is {"prompt", "schema"?}, written by cap-runner in platform state.
+    The rules, the tier and the timeout come from the registry, never from the request; the folder must be one of the
+    project's registry folders. It runs judgment point project-agent under the name <project>/<name>: an owner's pin,
+    the usage row and a failure go by that name."""
+    import registry
+    key = f"{project}/{name}"
+    spec = points()["points"][AGENT_POINT]
+    doc = registry.refresh()["projects"].get(project)
+    if not doc:
+        return fail(key, spec, _("{project} is not in the registry", project=project))
+    decl = (doc.get("agents") or {}).get(name)
+    if not isinstance(decl, dict) or not decl.get("allow"):
+        return fail(key, spec, _("{project} has not declared the agent call {name} (registry agents:)", project=project,
+                                 name=name))
+    d = registry.dirs(doc)
+    folders = {pathlib.Path(p).resolve() for p in (d.get("workspace"), d.get("runtime")) if p}
+    here = pathlib.Path(cwd).resolve()
+    if here not in folders:
+        return fail(key, spec, _("{cwd} is not one of {project}'s folders; an agent call runs only in one", cwd=cwd,
+                                 project=project))
+    try:
+        req = json.loads(request.read_text())
+        prompt, schema = req["prompt"], req.get("schema")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return fail(key, spec, _("cannot read the request: {err}", err=e))
+    if not isinstance(prompt, str) or not prompt.strip() or (schema is not None and not isinstance(schema, dict)):
+        return fail(key, spec, _("the request needs a prompt, and a schema that is a JSON object if any"))
+    timeout = registry.agent_timeout_s(decl)
+    limit = int(hubconf.get("cap_runner.agent_max_timeout_s", 3600))
+    if timeout > limit:
+        return fail(key, spec, _("{key} declares a timeout of {minutes} minutes; the most is {limit}", key=key,
+                                 minutes=timeout // 60, limit=limit // 60))
+    for var in ("AGENT_JOB_MAIL", "LLM_AUTH"):   # nothing of the caller's environment chooses how it runs
+        os.environ.pop(var, None)
+    os.environ.update({"AGENT_JOB_PROJECT": project, "AGENT_JOB_TIER": str(decl.get("tier") or ""),
+                       "AGENT_JOB_ALLOW": json.dumps(decl["allow"], ensure_ascii=False)})
+    a = argparse.Namespace(cmd="run", point=AGENT_POINT, cwd=str(here), model=None, prompt_file=None, extra=[],
+                           dry_run=False, key=key, prompt=prompt, schema=schema, timeout_s=timeout)
+    return run(a)
+
+
 def deny_unnamed_servers(point: str, task):
     """A judgment point declaring `tool_servers: allowed_only` (policy.tool_server_denials): ask the runtime which of
     the environment's tool servers this run would load, and deny every one the run's allow list doesn't name.
@@ -665,6 +711,11 @@ def main() -> int:
     pc.add_argument("project")
     pc.add_argument("point")
     pc.add_argument("--request", required=True)
+    ag = sub.add_parser("agent", help=_("a project's own declared agent call (run by cap-runner)"))
+    ag.add_argument("project")
+    ag.add_argument("name")
+    ag.add_argument("--request", required=True)
+    ag.add_argument("--cwd", required=True)
     sub.add_parser("lint")
     sub.add_parser("health", help=_("whether each provider in {settings} llm works (key, connection, model there)"))
     a = ap.parse_args()
@@ -674,6 +725,8 @@ def main() -> int:
         return run(a)
     if a.cmd == "project":
         return project_call(a.project, a.point, pathlib.Path(a.request))
+    if a.cmd == "agent":
+        return project_agent(a.project, a.name, pathlib.Path(a.request), a.cwd)
     if a.cmd == "health":
         import completion
         rows = completion.health_all()

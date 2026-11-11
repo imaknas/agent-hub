@@ -195,6 +195,25 @@ points:
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
+  project-agent:
+    caller: bin/cap-runner.py (brunna agent <name>, a project's declared agent call; docs/design/project-agent-calls.md A)
+    shape: agent
+    model_group: standard
+    purpose: "a confined agent call a project's code makes (registry agents:): the declared allow: rules and the
+      platform's own settings for the project are its whole boundary, in the project's folder, at the declared tier"
+    # The same confinement as agent-job-confined, with no tool servers at all and no mail: llm.py agent sets the
+    # project, the rules and the tier from the registry, never from the request. The prompt is the project's text.
+    permission_mode: dontAsk
+    prompts: none
+    allow_from_env: AGENT_JOB_ALLOW
+    tool_servers: none
+    settings: platform
+    project_env: AGENT_JOB_PROJECT
+    mail: none
+    tier_from_env: AGENT_JOB_TIER
+    timeout_s: 1800        # the declared timeout replaces it (registry agents.<name>.timeout)
+    output: {format: text}
+    on_failure: say_so      # the call fails with llm_error; its caller decides
   agent-job-event:
     caller: bin/run-agent-job.sh (event-triggered registry jobs; docs/design/event-jobs.md)
     shape: agent

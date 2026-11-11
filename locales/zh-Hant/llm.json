@@ -36,5 +36,10 @@
  "{point} runs at the strength its job chose ({tier}) only where how {runtime} is paid for can be told, and it can't be; not run": "{point} 只有在看得出 {runtime} 怎麼計費時,才照 job 選的強度({tier})跑;這裡看不出來,沒有跑",
  "{point} at strength {tier} would be paid per use ({runtime}), and the owner has not allowed metered models for {project} (registry metered_models); not run": "{point} 用強度 {tier} 會按用量計費({runtime}),而 owner 沒有允許 {project} 用按量計費的模型(registry metered_models);沒有跑",
  "today's model spending has reached the budget (llm.budget.daily_usd ${budget}); {point} not run": "今天的模型花費已達預算(llm.budget.daily_usd ${budget});{point} 沒有跑",
- "a pay-per-use run earlier today ended without saying what it cost, so today's spending can't be told; {point} not run until tomorrow": "今天稍早有一次按量計費的執行結束時沒說花了多少,今天的花費算不出來;{point} 明天以前不跑"
+ "a pay-per-use run earlier today ended without saying what it cost, so today's spending can't be told; {point} not run until tomorrow": "今天稍早有一次按量計費的執行結束時沒說花了多少,今天的花費算不出來;{point} 明天以前不跑",
+ "{project} has not declared the agent call {name} (registry agents:)": "{project} 沒有宣告 agent 呼叫 {name}(登錄的 agents:)",
+ "{cwd} is not one of {project}'s folders; an agent call runs only in one": "{cwd} 不是 {project} 的資料夾;agent 呼叫只在它的資料夾裡跑",
+ "the request needs a prompt, and a schema that is a JSON object if any": "請求要有 prompt;有 schema 的話要是 JSON 物件",
+ "{key} declares a timeout of {minutes} minutes; the most is {limit}": "{key} 宣告的時限是 {minutes} 分鐘;最多 {limit} 分鐘",
+ "a project's own declared agent call (run by cap-runner)": "專案自己宣告的 agent 呼叫(由 cap-runner 執行)"
 }

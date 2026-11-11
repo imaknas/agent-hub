@@ -1227,6 +1227,30 @@
   "exit": 0,
   "token_passed": true
  },
+ "project-agent/default": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
+ "project-agent/model": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
+ "project-agent/subscription": {
+  "auth": "subscription",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": false
+ },
+ "project-agent/token": {
+  "auth": "token",
+  "cmd": null,
+  "exit": 2,
+  "token_passed": true
+ },
  "reflect-week/default": {
   "auth": "token",
   "cmd": [

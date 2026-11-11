@@ -90,8 +90,9 @@ class Registry(unittest.TestCase):
         self.assertNotIn("AGENT_JOB_TIER", jobs["p/c"])
 
     def test_only_the_confined_points_take_it(self):
-        self.assertEqual([p for p, s in points().items() if "tier_from_env" in s], ["agent-job-confined", "agent-job-event"])
-        for p in ("agent-job-confined", "agent-job-event"):
+        taking = ["agent-job-confined", "project-agent", "agent-job-event"]   # project-agent: a declared agent's tier
+        self.assertEqual([p for p, s in points().items() if "tier_from_env" in s], taking)
+        for p in taking:
             self.assertEqual(points()[p]["tier_from_env"], "AGENT_JOB_TIER")
             self.assertEqual(points()[p]["settings"], "platform")   # restricted: the billing can be told
 

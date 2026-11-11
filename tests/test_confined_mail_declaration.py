@@ -44,7 +44,9 @@ class Declarations(unittest.TestCase):
         want = {"mailbox-escalation": ("tools", "MAILBOX_LETTERS", None, "untrusted"),
                 "mailbox-conversation": ("tools", "MAILBOX_LETTERS", None, "untrusted"),
                 "agent-job-event": ("none", None, None, "untrusted"),
-                "agent-job-confined": ("tools", None, "AGENT_JOB_MAIL", None)}
+                "agent-job-confined": ("tools", None, "AGENT_JOB_MAIL", None),
+                # a project's declared agent call: the project's own prompt, no mail (project-agent-calls.md A1)
+                "project-agent": ("none", None, None, None)}
         for name, (mail, letters, opt_in, source) in want.items():
             with self.subTest(name):
                 spec = p[name]
