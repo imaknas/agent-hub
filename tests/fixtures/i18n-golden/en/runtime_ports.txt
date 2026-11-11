@@ -22,6 +22,8 @@ platform rules written into the project's rules file | False | rules file
 a sandboxed project can't write what its sessions load hooks and settings from | False | map of where sessions load settings and hooks from
 === feature (none)
 scheduled agent jobs that send mail (mail: true) | False | agent runs, confined runs (declared permissions only), check of what a confined run's own rules may be, way to tell which tool servers a run loads, or way to give a run the platform's mail tools
+=== feature (none)
+a project's own agent calls (brunna agent) | False | agent runs, confined runs (declared permissions only), check of what a confined run's own rules may be, or login state
 === unknown runtime
 no registered runtime: nosuch (have: claude, fake, none, command, acp)
 === unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'rule_check', 'run_server', 'wake', 'session_status', 'session_summary')

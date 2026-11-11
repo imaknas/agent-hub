@@ -34,6 +34,7 @@ $ agenthub doctor    # launchd, problems
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ scheduled agent jobs that send mail (mail: true): available
+✓ a project's own agent calls (brunna agent): available
 ✗ agent login (headless token): missing
     → rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token
 ! agent login (~/.claude/.credentials.json): missing
@@ -82,6 +83,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ platform rules written into the project's rules file: available
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ scheduled agent jobs that send mail (mail: true): available
+✓ a project's own agent calls (brunna agent): available
 ! 2 letters in the last 7 days woke a session that then didn't take them (the latest: <ID> to beta); the coding agent may have changed how it handles the wake
     → the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end
 ✓ agent login (headless token): present
@@ -194,6 +196,8 @@ $ agenthub doctor    # two coding agents
     → a runtime that is off for a feature only lacks it for its own sessions
 ! scheduled agent jobs that send mail (mail: true): claude available; acp off (has no agent runs outside the platform's throwaway worktree, confined runs (declared permissions only), check of what a confined run's own rules may be, way to tell which tool servers a run loads, or way to give a run the platform's mail tools)
     → a runtime that is off for a feature only lacks it for its own sessions
+! a project's own agent calls (brunna agent): claude available; acp off (has no agent runs outside the platform's throwaway worktree, confined runs (declared permissions only), or check of what a confined run's own rules may be)
+    → a runtime that is off for a feature only lacks it for its own sessions
 ✓ claude: the platform's rules go into CLAUDE.local.md
 · acp: no rules file; its sessions get the platform's rules from the MCP server's instructions (brunna mcp) or their session-start hook
 · the runtime acp has no way to tell whether a session is busy, idle or waiting on a dialog or way to read how a session's last reply ended: routing a letter takes its sessions as idle, and reads nothing they said
@@ -208,5 +212,5 @@ $ agenthub doctor    # two coding agents
 ! the scheduler has not ticked yet, and no service manager runs it here (see the scheduler line above)
 ✓ background services, project settings: match the config
 
-1 problem, 13 reminders
+1 problem, 14 reminders
 --- stderr

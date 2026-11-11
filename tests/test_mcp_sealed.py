@@ -37,8 +37,12 @@ class McpSealed(unittest.TestCase):
         # (sealed by construction, not by declaration)
         complete_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def complete(", 1)[1].split("\ndef ", 1)[0]
         self.assertIn(FLAG, complete_src)
+        # tool_servers: none (a project's declared agent, project-agent): the adapter adds the flag itself
+        flags_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def _flags(", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('spec.get("tool_servers") == "none" and SEAL not in extra', flags_src)
         for name, spec in POINTS.items():
-            if FLAG in (spec.get("extra_args") or []) or spec.get("shape") == "completion":
+            if FLAG in (spec.get("extra_args") or []) or spec.get("shape") == "completion" \
+                    or spec.get("tool_servers") == "none":
                 continue
             caller = ADDED_BY_CALLER.get(name)
             if caller and FLAG in (ROOT / caller).read_text():

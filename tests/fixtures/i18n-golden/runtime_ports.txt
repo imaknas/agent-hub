@@ -22,6 +22,8 @@ session 裡即時看到信、提醒寫筆記 | False | session 事件(hook)
 sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案 | False | session 載入設定跟 hook 的檔案
 === feature (none)
 會寄信的排程 agent job(mail: true) | False | 跑 agent、受限執行(只照宣告的權限)、檢查受限執行自己的規則、判斷一次執行會載入哪些工具伺服器、給一次執行平台信件工具的方法
+=== feature (none)
+專案自己的 agent 呼叫(brunna agent) | False | 跑 agent、受限執行(只照宣告的權限)、檢查受限執行自己的規則、登入狀態
 === unknown runtime
 沒有登記的 runtime:nosuch(有:claude, fake, none, command, acp)
 === unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'rule_check', 'run_server', 'wake', 'session_status', 'session_summary')
