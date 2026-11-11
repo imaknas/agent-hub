@@ -252,6 +252,8 @@ def project_agent(project: str, name: str, request: pathlib.Path, cwd: str) -> i
         return fail(key, spec, _("cannot read the request: {err}", err=e))
     if not isinstance(prompt, str) or not prompt.strip() or (schema is not None and not isinstance(schema, dict)):
         return fail(key, spec, _("the request needs a prompt, and a schema that is a JSON object if any"))
+    if decl.get("tier") not in registry.TIERS:   # every call runs at its tier, behind the billing gate
+        return fail(key, spec, _("{key} declares no tier (one of {tiers})", key=key, tiers=", ".join(registry.TIERS)))
     timeout = registry.agent_timeout_s(decl)
     limit = int(hubconf.get("cap_runner.agent_max_timeout_s", 3600))
     if timeout > limit:
@@ -334,7 +336,9 @@ def run(a) -> int:
         return fail(key, spec, str(e))
     if tier:   # the job's strength is the run's group; an owner's pin on the point still wins (model_for)
         spec = {**spec, "model_group": tier}
-    model = model_for(key, spec, a.model, runtime=point_runtime(a.point, spec)) if key != a.point \
+    # a call's own pin (llm.points.<project>/<name>), else the point's
+    pins = ((hubconf.get("llm") or {}) if isinstance(hubconf.get("llm"), dict) else {}).get("points") or {}
+    model = model_for(key, spec, a.model, runtime=point_runtime(a.point, spec)) if key != a.point and key in pins \
         else model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
@@ -580,7 +584,8 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str 
     else:
         schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
-                              output_schema=schema, timeout_s=getattr(a, "timeout_s", None) or spec.get("timeout_s", 1200),
+                              output_schema=schema,
+                              timeout_s=a.timeout_s if getattr(a, "timeout_s", None) is not None else spec.get("timeout_s", 1200),
                               env=env,
                               extra=tuple(a.extra or ()), run_dir=str(run_dir) if run_dir else None)
     if (why := rule_refusal(a.point, spec, rt, task)):

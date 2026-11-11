@@ -41,5 +41,6 @@
  "{cwd} is not one of {project}'s folders; an agent call runs only in one": "{cwd} 不是 {project} 的資料夾;agent 呼叫只在它的資料夾裡跑",
  "the request needs a prompt, and a schema that is a JSON object if any": "請求要有 prompt;有 schema 的話要是 JSON 物件",
  "{key} declares a timeout of {minutes} minutes; the most is {limit}": "{key} 宣告的時限是 {minutes} 分鐘;最多 {limit} 分鐘",
- "a project's own declared agent call (run by cap-runner)": "專案自己宣告的 agent 呼叫(由 cap-runner 執行)"
+ "a project's own declared agent call (run by cap-runner)": "專案自己宣告的 agent 呼叫(由 cap-runner 執行)",
+ "{key} declares no tier (one of {tiers})": "{key} 沒有宣告 tier({tiers} 其中之一)"
 }

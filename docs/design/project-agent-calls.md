@@ -15,6 +15,14 @@
 >   is refused (one at a time). Doctor's row needs the login interface too: a call always runs at its project's tier,
 >   which the billing gate refuses where how it is paid for can't be told. D's wait for cap-runner went from two hours
 >   to three, since an agent call lasts up to an hour and a minute.
+> - After the cold review of A (11-11): the ledger's key is the runner's own (`<project>/<id>/<time>`): the request's
+>   id is the project's to choose, and the same id again (from the other folder, or after removing its job folder)
+>   replaced the earlier entry, so the day's minutes weren't held. Every end of a job goes through `finish()`, which
+>   closes and settles even when the project's job folder can't be written; a start whose state can't be written
+>   kills what it started. On a restart cap-runner kills only the process groups the last runner recorded in its own
+>   `active.json`, each only if that process started when recorded (a pid in the project's `state.json` is the
+>   project's to write; before, it was killed on that word). `timeout: 0m` is refused; a call's own pin, else the
+>   point's; the wait for cap-runner is two hours beyond `cap_runner.agent_max_timeout_s`.
 > - Not proven on this machine: no project declares `agents:` yet, so the live path (cap-runner → `llm.py agent` → the
 >   coding agent) has only the fake runtime's tests behind it until the project that asked declares one.
 > - B as built: the adapter's `billing(mode, env, restricted)` is part of the auth interface (a runtime without one is

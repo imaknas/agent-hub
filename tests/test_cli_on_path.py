@@ -178,7 +178,7 @@ class WaitForIdle(Base):
         rs._desired(self.index)
         rs.note_waiting()
         self.assertEqual(json.loads(rs.WAITED.read_text())["local.x.cap-runner"], first)   # since the first wait
-        rs.WAITED.write_text(json.dumps({"local.x.cap-runner": first - rs.WAIT_LIMIT_S - 1}))
+        rs.WAITED.write_text(json.dumps({"local.x.cap-runner": first - rs.wait_limit_s() - 1}))
         _want, _problems, keep, _ = rs._desired(self.index)
         self.assertEqual((keep, rs.waiting, rs.overdue), (set(), [], ["local.x.cap-runner"]))
         rs.note_waiting()
@@ -189,7 +189,7 @@ class WaitForIdle(Base):
         with mock.patch.object(cap_runner, "ACTIVE", active):
             r = cap_runner.Runner()
             r.note_active()
-            self.assertEqual(json.loads(active.read_text()), {"pid": os.getpid(), "jobs": 0})
+            self.assertEqual(json.loads(active.read_text()), {"pid": os.getpid(), "jobs": 0, "procs": []})
             r.queue.append(object())
             r.note_active()
             self.assertEqual(json.loads(active.read_text())["jobs"], 1)

@@ -44,7 +44,7 @@ found, and a LINE bot was down for a day and a half without anyone knowing):
   page turns red).
 A service whose restart loses work in flight (WAIT_FOR_IDLE: cap-runner marks a running job lost) keeps its unit as it
 is while it has some, by the record it keeps in the platform's state while it runs; the change is made on a run when it
-has none, or after three hours of waiting. A change that waits doesn't show in plan either, so a job ending between
+has none, or after two hours beyond the longest agent call (three by default). A change that waits doesn't show in plan either, so a job ending between
 `config apply`'s apply and its plan again can show it there once.
 
 Usage: render-services.py [--dry-run] [--only <label>]
@@ -98,11 +98,15 @@ def cli_last(args: list[str]) -> list[str]:
 # in the platform's state ({pid, jobs}), where no project writes; one whose pid isn't alive minds nothing.
 WAIT_FOR_IDLE = {("sandbox", "cap-runner"): "cap-runner/active.json"}
 # past this the change is made anyway: a job lasts at most 30 minutes, an agent call at most cap_runner.agent_max_timeout_s
-# (1 hour) plus a minute, and each pool runs its queue one or two at a time
-WAIT_LIMIT_S = 3 * 3600
+# (1 hour) plus a minute, and each pool runs its queue one or two at a time: two hours beyond the longest agent call
+WAIT_MARGIN_S = 2 * 3600
+
+
+def wait_limit_s() -> int:
+    return WAIT_MARGIN_S + int(hubconf.get("cap_runner.agent_max_timeout_s", 3600))
 WAITED = hubconf.STATE / "render-services-waiting.json"   # label → when its change first waited
 waiting: list[str] = []   # the last _desired()'s labels left as they are until idle (main says so)
-overdue: list[str] = []   # the last _desired()'s labels changed although busy, after waiting WAIT_LIMIT_S
+overdue: list[str] = []   # the last _desired()'s labels changed although busy, after waiting wait_limit_s()
 
 
 def busy(project: str, svc: dict) -> bool:
@@ -249,7 +253,7 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
                                   label=label, project=name, problem=problem))
                 keep.add(label)
             elif busy(name, svc):
-                if now - float(waited.get(label) or now) < WAIT_LIMIT_S:
+                if now - float(waited.get(label) or now) < wait_limit_s():
                     keep.add(label)
                     waiting.append(label)
                 else:
@@ -395,7 +399,8 @@ def main() -> int:
             print(_("{label}: has work in flight; its changes wait until it has none", label=label))
     for label in overdue:
         if not only or label == only:
-            print(_("{label}: still has work in flight after three hours of waiting; changed now", label=label))
+            print(_("{label}: still has work in flight after waiting {hours:g} hours; changed now", label=label,
+                    hours=wait_limit_s() / 3600))
     for ch, cur, plist in todo:
         label = ch.target.removeprefix("service:")
         if ch.op == "remove":

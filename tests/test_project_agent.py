@@ -63,7 +63,8 @@ class Registry(unittest.TestCase):
                "empty allow": {"a": {"tier": "fast", "allow": []}},
                "an option": {"a": {"tier": "fast", "allow": ["--dangerously-skip-permissions"]}},
                "two lines": {"a": {"tier": "fast", "allow": ["Edit(x)\nBash"]}},
-               "timeout": {"a": {"tier": "fast", "allow": ["Read"], "timeout": "90s"}}}
+               "timeout": {"a": {"tier": "fast", "allow": ["Read"], "timeout": "90s"}},
+               "no time": {"a": {"tier": "fast", "allow": ["Read"], "timeout": "0m"}}}
         for what, agents in bad.items():
             with self.subTest(what):
                 self.assertTrue(self.errs(agents=agents))
@@ -201,7 +202,9 @@ class Call(unittest.TestCase):
         cases = {"undeclared": ({"prompt": "x"}, "other", None),
                  "empty prompt": ({"prompt": "  "}, "research", None),
                  "schema not an object": ({"prompt": "x", "schema": []}, "research", None),
-                 "over the limit": ({"prompt": "x"}, "research", {"cap_runner.agent_max_timeout_s": 1800})}
+                 "over the limit": ({"prompt": "x"}, "research", {"cap_runner.agent_max_timeout_s": 1800}),
+                 "no tier": ({"prompt": "x"}, "untiered", None)}
+        self.doc["agents"]["untiered"] = {"allow": ["Read"]}
         for what, (req, name, conf) in cases.items():
             with self.subTest(what):
                 rc, out = self.call(req, name=name, conf=conf)
@@ -220,10 +223,13 @@ class Call(unittest.TestCase):
         self.doc["metered_models"] = True
         self.assertEqual(self.call({"prompt": "x"})[0], 0)
 
-    def test_the_owners_pin_is_per_call(self):
-        rc, _out = self.call({"prompt": "x"}, conf={"llm": {"points": {"p/research": {"model": "pinned"}}}})
+    def test_the_owners_pin_is_per_call_else_the_points(self):
+        rc, _out = self.call({"prompt": "x"}, conf={"llm": {"points": {"p/research": {"model": "pinned"},
+                                                                        "project-agent": {"model": "point"}}}})
         self.assertEqual(rc, 0)
         self.assertEqual(self.fake._ran[-1].model, "pinned")
+        rc, _out = self.call({"prompt": "x"}, conf={"llm": {"points": {"project-agent": {"model": "point"}}}})
+        self.assertEqual(self.fake._ran[-1].model, "point")
 
     def test_rules_the_runtime_refuses(self):
         self.fake.set_rule_problems(["Edit(~/x) names a path that isn't relative to the run's folder"])
@@ -289,7 +295,8 @@ class Runner(unittest.TestCase):
             p = mock.patch.object(cr, target, value)
             p.start()
             self.addCleanup(p.stop)
-        for target, attr, value in ((cr.subprocess, "Popen", popen),
+        self.real_popen = cr.subprocess.Popen
+        for target, attr, value in ((cr.subprocess, "Popen", popen), (cr, "process_started", lambda pid: None),
                                     (cr.Runner, "kill", staticmethod(lambda pgid, sig: None))):
             p = mock.patch.object(target, attr, value)
             p.start()
@@ -304,8 +311,14 @@ class Runner(unittest.TestCase):
         return json.loads(((ws or self.ws) / ".hub-run" / "jobs" / job_id / "state.json").read_text())
 
     def ledger(self):
+        """{<project>/<id>: entry}: the runner's own keys carry a suffix of their own"""
         f = self.state / "agent-minutes.json"
-        return json.loads(f.read_text())["jobs"] if f.exists() else {}
+        jobs = json.loads(f.read_text())["jobs"] if f.exists() else {}
+        return {k.rsplit("/", 1)[0]: v for k, v in jobs.items()}
+
+    def entries(self):
+        f = self.state / "agent-minutes.json"
+        return list(json.loads(f.read_text())["jobs"].values()) if f.exists() else []
 
     def test_a_declared_call_runs_llm_agent_in_the_folder_it_came_from(self):
         self.put("a1", name="research", prompt="look", schema={"type": "object"})
@@ -423,17 +436,100 @@ class Runner(unittest.TestCase):
 
     def test_the_daily_minutes(self):
         m = self.cr.Minutes()
-        self.assertEqual(m.reserve("p", "1", 45 * 60, None), "")
-        self.assertEqual(m.reserve("p", "2", 45 * 60, None), "")
-        self.assertTrue(m.reserve("p", "3", 60, None), "90 minutes a project by default")
-        m.settle("p", "2", 10 * 60)
-        self.assertEqual(m.reserve("p", "3", 30 * 60, None), "")
-        self.assertTrue(m.reserve("q", "1", 60, 0) == "" and m.reserve("s", "1", 60, 1) == "")
-        self.assertTrue(m.reserve("s", "2", 60, 1), "agents_per_day lowers the share")
-        self.assertTrue(m.reserve("t", "1", 60, 500) == "" and m.reserve("t", "2", 90 * 60, 500),
-                        "never raises it")
+
+        def why(*a):
+            return m.reserve(*a)[0]
+        self.assertEqual(why("p", "1", 45 * 60, None), "")
+        two = m.reserve("p", "2", 45 * 60, None)
+        self.assertEqual(two[0], "")
+        self.assertTrue(why("p", "3", 60, None), "90 minutes a project by default")
+        m.settle(two[1], 10 * 60)
+        self.assertEqual(why("p", "3", 30 * 60, None), "")
+        self.assertTrue(why("q", "1", 60, 0) == "" and why("s", "1", 60, 1) == "")
+        self.assertTrue(why("s", "2", 60, 1), "agents_per_day lowers the share")
+        self.assertTrue(why("t", "1", 60, 500) == "" and why("t", "2", 90 * 60, 500), "never raises it")
         self.conf["agent_minutes_per_day"] = 90
-        self.assertTrue(m.reserve("u", "1", 10 * 60, None), "the platform's day is full")
+        self.assertTrue(why("u", "1", 10 * 60, None), "the platform's day is full")
+
+    def test_an_id_used_again_doesnt_replace_what_was_spent(self):
+        r = self.cr.Runner()
+        for ws in (self.ws, self.tmp / "rt"):
+            ws.mkdir(exist_ok=True)
+        self.elig["p"]["dirs"] = [self.ws, self.tmp / "rt"]
+        for _round in range(3):
+            self.put("k1", name="research", prompt="x")   # 45 minutes each
+            r.scan()
+            r.start_ready()
+            if r.running:
+                r.running[0].started -= 45 * 60
+                self.started[-1][2].rc = 0
+                r.poll()
+            import shutil as sh
+            sh.rmtree(self.ws / ".hub-run" / "jobs", ignore_errors=True)   # the project removes its job folders
+        self.assertEqual(sum(e["used"] for e in self.entries()), 90, "two calls fit the day's 90 minutes, not three")
+        self.put("k2", ws=self.tmp / "rt", name="quick", prompt="x")
+        r.scan()
+        self.assertEqual(self.state_of("k2", ws=self.tmp / "rt")["state"], "rejected")
+
+    def test_a_job_folder_that_cant_be_written_wedges_nothing(self):
+        import shutil as sh
+        r = self.cr.Runner()
+        self.put("w1", name="quick", prompt="x")
+        r.scan()
+        r.start_ready()
+        sh.rmtree(self.ws / ".hub-run")   # the project removes it while the agent runs
+        self.started[0][2].rc = 0
+        r.poll()
+        self.assertEqual(r.running, [])
+        self.assertIsNotNone(self.entries()[0]["used"])
+        self.put("w2", name="quick", prompt="y")
+        r.scan()
+        r.start_ready()
+        self.assertEqual([j.id for j in r.running], ["w2"])
+
+    def test_a_start_whose_state_cant_be_written_leaves_no_run_behind(self):
+        killed = []
+        r = self.cr.Runner()
+        self.put("x1", name="quick", prompt="x")
+        r.scan()
+        with mock.patch.object(self.cr, "write_state", mock.Mock(side_effect=OSError("planted link"))), \
+                mock.patch.object(self.cr.Runner, "kill", staticmethod(lambda pgid, sig: killed.append(pgid))):
+            r.start_ready()
+        self.assertEqual(r.running, [])
+        self.assertEqual(killed, [self.started[0][2].pid])
+        self.assertEqual(self.entries()[0]["used"], 0)
+
+    def test_a_restart_kills_only_what_the_runner_recorded(self):
+        killed = []
+        self.put("y1", name="quick", prompt="x")
+        r = self.cr.Runner()
+        r.scan()
+        r.start_ready()
+        mine = r.running[0]
+        # the project writes another pid into its own state.json: never killed on its word
+        d = self.ws / ".hub-run" / "jobs" / "y1"
+        (d / "state.json").write_text(json.dumps({"state": "running", "pid": 1}))
+        with mock.patch.object(self.cr, "process_started", lambda pid: mine.started if pid == mine.proc.pid else None), \
+                mock.patch.object(self.cr.Runner, "kill", staticmethod(lambda pgid, sig: killed.append(pgid))):
+            self.cr.Runner().recover()
+        self.assertEqual(killed, [mine.proc.pid])
+        self.assertEqual(self.state_of("y1")["state"], "lost")
+        # a pid that started at another time (reused after a reboot) is left alone
+        killed.clear()
+        with mock.patch.object(self.cr, "process_started", lambda pid: mine.started + 3600), \
+                mock.patch.object(self.cr.Runner, "kill", staticmethod(lambda pgid, sig: killed.append(pgid))):
+            self.cr.Runner().recover()
+        self.assertEqual(killed, [])
+
+    def test_process_started(self):
+        import time
+        cr = load_cap_runner()   # its own process_started, and the real Popen for ps
+        with mock.patch.object(cr.subprocess, "Popen", self.real_popen):
+            here = cr.process_started(os.getpid())
+            gone = cr.process_started(2 ** 22 + 12345)
+        self.assertIsNotNone(here)
+        self.assertLess(here, time.time() + 2)
+        self.assertIsNone(gone)
 
     def test_eligible_takes_a_project_that_only_declares_agents(self):
         import types

@@ -43,6 +43,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -196,7 +197,7 @@ def main() -> int:
             return follow(ws, submit_complete(ws, a.complete, prompt, schema), pickup=True)
         job_id = submit_complete(ws, a.agent, prompt, schema, kind="agent")
         say(_("job {job_id} (agent {name}); if this call is interrupted, the agent keeps running: reattach with "
-              "`hub-run --wait {job_id}`", job_id=job_id, name=a.agent))
+              "`{cli} cap-run --wait {job_id}`", job_id=job_id, name=a.agent, cli=names.current("cli")))
         return follow(ws, job_id, pickup=True, agent=True)
     if not a.cap or not cmd:
         say(_("usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>"))

@@ -345,7 +345,7 @@ def validate_agents(doc: dict) -> list[str]:
             if not isinstance(allow, list) or not allow or not all(rule_shaped(x) for x in allow):
                 errs.append(_("agents.{name}: allow must be a non-empty list of permission rules, each a name (letters, "
                               "digits, _ or -), optionally its argument in parentheses, on one line", name=name))
-            if "timeout" in decl and not EVERY.match(str(decl["timeout"])):
+            if "timeout" in decl and (not EVERY.match(str(decl["timeout"])) or every_minutes(str(decl["timeout"])) < 1):
                 errs.append(_("agents.{name}: timeout must look like 45m / 1h", name=name))
     per_day = doc.get("agents_per_day")
     if per_day is not None and (not isinstance(per_day, int) or isinstance(per_day, bool) or per_day < 1):

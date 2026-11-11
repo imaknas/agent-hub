@@ -70,6 +70,7 @@ import time
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import names  # noqa: E402
 
 _ = i18n.domain(__file__)
 
@@ -259,26 +260,32 @@ class Minutes:
         return sum((j["used"] if j.get("used") is not None else j.get("reserved", 0))
                    for j in d["jobs"].values() if project is None or j.get("project") == project)
 
-    def reserve(self, project: str, job_id: str, seconds: int, per_day: int | None) -> str:
-        """'' when it fits (and is reserved), else why not, with the numbers."""
+    def reserve(self, project: str, job_id: str, seconds: int, per_day: int | None) -> tuple[str, str]:
+        """('', the reservation's key) when it fits (and is reserved), else (why not, with the numbers, ''). The key is
+        the runner's own: the request's id is the project's to choose, and could otherwise replace an earlier entry."""
         d, want = self.load(), _minutes(seconds)
         mine, cap = self.spent(d, project), conf("agent_minutes_per_project", 90)
         if isinstance(per_day, int) and not isinstance(per_day, bool) and per_day > 0:
             cap = min(cap, per_day)   # the registry's agents_per_day lowers the share, never raises it
         if mine + want > cap:
             return _("{project} has {spent} of its {cap} agent minutes today, and this call reserves {want}",
-                     project=project, spent=mine, cap=cap, want=want)
+                     project=project, spent=mine, cap=cap, want=want), ""
         everyone, total = self.spent(d), conf("agent_minutes_per_day", 480)
         if everyone + want > total:
             return _("agent calls have {spent} of the platform's {cap} minutes today, and this call reserves {want}",
-                     spent=everyone, cap=total, want=want)
-        d["jobs"][f"{project}/{job_id}"] = {"project": project, "reserved": want, "used": None, "at": time.time()}
+                     spent=everyone, cap=total, want=want), ""
+        key = f"{project}/{job_id}/{time.time_ns()}"
+        while key in d["jobs"]:
+            key += "+"
+        d["jobs"][key] = {"project": project, "reserved": want, "used": None, "at": time.time()}
         self.save(d)
-        return ""
+        return "", key
 
-    def settle(self, project: str, job_id: str, seconds: float) -> None:
+    def settle(self, key: str, seconds: float) -> None:
+        if not key:
+            return
         d = self.load()
-        j = d["jobs"].get(f"{project}/{job_id}")
+        j = d["jobs"].get(key)
         if j is not None and j.get("used") is None:   # a call taken on an earlier day counts there, not today
             j["used"] = min(j.get("reserved", 0), _minutes(seconds))
             self.save(d)
@@ -293,6 +300,17 @@ class Minutes:
                 changed = True
         if changed:
             self.save(d)
+
+
+def process_started(pid: int) -> float | None:
+    """When process pid started (seconds since the epoch, to the second), or None when there is none."""
+    try:
+        r = subprocess.run(["ps", "-o", "lstart=", "-p", str(int(pid))], capture_output=True, text=True, timeout=10,
+                           env={"LC_ALL": "C", "PATH": "/bin:/usr/bin"})
+        text = " ".join(r.stdout.split())
+        return time.mktime(time.strptime(text, "%a %b %d %H:%M:%S %Y")) if r.returncode == 0 and text else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
 
 
 def make_profile(project: str, cap: str, job_id: str) -> pathlib.Path:
@@ -407,14 +425,20 @@ class Runner:
             os.close(job_fd)
             log(project=project, id=stem, event="rejected", detail=reason)
             return
-        write_state(job_fd, state="queued")
+        try:
+            write_state(job_fd, state="queued")
+        except OSError:
+            os.close(job_fd)
+            self.minutes.settle(clean.get("ledger", ""), 0)   # never queued: nothing was spent
+            raise
         self.queue.append(Job(project, stem, job_fd, clean))
 
     def admit_agent(self, project: str, job_id: str, clean: dict, per_day: int | None) -> str:
         """One agent call per project at a time, and its minutes reserved (A5); '' when admitted."""
         if any(j.project == project and j.pool == "agent" for j in (*self.queue, *self.running)):
             return _("{project} already has an agent call queued or running; one at a time", project=project)
-        return self.minutes.reserve(project, job_id, clean["timeout_s"], per_day)
+        why, clean["ledger"] = self.minutes.reserve(project, job_id, clean["timeout_s"], per_day)
+        return why
 
     # ---------- running ----------
 
@@ -422,9 +446,7 @@ class Runner:
         t = time.time()
         for job in [j for j in self.queue if j.pool == "agent" and t - j.queued > j.req["timeout_s"]]:
             self.queue.remove(job)   # waited longer than it may run: whoever asked has given up on it
-            write_state(job.fd, state="rejected", reason=_("Waited in the queue longer than its timeout"))
-            os.close(job.fd)
-            self.minutes.settle(job.project, job.id, 0)
+            self.finish(job, 0, state="rejected", reason=_("Waited in the queue longer than its timeout"))
             log(project=job.project, id=job.id, event="rejected", detail="queued past its timeout")
         limits = {"agent": conf("agent_concurrency", 1), "other": conf("concurrency", 2)}
         busy = {(j.pool, j.project) for j in self.running}
@@ -456,7 +478,7 @@ class Runner:
                 inp.write_text(json.dumps({"prompt": r["prompt"], "schema": r["schema"]}, ensure_ascii=False))
                 argv = [*hubconf.launch(hubconf.ROOT / "bin" / "llm.py"), "project", job.project, r["point"],
                         "--request", str(inp)]
-                env.update({k: v for k, v in os.environ.items() if k.startswith("AGENT_HUB_")})
+                env.update({k: v for k, v in os.environ.items() if k.startswith(("AGENT_HUB_", names.ENV_NEW))})
                 cwd = DIR
             elif r.get("kind") == "agent":
                 # the project's declared agent, outside any sandbox (llm.py agent confines it): the prompt through a
@@ -466,7 +488,7 @@ class Runner:
                 inp.write_text(json.dumps({"prompt": r["prompt"], "schema": r["schema"]}, ensure_ascii=False))
                 argv = [*hubconf.launch(hubconf.ROOT / "bin" / "llm.py"), "agent", job.project, r["name"],
                         "--request", str(inp), "--cwd", str(r["cwd"])]
-                env.update({k: v for k, v in os.environ.items() if k.startswith("AGENT_HUB_")})
+                env.update({k: v for k, v in os.environ.items() if k.startswith(("AGENT_HUB_", names.ENV_NEW))})
                 cwd = DIR
             else:
                 profile = make_profile(job.project, r["cap"], job.id)
@@ -481,25 +503,48 @@ class Runner:
         # every failure must be answered, or the client keeps waiting on "queued" (seen on 10-25: stuck when
         # modules were inconsistent)
         except Exception as e:
-            write_state(job.fd, state="rejected", reason=_("Failed to start: {err!r}", err=e)[:500])
-            os.close(job.fd)
             log(project=job.project, id=job.id, event="start_failed", detail=str(e)[:300])
-            if job.pool == "agent":
-                self.minutes.settle(job.project, job.id, 0)
+            self.finish(job, 0, state="rejected", reason=_("Failed to start: {err!r}", err=e)[:500])
             return
         job.started = time.time()
         job.deadline = job.started + r["timeout_s"] + (AGENT_GRACE_S if job.pool == "agent" else 0)
+        try:
+            if r.get("kind") == "agent":
+                write_state(job.fd, state="running", pid=job.proc.pid, kind="agent")
+            elif r.get("kind") == "complete":
+                write_state(job.fd, state="running", pid=job.proc.pid, kind="complete")
+            else:
+                write_state(job.fd, state="running", pid=job.proc.pid, cap=r["cap"])
+        except OSError as e:
+            # the project's job folder can't be written (removed, a link planted): never a run nobody minds
+            self.kill(job.proc.pid, signal.SIGKILL)
+            log(project=job.project, id=job.id, event="state_error", detail=str(e)[:300])
+            self.finish(job, 0)
+            return
         if r.get("kind") == "agent":
-            write_state(job.fd, state="running", pid=job.proc.pid, kind="agent")
             log(project=job.project, id=job.id, event="started", kind="agent", name=r["name"], pid=job.proc.pid)
         elif r.get("kind") == "complete":
-            write_state(job.fd, state="running", pid=job.proc.pid, kind="complete")
             log(project=job.project, id=job.id, event="started", kind="complete", point=r["point"], pid=job.proc.pid)
         else:
-            write_state(job.fd, state="running", pid=job.proc.pid, cap=r["cap"])
             log(project=job.project, id=job.id, event="started", cap=r["cap"], argv=r["argv"][:20],
                 cwd=str(r["cwd"]), pid=job.proc.pid)
         self.running.append(job)
+        self.note_active()
+
+    def finish(self, job: Job, seconds: float, **state) -> None:
+        """A job's end, whatever happens to its folder: its state written when it can be (else logged), its folder
+        closed, its agent minutes settled. The caller has taken it off the queue or running list."""
+        if state:
+            try:
+                write_state(job.fd, **state)
+            except OSError as e:
+                log(project=job.project, id=job.id, event="state_error", detail=str(e)[:300])
+        try:
+            os.close(job.fd)
+        except OSError:
+            pass
+        if job.pool == "agent":
+            self.minutes.settle(job.req.get("ledger", ""), seconds)
 
     def poll(self) -> None:
         t = time.time()
@@ -515,12 +560,9 @@ class Runner:
             # the main process ended; reap child processes left in the background too
             self.kill(job.proc.pid, signal.SIGKILL)
             code = 124 if job.timed_out else (128 - rc if rc < 0 else rc)
-            write_state(job.fd, state="done", exit=code, timed_out=job.timed_out,
-                        **({"kind": "agent"} if job.pool == "agent" else {}))
-            os.close(job.fd)
             self.running.remove(job)
-            if job.pool == "agent":
-                self.minutes.settle(job.project, job.id, t - job.started)
+            self.finish(job, t - job.started, state="done", exit=code, timed_out=job.timed_out,
+                        **({"kind": "agent"} if job.pool == "agent" else {}))
             log(project=job.project, id=job.id, event="done", exit=code, timed_out=job.timed_out,
                 seconds=round(t - job.started, 1))
 
@@ -544,21 +586,37 @@ class Runner:
             self.minutes.settle_orphans()
         except OSError as e:
             log(event="minutes_error", detail=str(e)[:300])
+        # the process groups the last runner started, from its own record in platform state (a pid in the project's
+        # state.json is the project's to write: never killed on its word), each only if it is still the process
+        # that was started then (a pid is reused after a reboot)
+        try:
+            procs = json.loads(ACTIVE.read_text()).get("procs") or []
+        except (OSError, ValueError, AttributeError):
+            procs = []
+        for entry in procs:
+            try:
+                pgid, at = int(entry[0]), float(entry[1])
+            except (TypeError, ValueError, IndexError):
+                continue
+            if (began := process_started(pgid)) is not None and abs(began - at) < 3:
+                self.kill(pgid, signal.SIGKILL)
         for project, job_id, d in self.each_job():
             try:
                 st = json.loads((d / "state.json").read_text())
             except (OSError, ValueError):
                 continue
-            if st.get("state") not in ("queued", "running"):
+            if not isinstance(st, dict) or st.get("state") not in ("queued", "running"):
                 continue
-            if st.get("pid"):
-                self.kill(int(st["pid"]), signal.SIGKILL)
-            fd = os.open(d, DIRFLAGS)
             try:
-                write_state(fd, state="lost", reason=_("The platform runner restarted and this job did not finish "
-                                                       "(result unknown); run it again"))
-            finally:
-                os.close(fd)
+                fd = os.open(d, DIRFLAGS)
+                try:
+                    write_state(fd, state="lost", reason=_("The platform runner restarted and this job did not finish "
+                                                           "(result unknown); run it again"))
+                finally:
+                    os.close(fd)
+            except OSError as e:   # the project's folder: whatever is there, go on
+                log(project=project, id=job_id, event="recover_error", detail=str(e)[:300])
+                continue
             log(project=project, id=job_id, event="lost")
 
     def prune(self) -> None:
@@ -579,9 +637,10 @@ class Runner:
         """ACTIVE when the number of jobs in flight changed: a restart now would mark them lost (render-services
         changes this service's unit only while it is 0)."""
         n = len(self.running) + len(self.queue)
-        if n != self.noted:
-            hubconf.write_atomic(ACTIVE, json.dumps({"pid": os.getpid(), "jobs": n}))
-            self.noted = n
+        procs = sorted([j.proc.pid, j.started] for j in self.running if j.proc is not None)
+        if (n, procs) != self.noted:
+            hubconf.write_atomic(ACTIVE, json.dumps({"pid": os.getpid(), "jobs": n, "procs": procs}))
+            self.noted = (n, procs)
 
     def tick(self) -> None:
         self.scan()
