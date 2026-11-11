@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,6 @@ BIN = pathlib.Path(__file__).resolve().parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import names  # noqa: E402
-import systemd_units  # noqa: E402
 
 
 def load(name, file):
@@ -51,7 +51,7 @@ class Wrapper(Base):
         f = self.cli / names.current("cli")
         self.assertFalse(f.is_symlink())
         self.assertEqual(f.stat().st_mode & 0o777, 0o755)
-        self.assertIn(f'exec "{hubconf.MAIN / "bin" / names.current("cli")}" "$@"', f.read_text())
+        self.assertIn(f'exec {shlex.quote(str(hubconf.MAIN / "bin" / names.current("cli")))} "$@"', f.read_text())
         self.assertEqual(os.listdir(self.cli), [f.name])
         self.assertFalse(hubconf.write_cli_wrapper())   # as it should be: left alone
 
@@ -82,77 +82,120 @@ class Services(Base):
         super().setUp()
         self.ws = self.tmp / "ws"
         (self.ws / "bin").mkdir(parents=True)
-        (self.ws / "bin" / "serve.sh").write_text("#!/bin/sh\n")
+        (self.ws / "bin" / "serve.sh").write_text('#!/bin/sh\nprintf %s "$PATH"\n')
         (self.ws / "bin" / "serve.sh").chmod(0o755)
         self.doc = {"name": "p", "paths": {"workspace": str(self.ws)}}
-        rs._MANAGER_PATH.clear()
-        self.addCleanup(rs._MANAGER_PATH.clear)
 
-    def path_of(self, svc, manager="launchd"):
-        with mock.patch.object(hubconf, "service_manager", lambda: manager):
-            plist, problem = rs.render("p", self.doc, svc)
+    def render(self, svc, doc=None):
+        plist, problem = rs.render("p", doc or self.doc, svc)
         self.assertIsNone(problem)
-        return plist["EnvironmentVariables"]["PATH"]
+        return plist
 
-    def test_every_kind_of_service_ends_with_the_folder(self):
-        cases = {"own PATH": {"name": "a", "run": "bin/serve.sh", "env": {"PATH": "/opt/x/bin:/usr/bin"}},
-                 "own PATH with the platform's": {"name": "b", "run": "sh -c true", "env": {"PATH": "$PLATFORM_PATH"}},
-                 "by name": {"name": "c", "run": "sh -c true"},
-                 "by path": {"name": "d", "run": "bin/serve.sh"}}
-        for what, svc in cases.items():
+    def test_a_service_naming_its_path_or_started_by_name_gets_the_folder_last(self):
+        cases = {"own PATH": ({"name": "a", "run": "bin/serve.sh", "env": {"PATH": "/opt/x/bin:/usr/bin"}},
+                              f"/opt/x/bin:/usr/bin:{self.cli}"),
+                 "own PATH with the platform's": ({"name": "b", "run": "sh -c true", "env": {"PATH": "$PLATFORM_PATH"}},
+                                                  f"{hubconf.LAUNCHD_PATH}:{self.cli}"),
+                 "by name": ({"name": "d", "run": "sh -c true"}, f"{rs.DEFAULT_PATH}:{self.cli}")}
+        for what, (svc, want) in cases.items():
             with self.subTest(what):
-                self.assertTrue(self.path_of(svc).endswith(f":{self.cli}"))
-        self.assertEqual(self.path_of(cases["own PATH"]), f"/opt/x/bin:/usr/bin:{self.cli}")
-        self.assertEqual(self.path_of(cases["own PATH with the platform's"]), f"{hubconf.LAUNCHD_PATH}:{self.cli}")
-        self.assertEqual(self.path_of(cases["by name"]), f"{rs.DEFAULT_PATH}:{self.cli}")
+                self.assertEqual(self.render(svc)["EnvironmentVariables"]["PATH"], want)
 
-    def test_a_service_started_by_path_keeps_the_managers_own_path_before_it(self):
-        svc = {"name": "d", "run": "bin/serve.sh"}
-        self.assertEqual(self.path_of(svc), f"/usr/bin:/bin:/usr/sbin:/sbin:{self.cli}")
-        with mock.patch.object(systemd_units, "default_path", lambda: "/usr/local/bin:/usr/bin"):
-            self.assertEqual(self.path_of(svc, "systemd"), f"/usr/local/bin:/usr/bin:{self.cli}")
+    def test_a_service_started_by_path_keeps_the_managers_path_when_it_starts(self):
+        plist = self.render({"name": "e", "run": "bin/serve.sh", "env": {"X": "1"}})
+        self.assertNotIn("PATH", plist["EnvironmentVariables"])   # the unit names none: a manager's change changes nothing
+        self.assertEqual(plist["ProgramArguments"][:2], ["/bin/sh", "-c"])
+        self.assertEqual(plist["ProgramArguments"][-1], str(self.ws / "bin" / "serve.sh"))
+        # launchd and systemd always give one (a shell given none makes up its own)
+        for path in ("/usr/bin:/bin:/usr/sbin:/sbin", "/usr/local/bin:/usr/bin:/bin"):
+            with self.subTest(path=path):
+                out = subprocess.run(plist["ProgramArguments"], env={"PATH": path}, capture_output=True, text=True,
+                                     check=True)
+                self.assertEqual(out.stdout, f"{path}:{self.cli}")
+
+    def test_a_sandboxed_one_gets_it_around_its_sandbox(self):
+        import isolation
+        doc = {**self.doc, "enforce": {"sandbox": True}}
+        with mock.patch.object(isolation, "can_sandbox", lambda: None):
+            args = self.render({"name": "f", "run": "bin/serve.sh"}, doc)["ProgramArguments"]
+        self.assertEqual(args[:2], ["/bin/sh", "-c"])
+        self.assertEqual(args[3], "sh")
+        self.assertTrue(any(a.endswith("sandboxed-run") for a in args[4:6]), args)
 
     def test_brunna_by_name_resolves_to_the_wrapper(self):
         hubconf.write_cli_wrapper()
-        plist, problem = rs.render("p", self.doc, {"name": "e", "run": f"{names.current('cli')} glance --json"})
-        self.assertIsNone(problem)
+        plist = self.render({"name": "g", "run": f"{names.current('cli')} glance --json"})
         self.assertEqual(plist["ProgramArguments"][0], str(self.cli / names.current("cli")))
-
-    def test_systemds_default_comes_from_the_user_manager(self):
-        cp = subprocess.CompletedProcess
-        with mock.patch.object(systemd_units, "systemctl",
-                               lambda *a: cp(a, 0, "LANG=C\nPATH=/usr/local/bin:/usr/bin:/bin\n", "")):
-            self.assertEqual(systemd_units.default_path(), "/usr/local/bin:/usr/bin:/bin")
-        for broken in (cp((), 1, "", "Failed to connect to bus"), cp((), 0, "LANG=C\n", "")):
-            with mock.patch.object(systemd_units, "systemctl", lambda *a, r=broken: r):
-                self.assertEqual(systemd_units.default_path(), systemd_units.FIXED_PATH)
 
 
 class WaitForIdle(Base):
-    def test_cap_runners_unit_waits_while_it_has_a_job(self):
-        index = {"projects": {}, "modules": {"sandbox": {
+    def setUp(self):
+        super().setUp()
+        for name, value in (("WAITED", self.tmp / "waiting.json"),):
+            p = mock.patch.object(rs, name, value)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.object(hubconf, "STATE", self.tmp / "state")
+        p.start()
+        self.addCleanup(p.stop)
+        self.index = {"projects": {}, "modules": {"sandbox": {
             "name": "sandbox", "type": "module", "paths": {"workspace": str(self.tmp)},
             "services": [{"name": "cap-runner", "label": "local.x.cap-runner", "run": "/bin/echo"},
                          {"name": "other", "label": "local.x.other", "run": "/bin/echo"}]}}}
+
+    def active(self, pid, jobs):
+        f = self.tmp / "state" / "cap-runner" / "active.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"pid": pid, "jobs": jobs}))
+
+    def test_cap_runners_unit_waits_while_it_has_a_job(self):
         for is_busy in (True, False):
             with self.subTest(busy=is_busy), mock.patch.object(rs, "busy", lambda p, s, b=is_busy: b and s["name"] == "cap-runner"):
-                _want, problems, keep, _ = rs._desired(index)
+                _want, problems, keep, _ = rs._desired(self.index)
                 self.assertEqual(problems, [])
                 self.assertEqual(keep, {"local.x.cap-runner"} if is_busy else set())
                 self.assertEqual(rs.waiting, ["local.x.cap-runner"] if is_busy else [])
 
-    def test_only_cap_runner_asks(self):
-        self.assertFalse(rs.busy("p", {"name": "cap-runner"}))
+    def test_busy_is_the_running_runners_own_count(self):
+        dead = subprocess.Popen(["/bin/sh", "-c", "exit 0"])
+        dead.wait()
+        svc = {"name": "cap-runner"}
+        self.assertFalse(rs.busy("sandbox", svc))           # no record
+        for pid, jobs, want in ((os.getpid(), 1, True), (os.getpid(), 0, False), (dead.pid, 3, False)):
+            with self.subTest(pid=pid, jobs=jobs):
+                self.active(pid, jobs)
+                self.assertEqual(rs.busy("sandbox", svc), want)
+        (self.tmp / "state" / "cap-runner" / "active.json").write_text("{")
+        self.assertFalse(rs.busy("sandbox", svc))
+        self.active(os.getpid(), 1)
+        self.assertFalse(rs.busy("p", svc))                 # only the module's cap-runner waits
 
-    def test_busy_means_a_queued_or_running_job(self):
-        ws = self.tmp / "proj"
-        for state in ("done", "lost", "queued", "running"):
-            with self.subTest(state=state):
-                d = ws / ".hub-run" / "jobs" / "j1"
-                d.mkdir(parents=True, exist_ok=True)
-                (d / "state.json").write_text(json.dumps({"state": state}))
-                with mock.patch.object(cap_runner, "eligible", lambda: {"proj": {"dirs": [ws]}}):
-                    self.assertEqual(cap_runner.busy(), state in ("queued", "running"))
+    def test_after_two_hours_it_is_changed_anyway(self):
+        self.active(os.getpid(), 1)
+        rs._desired(self.index)
+        rs.note_waiting()
+        first = json.loads(rs.WAITED.read_text())["local.x.cap-runner"]
+        rs._desired(self.index)
+        rs.note_waiting()
+        self.assertEqual(json.loads(rs.WAITED.read_text())["local.x.cap-runner"], first)   # since the first wait
+        rs.WAITED.write_text(json.dumps({"local.x.cap-runner": first - rs.WAIT_LIMIT_S - 1}))
+        _want, _problems, keep, _ = rs._desired(self.index)
+        self.assertEqual((keep, rs.waiting, rs.overdue), (set(), [], ["local.x.cap-runner"]))
+        rs.note_waiting()
+        self.assertEqual(json.loads(rs.WAITED.read_text()), {})
+
+    def test_cap_runner_notes_its_jobs_in_flight(self):
+        active = self.tmp / "state" / "cap-runner" / "active.json"
+        with mock.patch.object(cap_runner, "ACTIVE", active):
+            r = cap_runner.Runner()
+            r.note_active()
+            self.assertEqual(json.loads(active.read_text()), {"pid": os.getpid(), "jobs": 0})
+            r.queue.append(object())
+            r.note_active()
+            self.assertEqual(json.loads(active.read_text())["jobs"], 1)
+            active.unlink()
+            r.note_active()                                  # unchanged: not written again
+            self.assertFalse(active.exists())
 
 
 class Jobs(Base):

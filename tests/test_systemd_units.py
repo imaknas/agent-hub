@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
@@ -80,6 +81,9 @@ class RenderServicesOnSystemd(unittest.TestCase):
         self.m = load_render_services()
         self.calls = []
         self.saved = (systemd_units.UNIT_DIR, systemd_units.systemctl, self.m.hubconf.service_manager, self.m.RENDERED)
+        cli = mock.patch.object(self.m.hubconf, "cli_folder", lambda: self.tmp / "shared" / "cli")   # not the live hub's
+        cli.start()
+        self.addCleanup(cli.stop)
         systemd_units.UNIT_DIR = self.tmp / "units"
         systemd_units.systemctl = lambda *a: self.calls.append(a) or subprocess.CompletedProcess(a, 0, "active\n", "")
         self.m.hubconf.service_manager = lambda: "systemd"
@@ -98,7 +102,8 @@ class RenderServicesOnSystemd(unittest.TestCase):
         self.assertFalse(self.calls, "plan does not touch systemd")
         self.m.apply(self.index)
         unit = (self.tmp / "units" / "local.demo.web.service").read_text()
-        self.assertIn('ExecStart="/bin/echo" "hi"', unit)
+        self.assertIn('ExecStart="/bin/sh" "-c" ', unit)   # through render-services.cli_last (a service started by path)
+        self.assertIn('"sh" "/bin/echo" "hi"\n', unit)
         self.assertIn(("enable", "--now", "local.demo.web.service"), self.calls)
         self.assertEqual(self.m.plan(self.index), [], "plan after apply is empty")
         self.index["projects"]["demo"]["services"] = []

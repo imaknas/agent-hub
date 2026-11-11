@@ -18,11 +18,18 @@
 >   start); a path holding glob, bracket, brace or control characters is refused by the registry and never written
 >   into a rule.
 > - D as built: the folder is `hubconf.cli_folder()`, the wrapper `hubconf.write_cli_wrapper()` (a link in its place,
->   or as the folder, is replaced; never followed). systemd's own PATH is the user manager's (`systemctl --user
->   show-environment`; a distribution may set its own), else systemd's fixed one. Waiting for cap-runner is
->   render-services' `WAIT_FOR_IDLE` (cap-runner's `busy()`: a job queued or running); its unit is left as it is, said
->   in the run's output, until a run finds it idle. The scheduled command's prefix is `hubconf.job_command()`, in the
->   scheduler and in `schedulectl run` both.
+>   or as the folder, is replaced; never followed; the hub's path shell-quoted). A service started by path with no
+>   PATH of its own runs through `/bin/sh -c 'PATH="${PATH:+$PATH:}"<folder>; export PATH; exec "$@"'`
+>   (`render-services.cli_last`) instead of naming the manager's PATH in its unit: it gets whatever launchd or the
+>   systemd user manager gives it when it starts, as before, and the unit doesn't change (nor restart every service)
+>   when the manager's PATH does (a desktop login's `import-environment`; cold review 11-11). Waiting for cap-runner is
+>   render-services' `WAIT_FOR_IDLE`: cap-runner keeps `{pid, jobs}` in `.state/cap-runner/active.json`, where no
+>   project writes (a job's `state.json` in the project's folder could be forged), and its unit waits only while that
+>   pid is alive with jobs in flight, at most two hours (`WAIT_LIMIT_S`, then changed anyway; a job lasts at most 30
+>   minutes). A runner that isn't running minds nothing, so a missing or unloaded one is put back at once. One limit:
+>   a job ending between `config apply`'s apply and its plan again shows the waiting change there once. The scheduled
+>   command's prefix is `hubconf.job_command()`, in the scheduler and in `schedulectl run` both. `upgrade.cli_wrapper()`
+>   skips the folder, so it is never taken for install-cli's wrapper.
 > - Rounds 1–3 were blind cold reviews, each with a security reading and a feasibility reading. What they changed is
 >   at the end.
 > - The holes round 2 found in today's confined runs were fixed on their own first, in the three `fix(confine)` commits
@@ -263,7 +270,8 @@ A platform-owned folder `<shared>/cli/` holds only a `brunna` wrapper:
 Services:
 - **PATH.** render-services appends it to every service's PATH. A service that sets `env.PATH`, or a bare command, gets
   its PATH plus the folder. A path-started service, which today gets the service manager's default PATH, gets that
-  default (launchd's, systemd's) plus the folder, so nothing it finds today changes.
+  default (launchd's, systemd's) plus the folder, so nothing it finds today changes: a shell adds the folder when it
+  starts, so the unit never names the manager's PATH.
 - **Restart.** Every service's unit changes once, so each restarts once. cap-runner's restart marks running jobs lost,
   so render-services applies the change when cap-runner is idle.
 

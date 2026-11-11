@@ -65,6 +65,7 @@ _ = i18n.domain(__file__)
 
 DIR = hubconf.STATE / "cap-runner"
 LOG = DIR / "log.jsonl"
+ACTIVE = DIR / "active.json"   # {pid, jobs}: running + queued, while this runs (render-services waits on it)
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_REQ = 512 * 1024      # a model call's prompt can be long; a cap request is still argv only
 STALE_S = 600
@@ -119,18 +120,6 @@ def each_job():
             for d in jobs.iterdir():
                 if d.is_dir() and not d.is_symlink():
                     yield project, d.name, d
-
-
-def busy() -> bool:
-    """A job is queued or running: a restart now would mark it lost (render-services waits to change this service's
-    unit until there is none)."""
-    for _project, _job_id, d in each_job():
-        try:
-            if json.loads((d / "state.json").read_text()).get("state") in ("queued", "running"):
-                return True
-        except (OSError, ValueError, AttributeError):
-            continue
-    return False
 
 
 def subdir(parent_fd: int, name: str, create: bool = False) -> int:
@@ -235,6 +224,7 @@ class Runner:
         self.queue: list[Job] = []
         self.running: list[Job] = []
         self.excluded: set[str] = set()
+        self.noted: int | None = None
         self.last_prune = 0.0
 
     # ---------- taking requests ----------
@@ -433,10 +423,19 @@ class Runner:
             if p.stat().st_mtime < cutoff:
                 p.unlink(missing_ok=True)
 
+    def note_active(self) -> None:
+        """ACTIVE when the number of jobs in flight changed: a restart now would mark them lost (render-services
+        changes this service's unit only while it is 0)."""
+        n = len(self.running) + len(self.queue)
+        if n != self.noted:
+            hubconf.write_atomic(ACTIVE, json.dumps({"pid": os.getpid(), "jobs": n}))
+            self.noted = n
+
     def tick(self) -> None:
         self.scan()
         self.start_ready()
         self.poll()
+        self.note_active()
         if time.time() - self.last_prune > 600:
             self.last_prune = time.time()
             self.prune()

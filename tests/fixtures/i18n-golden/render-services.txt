@@ -5,7 +5,7 @@ services:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux �
 - service:local.demo.old  登錄裡已經沒有
 + service:local.demo.failboot  demo
 + service:local.demo.ghost  demo
-~ service:local.demo.once  demo:改了 EnvironmentVariables、ProgramArguments、StandardErrorPath、StandardOutPath、StartInterval、WorkingDirectory
+~ service:local.demo.once  demo:改了 ProgramArguments、StandardErrorPath、StandardOutPath、StartInterval、WorkingDirectory
 + service:local.demo.web  demo
 + service:local.demo.worker  demo
 === dry-run
@@ -14,8 +14,7 @@ services:這個系統沒有支援的服務管理器(macOS 的 launchd、Linux �
 (dry-run) local.demo.failboot(demo):新增
 (dry-run) local.demo.ghost(demo):新增
 (dry-run) local.demo.once(demo):更新
-    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
-    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/sh', '-c', 'PATH="${PATH:+$PATH:}"<TMP>/shared/cli; export PATH; exec "$@"', 'sh', '/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
     StartInterval: None → 600
@@ -31,8 +30,7 @@ local.demo.failboot(demo):新增
     ⚠️ bootstrap 失敗:Bootstrap failed: 5: Input/output error
 local.demo.ghost(demo):新增
 local.demo.once(demo):更新
-    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
-    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/sh', '-c', 'PATH="${PATH:+$PATH:}"<TMP>/shared/cli; export PATH; exec "$@"', 'sh', '/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
     StartInterval: None → 600

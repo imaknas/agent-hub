@@ -5,7 +5,7 @@ services: this system has no supported service manager (neither macOS launchd no
 - service:local.demo.old  no longer in the registry
 + service:local.demo.failboot  demo
 + service:local.demo.ghost  demo
-~ service:local.demo.once  demo: changed EnvironmentVariables, ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
+~ service:local.demo.once  demo: changed ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
 + service:local.demo.web  demo
 + service:local.demo.worker  demo
 === dry-run
@@ -14,8 +14,7 @@ services: this system has no supported service manager (neither macOS launchd no
 (dry-run) local.demo.failboot (demo): add
 (dry-run) local.demo.ghost (demo): add
 (dry-run) local.demo.once (demo): update
-    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
-    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/sh', '-c', 'PATH="${PATH:+$PATH:}"<TMP>/shared/cli; export PATH; exec "$@"', 'sh', '/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
     StartInterval: None → 600
@@ -31,8 +30,7 @@ local.demo.failboot (demo): add
     ⚠️ bootstrap failed: Bootstrap failed: 5: Input/output error
 local.demo.ghost (demo): add
 local.demo.once (demo): update
-    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
-    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
+    ProgramArguments: ['/bin/echo', 'old'] → ['/bin/sh', '-c', 'PATH="${PATH:+$PATH:}"<TMP>/shared/cli; export PATH; exec "$@"', 'sh', '/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
     StartInterval: None → 600

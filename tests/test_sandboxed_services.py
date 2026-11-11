@@ -37,6 +37,13 @@ render_services = load("render_services_sb", BIN / "render-services.py")
 sandboxed_run = load("sandboxed_run_sb", BIN / "sandboxed-run")
 
 
+def after_cli_last(args):
+    """A service started by path runs through a shell that adds the platform's CLI folder to its PATH
+    (render-services.cli_last): what that shell execs."""
+    assert args[:2] == ["/bin/sh", "-c"] and args[3] == "sh", args
+    return args[4:]
+
+
 class Fixture(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -61,7 +68,7 @@ class Render(Fixture):
         with mock.patch.object(isolation, "can_sandbox", lambda: None):
             plist, problem = render_services.render("proj", self.doc, self.doc["services"][0])
         self.assertIsNone(problem)
-        args = plist["ProgramArguments"]
+        args = after_cli_last(plist["ProgramArguments"])
         self.assertTrue(args[1].endswith("sandboxed-run"), args)
         i = args.index("--")
         self.assertEqual(args[2:i], ["--project", "proj", "--cwd", str(self.ws), "--port", "18123"])
@@ -73,7 +80,7 @@ class Render(Fixture):
                     mock.patch.object(isolation.hubconf, "get",
                                       lambda k, d=None: ["proj"] if k == "service_sandbox_exempt" else d):
                 plist, _ = render_services.render("proj", doc, doc["services"][0])
-            self.assertEqual(plist["ProgramArguments"], [str(self.ws / "bin" / "serve.sh")])
+            self.assertEqual(after_cli_last(plist["ProgramArguments"]), [str(self.ws / "bin" / "serve.sh")])
 
     def test_no_adapter_means_not_rendered(self):
         with mock.patch.object(isolation, "can_sandbox", lambda: "this system has no Seatbelt (linux)"):

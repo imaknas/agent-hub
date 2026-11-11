@@ -329,8 +329,13 @@ def py_step(*argv) -> list[str]:
 def cli_wrapper() -> pathlib.Path | None:
     """The CLI on PATH, under either name (docs/design/rename-brunna.md), when it is install-cli's wrapper (never
     someone else's program of that name)."""
+    import hubconf
+    # not the platform's own folder that services and scheduled commands have last on PATH (hubconf.cli_folder)
+    shared = os.path.realpath(hubconf.cli_folder())
+    path = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep)
+                           if d and os.path.realpath(d) != shared)
     for name in names.all("cli"):
-        w = shutil.which(name)
+        w = shutil.which(name, path=path)
         if not w:
             continue
         try:

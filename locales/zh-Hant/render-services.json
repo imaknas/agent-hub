@@ -21,5 +21,6 @@
  " not loaded": " 沒有載入",
  "wrote {path}": "寫了 {path}",
  "{path} could not be written: {why}": "{path} 寫不進去:{why}",
- "{label}: has work in flight; its changes wait until it has none": "{label}:還有工作在跑,等它沒有工作時才改"
+ "{label}: has work in flight; its changes wait until it has none": "{label}:還有工作在跑,等它沒有工作時才改",
+ "{label}: still has work in flight after two hours of waiting; changed now": "{label}:等了兩小時還有工作在跑,現在就改"
 }

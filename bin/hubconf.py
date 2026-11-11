@@ -554,7 +554,7 @@ def cli_folder() -> pathlib.Path:
 
 def cli_wrapper_text() -> str:
     return (f'#!/bin/sh\n# the {names.current("product")} CLI, for services and scheduled commands (written by the '
-            f'platform)\nexec "{MAIN / "bin" / names.current("cli")}" "$@"\n')
+            f'platform)\nexec {shlex.quote(str(MAIN / "bin" / names.current("cli")))} "$@"\n')
 
 
 def write_cli_wrapper() -> bool:

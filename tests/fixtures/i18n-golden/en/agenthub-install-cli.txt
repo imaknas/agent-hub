@@ -2,6 +2,7 @@ $ agenthub install-cli --dir <TMP>/cli
 [exit 1]
 --- stdout
 wrote <TMP>/cli/brunna
+wrote <TMP>/state/shared/cli/brunna
 ⚠️ <TMP>/cli is not on PATH: add it to your shell setup (e.g. export PATH="<TMP>/cli:$PATH") so sessions can reach brunna
 --- stderr
 

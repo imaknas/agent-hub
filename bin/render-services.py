@@ -19,10 +19,10 @@ service fields (validated by registry.py):
   env                  environment variables; a value that is a relative path existing under cwd becomes an absolute
                        path. When run's first word is a command name (node) and no PATH is given: it is looked up
                        by hubconf.LAUNCHD_PATH, which is also written into the plist (the nvm default version's bin
-                       first -- node is managed only by nvm, see hubconf.nvm_bin). Run by path (bin/x.sh): the
-                       service manager's own PATH (launchd's; systemd's user manager's); $PLATFORM_PATH in an env value
-                       is replaced by hubconf.LAUNCHD_PATH. Every service's PATH, its own included, ends with
-                       hubconf.cli_folder(), which holds only the platform's `brunna` wrapper (written here and by
+                       first -- node is managed only by nvm, see hubconf.nvm_bin). Run by path (bin/x.sh) with no
+                       PATH: the service manager's own, through a shell that adds to it at start (cli_last); $PLATFORM_PATH
+                       in an env value is replaced by hubconf.LAUNCHD_PATH. Every service's PATH, its own included, ends
+                       with hubconf.cli_folder(), which holds only the platform's `brunna` wrapper (written here and by
                        install-cli), so a service finds brunna by name and nothing else it finds changes
                        (docs/design/project-agent-calls.md D)
   log                  one file (stdout and stderr both go there, relative to cwd); without it:
@@ -43,7 +43,9 @@ found, and a LINE bot was down for a day and a half without anyone knowing):
   Problems go to Discord (once per set, once more on recovery), exit 1 (the scheduler records job.failed, the status
   page turns red).
 A service whose restart loses work in flight (WAIT_FOR_IDLE: cap-runner marks a running job lost) keeps its unit as it
-is while it has some; the change is made on a run when it has none.
+is while it has some, by the record it keeps in the platform's state while it runs; the change is made on a run when it
+has none, or after two hours of waiting. A change that waits doesn't show in plan either, so a job ending between
+`config apply`'s apply and its plan again can show it there once.
 
 Usage: render-services.py [--dry-run] [--only <label>]
 Also an applier (appliers.py): plan()/apply(), used by `bin/hub config plan/apply`.
@@ -57,6 +59,7 @@ import plistlib
 import shlex
 import shutil
 import subprocess
+import time
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -74,50 +77,59 @@ AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
 # shell running this script (the shell may have nvm and the like; launchd does not)
 DEFAULT_PATH = hubconf.LAUNCHD_PATH
 RENDERED = hubconf.STATE / "rendered-services.json"
-# what launchd gives a job whose plist sets no PATH (a service started by path got this before it got the CLI folder)
-LAUNCHD_DEFAULT = "/usr/bin:/bin:/usr/sbin:/sbin"
-_MANAGER_PATH: dict[str, str] = {}
-
-
-def manager_path() -> str:
-    """The PATH the service manager gives a service that sets none (launchd's; systemd's user manager's), once a run."""
-    sm = hubconf.service_manager() or "launchd"
-    if sm not in _MANAGER_PATH:
-        if sm == "systemd":
-            import systemd_units
-            _MANAGER_PATH[sm] = systemd_units.default_path()
-        else:
-            _MANAGER_PATH[sm] = LAUNCHD_DEFAULT
-    return _MANAGER_PATH[sm]
 
 
 def with_cli(path: str) -> str:
     """path with the platform's CLI folder last (docs/design/project-agent-calls.md D): `brunna` by name, and nothing
     found today found anywhere else."""
-    return f"{path}:{hubconf.cli_folder()}"
+    return f"{path}:{hubconf.cli_folder()}" if path else str(hubconf.cli_folder())
+
+
+def cli_last(args: list[str]) -> list[str]:
+    """A service started by path, which sets no PATH, keeps the one its service manager gives it (launchd's, the systemd
+    user manager's, whatever they are when it starts) and gets the CLI folder after it: a shell that sets PATH and execs
+    it, so the unit itself names no PATH and doesn't change when the manager's does."""
+    script = f'PATH="${{PATH:+$PATH:}}"{shlex.quote(str(hubconf.cli_folder()))}; export PATH; exec "$@"'
+    return ["/bin/sh", "-c", script, "sh", *args]
 
 
 # Services whose restart loses work in flight: their unit is changed only while they have none (cap-runner marks a
-# running job lost when it restarts). (module or project, service name) → its script, whose busy() says so.
-WAIT_FOR_IDLE = {("sandbox", "cap-runner"): "cap-runner.py"}
+# running job lost when it restarts). (module or project, service name) → the record the running service keeps of it
+# in the platform's state ({pid, jobs}), where no project writes; one whose pid isn't alive minds nothing.
+WAIT_FOR_IDLE = {("sandbox", "cap-runner"): "cap-runner/active.json"}
+WAIT_LIMIT_S = 2 * 3600   # past this the change is made anyway (cap-runner's jobs last at most 30 minutes each)
+WAITED = hubconf.STATE / "render-services-waiting.json"   # label → when its change first waited
 waiting: list[str] = []   # the last _desired()'s labels left as they are until idle (main says so)
+overdue: list[str] = []   # the last _desired()'s labels changed although busy, after waiting WAIT_LIMIT_S
 
 
 def busy(project: str, svc: dict) -> bool:
-    script = WAIT_FOR_IDLE.get((project, svc["name"]))
-    if not script:
+    rel = WAIT_FOR_IDLE.get((project, svc["name"]))
+    if not rel:
         return False
-    import importlib.machinery
-    import importlib.util
-    loader = importlib.machinery.SourceFileLoader(f"wait_{svc['name'].replace('-', '_')}",
-                                                  str(pathlib.Path(__file__).resolve().parent / script))
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
     try:
-        return bool(m.busy())
-    except Exception:   # noqa: BLE001 (can't tell: wait, the next run asks again)
-        return True
+        rec = json.loads((hubconf.STATE / rel).read_text())
+        pid, jobs = int(rec["pid"]), int(rec["jobs"])
+        os.kill(pid, 0)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False   # no record, or its runner isn't running: nothing in flight to lose
+    return jobs > 0
+
+
+def _waited() -> dict:
+    try:
+        d = json.loads(WAITED.read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def note_waiting() -> None:
+    """After an apply: when each label still waiting first waited (kept), the others dropped."""
+    old, now = _waited(), time.time()
+    new = {label: old.get(label, now) for label in waiting}
+    if new != old:
+        hubconf.write_atomic(WAITED, json.dumps(new))
 
 
 def label_of(project: str, svc: dict) -> str:
@@ -136,26 +148,27 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     problem = None if pathlib.Path(first).is_absolute() and os.access(first, os.X_OK) else \
         _("`{command}` not found (PATH={path})", command=words[0], path=search)
     args = [first] + [str(cwd / w) if not w.startswith(("/", "-")) and (cwd / w).exists() else w for w in words[1:]]
+    path_started = "/" in words[0] and "PATH" not in (svc.get("env") or {})
     if isolation.sandboxed(doc):
         # a sandboxed project's service gets no more than its sessions (bin/sandboxed-run); where that can't be done it
         # is not rendered at all
         if (why := isolation.can_sandbox()):
             problem = _("{project} is sandboxed and {why}; its services are not run unsandboxed", project=project, why=why)
         args = isolation.wrap(project, cwd, args, (svc.get("expose") or {}).get("local_port"))
+    if path_started:
+        args = cli_last(args)
     label = label_of(project, svc)
     p: dict = {"Label": label, "ProgramArguments": args, "WorkingDirectory": str(cwd)}
     env = {k: (str(cwd / v) if isinstance(v, str) and not v.startswith("/") and (cwd / v).exists()
                else hubconf.expand_env(str(v))) for k, v in (svc.get("env") or {}).items()}
     if "PATH" in env:
         env["PATH"] = with_cli(env["PATH"])
-    elif "/" not in words[0]:
+    elif not path_started:
         # the command was found by the platform's PATH (node etc.); the process itself (npm's child processes) must
         # see it too
         env["PATH"] = with_cli(DEFAULT_PATH)
-    else:
-        # started by path: the service manager's own PATH, as before, then the CLI folder
-        env["PATH"] = with_cli(manager_path())
-    p["EnvironmentVariables"] = env
+    if env:
+        p["EnvironmentVariables"] = env
     p["RunAtLoad"] = True
     if svc.get("keepalive"):
         p["KeepAlive"] = True
@@ -220,6 +233,8 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
     keep: set[str] = set()       # command cannot be resolved: the current plist is left alone
     keepalive: set[str] = set()  # should be running all the time
     waiting.clear()
+    overdue.clear()
+    waited, now = _waited(), time.time()
     # services of enabled modules too
     docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
     for name, doc in docs:
@@ -232,8 +247,11 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
                                   label=label, project=name, problem=problem))
                 keep.add(label)
             elif busy(name, svc):
-                keep.add(label)
-                waiting.append(label)
+                if now - float(waited.get(label) or now) < WAIT_LIMIT_S:
+                    keep.add(label)
+                    waiting.append(label)
+                else:
+                    overdue.append(label)
             if svc.get("keepalive"):
                 keepalive.add(label)
     return want, problems, keep, keepalive
@@ -335,6 +353,7 @@ def apply(index: dict | None = None) -> list:
     todo = _changes(want, keep)
     for ch, _cur, plist in todo:
         _apply_one(uid, ch, plist, problems)
+    note_waiting()
     RENDERED.parent.mkdir(parents=True, exist_ok=True)
     RENDERED.write_text(json.dumps(sorted(want)))
     return [c for c, _cur, _plist in todo]
@@ -372,6 +391,9 @@ def main() -> int:
     for label in waiting:
         if not only or label == only:
             print(_("{label}: has work in flight; its changes wait until it has none", label=label))
+    for label in overdue:
+        if not only or label == only:
+            print(_("{label}: still has work in flight after two hours of waiting; changed now", label=label))
     for ch, cur, plist in todo:
         label = ch.target.removeprefix("service:")
         if ch.op == "remove":
@@ -387,6 +409,7 @@ def main() -> int:
         if not dry:
             _apply_one(uid, ch, plist, problems)
     if not dry and not only:
+        note_waiting()
         RENDERED.parent.mkdir(parents=True, exist_ok=True)
         RENDERED.write_text(json.dumps(sorted(want)))
     if not changed:
