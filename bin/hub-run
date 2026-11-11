@@ -7,6 +7,13 @@
                                a model call the project declares (registry models: {point: {tier}}); the platform
                                runs it with its own credentials (brunna complete). stdout = the JSON result
                                ({structured_output, result, …}); exit 1 = refused or failed, the reason in llm_error
+  hub-run --agent <name> [--schema F] < prompt
+                               a confined agent call the project declares (registry agents: {name: {tier, allow,
+                               timeout?}}; brunna agent): it runs in the project folder the call is made from (its
+                               workspace or runtime folder, never a folder below), with only the declared rules. The
+                               job id comes first on stderr; stdout = the JSON result, exit 1 = the run refused or
+                               failed (llm_error says why), 124 = stopped at its deadline (the declared timeout plus a
+                               minute). docs/design/project-agent-calls.md A
 
 Run in the project folder (or below it). This only writes the request into its own project's `.hub-run/requests/`; the
 platform's run service (cap-runner.py, not in the sandbox) checks it before running it, writes the output and exit code
@@ -74,9 +81,10 @@ def submit(ws: pathlib.Path, cap: str, argv: list[str], timeout: int | None) -> 
     return job_id
 
 
-def submit_complete(ws: pathlib.Path, point: str, prompt: str, schema: dict | None) -> str:
+def submit_complete(ws: pathlib.Path, point: str, prompt: str, schema: dict | None, kind: str = "complete") -> str:
+    """A model call (kind complete: point = the models: name) or an agent call (kind agent: the agents: name)."""
     job_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
-    req = {"v": 1, "id": job_id, "kind": "complete", "point": point, "prompt": prompt}
+    req = {"v": 1, "id": job_id, "kind": kind, "point" if kind == "complete" else "name": point, "prompt": prompt}
     if schema is not None:
         req["schema"] = schema
     d = ws / ".hub-run" / "requests"
@@ -104,7 +112,7 @@ class Tail:
             self.out.flush()
 
 
-def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
+def follow(ws: pathlib.Path, job_id: str, pickup: bool, agent: bool = False) -> int:
     req = ws / ".hub-run" / "requests" / f"{job_id}.json"
     job = ws / ".hub-run" / "jobs" / job_id
     tails = [Tail(job / "stdout", sys.stdout.buffer), Tail(job / "stderr", sys.stderr.buffer)]
@@ -137,7 +145,10 @@ def follow(ws: pathlib.Path, job_id: str, pickup: bool) -> int:
         if state == "done":
             for t in tails:
                 t.pump()
-            if st.get("timed_out"):
+            if st.get("timed_out") and (agent or st.get("kind") == "agent"):
+                say(_("the agent call ran past its deadline (its declared timeout plus a minute) and was stopped; the "
+                      "registry's agents.<name>.timeout sets it"))
+            elif st.get("timed_out"):
                 say(_("timed out; the job was stopped (use --timeout for longer; the limit is {settings} "
                       "cap_runner.max_timeout_s)"))
             return int(st.get("exit", 1))
@@ -158,7 +169,10 @@ def main() -> int:
     ap.add_argument("--wait", metavar="ID", help=_("reattach to a job"))
     ap.add_argument("--complete", metavar="POINT",
                     help=_("a model call this project declares (registry models:): prompt on stdin, JSON result on stdout"))
-    ap.add_argument("--schema", metavar="FILE", help=_("with --complete: JSON schema the answer must match"))
+    ap.add_argument("--agent", metavar="NAME",
+                    help=_("a confined agent call this project declares (registry agents:): prompt on stdin, JSON result "
+                           "on stdout"))
+    ap.add_argument("--schema", metavar="FILE", help=_("with --complete or --agent: JSON schema the answer must match"))
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
@@ -168,7 +182,7 @@ def main() -> int:
         return 2
     if a.wait:
         return follow(ws, a.wait, pickup=False)
-    if a.complete:
+    if a.complete or a.agent:
         try:
             schema = json.loads(pathlib.Path(a.schema).read_text()) if a.schema else None
         except (OSError, ValueError) as e:
@@ -178,7 +192,12 @@ def main() -> int:
         if not prompt.strip():
             say(_("the prompt (stdin) is empty"))
             return 2
-        return follow(ws, submit_complete(ws, a.complete, prompt, schema), pickup=True)
+        if a.complete:
+            return follow(ws, submit_complete(ws, a.complete, prompt, schema), pickup=True)
+        job_id = submit_complete(ws, a.agent, prompt, schema, kind="agent")
+        say(_("job {job_id} (agent {name}); if this call is interrupted, the agent keeps running: reattach with "
+              "`hub-run --wait {job_id}`", job_id=job_id, name=a.agent))
+        return follow(ws, job_id, pickup=True, agent=True)
     if not a.cap or not cmd:
         say(_("usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>"))
         return 2

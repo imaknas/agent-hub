@@ -13,7 +13,10 @@
  "usage: hub-run --cap <capability> [--timeout seconds] -- <command…>, or hub-run --wait <id>": "用法:hub-run --cap <能力> [--timeout 秒] -- <指令…>,或 hub-run --wait <id>",
  "job {job_id} (capability {cap}); if this call is interrupted, the job keeps running: reattach with `hub-run --wait {job_id}`": "工作 {job_id}(能力 {cap});這次呼叫被中斷的話,工作照跑,用 `hub-run --wait {job_id}` 接回",
  "a model call this project declares (registry models:): prompt on stdin, JSON result on stdout": "這個專案宣告的模型呼叫(登錄 models:):提示從 stdin 進,JSON 結果從 stdout 出",
- "with --complete: JSON schema the answer must match": "跟 --complete 一起用:回答必須符合的 JSON schema",
  "the prompt (stdin) is empty": "提示(stdin)是空的",
- "cannot read the schema: {err}": "讀不到 schema:{err}"
+ "cannot read the schema: {err}": "讀不到 schema:{err}",
+ "a confined agent call this project declares (registry agents:): prompt on stdin, JSON result on stdout": "這個專案宣告的受限 agent 呼叫(登錄的 agents:):prompt 從 stdin 給,JSON 結果在 stdout",
+ "with --complete or --agent: JSON schema the answer must match": "跟 --complete 或 --agent 一起用:回答必須符合的 JSON schema",
+ "job {job_id} (agent {name}); if this call is interrupted, the agent keeps running: reattach with `hub-run --wait {job_id}`": "工作 {job_id}(agent {name});這個呼叫被中斷的話,agent 會繼續跑:用 `hub-run --wait {job_id}` 接回來",
+ "the agent call ran past its deadline (its declared timeout plus a minute) and was stopped; the registry's agents.<name>.timeout sets it": "agent 呼叫超過期限(宣告的時限再加一分鐘),已經停掉;時限由登錄的 agents.<name>.timeout 決定"
 }

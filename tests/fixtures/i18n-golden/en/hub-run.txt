@@ -1,7 +1,8 @@
 === --help
 exit 0
 --- stdout
-usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--schema FILE]
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--agent NAME]
+               [--schema FILE]
                ...
 
 Run a program that needs a capability under the platform's profile
@@ -16,7 +17,9 @@ options:
   --wait ID          reattach to a job
   --complete POINT   a model call this project declares (registry models:): prompt on stdin, JSON
                      result on stdout
-  --schema FILE      with --complete: JSON schema the answer must match
+  --agent NAME       a confined agent call this project declares (registry agents:): prompt on
+                     stdin, JSON result on stdout
+  --schema FILE      with --complete or --agent: JSON schema the answer must match
 --- stderr
 === not in a project
 exit 2

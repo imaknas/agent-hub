@@ -23,7 +23,17 @@ get gpu by default, and keep it after being upgraded into a real project), and, 
 models: (sandboxed or not; their workspace and runtime folders are both scanned, so a service or job can call too).
 A model call ({"v": 1, "id", "kind": "complete", "point", "prompt", "schema"?}, from `brunna complete`): the point
 must be in models:; it runs `llm.py project <project> <point>` outside any sandbox (the platform's credentials), which
-checks the provider (metered only with the owner's metered_models) before sending. stdout = llm.py's JSON. Checks (failing one → rejected + reason):
+checks the provider (metered only with the owner's metered_models) before sending. stdout = llm.py's JSON.
+An agent call ({"v": 1, "id", "kind": "agent", "name", "prompt", "schema"?}, from `brunna agent`; projects that declare
+agents:, docs/design/project-agent-calls.md A): the name must be in agents:; it runs `llm.py agent <project> <name>
+--cwd <the folder the request was found in>`, which takes the rules, tier and timeout from the registry. Its own pool
+(cap_runner.agent_concurrency, default 1; the rest share cap_runner.concurrency, default 2), one job per project per pool,
+the project served least recently first; one agent call per project at a time (another is refused); daily minutes in
+.state/cap-runner/agent-minutes.json (cap_runner.agent_minutes_per_project, default 90, lowered by the registry's
+agents_per_day; cap_runner.agent_minutes_per_day, default 480, across projects): a call reserves its declared timeout
+when taken, replaced by the minutes it ran when it ends, however it ends; one that wouldn't fit is refused with the
+numbers. The deadline is the declared timeout plus a minute; a call queued longer than its timeout is refused.
+Checks (failing one → rejected + reason):
   .hub-run/, requests/ and jobs/ must not be symlinks (everything goes through O_NOFOLLOW directory fds, so results
   can't be redirected into another project); the request is a regular file, ≤ 64 KB, within 10 minutes; id is a
   plain file name; cap is one this project declares; argv is a list of strings;
@@ -66,6 +76,8 @@ _ = i18n.domain(__file__)
 DIR = hubconf.STATE / "cap-runner"
 LOG = DIR / "log.jsonl"
 ACTIVE = DIR / "active.json"   # {pid, jobs}: running + queued, while this runs (render-services waits on it)
+MINUTES = DIR / "agent-minutes.json"   # agent calls' minutes today: platform state, never the project's folder
+AGENT_GRACE_S = 60   # past the declared timeout, the runner's deadline (llm.py stops the run at the timeout itself)
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_REQ = 512 * 1024      # a model call's prompt can be long; a cap request is still argv only
 STALE_S = 600
@@ -98,15 +110,17 @@ def eligible() -> dict[str, dict]:
         enf = doc.get("enforce") or {}
         caps = list(enf.get("capabilities") or []) if enf.get("sandbox") is True else []
         models = doc.get("models") or {}
-        if not caps and not models:
+        agents = {k: v for k, v in (doc.get("agents") or {}).items() if isinstance(v, dict)}
+        if not caps and not models and not agents:
             continue
         d = registry.dirs(doc)
         dirs = []
-        for p in (d.get("workspace"), d.get("runtime") if models else None):
+        for p in (d.get("workspace"), d.get("runtime") if models or agents else None):
             if p and p.is_dir() and p.resolve() not in dirs:
                 dirs.append(p.resolve())
         if dirs:
-            out[name] = {"dirs": dirs, "caps": caps, "models": models}
+            out[name] = {"dirs": dirs, "caps": caps, "models": models, "agents": agents,
+                         "agents_per_day": doc.get("agents_per_day")}
     return out
 
 
@@ -148,7 +162,8 @@ def read_json(dir_fd: int, name: str):
         return json.loads(f.read(MAX_REQ + 1).decode())
 
 
-def check(req, stem: str, ws: pathlib.Path, caps: list[str], models: dict | None = None) -> tuple[str, dict]:
+def check(req, stem: str, ws: pathlib.Path, caps: list[str], models: dict | None = None,
+          agents: dict | None = None) -> tuple[str, dict]:
     """Return (reason for rejection, the tidied request); an empty reason = passed."""
     if not isinstance(req, dict) or req.get("v") != 1:
         return _("Malformed request (must be a JSON object with v: 1)"), {}
@@ -156,6 +171,8 @@ def check(req, stem: str, ws: pathlib.Path, caps: list[str], models: dict | None
         return _("id does not match the file name"), {}
     if req.get("kind") == "complete":
         return check_complete(req, models or {})
+    if req.get("kind") == "agent":
+        return check_agent(req, agents or {}, ws)
     cap = req.get("cap")
     if cap not in caps:
         return _("This project has not declared the capability {cap!r} (its registry entry's enforce.capabilities: "
@@ -193,6 +210,91 @@ def check_complete(req: dict, models: dict) -> tuple[str, dict]:
                 "timeout_s": conf("timeout_s", 600)}
 
 
+def check_agent(req: dict, agents: dict, ws: pathlib.Path) -> tuple[str, dict]:
+    """An agent call (brunna agent): the name must be in the registry's agents:; its rules, tier and timeout are the
+    registry's (llm.py agent reads them again), the folder is the one the request was found in."""
+    import registry
+    name = req.get("name")
+    if not isinstance(name, str) or name not in agents:
+        return _("This project has not declared the agent call {name!r} (its registry entry's agents: {have})",
+                 name=name, have=", ".join(sorted(agents)) or _("none")), {}
+    if not isinstance(req.get("prompt"), str) or not req["prompt"].strip():
+        return _("prompt must be a non-empty string"), {}
+    if req.get("schema") is not None and not isinstance(req["schema"], dict):
+        return _("schema must be a JSON object"), {}
+    timeout = registry.agent_timeout_s(agents[name])
+    if timeout > conf("agent_max_timeout_s", 3600):
+        return _("agents.{name} declares a timeout of {minutes} minutes; the most is {max}", name=name,
+                 minutes=timeout // 60, max=conf("agent_max_timeout_s", 3600) // 60), {}
+    return "", {"kind": "agent", "name": name, "prompt": req["prompt"], "schema": req.get("schema"), "cwd": ws,
+                "timeout_s": timeout}
+
+
+def _minutes(seconds: float) -> int:
+    return max(0, -(-int(seconds) // 60))
+
+
+class Minutes:
+    """Agent calls' minutes today (A5): {"day", "jobs": {"<project>/<id>": {"project", "reserved", "used", "at"}}}, in
+    platform state. A call reserves its declared timeout when taken; settle() puts the minutes it ran in its place."""
+
+    def __init__(self, path: pathlib.Path | None = None):
+        self.path = path or MINUTES   # read when made (tests move it)
+
+    def load(self) -> dict:
+        today = datetime.date.today().isoformat()
+        try:
+            d = json.loads(self.path.read_text())
+            if isinstance(d, dict) and d.get("day") == today and isinstance(d.get("jobs"), dict):
+                return d
+        except (OSError, ValueError):
+            pass
+        return {"day": today, "jobs": {}}
+
+    def save(self, d: dict) -> None:
+        hubconf.write_atomic(self.path, json.dumps(d, ensure_ascii=False))
+
+    @staticmethod
+    def spent(d: dict, project: str | None = None) -> int:
+        return sum((j["used"] if j.get("used") is not None else j.get("reserved", 0))
+                   for j in d["jobs"].values() if project is None or j.get("project") == project)
+
+    def reserve(self, project: str, job_id: str, seconds: int, per_day: int | None) -> str:
+        """'' when it fits (and is reserved), else why not, with the numbers."""
+        d, want = self.load(), _minutes(seconds)
+        mine, cap = self.spent(d, project), conf("agent_minutes_per_project", 90)
+        if isinstance(per_day, int) and not isinstance(per_day, bool) and per_day > 0:
+            cap = min(cap, per_day)   # the registry's agents_per_day lowers the share, never raises it
+        if mine + want > cap:
+            return _("{project} has {spent} of its {cap} agent minutes today, and this call reserves {want}",
+                     project=project, spent=mine, cap=cap, want=want)
+        everyone, total = self.spent(d), conf("agent_minutes_per_day", 480)
+        if everyone + want > total:
+            return _("agent calls have {spent} of the platform's {cap} minutes today, and this call reserves {want}",
+                     spent=everyone, cap=total, want=want)
+        d["jobs"][f"{project}/{job_id}"] = {"project": project, "reserved": want, "used": None, "at": time.time()}
+        self.save(d)
+        return ""
+
+    def settle(self, project: str, job_id: str, seconds: float) -> None:
+        d = self.load()
+        j = d["jobs"].get(f"{project}/{job_id}")
+        if j is not None and j.get("used") is None:   # a call taken on an earlier day counts there, not today
+            j["used"] = min(j.get("reserved", 0), _minutes(seconds))
+            self.save(d)
+
+    def settle_orphans(self) -> None:
+        """At start: calls still reserved belong to a runner that is gone; each counts the minutes up to now, at most
+        its reservation."""
+        d, changed = self.load(), False
+        for j in d["jobs"].values():
+            if j.get("used") is None:
+                j["used"] = min(j.get("reserved", 0), _minutes(time.time() - float(j.get("at") or time.time())))
+                changed = True
+        if changed:
+            self.save(d)
+
+
 def make_profile(project: str, cap: str, job_id: str) -> pathlib.Path:
     import policy
     import seatbelt
@@ -217,6 +319,11 @@ class Job:
         self.timed_out = False
         self.killed_at = 0.0
         self.started = 0.0
+        self.queued = time.time()
+
+    @property
+    def pool(self) -> str:
+        return "agent" if self.req.get("kind") == "agent" else "other"
 
 
 class Runner:
@@ -226,6 +333,8 @@ class Runner:
         self.excluded: set[str] = set()
         self.noted: int | None = None
         self.last_prune = 0.0
+        self.minutes = Minutes()
+        self.served: dict[tuple[str, str], float] = {}   # (pool, project) → when its last job started
 
     # ---------- taking requests ----------
 
@@ -233,11 +342,12 @@ class Runner:
         for project, e in eligible().items():
             for ws in e["dirs"]:
                 try:
-                    self.scan_project(project, ws, e["caps"], e["models"])
+                    self.scan_project(project, ws, e["caps"], e["models"], e.get("agents"), e.get("agents_per_day"))
                 except OSError as err:  # .hub-run is a symlink, wrong permissions and such: skip this folder, log it
                     log(project=project, event="scan_error", detail=str(err)[:300])
 
-    def scan_project(self, project: str, ws: pathlib.Path, caps: list[str], models: dict | None = None) -> None:
+    def scan_project(self, project: str, ws: pathlib.Path, caps: list[str], models: dict | None = None,
+                     agents: dict | None = None, per_day: int | None = None) -> None:
         ws_fd = os.open(ws, DIRFLAGS)
         try:
             try:
@@ -255,7 +365,7 @@ class Runner:
                         exclude_hub_run(project, ws)
                         self.excluded.add(str(ws))
                     for n in names:
-                        self.take(project, ws, caps, hr_fd, req_fd, n, models)
+                        self.take(project, ws, caps, hr_fd, req_fd, n, models, agents, per_day)
                 finally:
                     os.close(req_fd)
             finally:
@@ -264,7 +374,7 @@ class Runner:
             os.close(ws_fd)
 
     def take(self, project: str, ws: pathlib.Path, caps: list[str], hr_fd: int, req_fd: int, name: str,
-             models: dict | None = None) -> None:
+             models: dict | None = None, agents: dict | None = None, per_day: int | None = None) -> None:
         stem = name[:-5]
         st = os.stat(name, dir_fd=req_fd, follow_symlinks=False)
         if not ID.match(stem) or not stat.S_ISREG(st.st_mode) or st.st_size > MAX_REQ:
@@ -285,11 +395,13 @@ class Runner:
         os.rename(name, "request.json", src_dir_fd=req_fd, dst_dir_fd=job_fd)
         try:
             req = read_json(job_fd, "request.json")
-            reason, clean = check(req, stem, ws, caps, models)
+            reason, clean = check(req, stem, ws, caps, models, agents)
         except (OSError, ValueError) as e:
             reason, clean = _("Cannot read the request: {err}", err=e), {}
         if not reason and time.time() - st.st_mtime > STALE_S:
             reason = _("Request too old (nobody took it within 10 minutes)")
+        if not reason and clean.get("kind") == "agent":
+            reason = self.admit_agent(project, stem, clean, per_day)
         if reason:
             write_state(job_fd, state="rejected", reason=reason)
             os.close(job_fd)
@@ -298,17 +410,34 @@ class Runner:
         write_state(job_fd, state="queued")
         self.queue.append(Job(project, stem, job_fd, clean))
 
+    def admit_agent(self, project: str, job_id: str, clean: dict, per_day: int | None) -> str:
+        """One agent call per project at a time, and its minutes reserved (A5); '' when admitted."""
+        if any(j.project == project and j.pool == "agent" for j in (*self.queue, *self.running)):
+            return _("{project} already has an agent call queued or running; one at a time", project=project)
+        return self.minutes.reserve(project, job_id, clean["timeout_s"], per_day)
+
     # ---------- running ----------
 
     def start_ready(self) -> None:
-        busy = {j.project for j in self.running}
-        for job in list(self.queue):
-            if len(self.running) >= conf("concurrency", 2):
-                return
-            if job.project in busy:
+        t = time.time()
+        for job in [j for j in self.queue if j.pool == "agent" and t - j.queued > j.req["timeout_s"]]:
+            self.queue.remove(job)   # waited longer than it may run: whoever asked has given up on it
+            write_state(job.fd, state="rejected", reason=_("Waited in the queue longer than its timeout"))
+            os.close(job.fd)
+            self.minutes.settle(job.project, job.id, 0)
+            log(project=job.project, id=job.id, event="rejected", detail="queued past its timeout")
+        limits = {"agent": conf("agent_concurrency", 1), "other": conf("concurrency", 2)}
+        busy = {(j.pool, j.project) for j in self.running}
+        # within a pool, the project served least recently first; then the order they came in
+        order = sorted(enumerate(self.queue), key=lambda e: (self.served.get((e[1].pool, e[1].project), 0.0), e[0]))
+        for _i, job in order:
+            if sum(1 for j in self.running if j.pool == job.pool) >= limits[job.pool]:
+                continue
+            if (job.pool, job.project) in busy:
                 continue
             self.queue.remove(job)
-            busy.add(job.project)
+            busy.add((job.pool, job.project))
+            self.served[(job.pool, job.project)] = t
             self.start(job)
 
     def start(self, job: Job) -> None:
@@ -329,6 +458,16 @@ class Runner:
                         "--request", str(inp)]
                 env.update({k: v for k, v in os.environ.items() if k.startswith("AGENT_HUB_")})
                 cwd = DIR
+            elif r.get("kind") == "agent":
+                # the project's declared agent, outside any sandbox (llm.py agent confines it): the prompt through a
+                # file in platform state; the folder is the one the request was found in, never one it names
+                inp = DIR / job.project / f"{job.id}.in.json"
+                inp.parent.mkdir(parents=True, exist_ok=True)
+                inp.write_text(json.dumps({"prompt": r["prompt"], "schema": r["schema"]}, ensure_ascii=False))
+                argv = [*hubconf.launch(hubconf.ROOT / "bin" / "llm.py"), "agent", job.project, r["name"],
+                        "--request", str(inp), "--cwd", str(r["cwd"])]
+                env.update({k: v for k, v in os.environ.items() if k.startswith("AGENT_HUB_")})
+                cwd = DIR
             else:
                 profile = make_profile(job.project, r["cap"], job.id)
                 argv, cwd = ["/usr/bin/sandbox-exec", "-f", str(profile), *r["argv"]], r["cwd"]
@@ -345,10 +484,15 @@ class Runner:
             write_state(job.fd, state="rejected", reason=_("Failed to start: {err!r}", err=e)[:500])
             os.close(job.fd)
             log(project=job.project, id=job.id, event="start_failed", detail=str(e)[:300])
+            if job.pool == "agent":
+                self.minutes.settle(job.project, job.id, 0)
             return
         job.started = time.time()
-        job.deadline = job.started + r["timeout_s"]
-        if r.get("kind") == "complete":
+        job.deadline = job.started + r["timeout_s"] + (AGENT_GRACE_S if job.pool == "agent" else 0)
+        if r.get("kind") == "agent":
+            write_state(job.fd, state="running", pid=job.proc.pid, kind="agent")
+            log(project=job.project, id=job.id, event="started", kind="agent", name=r["name"], pid=job.proc.pid)
+        elif r.get("kind") == "complete":
             write_state(job.fd, state="running", pid=job.proc.pid, kind="complete")
             log(project=job.project, id=job.id, event="started", kind="complete", point=r["point"], pid=job.proc.pid)
         else:
@@ -371,9 +515,12 @@ class Runner:
             # the main process ended; reap child processes left in the background too
             self.kill(job.proc.pid, signal.SIGKILL)
             code = 124 if job.timed_out else (128 - rc if rc < 0 else rc)
-            write_state(job.fd, state="done", exit=code, timed_out=job.timed_out)
+            write_state(job.fd, state="done", exit=code, timed_out=job.timed_out,
+                        **({"kind": "agent"} if job.pool == "agent" else {}))
             os.close(job.fd)
             self.running.remove(job)
+            if job.pool == "agent":
+                self.minutes.settle(job.project, job.id, t - job.started)
             log(project=job.project, id=job.id, event="done", exit=code, timed_out=job.timed_out,
                 seconds=round(t - job.started, 1))
 
@@ -391,7 +538,12 @@ class Runner:
         return each_job()
 
     def recover(self) -> None:
-        """The service restarted: jobs still marked queued/running from the last round have nobody minding them."""
+        """The service restarted: jobs still marked queued/running from the last round have nobody minding them, and the
+        agent minutes they reserved count only up to now."""
+        try:
+            self.minutes.settle_orphans()
+        except OSError as e:
+            log(event="minutes_error", detail=str(e)[:300])
         for project, job_id, d in self.each_job():
             try:
                 st = json.loads((d / "state.json").read_text())

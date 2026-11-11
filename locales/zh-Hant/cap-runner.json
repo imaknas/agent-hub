@@ -16,5 +16,11 @@
  "This project has not declared the model call {point!r} (its registry entry's models: {have})": "這個專案沒有宣告模型呼叫 {point!r}(它登錄的 models:{have})",
  "prompt must be a non-empty string": "prompt 必須是非空字串",
  "schema must be a JSON object": "schema 必須是 JSON 物件",
- "none": "沒有"
+ "none": "沒有",
+ "This project has not declared the agent call {name!r} (its registry entry's agents: {have})": "這個專案沒有宣告 agent 呼叫 {name!r}(它登錄的 agents:{have})",
+ "agents.{name} declares a timeout of {minutes} minutes; the most is {max}": "agents.{name} 宣告的時限是 {minutes} 分鐘;最多 {max} 分鐘",
+ "{project} has {spent} of its {cap} agent minutes today, and this call reserves {want}": "{project} 今天的 agent 分鐘數 {cap} 已經用了 {spent},這次呼叫要預留 {want}",
+ "agent calls have {spent} of the platform's {cap} minutes today, and this call reserves {want}": "平台今天 agent 呼叫的 {cap} 分鐘已經用了 {spent},這次呼叫要預留 {want}",
+ "{project} already has an agent call queued or running; one at a time": "{project} 已經有一個 agent 呼叫在排隊或在跑;一次一個",
+ "Waited in the queue longer than its timeout": "排隊等得比它的時限還久"
 }

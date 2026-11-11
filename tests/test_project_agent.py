@@ -5,6 +5,9 @@
 - A run that loads no tool servers (tool_servers: none) refuses a rule naming one.
 - `llm.py agent <project> <name>` runs judgment point project-agent with the declared rules, tier and timeout (never
   the request's), in one of the project's registry folders, behind the billing gate, under the name <project>/<name>.
+- cap-runner takes `kind: agent` requests: only declared names, one call per project at a time, daily minutes reserved
+  and settled however a call ends, its own pool (one job per project per pool, the least recently served first), a
+  deadline of the declared timeout plus a minute, the prompt through platform state.
 
 No agent is started.
 
@@ -242,6 +245,207 @@ class Call(unittest.TestCase):
                 mock.patch.dict(os.environ, {}):
             self.assertEqual(self.llm.project_agent("p", "research", req, str(self.ws)), 1)
         self.assertIn("no coding agent here", json.loads(out.getvalue())["llm_error"])
+
+
+def load_cap_runner():
+    import importlib.machinery
+    loader = importlib.machinery.SourceFileLoader("cap_runner_agent", str(ROOT / "bin" / "cap-runner.py"))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+class Runner(unittest.TestCase):
+    def setUp(self):
+        self.cr = cr = load_cap_runner()
+        self.tmp = tmpdir(self)
+        self.ws, self.state = self.tmp / "ws", self.tmp / "state"
+        self.ws.mkdir()
+        self.state.mkdir()
+        self.agents = {"research": {"tier": "strong", "allow": ["Read"], "timeout": "45m"},
+                       "quick": {"tier": "fast", "allow": ["Read"], "timeout": "10m"}}
+        self.elig = {"p": {"dirs": [self.ws], "caps": [], "models": {"m": {"tier": "fast"}}, "agents": self.agents,
+                           "agents_per_day": None}}
+        self.started, self.conf = [], {}
+        test = self
+
+        class FakeProc:
+            def __init__(self):
+                self.pid = 4242 + len(test.started)
+                self.rc = None
+
+            def poll(self):
+                return self.rc
+
+        def popen(argv, **kw):
+            proc = FakeProc()
+            self.started.append((argv, kw, proc))
+            return proc
+        for target, value in (("eligible", lambda: self.elig), ("DIR", self.state), ("LOG", self.state / "log.jsonl"),
+                              ("MINUTES", self.state / "agent-minutes.json"), ("ACTIVE", self.state / "active.json"),
+                              ("exclude_hub_run", lambda project, ws: None),
+                              ("conf", lambda key, default: self.conf.get(key, default))):
+            p = mock.patch.object(cr, target, value)
+            p.start()
+            self.addCleanup(p.stop)
+        for target, attr, value in ((cr.subprocess, "Popen", popen),
+                                    (cr.Runner, "kill", staticmethod(lambda pgid, sig: None))):
+            p = mock.patch.object(target, attr, value)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def put(self, job_id, ws=None, **req):
+        d = (ws or self.ws) / ".hub-run" / "requests"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{job_id}.json").write_text(json.dumps({"v": 1, "id": job_id, "kind": "agent", **req}))
+
+    def state_of(self, job_id, ws=None):
+        return json.loads(((ws or self.ws) / ".hub-run" / "jobs" / job_id / "state.json").read_text())
+
+    def ledger(self):
+        f = self.state / "agent-minutes.json"
+        return json.loads(f.read_text())["jobs"] if f.exists() else {}
+
+    def test_a_declared_call_runs_llm_agent_in_the_folder_it_came_from(self):
+        self.put("a1", name="research", prompt="look", schema={"type": "object"})
+        r = self.cr.Runner()
+        r.scan()
+        r.start_ready()
+        [(argv, kw, _proc)] = self.started
+        self.assertNotIn("sandbox-exec", " ".join(argv))
+        i = argv.index("agent")
+        self.assertEqual(argv[i:i + 3], ["agent", "p", "research"])
+        self.assertEqual(argv[argv.index("--cwd") + 1], str(self.ws))
+        inp = pathlib.Path(argv[argv.index("--request") + 1])
+        self.assertEqual(inp.parent, self.state / "p", "the prompt is read from platform state")
+        self.assertEqual(json.loads(inp.read_text()), {"prompt": "look", "schema": {"type": "object"}})
+        self.assertNotIn("LLM_AUTH", kw["env"])
+        self.assertEqual(self.state_of("a1")["state"], "running")
+        job = r.running[0]
+        self.assertAlmostEqual(job.deadline - job.started, 45 * 60 + 60)
+        self.assertEqual(self.ledger()["p/a1"]["reserved"], 45)
+
+    def test_refused_by_the_runner(self):
+        cases = {"b1": {"name": "other", "prompt": "x"}, "b2": {"name": "research", "prompt": " "},
+                 "b3": {"name": "research", "prompt": "x", "schema": "no"}}
+        for job_id, req in cases.items():
+            self.put(job_id, **req)
+        self.conf["agent_max_timeout_s"] = 1800
+        self.put("b4", name="research", prompt="x")
+        r = self.cr.Runner()
+        r.scan()
+        for job_id in [*cases, "b4"]:
+            with self.subTest(job_id):
+                self.assertEqual(self.state_of(job_id)["state"], "rejected")
+        self.assertEqual(self.ledger(), {})
+
+    def test_one_call_per_project_at_a_time(self):
+        self.put("c1", name="quick", prompt="x")
+        r = self.cr.Runner()
+        r.scan()
+        self.put("c2", name="quick", prompt="y")
+        r.scan()
+        self.assertEqual(self.state_of("c2")["state"], "rejected")
+        r.start_ready()
+        self.put("c3", name="quick", prompt="z")   # a nested call, from the running one's script
+        r.scan()
+        self.assertEqual(self.state_of("c3")["state"], "rejected")
+        self.assertEqual(list(self.ledger()), ["p/c1"])
+
+    def test_an_agent_doesnt_hold_up_its_projects_other_requests(self):
+        self.put("d1", name="quick", prompt="x")
+        r = self.cr.Runner()
+        r.scan()
+        r.start_ready()
+        d = self.ws / ".hub-run" / "requests"
+        (d / "d2.json").write_text(json.dumps({"v": 1, "id": "d2", "kind": "complete", "point": "m", "prompt": "q"}))
+        r.scan()
+        r.start_ready()
+        self.assertEqual([j.id for j in r.running], ["d1", "d2"])
+
+    def test_the_agent_pool_and_who_goes_first(self):
+        ws2, ws3 = self.tmp / "ws2", self.tmp / "ws3"
+        for name, ws in (("q", ws2), ("s", ws3)):
+            ws.mkdir()
+            self.elig[name] = {**self.elig["p"], "dirs": [ws]}
+        r = self.cr.Runner()
+        r.served[("agent", "p")] = 1.0   # p was served before, q and s never
+        for job_id, ws in (("e1", self.ws), ("e2", ws2), ("e3", ws3)):
+            self.put(job_id, ws=ws, name="quick", prompt="x")
+        r.scan()
+        r.start_ready()
+        self.assertEqual(len(r.running), 1, "one agent call at a time across projects")
+        self.assertNotEqual(r.running[0].project, "p", "p was served most recently")
+
+    def test_minutes_reserved_then_settled_however_it_ends(self):
+        r = self.cr.Runner()
+        self.put("f1", name="quick", prompt="x")
+        r.scan()
+        r.start_ready()
+        job = r.running[0]
+        job.started -= 125
+        self.started[0][2].rc = 0
+        r.poll()
+        self.assertEqual(self.ledger()["p/f1"]["used"], 3)
+        self.assertEqual(self.state_of("f1")["kind"], "agent")
+        # a runner that restarts settles what the gone one reserved, up to now
+        self.put("f2", name="quick", prompt="x")
+        r.scan()
+        self.cr.Runner().recover()
+        self.assertEqual(self.ledger()["p/f2"]["used"], 0)
+
+    def test_a_deadline_kill_is_124_and_settled(self):
+        r = self.cr.Runner()
+        self.put("g1", name="quick", prompt="x")
+        r.scan()
+        r.start_ready()
+        job = r.running[0]
+        job.deadline = 0
+        r.poll()
+        self.assertTrue(job.timed_out)
+        self.started[0][2].rc = -15
+        job.started -= 11 * 60
+        r.poll()
+        st = self.state_of("g1")
+        self.assertEqual((st["exit"], st["timed_out"]), (124, True))
+        self.assertEqual(self.ledger()["p/g1"]["used"], 10, "never more than it reserved")
+
+    def test_queued_past_its_timeout_is_refused_and_settled(self):
+        self.conf["agent_concurrency"] = 0
+        r = self.cr.Runner()
+        self.put("h1", name="quick", prompt="x")
+        r.scan()
+        r.queue[0].queued -= 11 * 60
+        r.start_ready()
+        self.assertEqual(self.state_of("h1")["state"], "rejected")
+        self.assertEqual(self.ledger()["p/h1"]["used"], 0)
+
+    def test_the_daily_minutes(self):
+        m = self.cr.Minutes()
+        self.assertEqual(m.reserve("p", "1", 45 * 60, None), "")
+        self.assertEqual(m.reserve("p", "2", 45 * 60, None), "")
+        self.assertTrue(m.reserve("p", "3", 60, None), "90 minutes a project by default")
+        m.settle("p", "2", 10 * 60)
+        self.assertEqual(m.reserve("p", "3", 30 * 60, None), "")
+        self.assertTrue(m.reserve("q", "1", 60, 0) == "" and m.reserve("s", "1", 60, 1) == "")
+        self.assertTrue(m.reserve("s", "2", 60, 1), "agents_per_day lowers the share")
+        self.assertTrue(m.reserve("t", "1", 60, 500) == "" and m.reserve("t", "2", 90 * 60, 500),
+                        "never raises it")
+        self.conf["agent_minutes_per_day"] = 90
+        self.assertTrue(m.reserve("u", "1", 10 * 60, None), "the platform's day is full")
+
+    def test_eligible_takes_a_project_that_only_declares_agents(self):
+        import types
+        cr = load_cap_runner()
+        rt = self.tmp / "rt"
+        rt.mkdir()
+        doc = {"name": "a", "agents": self.agents}
+        fake = types.SimpleNamespace(dirs=lambda d: {"workspace": self.ws, "runtime": rt})
+        with mock.patch.object(cr.hubconf, "projects", lambda: {"a": doc}), mock.patch.dict(sys.modules, {"registry": fake}):
+            out = cr.eligible()
+        self.assertEqual(out["a"]["dirs"], [self.ws, rt])
+        self.assertEqual(out["a"]["agents"], self.agents)
 
 
 if __name__ == "__main__":

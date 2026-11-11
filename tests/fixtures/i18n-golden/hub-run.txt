@@ -1,7 +1,8 @@
 === --help
 exit 0
 --- stdout
-usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--schema FILE]
+usage: hub-run [-h] [--cap CAP] [--timeout TIMEOUT] [--wait ID] [--complete POINT] [--agent NAME]
+               [--schema FILE]
                ...
 
 在平台的 profile 底下跑需要能力的程式
@@ -15,7 +16,8 @@ options:
   --timeout TIMEOUT  秒(預設跟上限看 brunna.json cap_runner)
   --wait ID          接回一個工作
   --complete POINT   這個專案宣告的模型呼叫(登錄 models:):提示從 stdin 進,JSON 結果從 stdout 出
-  --schema FILE      跟 --complete 一起用:回答必須符合的 JSON schema
+  --agent NAME       這個專案宣告的受限 agent 呼叫(登錄的 agents:):prompt 從 stdin 給,JSON 結果在 stdout
+  --schema FILE      跟 --complete 或 --agent 一起用:回答必須符合的 JSON schema
 --- stderr
 === not in a project
 exit 2
