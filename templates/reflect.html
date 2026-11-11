@@ -180,14 +180,17 @@ function heatColor(n, max) {
   return `color-mix(in srgb, var(--accent) ${Math.round(t * 100)}%, var(--heat-0))`;
 }
 
-function heatmap(matrix) {
+function heatmap(matrix, from) {
+  // a row is one day as the week counted it: from `from` o'clock to the same hour the next morning (older weeks: 0)
   const max = Math.max(1, ...matrix.flat());
   const days = t("Mon Tue Wed Thu Fri Sat Sun").split(" ");
+  const hours = Array.from({ length: 24 }, (_, i) => (i + from) % 24);
   let h = `<div class="heat" role="img" aria-label="${t("Messages by weekday × hour")}"><span></span>`;
-  for (let hr = 0; hr < 24; hr++) h += `<span class="hr">${hr % 3 === 0 ? hr : ""}</span>`;
+  for (const hr of hours) h += `<span class="hr">${hr % 3 === 0 ? hr : ""}</span>`;
   matrix.forEach((row, d) => {
     h += `<span class="lab">${days[d]}</span>`;
-    row.forEach((n, hr) => {
+    hours.forEach(hr => {
+      const n = row[hr];
       const night = hr < 6 ? " n" : "";
       const hour = String(hr).padStart(2, "0");
       h += `<span class="cell${night}" style="background:${heatColor(n, max)}" title="${t("{day} {hour}:00 · {n} {n:message|messages}", { day: days[d], hour: hour, n: n })}"></span>`;
@@ -276,7 +279,7 @@ function render(w) {
 
   h += `<section><header><span class="eyebrow">Rhythm</span><h2>${t("Working hours")}</h2></header>
     ${a ? `<p class="verdict">${esc(a.rhythm.verdict)}</p><p>${esc(a.rhythm.analysis)}</p><p class="muted">${esc(a.rhythm.pattern)}</p>` : ""}
-    <div class="heat-wrap">${heatmap(w.matrix)}</div>
+    <div class="heat-wrap">${heatmap(w.matrix, r.day_starts || 0)}</div>
     <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>${t("The more messages, the darker")}</span>
       <span><i class="sw" style="box-shadow:inset 0 0 0 1px var(--night);background:var(--heat-0)"></i>${t("00:00–05:59 late night")}</span></div>
     <div><p class="eyebrow" style="margin-bottom:8px">${t("When work ended each day (the last message; before 6 a.m. counts as the day before)")}</p>

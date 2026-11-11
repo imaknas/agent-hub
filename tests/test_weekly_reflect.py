@@ -102,6 +102,30 @@ class Scan(unittest.TestCase):
         self.assertEqual(weeks["prev"].prompts["proj"], 1)
         self.assertEqual((weeks["this"].agents, weeks["prev"].agents), (0, 1))
 
+    def test_a_night_belongs_to_the_day_it_started_on(self):
+        """a day runs 06:00 to 06:00 and so does the week: Monday 03:00 is last week's Sunday night, the next Monday
+        03:00 is this week's; every day of the week is listed once, none outside it"""
+        start, end, label = self.m.week_bounds("2026-W45")
+        self.assertEqual((start.hour, start.date().isoformat(), label), (6, "2026-11-02", "2026-W45"))
+        at = lambda days, hours: start.replace(hour=0) + datetime.timedelta(days=days, hours=hours)   # noqa: E731
+        for days, hours in ((0, 3), (0, 22), (1, 1), (6, 23), (7, 2), (7, 7)):
+            t = Turn(at(days, hours).astimezone(UTC), "a", "human", "", (), folder="/w/proj")
+            with open(self.drop / "t.jsonl", "a") as fh:
+                fh.write(json.dumps(sessions.to_record(t)) + "\n")
+        weeks = self.m.scan(start, end)
+        self.addCleanup(setattr, self.m, "git_count", self.m.git_count)
+        self.m.git_count = lambda *a, **k: None
+        w = self.m.build_stats(label, start, end, weeks)
+        self.assertEqual((w["start"], w["end"]), ("2026-11-02", "2026-11-08"))
+        self.assertEqual(w["totals"]["prompts"], 4)          # Mon 22:00, Tue 01:00, Sun 23:00, the next Mon 02:00
+        self.assertEqual(weeks["prev"].prompts["proj"], 1)   # Mon 03:00
+        self.assertEqual(w["rhythm"]["last_per_day"],
+                         [{"day": "11/02", "time": "01:00", "late": True},
+                          {"day": "11/08", "time": "02:00", "late": True}])
+        self.assertEqual(w["totals"]["days"], 2)
+        self.assertEqual((w["matrix"][0][22], w["matrix"][0][1], w["matrix"][6][23], w["matrix"][6][2]), (1, 1, 1, 1))
+        self.assertEqual(w["rhythm"]["day_starts"], 6)
+
     def test_only_human_turns_are_prompts_and_projects_kept_apart(self):
         self.add("/w/proj", 1, "human", sid="a")
         self.add("/w/proj", 1, "other")

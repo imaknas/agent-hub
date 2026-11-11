@@ -60,6 +60,14 @@
     },
     "rhythm": {
       "type": "object",
+      "properties": {
+        "day_starts": {
+          "description": "the hour a day starts at: the week runs from Monday at this hour, the matrix's rows are days counted from it (its columns stay clock hours) and last_per_day's days too; absent in older weeks, read as 0",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        }
+      },
       "required": [
         "late",
         "late_share",

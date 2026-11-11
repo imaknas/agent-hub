@@ -43,17 +43,25 @@ OUT = hubconf.data_file("reflect")
 TEMPLATE = hublib.HUB / "templates" / "reflect.html"
 CONTRACT = hublib.HUB / "contracts" / "reflect-week.v2.schema.json"   # what a week's json follows (v1 weeks: read too)
 LATE_NIGHT = range(0, 6)       # 00:00–05:59 in the owner's time zone
+DAY_STARTS = 6                 # a day runs 06:00 to 06:00: a night's work belongs to the day it started on, and so
+                               # does a week (Monday 06:00 to the next Monday 06:00; the job runs after it ends)
 BREAK_MINUTES = 30             # a gap between two messages longer than this counts as a break
 QUIET_THRESHOLD = 10           # at least this many last week and 0 this week → a stopped project
+
+
+def day_of(t: datetime.datetime) -> datetime.date:
+    """the day a moment belongs to: before 06:00 it is still the day before"""
+    return (t - datetime.timedelta(hours=DAY_STARTS)).date()
 
 
 def week_bounds(week: str | None) -> tuple[datetime.datetime, datetime.datetime, str]:
     if week:
         y, w = week.split("-W")
-        start = datetime.datetime.fromisocalendar(int(y), int(w), 1).replace(tzinfo=TZ)
+        start = datetime.datetime.fromisocalendar(int(y), int(w), 1).replace(hour=DAY_STARTS, tzinfo=TZ)
     else:
-        today = datetime.datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        start = today - datetime.timedelta(days=today.weekday() + 7)
+        today = day_of(datetime.datetime.now(TZ))
+        start = datetime.datetime.combine(today - datetime.timedelta(days=today.weekday() + 7),
+                                          datetime.time(DAY_STARTS), tzinfo=TZ)
     end = start + datetime.timedelta(days=7)
     iso = start.isocalendar()
     return start, end, f"{iso.year}-W{iso.week:02d}"
@@ -98,7 +106,7 @@ def scan(start: datetime.datetime, end: datetime.datetime) -> dict[str, Week]:
             local = t.ts.astimezone(TZ)
             w.prompts[name] += 1
             w.sessions[name].add(t.session)
-            w.days[name].add(local.date())
+            w.days[name].add(day_of(local))
             w.times.append(local)
         for a in t.actions:  # neutral collaboration kinds (runtime_ports.COLLABS); knows no tool's names
             if a.collab == "subagent":
@@ -139,13 +147,13 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
         })
     matrix = [[0] * 24 for _day in range(7)]
     for t in this.times:
-        matrix[t.weekday()][t.hour] += 1
+        matrix[day_of(t).weekday()][t.hour] += 1   # rows are days as day_of counts them
     total = sum(this.prompts.values())
     late = sum(1 for t in this.times if t.hour in LATE_NIGHT)
     stretch, stretch_at = longest_stretch(this.times)
     last_per_day: dict[datetime.date, datetime.datetime] = {}
     for t in this.times:
-        day = (t - datetime.timedelta(hours=6)).date()  # before 6 a.m. counts as the previous day's stopping time
+        day = day_of(t)
         last_per_day[day] = max(last_per_day.get(day, t), t)
     return {
         "v": 2,  # contract contracts/reflect-week.v2.schema.json
@@ -155,10 +163,11 @@ def build_stats(label: str, start: datetime.datetime, end: datetime.datetime, we
         "timezone": str(TZ),   # the zone the hours are counted in
         "totals": {"prompts": total, "prompts_prev": sum(prev.prompts.values()),
                    "sessions": sum(len(s) for s in this.sessions.values()),
-                   "projects": len(this.prompts), "days": len({t.date() for t in this.times})},
+                   "projects": len(this.prompts), "days": len({day_of(t) for t in this.times})},
         "projects": projects,
         "matrix": matrix,
-        "rhythm": {"late": late, "late_share": late / total if total else 0,
+        "rhythm": {"day_starts": DAY_STARTS,   # the matrix's rows run from this hour (weeks without it: from 0)
+                   "late": late, "late_share": late / total if total else 0,
                    "late_prev": sum(1 for t in prev.times if t.hour in LATE_NIGHT),
                    "longest_hours": round(stretch, 1),
                    "longest_start": stretch_at.isoformat(timespec="minutes") if stretch_at else None,
