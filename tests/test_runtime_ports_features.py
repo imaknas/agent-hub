@@ -38,8 +38,11 @@ ROWS = {
     4: (("mailbox-conversation",), True),
 }
 LEASING = 5
-# the last row: agent-job-confined when a job opts in to the mail (mail_from_env)
-JOB_MAIL = -1
+# agent-job-confined when a job opts in to the mail (mail_from_env)
+JOB_MAIL = -2
+# the last row: a project's declared agent calls (project-agent), always at a tier the project chose, so the billing gate
+# asks the login interface how it is paid for (llm.billing_gate: no auth port = unknown = refused)
+AGENT = -1
 
 
 def needs(points, providers: bool) -> set:
@@ -77,10 +80,17 @@ class FeatureNeeds(unittest.TestCase):
             table = runtime_ports.features(providers=providers, propose=False)
             self.assertEqual(set(table[JOB_MAIL][1]), needs(("agent-job-confined",), providers) | {"run_server"})
 
-    def test_no_row_asks_for_a_login_but_leasing(self):
-        """llm.py takes auth_env only from a runtime that has the port: without it the tool logs in itself."""
-        for i, (feature, need) in enumerate(runtime_ports.features(providers=False, propose=False)):
-            if i != LEASING:
+    def test_a_projects_agent_calls(self):
+        for providers in (False, True):
+            table = runtime_ports.features(providers=providers, propose=False)
+            self.assertEqual(set(table[AGENT][1]), needs(("project-agent",), providers) | {"auth"})
+
+    def test_no_row_asks_for_a_login_but_leasing_and_agent_calls(self):
+        """llm.py takes auth_env only from a runtime that has the port: without it the tool logs in itself. An agent call
+        always runs at its project's tier, which the billing gate refuses where the login can't say how it is paid for."""
+        rows = runtime_ports.features(providers=False, propose=False)
+        for i, (feature, need) in enumerate(rows):
+            if i not in (LEASING, len(rows) + AGENT):
                 self.assertNotIn("auth", need, feature)
         self.assertIn("auth", runtime_ports.features()[LEASING][1])
 

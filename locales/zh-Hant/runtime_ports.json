@@ -35,5 +35,6 @@
  "memory consolidation (the consolidate module)": "記憶整併(consolidate 模組)",
  "check of what a confined run's own rules may be": "檢查受限執行自己的規則",
  "way to give a run the platform's mail tools": "給一次執行平台信件工具的方法",
- "scheduled agent jobs that send mail (mail: true)": "會寄信的排程 agent job(mail: true)"
+ "scheduled agent jobs that send mail (mail: true)": "會寄信的排程 agent job(mail: true)",
+ "a project's own agent calls (brunna agent)": "專案自己的 agent 呼叫(brunna agent)"
 }

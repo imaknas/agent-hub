@@ -184,3 +184,14 @@ model for the tier), then call `brunna complete <name> [--schema <file.json>] < 
 from sessions, services and jobs, sandboxed or not. When it fails, fail visibly: don't switch to another model or
 provider. A provider billed per use is only used if {{owner}} allowed it for this project (`metered_models`, which
 only {{owner}} sets); calls show per project on the platform's status page.
+
+When the work needs an agent that reads and edits this project's files or fetches pages, not only an answer, declare it
+in `agents: {<name>: {tier: fast|standard|strong, allow: [<permission rules>], timeout: 45m}}` (a manifest.update) and
+call `brunna agent <name> [--schema <file.json>] < prompt`. Its `allow:` rules are its whole boundary: paths in them are
+relative to the folder it runs in, and a sandboxed project's may name only the file tools and `WebFetch(domain:…)` for
+its own `network:` domains. It loads no tool servers and has no mail. It runs in the project folder the call is made from
+(the workspace or the runtime folder), never in a folder below it: a call from a linked worktree runs in the main
+checkout. The job id comes first on stderr; when a tool call times out, reattach with `brunna cap-run --wait <id>`. A
+command job that calls it needs `background: true` and a `timeout:` longer than the agent's timeout plus its time in
+the queue. One call per project at a time, within daily minutes (`agents_per_day` can lower this project's share): a
+call the platform refuses exits 126 with the reason on stderr, a run that refused or failed exits 1 with `llm_error`.

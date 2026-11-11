@@ -72,7 +72,8 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   instance directory (default `~/.brunna`: config is a local git repo, data, secrets); the hub root holds nothing of
   the user's. New code always goes through these and never builds paths itself (the ratchet blocks it)
 - **The platform's CLI is `brunna`** (`bin/hub` is the old name and forwards to it). `brunna install-cli` puts it on
-  PATH; project sessions use `brunna send/inbox/done/…`, `brunna merge-branch`, `brunna cap-run` (rules files name
+  PATH; project sessions use `brunna send/inbox/done/…`, `brunna merge-branch`, `brunna cap-run`, `brunna complete`,
+  `brunna agent` (a project's declared confined agent call, docs/design/project-agent-calls.md) (rules files name
   only these, never local paths); the same mailbox is also an MCP server, `brunna mcp` (`bin/mcp_server.py`, for any
   agent that supports MCP; how to register it: docs/mcp.md)
 - **What commands the platform has**: `bin/brunna --help` (init, doctor, config, llm, modules, onboard, recover,

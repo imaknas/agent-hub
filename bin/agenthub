@@ -81,6 +81,8 @@ for project sessions (these are what the rules files name; the permission rules 
   brunna cap-run --cap <capability> -- <command…>   = bin/hub-run (the platform runs a program the sandbox blocks)
   brunna complete <point> [--schema F] < prompt    = bin/hub-run --complete (a model call the project declares in
                                                        its registry models:, run by the platform)
+  brunna agent <name> [--schema F] < prompt         = bin/hub-run --agent (a confined agent call the project declares
+                                                       in its registry agents:, run by the platform in its folder)
   brunna install-cli [--dir <folder>]   put brunna's forwarding script in <folder> (default ~/.local/bin; must be on PATH)
   brunna mcp               the platform's MCP server (stdio): any coding agent with MCP can use the mailbox and write notes
                         (= bin/mcp_server.py)
@@ -1883,7 +1885,7 @@ def passthrough(script: str):
 SESSION_COMMANDS = {**{c: ("hubbus", c) for c in ("send", "inbox", "show", "ack", "pass", "done", "thread", "open-questions")},
                     "merge-branch": ("merge-branch", None), "test": ("test-runner.py", None),
                     "cap-run": ("hub-run", None),
-                    "complete": ("hub-run", "--complete")}
+                    "complete": ("hub-run", "--complete"), "agent": ("hub-run", "--agent")}
 
 
 def session_command(name: str):

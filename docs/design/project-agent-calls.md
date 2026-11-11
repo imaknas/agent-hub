@@ -1,7 +1,22 @@
 # A project's own confined agent calls, per-job model tiers, declared secrets kept from confined runs
 
-> **Status**: design, fourth draft (11-09). Steps 1 to 3 built (A4, A2's run-time check 11-10; B, C and D 11-11); A
-> not yet.
+> **Status**: design, fourth draft (11-09). Built: steps 1 to 4 (A4, A2's run-time check 11-10; B, C, D and A 11-11).
+> Step 5 (telling the project that asked) is the last.
+> - A as built: judgment point `project-agent` declares `tool_servers: none` instead of a runtime flag: the run loads
+>   none of the environment's tool servers (Claude Code: `--strict-mcp-config`, added by the adapter) and a rule naming
+>   one is refused when it starts, a neutral key the adapter reads (a sealed run with the platform's own server, the
+>   mailbox conversation, is not caught by it). `run()` takes the call's own name (`<project>/<name>`: the owner's pin,
+>   the usage row, a failure), prompt, schema and timeout. `llm.py agent` reads the rules, tier and timeout from the
+>   registry and refuses a folder that isn't one of the project's registry folders, even though cap-runner passes only
+>   that. cap-runner: the minutes ledger is `.state/cap-runner/agent-minutes.json`, keyed `<project>/<id>`, settled on
+>   every way a call ends (done, deadline, start failure, queued past its timeout, a restart, which counts a gone
+>   runner's reservations up to the moment it starts again); a call taken on an earlier day counts there. Pools are per
+>   project and per pool, so an agent's script can still call `brunna complete` or `cap-run`; a nested `brunna agent`
+>   is refused (one at a time). Doctor's row needs the login interface too: a call always runs at its project's tier,
+>   which the billing gate refuses where how it is paid for can't be told. D's wait for cap-runner went from two hours
+>   to three, since an agent call lasts up to an hour and a minute.
+> - Not proven on this machine: no project declares `agents:` yet, so the live path (cap-runner → `llm.py agent` → the
+>   coding agent) has only the fake runtime's tests behind it until the project that asked declares one.
 > - B as built: the adapter's `billing(mode, env, restricted)` is part of the auth interface (a runtime without one is
 >   unknown, so refused); every run at a tier writes a usage row (`completion.record_run`); `agents` and
 >   `agents_per_day` wait for A, which reads them. After the cold review (11-11): `tier:` only on a job with `allow:`
@@ -25,8 +40,8 @@
 >   when the manager's PATH does (a desktop login's `import-environment`; cold review 11-11). Waiting for cap-runner is
 >   render-services' `WAIT_FOR_IDLE`: cap-runner keeps `{pid, jobs}` in `.state/cap-runner/active.json`, where no
 >   project writes (a job's `state.json` in the project's folder could be forged), and its unit waits only while that
->   pid is alive with jobs in flight, at most two hours (`WAIT_LIMIT_S`, then changed anyway; a job lasts at most 30
->   minutes). A runner that isn't running minds nothing, so a missing or unloaded one is put back at once. One limit:
+>   pid is alive with jobs in flight, at most three hours (`WAIT_LIMIT_S`, then changed anyway; a job lasts at most 30
+>   minutes, an agent call an hour and a minute). A runner that isn't running minds nothing, so a missing or unloaded one is put back at once. One limit:
 >   a job ending between `config apply`'s apply and its plan again shows the waiting change there once. The scheduled
 >   command's prefix is `hubconf.job_command()`, in the scheduler and in `schedulectl run` both. `upgrade.cli_wrapper()`
 >   skips the folder, so it is never taken for install-cli's wrapper.

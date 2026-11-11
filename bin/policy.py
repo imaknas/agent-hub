@@ -390,7 +390,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
 # onboard…)
 MAIL_SUBCOMMANDS = ("send", "inbox", "show", "ack", "done", "thread", "open-questions")
 # pass: a session's word, never a mailbox agent's (not in MAIL_SUBCOMMANDS; a confined run has no mail command at all)
-SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "pass", "merge-branch", "test", "cap-run", "complete")
+SESSION_SUBCOMMANDS = (*MAIL_SUBCOMMANDS, "pass", "merge-branch", "test", "cap-run", "complete", "agent")
 
 
 def platform_cli() -> list[str]:

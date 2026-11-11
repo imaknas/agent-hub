@@ -278,6 +278,9 @@ def features(providers: bool | None = None, propose: bool | None = None) -> tupl
         (_("a sandboxed project can't write what its sessions load hooks and settings from"), ("control",)),
         # appended: the rows above keep their places. agent-job-confined with mail: true (registry), mail_from_env
         (_("scheduled agent jobs that send mail (mail: true)"), ("agent", "confine", "rule_check", "tool_servers", "run_server")),
+        # project-agent: settings: platform, allow_from_env, tool_servers: none (the runtime seals it, nothing to ask), and
+        # always a tier the project chose, which runs only where the login interface tells how it is paid for
+        (_("a project's own agent calls (brunna agent)"), ("agent", "confine", "rule_check", "auth")),
     )
 
 
