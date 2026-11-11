@@ -68,7 +68,9 @@ The current interfaces (the other layers get added one at a time, following the 
     rule_problems(task, *, sandboxed, network, untrusted) -> list[str]   why this run's own rules (the point's, the
                                                          caller's, the job's; never what the platform adds) don't start,
                                                          one sentence each for people; [] = it may start
-    rules_problems(rules, *, sandboxed, network, untrusted, cwd=None) -> list[str]   the same for a job's allow: list
+    rules_problems(rules, *, sandboxed, network, untrusted, cwd=None, servers=True) -> list[str]   the same for a
+                                                         job's or a declared agent's allow: list (servers=False: the
+                                                         run loads no tool servers, so a rule naming one is refused)
                                                          alone (registry.py check and the status page list them)
     command_rules(rules) -> list[str]                    those of a job's rules that start a command, whose program
                                                          runs with the run's sandbox, not its tool rules

@@ -169,5 +169,13 @@
  "not sandboxed": "沒有 sandbox",
  "{job}: its rules start {rules}, which still read them": "{job}:它的規則會跑 {rules},這些仍讀得到",
  "job {name}: tier is for an agent job with an allow: list (a run without one loads the project's saved settings, which can change how it is paid for), one of {tiers}": "job {name}:tier 只給有 allow: 清單的 agent job 用(沒有的會載入專案存的設定,那可能改變計費方式),值是 {tiers} 其中之一",
- "{where}: path may not hold a glob, bracket, brace or control character (it is written into the deny rules of the project's confined runs)": "{where}:path 不能有萬用字元、括號、大括號或控制字元(它會寫進專案受限執行的拒絕規則)"
+ "{where}: path may not hold a glob, bracket, brace or control character (it is written into the deny rules of the project's confined runs)": "{where}:path 不能有萬用字元、括號、大括號或控制字元(它會寫進專案受限執行的拒絕規則)",
+ "agents_per_day must be a whole number of minutes, at least 1": "agents_per_day 要是整數分鐘數,至少 1",
+ "agent call {agent} doesn't run until its allow: changes: {problems}": "agent 呼叫 {agent} 在它的 allow: 改掉之前不會跑:{problems}",
+ "agents must be a mapping of name → {{tier, allow, timeout?}}": "agents 要是 名稱 → {{tier, allow, timeout?}} 的對照",
+ "agents: name {name!r} must be lowercase letters, digits and -": "agents:名稱 {name!r} 只能用小寫字母、數字和 -",
+ "agents.{name} must be {{tier, allow, timeout?}}": "agents.{name} 要是 {{tier, allow, timeout?}}",
+ "agents.{name}: tier must be one of {tiers}": "agents.{name}:tier 要是 {tiers} 其中之一",
+ "agents.{name}: allow must be a non-empty list of permission rules, each a name (letters, digits, _ or -), optionally its argument in parentheses, on one line": "agents.{name}:allow 要是不空的權限規則清單,每條是一個名稱(字母、數字、_ 或 -),可以加括號裡的參數,寫在一行",
+ "agents.{name}: timeout must look like 45m / 1h": "agents.{name}:timeout 要寫成 45m / 1h 這樣"
 }

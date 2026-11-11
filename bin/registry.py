@@ -44,6 +44,14 @@ schema v1 (contracts/project.v1.md has the full description):
                                   standard | strong, {settings} decides the model). Undeclared points are refused
   metered_models: true            the owner allows metered (pay-per-use) providers for those calls; without it a call
                                   that would go to one is refused (llm.py project)
+  agents: {<name>: {tier, allow, timeout?}}
+                                  confined agent calls this project's code makes (brunna agent <name> < prompt; run by
+                                  cap-runner, judgment point project-agent): tier as models:, allow: the whole boundary
+                                  (the same rule strings as a job's; what a run may have is checked when it runs, A2),
+                                  timeout 45m / 1h (default 30m, at most {settings} cap_runner.agent_max_timeout_s).
+                                  docs/design/project-agent-calls.md A
+  agents_per_day: <minutes>       lowers this project's daily minutes of agent calls (cap_runner
+                                  .agent_minutes_per_project), never raises them
   network: [domains]              what the sandbox needs to reach beyond the platform defaults
   allow_write: [paths]            what the sandbox needs to write beyond the platform defaults
     type, enforce, network, allow_write, privacy, metered_models and paths are security fields: a manifest.update a project
@@ -162,7 +170,7 @@ _ = i18n.domain(__file__)
 CACHE = hubconf.REGISTRY_INDEX.parent   # hubconf.SHARED: readable inside every sandbox, written only here
 TOP = {"v", "name", "type", "purpose", "paths", "memory", "privacy", "runtime", "push_on_merge", "commits", "mailbox",
        "publishes", "provides", "consumes", "services", "jobs", "enforce", "network", "allow_write", "gate", "secrets",
-       "models", "metered_models", "layout_intent"}
+       "models", "metered_models", "layout_intent", "agents", "agents_per_day"}
 TOP_V2 = TOP | {"tests", "code", "inputs", "commit_gate"}
 # what the index's documents are: 2 = project v2 (v1 files upgraded as they are read). Readers that need v2 fields
 # (merge-branch) refuse an index of an older format; registry.refresh never overwrites a newer one
@@ -308,11 +316,46 @@ def validate_models(doc: dict) -> list[str]:
                 errs.append(_("models: point name {name!r} must be lowercase letters, digits and -", name=name))
             if not isinstance(decl, dict) or set(decl) - {"tier"} or decl.get("tier") not in TIERS:
                 errs.append(_("models.{name} must be {{tier: fast|standard|strong}}", name=name))
+    errs += validate_agents(doc)
     if "metered_models" in doc and not isinstance(doc["metered_models"], bool):
         errs.append(_("metered_models must be true or false"))
     if isinstance(doc.get("mailbox"), dict) and "wake" in doc["mailbox"] and not isinstance(doc["mailbox"]["wake"], bool):
         errs.append(_("mailbox.wake must be true or false"))
     return errs
+
+
+def validate_agents(doc: dict) -> list[str]:
+    """agents: {<name>: {tier, allow, timeout?}} and agents_per_day (docs/design/project-agent-calls.md A1): the shape
+    only. What a run's rules may be is checked when it runs (A2), so an owner who tightens the project is never held
+    back by them."""
+    errs = []
+    agents = doc.get("agents")
+    if agents is not None:
+        if not isinstance(agents, dict):
+            return [_("agents must be a mapping of name → {{tier, allow, timeout?}}")]
+        for name, decl in agents.items():
+            if not isinstance(name, str) or not MODEL_POINT.match(name):
+                errs.append(_("agents: name {name!r} must be lowercase letters, digits and -", name=name))
+            if not isinstance(decl, dict) or set(decl) - {"tier", "allow", "timeout"}:
+                errs.append(_("agents.{name} must be {{tier, allow, timeout?}}", name=name))
+                continue
+            if decl.get("tier") not in TIERS:
+                errs.append(_("agents.{name}: tier must be one of {tiers}", name=name, tiers=", ".join(TIERS)))
+            allow = decl.get("allow")
+            if not isinstance(allow, list) or not allow or not all(rule_shaped(x) for x in allow):
+                errs.append(_("agents.{name}: allow must be a non-empty list of permission rules, each a name (letters, "
+                              "digits, _ or -), optionally its argument in parentheses, on one line", name=name))
+            if "timeout" in decl and not EVERY.match(str(decl["timeout"])):
+                errs.append(_("agents.{name}: timeout must look like 45m / 1h", name=name))
+    per_day = doc.get("agents_per_day")
+    if per_day is not None and (not isinstance(per_day, int) or isinstance(per_day, bool) or per_day < 1):
+        errs.append(_("agents_per_day must be a whole number of minutes, at least 1"))
+    return errs
+
+
+def agent_timeout_s(decl: dict) -> int:
+    """A declared agent's timeout in seconds (default 30 minutes)."""
+    return every_minutes(str(decl["timeout"])) * 60 if decl.get("timeout") else 1800
 
 
 # paths too: a manifest.update setting paths.workspace to ~ would make the whole home folder its sandbox's to write
@@ -369,7 +412,9 @@ def rules_refused(index: dict) -> dict[str, str]:
     is said once: none of those runs happens there."""
     jobs = [(name, doc, job) for name, doc in sorted(index["projects"].items()) for job in doc.get("jobs") or []
             if isinstance(job, dict) and job.get("kind") == "agent" and job.get("allow")]
-    if not jobs:
+    agents = [(name, doc, agent, decl) for name, doc in sorted(index["projects"].items())
+              for agent, decl in (doc.get("agents") or {}).items() if isinstance(decl, dict) and decl.get("allow")]
+    if not jobs and not agents:
         return {}
     import runtime_ports
     try:
@@ -386,6 +431,13 @@ def rules_refused(index: dict) -> dict[str, str]:
         if problems:
             out[f"{name}/{job.get('name')}"] = _("agent job {job} doesn't run until its allow: changes: {problems}",
                                                  job=f"{name}/{job.get('name')}", problems="; ".join(problems))
+    for name, doc, agent, decl in agents:
+        # a declared agent runs in the project's folder, loads no tool servers (project-agent), its prompt the project's
+        problems = rt.rules_problems(decl["allow"], sandboxed=sandbox_enforced(doc), network=list(doc.get("network") or []),
+                                     untrusted=False, servers=False)
+        if problems:
+            out[f"{name}/agents.{agent}"] = _("agent call {agent} doesn't run until its allow: changes: {problems}",
+                                              agent=f"{name}/{agent}", problems="; ".join(problems))
     return out
 
 
@@ -1369,6 +1421,11 @@ def secrets_report(index: dict) -> int:
             commands = rt.command_rules(job["allow"]) if rt else []
             if commands:   # (in a sandboxed project such a job doesn't run: rule_check refuses it)
                 print("    " + _("{job}: its rules start {rules}, which still read them", job=job["name"],
+                                 rules=", ".join(commands)))
+        for agent, decl in sorted((doc.get("agents") or {}).items()):
+            commands = rt.command_rules(decl.get("allow") or []) if rt and isinstance(decl, dict) else []
+            if commands:
+                print("    " + _("{job}: its rules start {rules}, which still read them", job=f"agents.{agent}",
                                  rules=", ".join(commands)))
     return 0
 

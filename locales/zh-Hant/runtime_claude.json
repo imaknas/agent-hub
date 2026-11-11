@@ -53,5 +53,6 @@
  "{rule} runs the platform's command line, which a confined run reaches only through the platform's tools": "{rule} 會跑平台的指令列,受限執行只能透過平台的工具碰到平台",
  "{rule} names the platform's own tool server, which only the platform gives a run": "{rule} 指名平台自己的工具伺服器,那只有平台能給一次執行",
  "{rule}: a run whose prompt anyone can write fetches only from the domains in its project's network: list": "{rule}:prompt 誰都能寫的執行,只能從專案 network: 清單裡的網域抓取",
- "{rule}: a run whose prompt anyone can write (an event job, a mail handler) may name only reading and editing files, and WebFetch to its project's own domains": "{rule}:prompt 誰都能寫的執行(事件 job、信箱處理者)只能列讀寫檔案的工具,以及到專案自己網域的 WebFetch"
+ "{rule}: a run whose prompt anyone can write (an event job, a mail handler) may name only reading and editing files, and WebFetch to its project's own domains": "{rule}:prompt 誰都能寫的執行(事件 job、信箱處理者)只能列讀寫檔案的工具,以及到專案自己網域的 WebFetch",
+ "{rule} names a tool server, and this run loads none": "{rule} 指名一個工具伺服器,而這次執行一個都不載入"
 }

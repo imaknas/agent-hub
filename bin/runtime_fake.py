@@ -350,7 +350,7 @@ def set_rule_problems(problems: list) -> None:
     _rule_problems[:] = list(problems)
 
 
-def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list:
+def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None, servers: bool = True) -> list:
     return list(_rule_problems)
 
 

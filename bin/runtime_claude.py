@@ -936,11 +936,12 @@ def command_rules(rules) -> list[str]:
     return [str(r) for r in rules or [] if str(r) == "Bash" or str(r).startswith("Bash(")]
 
 
-def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list[str]:
+def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None, servers: bool = True) -> list[str]:
     """Why a confined run with these rules (the point's and the job's own, never what the platform adds) doesn't start,
     one sentence each; [] = it may. untrusted: its prompt is text anyone who can write the bus wrote, so it is held to the
     same list as a sandboxed project's run (docs/design/confined-mail-tools.md M6): a shell or the open web, with Read
-    always on, would let that text read the project's files and carry them out."""
+    always on, would let that text read the project's files and carry them out. servers: False for a run that loads no
+    tool servers (a project's declared agent, docs/design/project-agent-calls.md A2): a rule naming one is refused."""
     out = []
     for r in rules:
         m = _PARTS.fullmatch(r)
@@ -963,6 +964,8 @@ def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None
                          "platform's tools", rule=r))
         if _reserved_server(tool):
             out.append(_("{rule} names the platform's own tool server, which only the platform gives a run", rule=r))
+        elif not servers and tool.split("__")[0] == "mcp":
+            out.append(_("{rule} names a tool server, and this run loads none", rule=r))
         if sandboxed or untrusted:
             if tool == "WebFetch":
                 domain = arg[len("domain:"):] if arg and arg.startswith("domain:") else None
@@ -1005,7 +1008,8 @@ def _server_config(task) -> pathlib.Path:
 
 def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list[str]:
     """rules_problems over the run's own rules: the point's and the caller's and the job's (_rules), in its folder."""
-    return rules_problems(_rules(task)[1], sandboxed=sandboxed, network=network, untrusted=untrusted, cwd=task.cwd)
+    return rules_problems(_rules(task)[1], sandboxed=sandboxed, network=network, untrusted=untrusted, cwd=task.cwd,
+                          servers=task.spec.get("tool_servers") != "none")
 
 
 MEMORY_RULE = "Edit(./.agent-memory/memory/**)"
@@ -1096,7 +1100,10 @@ def _flags(task) -> list:
         # denied this way isn't even offered to the model (live probe 11-01). The built-in resource tools reach any
         # connected server's resources by name, past those rules: off too
         cmd += ["--disallowedTools", *(f"mcp__{s}" for s in task.deny_servers), *MCP_RESOURCE_TOOLS]
-    return cmd + list(spec.get("extra_args") or []) + list(task.extra or [])
+    extra = list(spec.get("extra_args") or []) + list(task.extra or [])
+    if spec.get("tool_servers") == "none" and SEAL not in extra:
+        extra.append(SEAL)   # loads none of the environment's servers (the point's tool_servers: none)
+    return cmd + extra
 
 
 # ---------- the environment's MCP servers (runtime_ports' tool_servers interface) ----------
@@ -1119,7 +1126,7 @@ def mcp_id(name: str) -> str:
 
 
 def _sealed(task) -> bool:
-    return SEAL in [*(task.spec.get("extra_args") or []), *(task.extra or ())]
+    return task.spec.get("tool_servers") == "none" or SEAL in [*(task.spec.get("extra_args") or []), *(task.extra or ())]
 
 
 def parse_mcp_list(out: str) -> list[str]:
