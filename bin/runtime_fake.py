@@ -40,6 +40,7 @@ def reset() -> None:
     _context.clear()
     _ambient.clear()
     _rule_problems.clear()
+    _billing["how"] = "subscription"
 
 
 # ---------- putting data in, for tests ----------
@@ -250,6 +251,7 @@ from runtime_ports import Credential  # noqa: E402
 
 _AUTH_VAR = "FAKE_RUNTIME_KEY"
 _creds: dict = {"subscription": True, "token": True}   # mode → present or not
+_billing: dict = {"how": "subscription"}   # what billing() says (set_billing)
 
 
 def set_credential(mode: str, present: bool) -> None:
@@ -267,6 +269,14 @@ def auth_env(mode: str, env) -> tuple:
     if mode == "token":
         out[_AUTH_VAR] = "fake-key"
     return out, ""
+
+
+def set_billing(how: str) -> None:
+    _billing["how"] = how
+
+
+def billing(mode: str, env, restricted: bool = False) -> str:
+    return _billing["how"]
 
 
 def credentials() -> list:
@@ -346,6 +356,11 @@ def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None
 
 def rule_problems(task, *, sandboxed: bool, network, untrusted: bool) -> list:
     return list(_rule_problems)
+
+
+def command_rules(rules) -> list:
+    """The fake's commands are rules written run:<command>."""
+    return [str(r) for r in rules or [] if str(r).startswith("run:")]
 
 
 # ---------- the platform's tool server ----------

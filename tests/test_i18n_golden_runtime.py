@@ -213,10 +213,12 @@ class RuntimeGolden(unittest.TestCase):
                         ("schema twice", [CompletionResult(True, text='{"nope": 1}', stop="end")], "hi", None),
                         ("budget", [CompletionResult(True, text='{"answer": "a"}', stop="end", cost_usd=9.0)], "hi", 5)):
                     conf = json.loads(json.dumps(llm_conf))
-                    if budget:
+                    if budget:   # a provider with a key: pay-per-use, what the budget counts
                         conf["budget"] = {"daily_usd": budget}
+                        conf["providers"]["f"]["key"] = {"env": "F_GOLDEN_KEY"}
                     runtime_fake.set_completions("p", *results) if results else None
-                    with mock.patch.object(c, "settings", lambda conf=conf: conf):
+                    with mock.patch.object(c, "settings", lambda conf=conf: conf), \
+                            mock.patch.dict(os.environ, {"F_GOLDEN_KEY": "k"}):
                         for _attempt in range(2 if budget else 1):
                             try:
                                 c.run("p", spec, prompt, schema, sleep=lambda s: None)

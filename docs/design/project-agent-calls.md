@@ -1,6 +1,22 @@
 # A project's own confined agent calls, per-job model tiers, declared secrets kept from confined runs
 
-> **Status**: design, fourth draft (11-09). Not built.
+> **Status**: design, fourth draft (11-09). Steps 1 and 2 built (A4, A2's run-time check 11-10; B and C 11-11); D and
+> A not yet.
+> - B as built: the adapter's `billing(mode, env, restricted)` is part of the auth interface (a runtime without one is
+>   unknown, so refused); every run at a tier writes a usage row (`completion.record_run`); `agents` and
+>   `agents_per_day` wait for A, which reads them. After the cold review (11-11): `tier:` only on a job with `allow:`
+>   (an unconfined run loads the project's saved settings, which can name a key, so its billing can't be told, and
+>   `agent-job` doesn't take one); for Claude Code only the headless token counts as subscription (the interactive
+>   login may be a Console one); `llm.budget` is read with or without `llm.providers`; a failed run still reports what
+>   it cost when its output says, and a metered run that ends without a cost stops the day's metered tiered runs. Two
+>   limits stay: the gate looks before a run, so runs that start together all pass it, and an untiered metered run
+>   writes no row (as before).
+> - C as built: `registry.py check --secrets-report` on the live registry (11-11) found one sandboxed project with
+>   declared secrets and no confined job with Bash rules (a sandboxed project's confined run has none); the projects
+>   whose jobs run scripts are unsandboxed, so only the agent's own tools lose the files. A relative path is denied at
+>   any depth below the workspace and runtime folder too (a copy in a worktree, where a mail conversation fork can
+>   start); a path holding glob, bracket, brace or control characters is refused by the registry and never written
+>   into a rule.
 > - Rounds 1–3 were blind cold reviews, each with a security reading and a feasibility reading. What they changed is
 >   at the end.
 > - The holes round 2 found in today's confined runs were fixed on their own first, in the three `fix(confine)` commits

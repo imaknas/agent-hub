@@ -38,6 +38,7 @@
     "consumes": {"type": "array", "items": {"type": "object", "required": ["contract", "v", "copy"]}},
     "services": {"type": "array", "items": {"type": "object", "required": ["name", "run"]}},
     "jobs": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {
+      "tier": {"enum": ["fast", "standard", "strong"], "description": "fast | standard | strong, agent jobs with allow: only: the model strength its run uses instead of the tool's default (an owner's pin on the judgment point still wins); only where the runtime can tell how the run is paid for, a pay-per-use one needing metered_models"},
       "mail": {"type": "boolean", "description": "a scheduled agent job with allow: only, never an event job: its run gets the platform's mail tools to start new letters (send, ask the owner, notes when its rules write them); never to read, reply or close"},
       "trigger": {"type": "object", "description": "event-triggered job (docs/design/event-jobs.md): exactly one of at, every, trigger", "additionalProperties": false, "required": ["events"], "properties": {
         "events": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "bus event types (the hubbus contract's type enum)"},

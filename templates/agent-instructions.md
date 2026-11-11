@@ -129,8 +129,10 @@ no longer needed), close it, or {{assistant}} keeps showing it as "waiting for y
   **never degrade silently** (switching to other credentials, another model or service): that is an invisible failure.
 - **Which credentials this project uses is declared in the platform's project registry** (this project's entry;
   `brunna status <project>` shows it), under `secrets:` (name, location and expiry only, **never the value**); the
-  platform checks every day that each one exists, is backed up and is not about to expire, and alerts on problems. To
-  add, remove or move one: send the full edited YAML with
+  platform checks every day that each one exists, is backed up and is not about to expire, and alerts on problems.
+  The platform's confined agent runs of this project (agent jobs with `allow:`, mail handlers) can't read or write the
+  declared ones (or a copy of one at the same path anywhere in the project) with their file tools; a script a
+  `Bash(...)` rule starts, or a tool server the job names, still runs as the user and can. To add, remove or move one: send the full edited YAML with
   `brunna send --to brunna --type manifest.update --text "$(cat <edited file>)"`
   (it is returned if it doesn't validate; `type`, `enforce`, `network`, `allow_write`, `privacy`, `metered_models`, `paths`
   are security fields, and a letter that changes them is returned whole: instead write to brunna with `--type request`

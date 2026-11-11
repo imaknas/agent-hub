@@ -80,6 +80,7 @@
         "mail": {"enum": ["tools", "none"], "description": "Whether a settings: platform run gets the platform's mail tools (sending, reading and closing letters as its project, through the platform's tool server, never a shell); required on every settings: platform point, refused on any other"},
         "mail_from_env": {"type": "string", "description": "With mail: tools: the tools are given only when this environment variable is 1 (a job's opt-in); without it, always"},
         "letters_env": {"type": "string", "description": "With mail: tools: the run acts on the letters this environment variable lists (a JSON list of ids); a run with none, or with an id that isn't one, doesn't start"},
+        "tier_from_env": {"type": "string", "description": "The environment variable a job's chosen model strength comes in (fast, standard or strong): when set, it is the run's model_group, and the run goes only where the runtime can tell how it is paid for (a pay-per-use one needs the project's metered_models and counts toward the daily budget)"},
         "prompt_source": {"enum": ["untrusted"], "description": "untrusted = the prompt is text anyone who can write the bus wrote: the run's rules are held to what such a run may have"},
         "project_env": {"type": "string", "description": "The environment variable that names the run's project: required with settings: platform; on another point, a sandboxed project's run is refused"},
         "extra_args": {"type": "array", "items": {"type": "string"}},

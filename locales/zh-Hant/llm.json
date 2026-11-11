@@ -31,5 +31,10 @@
  "judgment point {name}: {key} needs mail: tools": "判斷點 {name}:{key} 要搭配 mail: tools",
  "judgment point {name}: mail: tools needs tool_servers: allowed_only (a server under the platform's own id would otherwise go unchecked)": "判斷點 {name}:mail: tools 要搭配 tool_servers: allowed_only(不然用平台自己 id 的伺服器沒人檢查)",
  "{point} did not start: the platform's tool server for it would be given a $ in its command, arguments or environment, which the runtime may expand": "{point} 沒有啟動:給它的平台工具伺服器,指令、參數或環境變數裡會有 $,執行環境可能會把它展開",
- "{point} did not run: a tool server it would load is named {name}, the id of the platform's own server": "{point} 沒有執行:它會載入的工具伺服器裡有一個叫 {name},那是平台自己伺服器的 id"
+ "{point} did not run: a tool server it would load is named {name}, the id of the platform's own server": "{point} 沒有執行:它會載入的工具伺服器裡有一個叫 {name},那是平台自己伺服器的 id",
+ "${var} is {tier}, not one of {tiers}": "${var} 是 {tier},不是 {tiers} 其中之一",
+ "{point} runs at the strength its job chose ({tier}) only where how {runtime} is paid for can be told, and it can't be; not run": "{point} 只有在看得出 {runtime} 怎麼計費時,才照 job 選的強度({tier})跑;這裡看不出來,沒有跑",
+ "{point} at strength {tier} would be paid per use ({runtime}), and the owner has not allowed metered models for {project} (registry metered_models); not run": "{point} 用強度 {tier} 會按用量計費({runtime}),而 owner 沒有允許 {project} 用按量計費的模型(registry metered_models);沒有跑",
+ "today's model spending has reached the budget (llm.budget.daily_usd ${budget}); {point} not run": "今天的模型花費已達預算(llm.budget.daily_usd ${budget});{point} 沒有跑",
+ "a pay-per-use run earlier today ended without saying what it cost, so today's spending can't be told; {point} not run until tomorrow": "今天稍早有一次按量計費的執行結束時沒說花了多少,今天的花費算不出來;{point} 明天以前不跑"
 }

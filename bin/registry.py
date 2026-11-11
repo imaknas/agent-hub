@@ -57,7 +57,10 @@ schema v1 (contracts/project.v1.md has the full description):
                                   ~/ or an absolute path; env_key = the file is a .env and the credential is one line
                                   of it (only checks that the key is there); expires is "YYYY-MM-DD" (quote it);
                                   max_age_days counts from the file's modification time (replacing it restarts the
-                                  count); backup: false needs a why (e.g. just reissue it)
+                                  count); backup: false needs a why (e.g. just reissue it). None of the project's
+                                  confined runs reads or writes them (a relative path under both its workspace and
+                                  runtime; policy.secret_paths); `registry.py check --secrets-report` lists what that
+                                  keeps from which jobs
   gate: strict                    the merge gate enforced: main in the main checkout can't be committed to directly
                                   (only via merge-branch); by default it only detects
   jobs:      [{name, at | every | trigger, run | (kind: agent + prompt), cwd?, days?, days_of_month?, months?,
@@ -94,6 +97,11 @@ schema v1 (contracts/project.v1.md has the full description):
       start new letters (send a request, question, info or progress; ask the owner; write notes when its rules write
       them), never to read the mailbox, reply or close (docs/design/confined-mail-tools.md M1). Without it a confined job
       sends no mail. On an event job it is refused: any bus writer's text would then send as the project
+    tier: fast | standard | strong (agent jobs with allow: only): the model strength its run uses, instead of the
+      tool's default (an owner's model pin on the judgment point still wins). Only where the runtime can tell how the
+      run is paid for (for Claude Code: the headless token, not the interactive login connectors: true uses); a
+      pay-per-use one needs metered_models: true and counts toward llm.budget.daily_usd
+      (docs/design/project-agent-calls.md B)
     legacy_name: the old name in schedule.yaml: while the old name is still in schedule.yaml this job isn't used
                  (during the switch the old one wins; delete that entry from schedule.yaml to switch over; the state
                  moves over from the old name too)
@@ -162,10 +170,12 @@ INDEX_FORMAT = 2
 MOMENTS = ("commit", "merge", "nightly", "deploy")
 TIER_KEYS = {"tier", "run", "when", "paths", "jobs"}
 ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+# a secret's path goes into confined runs' deny rules (policy.secret_paths): no glob, bracket, brace or control character
+SECRET_PATH = re.compile(r"[^\x00-\x1f\x7f()\[\]{}*?]+")
 SECRET = {"name", "path", "env_key", "expires", "max_age_days", "warn_days", "backup", "why", "rotate"}
 JOB = {"name", "at", "every", "trigger", "run", "kind", "prompt", "cwd", "days", "days_of_month", "months", "until",
        "between", "background", "after", "before", "max_attempts_per_day", "timeout", "legacy_name", "allow",
-       "connectors", "catch_up", "mail"}
+       "connectors", "catch_up", "mail", "tier"}
 TRIGGER = {"events", "projects", "sources", "where", "debounce"}
 # the mailbox's own work and bookkeeping (inbox records, delivery and closing written by dispatch, which relays others'
 # letters without a chain): no event job reacts to them (event-jobs.md 3.5)
@@ -232,6 +242,9 @@ def validate_secrets(secrets) -> list[str]:
         for k in ("name", "path"):
             if not isinstance(sec.get(k), str) or not sec.get(k):
                 errs.append(_("{where}: {key} is required", where=where, key=k))
+        if isinstance(sec.get("path"), str) and not SECRET_PATH.fullmatch(sec["path"]):
+            errs.append(_("{where}: path may not hold a glob, bracket, brace or control character (it is written into "
+                          "the deny rules of the project's confined runs)", where=where))
         if sec.get("name") in seen:
             errs.append(_("{where}: name {name} is a duplicate", where=where, name=sec.get("name")))
         seen.add(sec.get("name"))
@@ -707,6 +720,10 @@ def validate_runs(doc: dict, stem: str, d: dict) -> list[str]:
         elif job.get("mail") is True and (job.get("kind") != "agent" or not job.get("allow") or "trigger" in job):
             errs.append(_("job {name}: mail: true is only for a scheduled agent job with an allow: list (on an event job "
                           "any bus writer's text would send letters as the project)", name=n))
+        if "tier" in job and (job.get("kind") != "agent" or not job.get("allow") or job["tier"] not in TIERS):
+            errs.append(_("job {name}: tier is for an agent job with an allow: list (a run without one loads the "
+                          "project's saved settings, which can change how it is paid for), one of {tiers}", name=n,
+                          tiers=", ".join(TIERS)))
         if "connectors" in job and not isinstance(job["connectors"], bool):
             errs.append(_("job {name}: connectors must be true/false", name=n))
         if job.get("connectors") is True and not job.get("allow"):
@@ -1066,6 +1083,9 @@ def scheduler_jobs(index: dict, legacy_names: set[str]) -> tuple[list[dict], lis
                 # the platform's mail tools, only for a job that asks (llm-points mail_from_env)
                 if job.get("mail") is True:
                     cmd = f"AGENT_JOB_MAIL=1 {cmd}"
+                # the model strength it chose (llm-points tier_from_env), behind llm.py's billing gate
+                if job.get("tier"):
+                    cmd = f"AGENT_JOB_TIER={shlex.quote(job['tier'])} {cmd}"
                 # needs claude.ai connectors: use the subscription login, not the default headless token
                 if job.get("connectors"):
                     cmd = f"LLM_AUTH=subscription {cmd}"
@@ -1324,6 +1344,35 @@ def cmd_upgrade_files(apply: bool) -> int:
     return 1 if stuck else 0
 
 
+def secrets_report(index: dict) -> int:
+    """What keeping each project's declared credentials from its confined runs changes (docs/design/project-agent-calls.md
+    C): the files and folders, and the confined jobs whose rules start a command, which runs as the user and still
+    reads them (only the agent's own file tools are kept off; a sandboxed project's confined run has no command rules).
+    Every project's mail handlers are confined runs as well. Prints; returns 0."""
+    import policy
+    import runtime_ports
+    try:
+        rt = runtime_ports.load(None, ports=("rule_check",))
+    except runtime_ports.Unsupported as e:   # which rules start a command is the runtime's to say
+        print(e)
+        rt = None
+    for name, doc in sorted(index["projects"].items()):
+        folders, files = policy.secret_paths(name, doc)
+        if not folders and not files:
+            continue
+        sandboxed = sandbox_enforced(doc)
+        print(_("{name} ({how}): {paths}", name=name, how=_("sandboxed") if sandboxed else _("not sandboxed"),
+                paths=", ".join(str(p) + ("/" if p in folders else "") for p in [*folders, *files])))
+        for job in doc.get("jobs") or []:
+            if job.get("kind") != "agent" or not job.get("allow"):
+                continue
+            commands = rt.command_rules(job["allow"]) if rt else []
+            if commands:   # (in a sandboxed project such a job doesn't run: rule_check refuses it)
+                print("    " + _("{job}: its rules start {rules}, which still read them", job=job["name"],
+                                 rules=", ".join(commands)))
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
     if args[:1] == ["upgrade-files"]:
@@ -1338,6 +1387,8 @@ def main() -> int:
         return cmd_apply_updates()
     if args and args[0] == "check":
         args = args[1:]
+    if args == ["--secrets-report"]:
+        return secrets_report(refresh())
     rebuild = "--rebuild" in args
     args = [x for x in args if x != "--rebuild"]
     index = refresh(rebuild=rebuild)

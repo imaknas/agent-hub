@@ -278,9 +278,12 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
     pol = policy.policy(project, doc, index)
     folder = keep or job_folder(cwd)   # read: the job's own folder, whether or not its rules write it
     hidden = policy.run_state_denied(project, folder)
+    # the project's own declared credentials (project-agent-calls.md C): its sessions and services read them, its
+    # confined runs never (folders whole; files one by one, below)
+    own_dirs, own_files = policy.secret_paths(project, doc)
     # the hub's platform state for another project's run, less the job's own folder and the notes it writes (the hub's
     # own runs: hidden above)
-    pol = {**pol, "deny_read": [*pol["deny_read"], *hidden],
+    pol = {**pol, "deny_read": [*pol["deny_read"], *hidden, *own_dirs, *own_files],
            "platform_state": policy.platform_state(project, [folder, policy.notes_dir(project)])}
     sandbox = settings(pol)[0]
     # a runtime's deny can't be narrowed by an allow: the job's own folder and the project's notes come off the list here,
@@ -293,6 +296,11 @@ def platform_settings(project: str, spec: dict, run_dir, keep: pathlib.Path | No
     # each carved entry is denied as itself too (settings: a file beside the path, not only a folder's contents)
     deny = lease_settings(pol)["permissions"]["deny"]
     deny += [r for x in hidden if not x.is_dir() for r in (f"Read({_rule_path(x)})",) if r not in deny]
+    deny += [r for x in _spelled(own_files) for r in (f"Read({_rule_path(x)})",) if r not in deny]
+    # and at any depth below the project's folders: a copy in a worktree is the same credential
+    deny += [r for base, rel in policy.secret_names(project, doc) for b in _spelled([base])
+             for tail in ("", "/**") for t in ("Read", "Edit") for r in (f"{t}({_rule_path(b)}/**/{rel}{tail})",)
+             if r not in deny]
     deny += [r for r in run_write_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
     if spec.get("prompt_source") == "untrusted":
         deny += [r for r in instructions_denied(project, [*(cwd and [cwd] or []), *folders]) if r not in deny]
@@ -923,6 +931,11 @@ def _reserved_server(tool: str) -> bool:
     return parts[0] == "mcp" and len(parts) > 1 and parts[1].lower() in {f"{c}-run" for c in names.all("cli")}
 
 
+def command_rules(rules) -> list[str]:
+    """The rules that start a command (Bash): what they run is held by the sandbox, not by the file-tool rules."""
+    return [str(r) for r in rules or [] if str(r) == "Bash" or str(r).startswith("Bash(")]
+
+
 def rules_problems(rules, *, sandboxed: bool, network, untrusted: bool, cwd=None) -> list[str]:
     """Why a confined run with these rules (the point's and the job's own, never what the platform adds) doesn't start,
     one sentence each; [] = it may. untrusted: its prompt is text anyone who can write the bus wrote, so it is held to the
@@ -1234,9 +1247,14 @@ def run(task) -> TaskResult:
     import sys
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
-        # claude -p errors (e.g. Login expired) are often only in the JSON on stdout
+        # claude -p errors (e.g. Login expired) are often only in the JSON on stdout, with what the run cost
+        try:
+            cost = json.loads(r.stdout).get("total_cost_usd")
+        except (ValueError, AttributeError):
+            cost = None
         return TaskResult(False, error=_("exit {code}: {detail}", code=r.returncode,
-                                                 detail=(r.stderr.strip() or r.stdout.strip())[-300:]))
+                                                 detail=(r.stderr.strip() or r.stdout.strip())[-300:]),
+                          cost_usd=cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None)
     try:
         out = json.loads(r.stdout)
     except ValueError:
@@ -1906,6 +1924,26 @@ def auth_env(mode: str, env) -> tuple:
                        "declare auth: subscription)", file=f)
     out[TOKEN_VAR] = f.read_text().strip()
     return out, ""
+
+
+# what Claude Code bills per use with, ahead of any login: an API key, or a cloud provider's own billing
+METERED_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX",
+                "CLAUDE_CODE_USE_FOUNDRY")
+
+
+def billing(mode: str, env, restricted: bool = False) -> str:
+    """How a run is paid for (runtime_ports' auth interface). Only a run that loads no settings file but the platform's
+    (restricted) with the headless token, which only a Claude plan issues (claude setup-token), can be told: metered when
+    its environment names an API key or a cloud provider (Claude Code uses those ahead of the token), unknown when it
+    reaches another endpoint (ANTHROPIC_BASE_URL), else subscription. Unknown too for the interactive login (mode
+    subscription), which may be a pay-per-use Console login, and for a run that loads the user's or the project's saved
+    settings, which can name a key, a helper or an endpoint of their own."""
+    if mode != "token" or not restricted:
+        return "unknown"
+    seen = dict(env or {})
+    if any(seen.get(k) for k in METERED_VARS):
+        return "metered"
+    return "unknown" if seen.get("ANTHROPIC_BASE_URL") else "subscription"
 
 
 def credentials() -> list:

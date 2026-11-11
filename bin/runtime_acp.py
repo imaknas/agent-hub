@@ -587,6 +587,11 @@ def auth_env(mode: str, env) -> tuple:
     return out, ""
 
 
+def billing(mode: str, env, restricted: bool = False) -> str:
+    """Any agent that speaks ACP, logged in its own way: how it is paid for can't be told here."""
+    return "unknown"
+
+
 def credentials() -> list:
     try:
         conf = _conf()

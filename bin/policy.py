@@ -105,6 +105,50 @@ def secret_dirs() -> list[pathlib.Path]:
     return [cur] + ([old] if old.exists() and old.resolve() != cur.resolve() else [])
 
 
+def secret_paths(project: str, doc: dict) -> tuple[list[pathlib.Path], list[pathlib.Path]]:
+    """(folders, files): the credentials a project's registry entry declares (secrets:), which none of its confined runs
+    reads or writes (docs/design/project-agent-calls.md C). A relative path is taken under both its workspace and its
+    runtime folder (a run works in either); ~/ and absolute ones as given; the platform's own (the hub, modules) through
+    hubconf.path, as check-secrets reads them. A .env named with env_key is one file, kept whole. Not in policy(): a
+    project's sessions and services read their own credentials."""
+    import registry
+    d = registry.dirs(doc)
+    platform = project == hubconf.hub_project() or doc.get("type") == "module"
+    bases = _uniq([d.get("workspace"), d.get("runtime")])
+    folders, files = [], []
+    for sec in doc.get("secrets") or []:
+        raw = str((sec or {}).get("path") or "") if isinstance(sec, dict) else ""
+        if not raw or not _secret_text(raw):   # the registry refuses such a path; never written into a rule
+            continue
+        places = [hubconf.path(raw)] if platform or raw.startswith(("~", "/")) else [b / raw for b in bases]
+        for p in places:
+            if p:
+                (folders if p.is_dir() else files).append(p)
+    return _uniq(folders), _uniq(files)
+
+
+def secret_names(project: str, doc: dict) -> list[tuple[pathlib.Path, str]]:
+    """(root, relative path): each relative secrets: path with the workspace and runtime folder it is under, to be denied
+    at any depth below them too (a copy in a worktree, which a run started there reads): secret_paths names only the
+    declared place."""
+    import registry
+    if project == hubconf.hub_project() or doc.get("type") == "module":
+        return []
+    d = registry.dirs(doc)
+    out = []
+    for sec in doc.get("secrets") or []:
+        raw = str(sec.get("path") or "") if isinstance(sec, dict) else ""
+        if raw and not raw.startswith(("~", "/")) and _secret_text(raw):
+            out += [(b, raw.strip("/")) for b in _uniq([d.get("workspace"), d.get("runtime")])]
+    return out
+
+
+def _secret_text(raw: str) -> bool:
+    """A secret's path holds nothing a deny rule would read as syntax (registry.SECRET_PATH, also checked there)."""
+    import registry
+    return bool(registry.SECRET_PATH.fullmatch(raw))
+
+
 def memory_bare(name: str, doc: dict) -> pathlib.Path:
     return hubconf.path((doc.get("paths") or {}).get("memory_bare")) \
         or hubconf.p("git_origin", "~/git-origin") / f"{name}-memory.git"

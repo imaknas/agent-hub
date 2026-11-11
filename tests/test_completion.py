@@ -150,11 +150,13 @@ class Pipeline(Base):
 
     def test_budget(self):
         self.llm["providers"]["f"]["models"]["fast"]["price"] = {"in": 1_000_000, "out": 0}   # 1 token = $1
+        self.llm["providers"]["f"]["key"] = {"env": "F_TEST_KEY"}   # a key: pay-per-use, what the budget counts
         self.llm["budget"] = {"daily_usd": 5}
         runtime_fake.set_completions("p", CompletionResult(True, text='{"answer": "a"}', stop="end", input_tokens=10))
-        self.run_()
-        with self.assertRaises(completion.Refused) as cm:
+        with mock.patch.dict(os.environ, {"F_TEST_KEY": "k"}):
             self.run_()
+            with self.assertRaises(completion.Refused) as cm:
+                self.run_()
         self.assertIn(zh("today's model spending has reached the budget (llm.budget.daily_usd ${budget}); not sending "
                          "this one", budget=5), str(cm.exception))
         rows = [json.loads(x) for x in (self.tmp / "usage.jsonl").read_text().splitlines()]

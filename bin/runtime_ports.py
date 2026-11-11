@@ -70,6 +70,9 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          one sentence each for people; [] = it may start
     rules_problems(rules, *, sandboxed, network, untrusted, cwd=None) -> list[str]   the same for a job's allow: list
                                                          alone (registry.py check and the status page list them)
+    command_rules(rules) -> list[str]                    those of a job's rules that start a command, whose program
+                                                         runs with the run's sandbox, not its tool rules
+                                                         (registry.py check --secrets-report)
   control: the files in a project folder the runtime loads settings, hooks and tools from. A sandboxed project's own
   processes must never write them (its sessions would run what it put there, outside its sandbox); the platform
   writes the settings itself
@@ -126,6 +129,13 @@ The current interfaces (the other layers get added one at a time, following the 
                                                         expire (values never read or printed)
     is_login_error(text) -> bool                         whether this error message is a login problem (a person has
                                                          to deal with it) or something else (timeout, quota…)
+    billing(mode, env, restricted) -> subscription | metered | unknown
+                                                         how a run with this login and these environment variables
+                                                         (auth_env's) is paid for; restricted: the run loads no
+                                                         settings file but the platform's. llm.py's gate for a model
+                                                         strength a project chose (docs/design/project-agent-calls.md
+                                                         A5): unknown is refused, metered needs the owner's
+                                                         metered_models and counts toward the daily budget
   completion (a judgment point's "answer only"; docs/design/llm-providers.md): the model has no tools and touches no
   files
     complete(req: CompletionRequest, conf: dict) -> CompletionResult   conf = this provider's settings in {settings}
@@ -345,7 +355,7 @@ PORTS = {
     "control": ("control_paths", "session_folders", "foreign_controls"),
     "sessions": ("alive", "live_sessions", "context_size", "current_session"),
     "stream": ("action", "parse_stream", "classify_exit", "resumable", "resume_command", "relocate"),
-    "auth": ("auth_env", "clean_env", "credentials", "is_login_error"),
+    "auth": ("auth_env", "clean_env", "credentials", "is_login_error", "billing"),
     "completion": ("complete", "health"),
     # confine: the runtime honours a judgment point's declared permissions (allow_from_env: only those rules, nothing
     # asked; settings: platform: none of the user's, project's or local settings, only the platform's for the project).
@@ -353,7 +363,7 @@ PORTS = {
     "confine": ("platform_settings",),
     "tool_servers": ("ambient_servers", "servers_named"),
     # rule_check: what the run's boundary rests on, so not OPTIONAL: a runtime without it runs no settings: platform point
-    "rule_check": ("rule_problems", "rules_problems"),
+    "rule_check": ("rule_problems", "rules_problems", "command_rules"),
     "run_server": ("run_server",),
     "wake": ("wake", "can_wake"),
     "session_status": ("session_status",),

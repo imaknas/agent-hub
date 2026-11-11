@@ -276,6 +276,12 @@ def run(a) -> int:
               file=sys.stderr)
         return 2
     prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
+    try:
+        tier = job_tier(spec, os.environ)
+    except ValueError as e:
+        return fail(a.point, spec, str(e))
+    if tier:   # the job's strength is the run's group; an owner's pin on the point still wins (model_for)
+        spec = {**spec, "model_group": tier}
     model = model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
@@ -332,6 +338,14 @@ def run(a) -> int:
         import completion
         drop = {"LLM_AUTH"} | completion.key_envs()
         env = {k: v for k, v in os.environ.items() if k not in drop}
+    how = None
+    if tier:
+        how, why = billing_gate(a.point, spec, rt, env, tier)
+        if why:
+            if getattr(a, "dry_run", False):
+                print(why, file=sys.stderr)
+                return 2
+            return fail(a.point, spec, why)
     # the process started (hooks included) knows it's a platform headless call: hubbus doesn't deliver mail to it
     env["HUB_LLM_POINT"] = a.point
     if spec.get("settings") == "platform":
@@ -342,10 +356,54 @@ def run(a) -> int:
     env["PATH"] = f"{hubconf.ROOT / 'bin'}:{env.get('PATH', '')}".rstrip(":")
     run_dir = make_run_dir(a.point, spec)
     try:
-        return _launch(a, spec, rt, env, prompt, model, run_dir)
+        return _launch(a, spec, rt, env, prompt, model, run_dir, how)
     finally:
         if run_dir:
             shutil.rmtree(run_dir, ignore_errors=True)
+
+
+def job_tier(spec: dict, env) -> str | None:
+    """The model strength a job chose (registry tier:, which the scheduler puts in AGENT_JOB_TIER) on a point that takes
+    one (tier_from_env); None when it chose none. ValueError when the value isn't a strength."""
+    import registry
+    var = spec.get("tier_from_env")
+    tier = (env or {}).get(var) if var else None
+    if not tier:
+        return None
+    if tier not in registry.TIERS:
+        raise ValueError(_("${var} is {tier}, not one of {tiers}", var=var, tier=tier, tiers=", ".join(registry.TIERS)))
+    return tier
+
+
+def billing_gate(point: str, spec: dict, rt, env: dict, tier: str) -> tuple[str | None, str | None]:
+    """(how the run is paid for, why it doesn't run) for a run at a strength its project chose
+    (docs/design/project-agent-calls.md A5): the runtime's auth interface says; unknown is refused, metered runs only
+    when the owner allowed metered models for the project and today's metered spending is under the budget."""
+    import runtime_ports
+    name = point_runtime(point, spec) or runtime_ports.default_name()
+    restricted = spec.get("settings") == "platform" or bool(spec.get("restricted"))
+    how = rt.billing(auth_mode(spec), env, restricted) if "auth" in runtime_ports.capabilities(name) else "unknown"
+    if how == "unknown":
+        return how, _("{point} runs at the strength its job chose ({tier}) only where how {runtime} is paid for can be "
+                      "told, and it can't be; not run", point=point, tier=tier, runtime=name)
+    if how == "metered":
+        import completion
+        import registry
+        project = env.get(spec.get("project_env") or "") or ""
+        doc = registry.refresh()["projects"].get(project) if project else None
+        if not doc or doc.get("metered_models") is not True:
+            return how, _("{point} at strength {tier} would be paid per use ({runtime}), and the owner has not allowed "
+                          "metered models for {project} (registry metered_models); not run", point=point, tier=tier,
+                          runtime=name, project=project or "?")
+        if completion.unknown_cost_today():
+            return how, _("a pay-per-use run earlier today ended without saying what it cost, so today's spending can't "
+                          "be told; {point} not run until tomorrow", point=point)
+        # llm.budget holds with or without llm.providers (completion.settings() needs providers)
+        budget = (((hubconf.get("llm") or {}) if isinstance(hubconf.get("llm"), dict) else {}).get("budget") or {}).get("daily_usd")
+        if budget is not None and completion.today_cost() >= float(budget):
+            return how, _("today's model spending has reached the budget (llm.budget.daily_usd ${budget}); {point} not "
+                          "run", budget=budget, point=point)
+    return how, None
 
 
 RUN_DIR_MAX_AGE_S = 86400   # a run folder older than this was left by a crash (no run takes a day)
@@ -460,7 +518,7 @@ def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
              point=point, project=project, problems="; ".join(problems))
 
 
-def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir) -> int:
+def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str | None = None) -> int:
     import runtime_ports
     schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
@@ -511,6 +569,10 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir) -> int:
         res = rt.run(task)
     except ValueError as e:
         return fail(a.point, spec, str(e))
+    if how:   # a strength the project chose: every run is a usage row (the metered ones count toward the budget)
+        import completion
+        completion.record_run(a.point, point_runtime(a.point, spec) or runtime_ports.default_name(), model, how,
+                              res.cost_usd, res.stop, env.get(spec.get("project_env") or "") or None)
     if not res.ok:
         return fail(a.point, spec, res.error)
     # no structured_output isn't a failure: handed to the caller as is (the librarian deliberately "still goes by the

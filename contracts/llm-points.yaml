@@ -191,6 +191,7 @@ points:
     # (docs/design/confined-mail-tools.md M1)
     mail: tools
     mail_from_env: AGENT_JOB_MAIL
+    tier_from_env: AGENT_JOB_TIER
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the job fails, status page red
@@ -212,6 +213,7 @@ points:
     # no mail: any bus writer's text would send as the project (confined-mail-tools.md M1)
     mail: none
     prompt_source: untrusted
+    tier_from_env: AGENT_JOB_TIER
     timeout_s: 3600
     output: {format: text}
     on_failure: say_so      # the run fails, its events wait for the next attempt

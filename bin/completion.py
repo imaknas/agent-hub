@@ -139,6 +139,9 @@ def estimate_tokens(text: str) -> int:
 
 
 def today_cost() -> float:
+    """Today's spending: metered rows only (a row from before billing was written counts). A subscription run's cost is
+    what the tool says it would have cost, not a charge, so it never uses up the budget metered calls need
+    (docs/design/project-agent-calls.md A5)."""
     today = datetime.date.today().isoformat()
     total = 0.0
     try:
@@ -147,7 +150,7 @@ def today_cost() -> float:
                 r = json.loads(line)
             except ValueError:
                 continue
-            if str(r.get("ts", "")).startswith(today) and r.get("cost_usd"):
+            if str(r.get("ts", "")).startswith(today) and r.get("cost_usd") and r.get("billing", "metered") == "metered":
                 total += float(r["cost_usd"])
     except OSError:
         pass
@@ -176,6 +179,41 @@ def record(point: str, target: dict, res, project: str | None = None) -> float |
     row = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": point,
            "provider": target["provider"], "model": target["model"], "input_tokens": res.input_tokens,
            "output_tokens": res.output_tokens, "cost_usd": cost, "stop": res.stop, "billing": billing(target)}
+    _append(row, project)
+    return cost
+
+
+def record_run(point: str, runtime: str, model: str | None, how: str, cost: float | None, stop: str | None,
+               project: str | None = None) -> None:
+    """One row for an agent run whose model strength a project chose (llm.py's billing gate): the runtime is the
+    provider, how the adapter says it is paid for, no token counts (an agent run reports none)."""
+    row = {"ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "point": point,
+           "provider": runtime, "model": model, "input_tokens": None, "output_tokens": None, "cost_usd": cost,
+           "stop": stop, "billing": how}
+    if how == "metered" and cost is None:   # e.g. it ran to its timeout: what it spent can't be told (unknown_cost_today)
+        row["cost_unknown"] = True
+    _append(row, project)
+
+
+def unknown_cost_today() -> bool:
+    """Whether a pay-per-use agent run today ended without a cost (record_run's cost_unknown): the day's spending can't be
+    told then, so llm.py runs no more pay-per-use runs at a strength a project chose until the next day."""
+    today = datetime.date.today().isoformat()
+    try:
+        lines = USAGE.read_text().splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict) and str(r.get("ts", "")).startswith(today) and r.get("cost_unknown") is True:
+            return True
+    return False
+
+
+def _append(row: dict, project: str | None) -> None:
     if project:
         row["project"] = project
     try:
@@ -184,7 +222,6 @@ def record(point: str, target: dict, res, project: str | None = None) -> float |
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     except OSError:
         pass
-    return cost
 
 
 THINK = re.compile(r"<think>.*?</think>", re.S)

@@ -401,7 +401,26 @@ def cmd_models():
             model = llm.model_for(name, spec)
             where = "hub.json llm.points" if (pins.get(name) or {}).get("model") else _("group {group}", group=group)
         print(f"{name:24} {model or _('(tool default)'):16} {where}")
+    tiered = tier_jobs()
+    if tiered:
+        print(_("\nAgent jobs with a tier (registry tier:; the point's pin above still wins):"))
+        for full, point, tier in tiered:
+            spec = {**(llm.points()["points"].get(point) or {}), "model_group": tier}
+            print(f"{full:24} {llm.model_for(point, spec) or _('(tool default)'):16} {_('tier {tier}', tier=tier)} ({point})")
     print(_("\nTo change one: schedulectl set-model <point|state|index|consolidate> <model|default>"))
+
+
+def tier_jobs() -> list[tuple[str, str, str]]:
+    """(project/job, the judgment point it runs under, its tier) for every registry agent job that chose a tier."""
+    import registry
+    out = []
+    index = registry.refresh()
+    for name, doc in sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items()):
+        for job in doc.get("jobs") or []:
+            if job.get("kind") == "agent" and job.get("tier"):
+                point = "agent-job-event" if "trigger" in job else "agent-job-confined" if job.get("allow") else "agent-job"
+                out.append((f"{name}/{job['name']}", point, job["tier"]))
+    return out
 
 
 def cmd_set_model(which, model):

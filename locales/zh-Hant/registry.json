@@ -163,5 +163,11 @@
  "the rules of confined agent jobs can't be checked on this runtime, so none of them runs: {why}": "這個 runtime 無法檢查受限 agent 工作的規則,所以它們都不會執行:{why}",
  "agent job {job} doesn't run until its allow: changes: {problems}": "agent 工作 {job} 在它的 allow: 改掉之前不會執行:{problems}",
  "job {name}: mail must be true/false": "job {name}:mail 只能是 true/false",
- "job {name}: mail: true is only for a scheduled agent job with an allow: list (on an event job any bus writer's text would send letters as the project)": "job {name}:mail: true 只能用在有 allow: 清單的排程 agent job(放在事件 job 上,任何能寫 bus 的人寫的字都會用這個專案的名義寄信)"
+ "job {name}: mail: true is only for a scheduled agent job with an allow: list (on an event job any bus writer's text would send letters as the project)": "job {name}:mail: true 只能用在有 allow: 清單的排程 agent job(放在事件 job 上,任何能寫 bus 的人寫的字都會用這個專案的名義寄信)",
+ "{name} ({how}): {paths}": "{name}({how}):{paths}",
+ "sandboxed": "有 sandbox",
+ "not sandboxed": "沒有 sandbox",
+ "{job}: its rules start {rules}, which still read them": "{job}:它的規則會跑 {rules},這些仍讀得到",
+ "job {name}: tier is for an agent job with an allow: list (a run without one loads the project's saved settings, which can change how it is paid for), one of {tiers}": "job {name}:tier 只給有 allow: 清單的 agent job 用(沒有的會載入專案存的設定,那可能改變計費方式),值是 {tiers} 其中之一",
+ "{where}: path may not hold a glob, bracket, brace or control character (it is written into the deny rules of the project's confined runs)": "{where}:path 不能有萬用字元、括號、大括號或控制字元(它會寫進專案受限執行的拒絕規則)"
 }
