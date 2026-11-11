@@ -275,14 +275,21 @@ def run(a) -> int:
         print(_("llm.py: {point} is not a declared judgment point (contracts/llm-points.yaml)", point=a.point),
               file=sys.stderr)
         return 2
-    prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
+    # a.key: the call's own name where a point serves many (a project's declared agent, <project>/<name>): the owner's
+    # pin, the usage row and the failure are by it. a.prompt: given by the caller (llm.py agent), not read here
+    key = getattr(a, "key", None) or a.point
+    if getattr(a, "prompt", None) is not None:
+        prompt = a.prompt
+    else:
+        prompt = "" if a.cmd == "exec" else (pathlib.Path(a.prompt_file).read_text() if a.prompt_file else sys.stdin.read())
     try:
         tier = job_tier(spec, os.environ)
     except ValueError as e:
-        return fail(a.point, spec, str(e))
+        return fail(key, spec, str(e))
     if tier:   # the job's strength is the run's group; an owner's pin on the point still wins (model_for)
         spec = {**spec, "model_group": tier}
-    model = model_for(a.point, spec, a.model)
+    model = model_for(key, spec, a.model, runtime=point_runtime(a.point, spec)) if key != a.point \
+        else model_for(a.point, spec, a.model)
     if a.cmd == "run" and spec.get("shape") == "completion" and not getattr(a, "dry_run", False):
         return run_completion(a, spec, prompt, model)
     # declared permissions (unattended allow:, settings: platform) must be honoured, never dropped by a runtime that
@@ -302,7 +309,7 @@ def run(a) -> int:
             if getattr(a, "dry_run", False):   # a dry run only shows, never publishes job.failed
                 print(why, file=sys.stderr)
                 return 2
-            return fail(a.point, spec, why)
+            return fail(key, spec, why)
     try:
         # a settings: platform run's rules are checked when it starts: a runtime that can't check them runs none; a run
         # that gets the mail tools needs the runtime to attach the platform's server
@@ -310,7 +317,7 @@ def run(a) -> int:
             + (("run_server",) if mail_tools(spec, os.environ) else ())
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports)
     except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
-        return fail(a.point, spec, str(e))
+        return fail(key, spec, str(e))
     # works_in: memory: the folder is a copy of a project's memory branch, so an agent started there loads what the project wrote. What
     # holds it is this look at the files, on every runtime: only notes, or no run
     in_memory = spec.get("works_in") == "memory"
@@ -321,17 +328,17 @@ def run(a) -> int:
                 "until a commit on that branch removes it", point=a.point, paths="; ".join(bad)) if bad else None
         memory_copy_alert(os.environ.get("HUB_MEMORY_OF") or os.path.realpath(a.cwd or os.getcwd()), why)
         if why:
-            return fail(a.point, spec, why)
+            return fail(key, spec, why)
     # restricted: a runtime that can't be told to load no settings file runs it only in the platform's throwaway copy (doctor says what
     # that leaves), never anywhere else with the ask dropped. A memory copy just checked is fine too: there the flag only reinforces
     if spec.get("restricted") and not in_memory and "confine" not in runtime_ports.capabilities(point_runtime(a.point, spec)) \
             and not hubconf.is_throwaway_copy(a.cwd or os.getcwd(), marked=os.environ.get("HUB_THROWAWAY_COPY") or ""):
-        return fail(a.point, spec, _("{point} asks that no settings file be loaded, and this runtime can't be told that: it runs only in the "
+        return fail(key, spec, _("{point} asks that no settings file be loaded, and this runtime can't be told that: it runs only in the "
                                      "platform's throwaway copy, and {cwd} is not one", point=a.point, cwd=a.cwd or os.getcwd()))
     if "auth" in runtime_ports.capabilities(point_runtime(a.point, spec)):
         env, why = auth_env(spec, rt)
         if env is None:
-            return fail(a.point, spec, why)
+            return fail(key, spec, why)
     # a runtime without a login interface (e.g. a command template): the tool logs in itself; the platform's keys still
     # aren't passed down
     else:
@@ -345,7 +352,7 @@ def run(a) -> int:
             if getattr(a, "dry_run", False):
                 print(why, file=sys.stderr)
                 return 2
-            return fail(a.point, spec, why)
+            return fail(key, spec, why)
     # the process started (hooks included) knows it's a platform headless call: hubbus doesn't deliver mail to it
     env["HUB_LLM_POINT"] = a.point
     if spec.get("settings") == "platform":
@@ -520,29 +527,35 @@ def rule_refusal(point: str, spec: dict, rt, task) -> str | None:
 
 def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str | None = None) -> int:
     import runtime_ports
-    schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
+    key = getattr(a, "key", None) or a.point
+    # a.schema / a.timeout_s: the call's own (a project's declared agent: its request's schema, its declared timeout)
+    if getattr(a, "schema", None) is not None:
+        schema = a.schema
+    else:
+        schema = json.loads((POINTS.parent / output_schema(spec)).read_text()) if output_schema(spec) else None
     task = runtime_ports.Task(point=a.point, prompt=prompt, spec=spec, cwd=a.cwd or None, model=model,
-                              output_schema=schema, timeout_s=spec.get("timeout_s", 1200), env=env,
+                              output_schema=schema, timeout_s=getattr(a, "timeout_s", None) or spec.get("timeout_s", 1200),
+                              env=env,
                               extra=tuple(a.extra or ()), run_dir=str(run_dir) if run_dir else None)
     if (why := rule_refusal(a.point, spec, rt, task)):
         if getattr(a, "dry_run", False):   # a dry run only shows, never publishes job.failed
             print(why, file=sys.stderr)
             return 2
-        return fail(a.point, spec, why)
+        return fail(key, spec, why)
     if mail_tools(spec, env):
         task, why = attach_server(a.point, spec, rt, task, run_dir)
         if why:
             if getattr(a, "dry_run", False):
                 print(why, file=sys.stderr)
                 return 2
-            return fail(a.point, spec, why)
+            return fail(key, spec, why)
     if spec.get("tool_servers") == "allowed_only":
         task, why, checked = deny_unnamed_servers(a.point, task)
         real = a.cmd == "run" and not getattr(a, "dry_run", False)   # a dry run only shows, never alerts
         if why:
             if real:
                 tool_servers_alert(a.point, why)
-                return fail(a.point, spec, why)
+                return fail(key, spec, why)
             print(why, file=sys.stderr)
             return 2
         if checked and real:
@@ -568,24 +581,24 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str 
     try:
         res = rt.run(task)
     except ValueError as e:
-        return fail(a.point, spec, str(e))
+        return fail(key, spec, str(e))
     if how:   # a strength the project chose: every run is a usage row (the metered ones count toward the budget)
         import completion
-        completion.record_run(a.point, point_runtime(a.point, spec) or runtime_ports.default_name(), model, how,
+        completion.record_run(key, point_runtime(a.point, spec) or runtime_ports.default_name(), model, how,
                               res.cost_usd, res.stop, env.get(spec.get("project_env") or "") or None)
     if not res.ok:
-        return fail(a.point, spec, res.error)
+        return fail(key, spec, res.error)
     # no structured_output isn't a failure: handed to the caller as is (the librarian deliberately "still goes by the
     # actual file changes"); if present, it must be valid
     if schema is not None and res.structured_output is not None:
         if (errs := minischema.errors(schema, res.structured_output)):
-            return fail(a.point, spec, _("output does not match the schema: {errors}", errors="; ".join(errs[:3])))
+            return fail(key, spec, _("output does not match the schema: {errors}", errors="; ".join(errs[:3])))
     # the output field names are llm.py's agreement with its callers (librarian, consolidate, lease-runner… read
     # these), not changed by the runtime
     print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
                       "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
                       "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
-                      "permission_denials": list(res.denials), "llm_point": a.point, "llm_model": model},
+                      "permission_denials": list(res.denials), "llm_point": key, "llm_model": model},
                      ensure_ascii=False))
     return 0
 
