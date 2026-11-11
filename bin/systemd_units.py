@@ -91,6 +91,21 @@ def systemctl(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
 
 
+# systemd's own PATH for what it starts (systemd.exec(5), with unmerged /usr's /sbin:/bin): when the user manager can't
+# be asked
+FIXED_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+
+def default_path() -> str:
+    """The PATH a user unit that sets none gets: the user manager's (a distribution may configure its own), else the
+    fixed one."""
+    r = systemctl("show-environment")
+    for line in (r.stdout or "").splitlines() if r.returncode == 0 else []:
+        if line.startswith("PATH=") and line[5:]:
+            return line[5:]
+    return FIXED_PATH
+
+
 def install(plist: dict) -> subprocess.CompletedProcess:
     """Write the unit files, daemon-reload, enable --now the one to run; if the service is already running, restart it
     (to pick up the new content)."""

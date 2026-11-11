@@ -274,8 +274,9 @@ def run_here(name, job, env) -> int:
     log = job_log(name)
     log.parent.mkdir(parents=True, exist_ok=True)
     print(_("Running {name} here (no service manager); its output also goes to {log}", name=name, log=log), flush=True)
-    with open(log, "a") as f, subprocess.Popen([hubconf.login_shell(), "-lc", job["command"]], stdout=subprocess.PIPE,
-                                               stderr=subprocess.STDOUT, text=True, env={**os.environ, **env}) as p:
+    argv = [hubconf.login_shell(), "-lc", hubconf.job_command(job["command"])]
+    with open(log, "a") as f, subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                               env={**os.environ, **env}) as p:
         for line in p.stdout:
             sys.stdout.write(line)
             f.write(line)
@@ -292,14 +293,15 @@ def start(name, job, env):
         subprocess.run(["systemctl", "--user", "reset-failed", f"{label}.service"], capture_output=True)
         subprocess.run(["systemd-run", "--user", "--collect", f"--unit={label}",
                         f"--property=StandardOutput=append:{log}", f"--property=StandardError=append:{log}",
-                        *[f"--setenv={k}={v}" for k, v in env.items()], "/bin/sh", "-lc", job["command"]], check=True)
+                        *[f"--setenv={k}={v}" for k, v in env.items()], "/bin/sh", "-lc",
+                        hubconf.job_command(job["command"])], check=True)
         print(_("Started {name}; its output goes to {log} (today's schedule won't run it again)", name=name, log=log))
         return
     plist = hubconf.private_tmp() / f"{label}.plist"   # launchd runs what it says, as the user
     import plistlib
     plist.write_bytes(plistlib.dumps({
         "Label": label,
-        "ProgramArguments": [hubconf.login_shell(), "-lc", job["command"]],
+        "ProgramArguments": [hubconf.login_shell(), "-lc", hubconf.job_command(job["command"])],
         "EnvironmentVariables": env,
         "RunAtLoad": True,
         "StandardOutPath": str(log),

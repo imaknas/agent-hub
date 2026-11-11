@@ -301,8 +301,9 @@ def run_bounded(command: str, job_log, minutes: float, env: dict | None = None) 
     """Run the job's command in its own process group; past `minutes`, SIGTERM the group, SIGKILL it 10 s later, and
     return TIMED_OUT."""
     import signal
-    p = subprocess.Popen([hubconf.login_shell(), "-lc", command], stdout=job_log, stderr=subprocess.STDOUT,
-                         env=env or JOB_ENV, start_new_session=True)
+    # brunna on PATH by name, after the shell's profile (hubconf.job_command)
+    p = subprocess.Popen([hubconf.login_shell(), "-lc", hubconf.job_command(command)], stdout=job_log,
+                         stderr=subprocess.STDOUT, env=env or JOB_ENV, start_new_session=True)
     try:
         return p.wait(timeout=minutes * 60)
     except subprocess.TimeoutExpired:

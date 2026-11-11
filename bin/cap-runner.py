@@ -109,6 +109,30 @@ def eligible() -> dict[str, dict]:
     return out
 
 
+def each_job():
+    """(project, job id, path of the jobs directory): only walks directories that aren't symlinks."""
+    for project, e in eligible().items():
+        for ws in e["dirs"]:
+            jobs = ws / ".hub-run" / "jobs"
+            if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
+                continue
+            for d in jobs.iterdir():
+                if d.is_dir() and not d.is_symlink():
+                    yield project, d.name, d
+
+
+def busy() -> bool:
+    """A job is queued or running: a restart now would mark it lost (render-services waits to change this service's
+    unit until there is none)."""
+    for _project, _job_id, d in each_job():
+        try:
+            if json.loads((d / "state.json").read_text()).get("state") in ("queued", "running"):
+                return True
+        except (OSError, ValueError, AttributeError):
+            continue
+    return False
+
+
 def subdir(parent_fd: int, name: str, create: bool = False) -> int:
     """A directory fd under parent; OSError if it's a symlink or not a directory."""
     if create:
@@ -372,16 +396,9 @@ class Runner:
 
     # ---------- restart, cleanup ----------
 
-    def each_job(self):
-        """(project, job id, path of the jobs directory): only walks directories that aren't symlinks."""
-        for project, e in eligible().items():
-            for ws in e["dirs"]:
-                jobs = ws / ".hub-run" / "jobs"
-                if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
-                    continue
-                for d in jobs.iterdir():
-                    if d.is_dir() and not d.is_symlink():
-                        yield project, d.name, d
+    @staticmethod
+    def each_job():
+        return each_job()
 
     def recover(self) -> None:
         """The service restarted: jobs still marked queued/running from the last round have nobody minding them."""

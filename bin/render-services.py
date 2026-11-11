@@ -19,8 +19,12 @@ service fields (validated by registry.py):
   env                  environment variables; a value that is a relative path existing under cwd becomes an absolute
                        path. When run's first word is a command name (node) and no PATH is given: it is looked up
                        by hubconf.LAUNCHD_PATH, which is also written into the plist (the nvm default version's bin
-                       first -- node is managed only by nvm, see hubconf.nvm_bin). Run by path (bin/x.sh): no PATH
-                       added; $PLATFORM_PATH in an env value is replaced by that same PATH
+                       first -- node is managed only by nvm, see hubconf.nvm_bin). Run by path (bin/x.sh): the
+                       service manager's own PATH (launchd's; systemd's user manager's); $PLATFORM_PATH in an env value
+                       is replaced by hubconf.LAUNCHD_PATH. Every service's PATH, its own included, ends with
+                       hubconf.cli_folder(), which holds only the platform's `brunna` wrapper (written here and by
+                       install-cli), so a service finds brunna by name and nothing else it finds changes
+                       (docs/design/project-agent-calls.md D)
   log                  one file (stdout and stderr both go there, relative to cwd); without it:
                        <hub>/.logs/<label without local.>-{stdout,stderr}.log
   expose               {tailnet_https, local_port}: declaration only, tailscale serve is not run automatically --
@@ -38,6 +42,8 @@ found, and a LINE bot was down for a day and a half without anyone knowing):
   - bootstrap failed, a keepalive service is not running, something that should be loaded is not -> report it
   Problems go to Discord (once per set, once more on recovery), exit 1 (the scheduler records job.failed, the status
   page turns red).
+A service whose restart loses work in flight (WAIT_FOR_IDLE: cap-runner marks a running job lost) keeps its unit as it
+is while it has some; the change is made on a run when it has none.
 
 Usage: render-services.py [--dry-run] [--only <label>]
 Also an applier (appliers.py): plan()/apply(), used by `bin/hub config plan/apply`.
@@ -68,6 +74,50 @@ AGENTS = pathlib.Path.home() / "Library" / "LaunchAgents"
 # shell running this script (the shell may have nvm and the like; launchd does not)
 DEFAULT_PATH = hubconf.LAUNCHD_PATH
 RENDERED = hubconf.STATE / "rendered-services.json"
+# what launchd gives a job whose plist sets no PATH (a service started by path got this before it got the CLI folder)
+LAUNCHD_DEFAULT = "/usr/bin:/bin:/usr/sbin:/sbin"
+_MANAGER_PATH: dict[str, str] = {}
+
+
+def manager_path() -> str:
+    """The PATH the service manager gives a service that sets none (launchd's; systemd's user manager's), once a run."""
+    sm = hubconf.service_manager() or "launchd"
+    if sm not in _MANAGER_PATH:
+        if sm == "systemd":
+            import systemd_units
+            _MANAGER_PATH[sm] = systemd_units.default_path()
+        else:
+            _MANAGER_PATH[sm] = LAUNCHD_DEFAULT
+    return _MANAGER_PATH[sm]
+
+
+def with_cli(path: str) -> str:
+    """path with the platform's CLI folder last (docs/design/project-agent-calls.md D): `brunna` by name, and nothing
+    found today found anywhere else."""
+    return f"{path}:{hubconf.cli_folder()}"
+
+
+# Services whose restart loses work in flight: their unit is changed only while they have none (cap-runner marks a
+# running job lost when it restarts). (module or project, service name) → its script, whose busy() says so.
+WAIT_FOR_IDLE = {("sandbox", "cap-runner"): "cap-runner.py"}
+waiting: list[str] = []   # the last _desired()'s labels left as they are until idle (main says so)
+
+
+def busy(project: str, svc: dict) -> bool:
+    script = WAIT_FOR_IDLE.get((project, svc["name"]))
+    if not script:
+        return False
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader(f"wait_{svc['name'].replace('-', '_')}",
+                                                  str(pathlib.Path(__file__).resolve().parent / script))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    try:
+        return bool(m.busy())
+    except Exception:   # noqa: BLE001 (can't tell: wait, the next run asks again)
+        return True
 
 
 def label_of(project: str, svc: dict) -> str:
@@ -80,7 +130,7 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     cwd = d[svc.get("cwd") or registry.default_cwd(doc)]
     words = shlex.split(svc["run"])
     first = words[0]
-    search = hubconf.expand_env((svc.get("env") or {}).get("PATH") or DEFAULT_PATH)
+    search = with_cli(hubconf.expand_env((svc.get("env") or {}).get("PATH") or DEFAULT_PATH))
     if not first.startswith("/"):
         first = str(cwd / first) if "/" in first else (shutil.which(first, path=search) or first)
     problem = None if pathlib.Path(first).is_absolute() and os.access(first, os.X_OK) else \
@@ -96,12 +146,16 @@ def render(project: str, doc: dict, svc: dict) -> tuple[dict, str | None]:
     p: dict = {"Label": label, "ProgramArguments": args, "WorkingDirectory": str(cwd)}
     env = {k: (str(cwd / v) if isinstance(v, str) and not v.startswith("/") and (cwd / v).exists()
                else hubconf.expand_env(str(v))) for k, v in (svc.get("env") or {}).items()}
-    if "/" not in words[0] and "PATH" not in env:
+    if "PATH" in env:
+        env["PATH"] = with_cli(env["PATH"])
+    elif "/" not in words[0]:
         # the command was found by the platform's PATH (node etc.); the process itself (npm's child processes) must
         # see it too
-        env["PATH"] = DEFAULT_PATH
-    if env:
-        p["EnvironmentVariables"] = env
+        env["PATH"] = with_cli(DEFAULT_PATH)
+    else:
+        # started by path: the service manager's own PATH, as before, then the CLI folder
+        env["PATH"] = with_cli(manager_path())
+    p["EnvironmentVariables"] = env
     p["RunAtLoad"] = True
     if svc.get("keepalive"):
         p["KeepAlive"] = True
@@ -165,6 +219,7 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
     problems: list[str] = []
     keep: set[str] = set()       # command cannot be resolved: the current plist is left alone
     keepalive: set[str] = set()  # should be running all the time
+    waiting.clear()
     # services of enabled modules too
     docs = sorted(index["projects"].items()) + sorted((index.get("modules") or {}).items())
     for name, doc in docs:
@@ -176,6 +231,9 @@ def _desired(index: dict) -> tuple[dict[str, tuple[str, dict]], list[str], set[s
                 problems.append(_("{label} ({project}): {problem}; the plist is left as it is (and not created if it is missing)",
                                   label=label, project=name, problem=problem))
                 keep.add(label)
+            elif busy(name, svc):
+                keep.add(label)
+                waiting.append(label)
             if svc.get("keepalive"):
                 keepalive.add(label)
     return want, problems, keep, keepalive
@@ -252,6 +310,15 @@ def _apply_one(uid: int, ch, plist: dict | None, problems: list[str]) -> None:
                           error=r.stderr.strip()[:200]))
 
 
+def write_wrapper(problems: list[str]) -> None:
+    """The `brunna` every service's PATH ends with (hubconf.cli_folder), written before any unit that names it."""
+    try:
+        if hubconf.write_cli_wrapper():
+            print(_("wrote {path}", path=hubconf.cli_folder() / names.current("cli")))
+    except OSError as e:
+        problems.append(_("{path} could not be written: {why}", path=hubconf.cli_folder(), why=e.strerror or e))
+
+
 def plan(index: dict | None = None) -> list:
     if hubconf.service_manager() is None:
         return []   # no service manager: nothing can be applied (doctor and main say so)
@@ -263,6 +330,7 @@ def apply(index: dict | None = None) -> list:
     if hubconf.service_manager() is None:
         return []
     want, problems, keep, _keepalive = _desired(index or registry.refresh())
+    write_wrapper(problems)
     uid = os.getuid()
     todo = _changes(want, keep)
     for ch, _cur, plist in todo:
@@ -297,8 +365,13 @@ def main() -> int:
     if only:
         # either spelling of a platform label (recover-service passes the one services.tsv names)
         only = next((s for s in names.unit_spellings(only) if s in want), only)
+    if not dry:
+        write_wrapper(problems)
     todo = _changes(want, keep, only)
     changed = 0
+    for label in waiting:
+        if not only or label == only:
+            print(_("{label}: has work in flight; its changes wait until it has none", label=label))
     for ch, cur, plist in todo:
         label = ch.target.removeprefix("service:")
         if ch.op == "remove":

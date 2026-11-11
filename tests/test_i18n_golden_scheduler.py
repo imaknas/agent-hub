@@ -260,6 +260,9 @@ class Golden(unittest.TestCase):
     def test_render_services(self):
         m = load("render_services_golden", "render-services.py")
         m.AGENTS, m.RENDERED, m.DEFAULT_PATH = self.tmp / "LaunchAgents", self.tmp / "state" / "rendered.json", "/usr/bin:/bin"
+        cli = mock.patch.object(hubconf, "cli_folder", lambda: self.tmp / "shared" / "cli")   # never the live hub's
+        cli.start()
+        self.addCleanup(cli.stop)
         m.AGENTS.mkdir()
         m.RENDERED.parent.mkdir()
         ws = self.tmp / "ws"

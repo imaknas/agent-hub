@@ -5,7 +5,7 @@ services: this system has no supported service manager (neither macOS launchd no
 - service:local.demo.old  no longer in the registry
 + service:local.demo.failboot  demo
 + service:local.demo.ghost  demo
-~ service:local.demo.once  demo: changed ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
+~ service:local.demo.once  demo: changed EnvironmentVariables, ProgramArguments, StandardErrorPath, StandardOutPath, StartInterval, WorkingDirectory
 + service:local.demo.web  demo
 + service:local.demo.worker  demo
 === dry-run
@@ -14,6 +14,7 @@ services: this system has no supported service manager (neither macOS launchd no
 (dry-run) local.demo.failboot (demo): add
 (dry-run) local.demo.ghost (demo): add
 (dry-run) local.demo.once (demo): update
+    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
     ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
@@ -21,14 +22,16 @@ services: this system has no supported service manager (neither macOS launchd no
     WorkingDirectory: None → '<TMP>/ws'
 (dry-run) local.demo.web (demo): add
 (dry-run) local.demo.worker (demo): add
-⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)
 === apply
 [exit 1]
+wrote <TMP>/shared/cli/brunna
 local.demo.old: no longer in the registry, unloading
 local.demo.failboot (demo): add
     ⚠️ bootstrap failed: Bootstrap failed: 5: Input/output error
 local.demo.ghost (demo): add
 local.demo.once (demo): update
+    EnvironmentVariables: None → {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin:<TMP>/shared/cli'}
     ProgramArguments: ['/bin/echo', 'old'] → ['/bin/echo', 'o']
     StandardErrorPath: None → '<HUB>/.logs/demo.once-stderr.log'
     StandardOutPath: None → '<HUB>/.logs/demo.once-stdout.log'
@@ -36,7 +39,7 @@ local.demo.once (demo): update
     WorkingDirectory: None → '<TMP>/ws'
 local.demo.web (demo): add
 local.demo.worker (demo): add
-⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)
 ⚠️ local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error
 ⚠️ local.demo.ghost (demo): not loaded in launchd
 ⚠️ local.demo.worker (demo): the keepalive service is not running (state = not running)
@@ -45,17 +48,17 @@ local.demo.worker (demo): add
 local.demo.failboot (demo): update
     ⚠️ bootstrap failed: Bootstrap failed: 5: Input/output error
 local.demo.ghost (demo): update
-⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)
 ⚠️ local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error
 ⚠️ local.demo.ghost (demo): not loaded in launchd
 ⚠️ local.demo.worker (demo): the keepalive service is not running (state = not running)
 === only one label, dry-run
 [exit 1]
 services: everything matches the registry
-⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)
+⚠️ local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)
 === alert.once
-('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)', 'local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
-('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin); the plist is left as it is (and not created if it is missing)', 'local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
+('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)', 'local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
+('render-services', ['local.demo.broken (demo): `no-such-cmd-golden` not found (PATH=/usr/bin:/bin:<TMP>/shared/cli); the plist is left as it is (and not created if it is missing)', 'local.demo.failboot (demo): bootstrap failed: Bootstrap failed: 5: Input/output error', 'local.demo.ghost (demo): not loaded in launchd', 'local.demo.worker (demo): the keepalive service is not running (state = not running)'], 'The background services are all back to normal (render-services)')
 === rendered
 ["local.demo.broken", "local.demo.failboot", "local.demo.ghost", "local.demo.once", "local.demo.web", "local.demo.worker"]
 === systemd plan

@@ -1,7 +1,7 @@
 # A project's own confined agent calls, per-job model tiers, declared secrets kept from confined runs
 
-> **Status**: design, fourth draft (11-09). Steps 1 and 2 built (A4, A2's run-time check 11-10; B and C 11-11); D and
-> A not yet.
+> **Status**: design, fourth draft (11-09). Steps 1 to 3 built (A4, A2's run-time check 11-10; B, C and D 11-11); A
+> not yet.
 > - B as built: the adapter's `billing(mode, env, restricted)` is part of the auth interface (a runtime without one is
 >   unknown, so refused); every run at a tier writes a usage row (`completion.record_run`); `agents` and
 >   `agents_per_day` wait for A, which reads them. After the cold review (11-11): `tier:` only on a job with `allow:`
@@ -17,6 +17,12 @@
 >   any depth below the workspace and runtime folder too (a copy in a worktree, where a mail conversation fork can
 >   start); a path holding glob, bracket, brace or control characters is refused by the registry and never written
 >   into a rule.
+> - D as built: the folder is `hubconf.cli_folder()`, the wrapper `hubconf.write_cli_wrapper()` (a link in its place,
+>   or as the folder, is replaced; never followed). systemd's own PATH is the user manager's (`systemctl --user
+>   show-environment`; a distribution may set its own), else systemd's fixed one. Waiting for cap-runner is
+>   render-services' `WAIT_FOR_IDLE` (cap-runner's `busy()`: a job queued or running); its unit is left as it is, said
+>   in the run's output, until a run finds it idle. The scheduled command's prefix is `hubconf.job_command()`, in the
+>   scheduler and in `schedulectl run` both.
 > - Rounds 1–3 were blind cold reviews, each with a security reading and a feasibility reading. What they changed is
 >   at the end.
 > - The holes round 2 found in today's confined runs were fixed on their own first, in the three `fix(confine)` commits

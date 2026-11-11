@@ -39,9 +39,10 @@ class SchedulerFixture:
 
 class ServicesFixture:
     def setup(self, m, tmp: pathlib.Path):
-        self._saved = (m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager)
+        self._saved = (m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager, m.hubconf.cli_folder)
         # tests the launchd path (launchctl is fake), whatever system it runs on
         m.hubconf.service_manager = lambda: "launchd"
+        m.hubconf.cli_folder = lambda: tmp / "shared" / "cli"   # the wrapper apply writes: never the live hub's
         m.AGENTS, m.RENDERED = tmp / "LaunchAgents", tmp / "state" / "rendered-services.json"
         m.AGENTS.mkdir(parents=True)
         self.calls, loaded = [], set()
@@ -63,7 +64,7 @@ class ServicesFixture:
             "services": [{"name": "web", "run": "/bin/echo hi", "keepalive": True, "log": "web.log"}]}}}
 
     def teardown(self, m):
-        m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager = self._saved
+        m.AGENTS, m.RENDERED, m.launchctl, m.hubconf.service_manager, m.hubconf.cli_folder = self._saved
 
 
 class AgentSettingsFixture:

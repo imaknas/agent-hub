@@ -544,6 +544,49 @@ def shared_leftovers() -> list[pathlib.Path]:
     return [STATE / p.name for p in shared_items() if os.path.lexists(STATE / p.name)]
 
 
+def cli_folder() -> pathlib.Path:
+    """A folder holding only the platform's `brunna` wrapper, for services and scheduled commands to find it by name
+    (docs/design/project-agent-calls.md D): every service's PATH ends with it (render-services), every scheduled command
+    puts it last on its PATH (job_command). In shared(), which sandboxed code reads; under the hub root, which nothing of
+    a project's writes."""
+    return shared() / "cli"
+
+
+def cli_wrapper_text() -> str:
+    return (f'#!/bin/sh\n# the {names.current("product")} CLI, for services and scheduled commands (written by the '
+            f'platform)\nexec "{MAIN / "bin" / names.current("cli")}" "$@"\n')
+
+
+def write_cli_wrapper() -> bool:
+    """cli_folder()/brunna as it should be: a plain file (never a link), mode 755, beside nothing else of ours; a link in
+    its place, or as the folder, is replaced. True when something was written."""
+    d = cli_folder()
+    if d.is_symlink() or (d.exists() and not d.is_dir()):
+        d.unlink()
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o755)
+    f, text = d / names.current("cli"), cli_wrapper_text()
+    try:
+        if not f.is_symlink() and f.is_file() and f.read_text() == text and (f.stat().st_mode & 0o777) == 0o755:
+            return False
+    except OSError:
+        pass
+    tmp = d / f".{f.name}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.chmod(tmp, 0o755)
+    os.replace(tmp, f)   # replaces a link itself, never its target
+    return True
+
+
+def job_command(command: str) -> str:
+    """A scheduled command as the login shell runs it (`<shell> -lc`): after the shell's profile, cli_folder() last on
+    its PATH, so `brunna` is found by name and nothing found today changes."""
+    return f'PATH="$PATH":{shlex.quote(str(cli_folder()))}; {command}'
+
+
 def renames() -> pathlib.Path:
     """The renames record, in shared() (moved out of .state the first time): every reader and the writer take it here."""
     return moved_from_state(shared() / RENAMES_FILE)
