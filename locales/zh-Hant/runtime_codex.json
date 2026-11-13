@@ -17,5 +17,11 @@
  "config.toml would not parse after the edit ({error})": "config.toml 改完會解析不了({error})",
  "config.toml sets the trust of {key} in a form this writer doesn't edit": "config.toml 用這個寫入器不改的寫法設定了 {key} 的信任",
  "the platform's Codex hooks in {file}: remove them by hand (they share a group with yours)": "{file} 裡平台的 Codex hook:請手動移除(它們和你的 hook 在同一組)",
- "the platform's Codex hooks in {file}: remove them by hand (yours come after them)": "{file} 裡平台的 Codex hook:請手動移除(你的 hook 排在它們後面)"
+ "the platform's Codex hooks in {file}: remove them by hand (yours come after them)": "{file} 裡平台的 Codex hook:請手動移除(你的 hook 排在它們後面)",
+ "{hooks} or {config} changed while this ran; nothing was written: run it again": "{hooks} 或 {config} 在執行途中被改了;什麼都沒寫:再跑一次",
+ "config.toml can't be edited here ({error})": "config.toml 在這裡改不了({error})",
+ "Codex's settings can't be read here ({error})": "Codex 的設定在這裡讀不了({error})",
+ "a group of {event} in hooks.json holds the platform's hook and one of yours: edit it by hand (move yours to a group of its own)": "hooks.json 裡 {event} 的某一組同時有平台的 hook 跟你的:請手動改(把你的移到自己的一組)",
+ "{config} changed while this ran": "{config} 在執行途中被改了",
+ "{hooks} was written, but {config} wasn't ({error}): the hooks are there untrusted, and doctor says so until this runs again": "{hooks} 寫好了,但 {config} 沒寫成({error}):hook 在那裡但未被信任,在再跑一次之前 doctor 都會提醒"
 }

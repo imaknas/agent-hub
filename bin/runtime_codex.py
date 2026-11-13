@@ -94,6 +94,19 @@ def credential_paths() -> dict:
     return {"dirs": [str(codex_home())], "files": []}
 
 
+def credential_override(env) -> tuple[str, list[str], list[str]] | None:
+    """(variable, dirs, files) when env moves Codex's home away from ~/.codex: the platform's jobs (the scheduler's
+    environment has no CODEX_HOME) then deny ~/.codex and not that folder, unless {settings} credentials.dirs names it
+    (doctor says so)."""
+    v = env.get("CODEX_HOME")
+    if not v:
+        return None
+    home = os.path.realpath(os.path.expanduser(v))
+    if home == os.path.realpath(pathlib.Path.home() / ".codex"):
+        return None
+    return "CODEX_HOME", [home], []
+
+
 def unsupported(port: str) -> str | None:
     """Why it lacks a port (doctor's feature table)."""
     why = {
@@ -189,8 +202,11 @@ def remove_lifecycle(workspace, check: bool = False) -> bool:
 
 # ---------- sessions ----------
 
-_SESSION_PROCESS = re.compile(r"(?:^|/)codex(?:\s|$)|@openai/codex|/codex-[a-z0-9-]+/vendor/")
-_HEADLESS = re.compile(r"(?:^|/)codex\s+(?:exec|e)(?:\s|$)")
+# the executable itself (argv[0], a path with no spaces): an argument naming codex is no Codex process
+_SESSION_PROCESS = re.compile(r"^(?:\S*/)?codex(?:\s|$)")
+# `codex [options] exec|e …`: an option's value may follow it (`-m o3`, `-c k=v`); the first word that isn't one is the
+# subcommand
+_HEADLESS = re.compile(r"^(?:\S*/)?codex(?:\s+-{1,2}[^\s=]+(?:=\S*|\s+(?!-)(?!(?:exec|e)(?:\s|$))\S+)?)*\s+(?:exec|e)(?:\s|$)")
 _ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -218,8 +234,31 @@ def session_pid(env, ancestors=None) -> int | None:
     return None
 
 
-def person_session(pid: int, env) -> bool:
-    """A session a person works in: not `codex exec` (a script's or the platform's run, as Claude's -p)."""
+EXEC_ORIGINATOR = "codex_exec"   # session_meta.originator of a `codex exec` run (M4; sessions_codex.NOT_A_PERSON)
+
+
+def _originator(raw: str | None) -> str | None:
+    """The originator the session's rollout names (its first line, session_meta), from the hook input's transcript_path;
+    None when it can't be read. Only a rollout file's first line is read."""
+    try:
+        path = (json.loads(raw or "{}") or {}).get("transcript_path")
+        if not isinstance(path, str) or not re.fullmatch(r"rollout-[^/]*\.jsonl", os.path.basename(path)):
+            return None
+        with open(path, errors="replace") as fh:
+            meta = (json.loads(fh.readline(1 << 20) or "null") or {}).get("payload") or {}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+    o = meta.get("originator") if isinstance(meta, dict) else None
+    return o if isinstance(o, str) and o else None
+
+
+def person_session(pid: int, env, raw: str | None = None) -> bool:
+    """A session a person works in: not `codex exec` (a script's or the platform's run, as Claude's -p). What the session's
+    rollout says (raw: the hook's input, with its transcript_path) decides; its process's command line when that can't be
+    read."""
+    o = _originator(raw)
+    if o is not None:
+        return o != EXEC_ORIGINATOR
     import runtime_ports
     cmd = runtime_ports._parent_and_command(pid)[1]
     return bool(cmd) and not _HEADLESS.search(cmd)
@@ -275,7 +314,9 @@ def context_size(sid: str) -> int | None:
 
 def unrecorded(since_s: int = 3600, now: float | None = None) -> list[str]:
     """Sessions a person ran in the last since_s (their rollout changed) that have no record: their hooks didn't run, being
-    absent, untrusted or modified, which Codex skips without a word (M2). A program's run (`codex exec`) is left out."""
+    absent, untrusted or modified, which Codex skips without a word (M2). Left out: a program's run (`codex exec`), a
+    session in no onboarded project or in a sandboxed one (the hooks record neither), and one that ended on record (its
+    end leaves <session>.ended, runtime_ports.SESSION_ENDED)."""
     import time
     import hubconf
     now = time.time() if now is None else now
@@ -292,14 +333,31 @@ def unrecorded(since_s: int = 3600, now: float | None = None) -> list[str]:
         except (OSError, ValueError, AttributeError):
             continue
         sid = meta.get("session_id") or meta.get("id")
-        if not isinstance(sid, str) or not _ID.match(sid) or meta.get("originator") == "codex_exec":
+        if not isinstance(sid, str) or not _ID.match(sid) or meta.get("originator") == EXEC_ORIGINATOR:
+            continue
+        cwd = meta.get("cwd")
+        if not isinstance(cwd, str) or not cwd or not _served_folder(cwd):
             continue
         import runtime_ports
         key = runtime_ports.qualify(NAME, sid)
         if not any((p := hubconf.session_file(key, s)) and p.exists() for s in (runtime_ports.SESSION_RECORD,
-                                                                                  runtime_ports.SESSION_VERSION)):
+                                                                                  runtime_ports.SESSION_VERSION,
+                                                                                  runtime_ports.SESSION_ENDED)):
             out.append(sid)
     return out
+
+
+def _served_folder(cwd: str) -> bool:
+    """Whether a session in this folder is one the hooks record: in an onboarded project (or the hub), not a sandboxed one."""
+    import hubconf
+    import project_git
+    try:
+        if project_git.sandbox_of(cwd):
+            return False
+        here = pathlib.Path(cwd).resolve()
+        return bool(project_git.project_at(cwd)) or here.is_relative_to(hubconf.MAIN.resolve())
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 # ---------- the user-level hooks and their trust (D1; only on the owner's yes) ----------
@@ -363,7 +421,7 @@ def _hooks_doc(path: pathlib.Path) -> dict:
     if not path.exists():
         return {}
     try:
-        doc = json.loads(path.read_text())
+        doc = json.loads(_read(path))
     except ValueError as e:
         raise Refused(_("{file} isn't JSON ({error})", file=path, error=e)) from e
     if not isinstance(doc, dict) or not isinstance(doc.get("hooks", {}), dict) or set(doc) - {"hooks", "description"}:
@@ -388,7 +446,12 @@ def merge_hooks(doc: dict) -> dict:
         want = platform_handler(codex_event, event)
         found = False
         for g in groups:
-            for i, h in enumerate(g.get("hooks", [])):
+            inner = g.get("hooks", [])
+            if any(_ours(h) for h in inner) and not all(_ours(h) for h in inner):
+                # its matcher is the user's too: rewriting it would change what their hook runs on
+                raise Refused(_("a group of {event} in hooks.json holds the platform's hook and one of yours: edit it by "
+                                "hand (move yours to a group of its own)", event=codex_event))
+            for i, h in enumerate(inner):
                 if _ours(h):
                     g["hooks"][i] = dict(want)
                     if matcher is None:
@@ -421,7 +484,30 @@ def _toml_string(s: str) -> str:
     return json.dumps(s, ensure_ascii=False)
 
 
-_HEADER = re.compile(r"^\s*\[\s*hooks\s*\.\s*state\s*\.\s*(\"(?:[^\"\\]|\\.)*\")\s*\]\s*(?:#.*)?$")
+_HEADER = re.compile(r"^\s*\[\s*hooks\s*\.\s*state\s*\.\s*\"")   # a candidate; tomllib reads its key
+
+
+def _header_key(line: str) -> str | None:
+    """The key a [hooks.state."<key>"] header line names, as TOML reads it (escapes included); None for anything else."""
+    import tomllib
+    if not _HEADER.match(line):
+        return None
+    try:
+        state = tomllib.loads(line + "\n").get("hooks", {}).get("state", {})
+    except (tomllib.TOMLDecodeError, AttributeError):
+        return None
+    return next(iter(state)) if isinstance(state, dict) and len(state) == 1 else None
+
+
+def _same(a, b) -> bool:
+    """Equal TOML values, a NaN equal to itself."""
+    if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
+        return True
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return type(a) is type(b) and a == b
 _TABLE = re.compile(r"^\s*\[")
 _TRUSTED = re.compile(r"^\s*trusted_hash\s*=")
 
@@ -431,31 +517,41 @@ def set_trust(text: str, entries: dict[str, str]) -> str:
     line replaced or added, a missing one is appended at the end. Everything else is kept byte for byte, and the result is
     checked: it parses, and differs from the text before only by these values. Refused (nothing written) for a form this
     writer doesn't edit (the key set inline or dotted, a trusted_hash split over lines)."""
+    try:
+        return _set_trust(text, entries)
+    except Refused:
+        raise
+    except Exception as e:   # anything this writer didn't foresee: refused, never a traceback in doctor or upgrade
+        raise Refused(_("config.toml can't be edited here ({error})", error=f"{type(e).__name__}: {e}")) from e
+
+
+def _set_trust(text: str, entries: dict[str, str]) -> str:
+    import copy
     import tomllib
     try:
         before = tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
         raise Refused(_("config.toml doesn't parse ({error})", error=e)) from e
+    nl = "\r\n" if "\r\n" in text else "\n"   # the file's own line ends for what is added
     lines = text.splitlines(keepends=True)
     state = ((before.get("hooks") or {}).get("state") or {}) if isinstance(before.get("hooks"), dict) else {}
     for key, value in entries.items():
         start = None
         for i, line in enumerate(lines):
-            m = _HEADER.match(line.rstrip("\r\n"))
-            if m and json.loads(m.group(1)) == key:
+            if _header_key(line.rstrip("\r\n")) == key:
                 start = i
                 break
         if start is None:
             if key in state:
                 raise Refused(_("config.toml sets the trust of {key} in a form this writer doesn't edit", key=key))
             if lines and not lines[-1].endswith("\n"):
-                lines[-1] += "\n"
-            lines += [*(["\n"] if lines and lines[-1].strip() else []),
-                      f"[hooks.state.{_toml_string(key)}]\n", f"trusted_hash = {_toml_string(value)}\n"]
+                lines[-1] += nl
+            lines += [*([nl] if lines and lines[-1].strip() else []),
+                      f"[hooks.state.{_toml_string(key)}]{nl}", f"trusted_hash = {_toml_string(value)}{nl}"]
             continue
         end = next((j for j in range(start + 1, len(lines)) if _TABLE.match(lines[j])), len(lines))
         at = next((j for j in range(start + 1, end) if _TRUSTED.match(lines[j])), None)
-        line = f"trusted_hash = {_toml_string(value)}\n"
+        line = f"trusted_hash = {_toml_string(value)}{nl}"
         if at is None:
             lines.insert(start + 1, line)
         else:
@@ -465,23 +561,33 @@ def set_trust(text: str, entries: dict[str, str]) -> str:
         after = tomllib.loads(out)
     except tomllib.TOMLDecodeError as e:
         raise Refused(_("config.toml would not parse after the edit ({error})", error=e)) from e
-    expect = json.loads(json.dumps(before))
+    expect = copy.deepcopy(before)
     st = expect.setdefault("hooks", {}).setdefault("state", {})
     for key, value in entries.items():
         st.setdefault(key, {})["trusted_hash"] = value
-    if after != expect:
+    if not _same(after, expect):
         raise Refused(_("config.toml would change more than the platform's trust entries; nothing was written"))
     return out
 
 
+def _read(path: pathlib.Path) -> str:
+    """The file's text as it is, line ends included (CRLF stays CRLF); "" when there is none."""
+    if not path.exists():
+        return ""
+    with open(path, newline="") as fh:
+        return fh.read()
+
+
 def _write(path: pathlib.Path, text: str) -> None:
-    """Written whole or not at all, keeping the file's mode (600 for a new one)."""
+    """Written whole or not at all, on disk before it replaces the file, keeping the file's mode (600 for a new one)."""
     mode = path.stat().st_mode & 0o7777 if path.exists() else 0o600
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), mode)
-        with os.fdopen(fd, "w") as fh:
+        with os.fdopen(fd, "w", newline="") as fh:
             fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
         os.chmod(tmp, mode)
         os.replace(tmp, path)
     finally:
@@ -504,31 +610,55 @@ def installed_hooks() -> bool:
 
 
 def _plan() -> tuple[str, str, str, str]:
-    """(hooks.json before, after, config.toml before, after) for this version's hooks and their trust."""
+    """(hooks.json before, after, config.toml before, after) for this version's hooks and their trust. Anything unforeseen
+    is Refused, never a traceback (doctor, --update and upgrade say it and go on)."""
+    try:
+        return _plan_files()
+    except Refused:
+        raise
+    except Exception as e:
+        raise Refused(_("Codex's settings can't be read here ({error})", error=f"{type(e).__name__}: {e}")) from e
+
+
+def _plan_files() -> tuple[str, str, str, str]:
     hooks_file, cfg = _files()
     if cfg.is_symlink():
         raise Refused(_("{file} is a link", file=cfg))
     doc = _hooks_doc(hooks_file)
-    before_hooks = hooks_file.read_text() if hooks_file.exists() else ""
+    before_hooks = _read(hooks_file)
     after_doc = merge_hooks(json.loads(json.dumps(doc)))
-    after_hooks = json.dumps(after_doc, indent=2, ensure_ascii=False) + "\n"
+    nl = "\r\n" if "\r\n" in before_hooks else "\n"
+    after_hooks = (json.dumps(after_doc, indent=2, ensure_ascii=False) + "\n").replace("\n", nl)
     if before_hooks and json.loads(before_hooks) == after_doc:
         after_hooks = before_hooks   # nothing of ours changed: the user's formatting stays
-    before_cfg = cfg.read_text() if cfg.exists() else ""
+    before_cfg = _read(cfg)
     after_cfg = set_trust(before_cfg, trust_entries(after_doc, hooks_file))
     return before_hooks, after_hooks, before_cfg, after_cfg
 
 
 def _apply(plan) -> bool:
+    """Both files written, each only if it still holds what the plan read (someone else's edit in between refuses it).
+    hooks.json goes first: if config.toml then fails, the hooks are there untrusted (Codex skips them; doctor says so)."""
     before_hooks, after_hooks, before_cfg, after_cfg = plan
     hooks_file, cfg = _files()
+    if _read(hooks_file) != before_hooks or _read(cfg) != before_cfg:
+        raise Refused(_("{hooks} or {config} changed while this ran; nothing was written: run it again", hooks=hooks_file,
+                        config=cfg))
     changed = False
     if after_hooks != before_hooks:
         hooks_file.parent.mkdir(parents=True, exist_ok=True)
         _write(hooks_file, after_hooks)
         changed = True
     if after_cfg != before_cfg:
-        _write(cfg, after_cfg)
+        try:
+            if _read(cfg) != before_cfg:
+                raise Refused(_("{config} changed while this ran", config=cfg))
+            _write(cfg, after_cfg)
+        except Exception as e:
+            if changed:
+                raise Refused(_("{hooks} was written, but {config} wasn't ({error}): the hooks are there untrusted, and "
+                                "doctor says so until this runs again", hooks=hooks_file, config=cfg, error=e)) from e
+            raise
         changed = True
     return changed
 
@@ -607,6 +737,8 @@ def user_missing() -> str | None:
         plan = _plan()
     except Refused as e:
         return _("the platform's Codex hooks can't be checked: {why}", why=e)
+    except Exception as e:   # never a traceback in doctor
+        return _("the platform's Codex hooks can't be checked: {why}", why=type(e).__name__)
     if plan[3] != plan[2]:
         return _("some of the platform's Codex hooks aren't trusted in config.toml (Codex skips them without a word)")
     return None
