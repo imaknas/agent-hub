@@ -29,7 +29,7 @@ _ = i18n.domain(__file__)
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FAST = rc.MODELS["fast"]
 ASK = "Reply with exactly the two letters ok and nothing else."
-SECURITY = "#!/bin/sh\n# a check's runs may not read the Keychain (runtime-versions.md section 3a, DV5 (c))\nexit 44\n"
+SECURITY = rc.SECURITY_STUB   # the same refusing `security` the platform's token runs get
 
 
 # ---------- the world ----------
@@ -180,10 +180,14 @@ def completion_schemas(world) -> Outcome:
 
 def _completion_argv(schema=None, tools_off: bool = True) -> list:
     """complete()'s own argv (runtime_claude.completion_command), its output as stream-json so the init event shows the
-    run's tools; tools_off=False takes its `--tools ""` out (the positive control)."""
+    run's tools (complete() reads it so itself; an argv that doesn't yet is made to); tools_off=False takes its
+    `--tools ""` out (the positive control)."""
     argv = rc.completion_command(CompletionRequest(point="login-check", prompt=ASK, model=FAST, schema=schema))[1:]
     i = argv.index("--output-format")
-    argv[i:i + 2] = ["--output-format", "stream-json", "--verbose"]
+    if argv[i + 1] != "stream-json":
+        argv[i:i + 2] = ["--output-format", "stream-json"]
+    if "--verbose" not in argv:
+        argv.append("--verbose")
     if not tools_off:
         j = argv.index("--tools")
         del argv[j:j + 2]
@@ -210,7 +214,7 @@ def completion_no_tools(world) -> Outcome:
 def confine_folder_git(world) -> Outcome:
     """A platform run leaves a repo's git filter alone (NO_FOLDER_GIT), with its positive control: the same run without
     the variable fires it. Model calls, in a repo inside the world."""
-    why = filter_probe(pathlib.Path(world.tmp), exe=rc.binary())
+    why = filter_probe(pathlib.Path(world.tmp))   # the binary under check (rc.binary())
     if why is None:
         return Outcome("pass")
     # NONE: this version runs no git in the folder even without the variable (2.1.322, 11-13): nothing to guard on this

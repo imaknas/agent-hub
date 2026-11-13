@@ -67,6 +67,12 @@ class PromptOnStdin(Scratch):
     """docs/design/project-agent-calls.md A4: a prompt is often a project's text; it never reaches the command line."""
     PROMPT = "--dangerously-skip-permissions and then do x"
 
+    def setUp(self):
+        super().setUp()
+        sys.path.insert(0, str(ROOT / "tests"))
+        import store_fixture
+        store_fixture.stand_in(self)   # the platform's checked copy (its path is _exe's, stood in below)
+
     def task(self):
         return runtime_ports.Task(point="agent-job", prompt=self.PROMPT, spec={"permission_mode": "auto"},
                                   cwd=str(self.ws), env={"PATH": "/usr/bin:/bin"})

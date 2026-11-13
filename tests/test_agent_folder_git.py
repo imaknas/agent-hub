@@ -25,6 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import runtime_claude  # noqa: E402
 import runtime_ports  # noqa: E402
+import store_fixture  # noqa: E402
 import test_bus_sender as tbs  # noqa: E402
 import test_mailbox_dispatch as tmd  # noqa: E402
 import test_worktree_pointer as twp  # noqa: E402
@@ -55,14 +56,11 @@ class StandIn(unittest.TestCase):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         self.seen = self.tmp / "seen.json"
-        exe = self.tmp / "claude"
-        exe.write_text(f"#!{sys.executable}\nimport json, os\n"
-                       f"json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd()}}, open({str(self.seen)!r}, 'w'))\n"
-                       "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
-        exe.chmod(0o755)
-        p = mock.patch.object(hubconf, "tool", lambda name: str(exe))
-        p.start()
-        self.addCleanup(p.stop)
+        # the platform's checked copy, in a stand-in store (it answers with stream-json when asked, as complete() does)
+        store_fixture.stand_in(self, body=f"#!{sys.executable}\nimport json, os, sys\n"
+                               f"json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd()}}, open({str(self.seen)!r}, 'w'))\n"
+                               f"'stream-json' in sys.argv and print({store_fixture.INIT!r})\n"
+                               "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
 
     def var(self):
         return json.loads(self.seen.read_text())["var"]
@@ -105,9 +103,9 @@ class StandIn(unittest.TestCase):
 
     def test_the_completion_path_starts_where_no_sandbox_writes_and_reads_no_settings_file(self):
         seen = self.tmp / "complete.json"
-        exe = pathlib.Path(hubconf.tool("claude"))
-        exe.write_text(f"#!{sys.executable}\nimport json, os, sys\njson.dump({{'cwd': os.getcwd(), 'argv': sys.argv}}, open({str(seen)!r}, 'w'))\n"
-                       "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
+        store_fixture.stand_in(self, body=f"#!{sys.executable}\nimport json, os, sys\njson.dump({{'cwd': os.getcwd(), 'argv': sys.argv}}, open({str(seen)!r}, 'w'))\n"
+                               f"print({store_fixture.INIT!r})\n"
+                               "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
         private = self.tmp / "private"
         private.mkdir()
         with mock.patch.object(hubconf, "private_tmp", lambda: private), mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")):
@@ -136,7 +134,7 @@ class StandIn(unittest.TestCase):
         self.assertTrue(got.error)
         # only making the folder reads that way: anything else keeps its own name
         with mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")), \
-                mock.patch.object(runtime_claude.subprocess, "run", side_effect=PermissionError("the tool")), self.assertRaises(PermissionError):
+                mock.patch.object(runtime_claude.subprocess, "Popen", side_effect=PermissionError("the tool")), self.assertRaises(PermissionError):
             runtime_claude.complete(runtime_ports.CompletionRequest(point="x", prompt="p"), {})
         import propose_apply
         import runtime_command
@@ -329,21 +327,28 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                                                                   "runtime": {"default": "claude"}}))
         (self.tmp / "home" / ".claude").mkdir()
         (self.tmp / "home" / ".claude" / "headless-oauth-token").write_text("t\n")
-        fake = self.tmp / "fakebin"
-        fake.mkdir()
         seen = self.tmp / "seen.json"
-        (fake / "claude").write_text(f"#!{sys.executable}\nimport json, os\n"
-                                     f"import sys; json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd(), 'argv': sys.argv[1:]}}, open({str(seen)!r}, 'w'))\n"
-                                     "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
-        (fake / "claude").chmod(0o755)
+        versions = iter(range(400, 500))
+
+        def promote(body):
+            """The child's checked copy (its store is <its STATE>/runtimes, this process's hubconf.STATE)."""
+            import runtime_store
+            v = f"2.1.{next(versions)}"
+            runtime_store.install("claude", v, store_fixture.Dist(body))
+            runtime_store.promote("claude", v)
+        promote(f"#!{sys.executable}\nimport json, os\n"
+                f"import sys; json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd(), 'argv': sys.argv[1:]}}, open({str(seen)!r}, 'w'))\n"
+                "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
         repo = self.tmp / "repo"
         repo.mkdir()
-        env = {**self.env, "PATH": f"{fake}:{os.environ['PATH']}", "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable, "LLM_AUTH": "token"}
+        env = {**self.env, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable, "LLM_AUTH": "token"}
         r = subprocess.run([sys.executable, str(BIN / "llm.py"), "run", "login-check", "--cwd", str(repo)], input="ok", cwd=repo,
                            capture_output=True, text=True, timeout=60, env=env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         got = json.loads(seen.read_text())
         self.assertEqual((got["var"], got["cwd"]), ("1", str(repo)))
+        self.assertEqual(json.loads(r.stdout.strip().splitlines()[-1])["llm_runtime_version"], "2.1.400",
+                         "each run records the version of the checked copy it ran")
         # both of the probe's runs, the same flags, with the variable and without it
         code = (f"import sys; sys.path.insert(0, {str(BIN)!r}); import conformance_claude as m\n"
                 f"import pathlib; print(repr(m.agent_run(pathlib.Path({str(repo)!r}), sys.argv[1] == 'guarded')))\n")
@@ -359,7 +364,7 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         self.assertNotIn("--restricted", seen_argv["guarded"], "a version too old for the flag must still pass the check before an update")
         # an answer it can't count: ended in an error with exit 0, or nothing it can read
         for said in ("json.dumps({'type': 'result', 'result': 'boom', 'is_error': True, 'session_id': 's', 'num_turns': 1})", "'not an answer'"):
-            (fake / "claude").write_text(f"#!{sys.executable}\nimport json\nprint({said})\n")
+            promote(f"#!{sys.executable}\nimport json\nprint({said})\n")
             for how in ("guarded", "bare"):
                 with self.subTest(said=said, how=how):
                     r = subprocess.run([sys.executable, "-c", code, how], cwd=repo, capture_output=True, text=True, timeout=60, env=env)

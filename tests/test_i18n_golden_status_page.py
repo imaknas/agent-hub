@@ -111,6 +111,9 @@ class StatusPage(unittest.TestCase):
         hub, cfg_dir, data, secrets, state, bus = (tmp / d for d in ("hub", "config", "data", "secrets", "state", "bus"))
         for d in (hub / ".state", hub / ".logs", cfg_dir, data, secrets, state, bus):
             d.mkdir(parents=True, exist_ok=True)
+        if o.get("store", True):   # the coding agent's checked copy, in the instance's store (<STATE>/runtimes)
+            import store_fixture
+            store_fixture.promote_into(state / "runtimes")
         cfg = {"language": {"ui": golden_lang.LANG, "content": golden_lang.LANG}, "bus_dir": str(bus)}
         if o["alerts"]:
             cfg["alerts"] = o["alerts"] if isinstance(o["alerts"], dict) else {"discord": {}}
@@ -199,7 +202,7 @@ class StatusPage(unittest.TestCase):
                "AGENT_HUB_SECRETS": str(secrets), "AGENT_HUB_STATE": str(state), "AGENT_HUB_HOME": "",
                "AGENT_HUB_LANG_UI": golden_lang.LANG, "HOME": str(tmp)}
         with mock.patch.dict(os.environ, env), mock.patch.dict(sys.modules):
-            for m in ("hubconf", "i18n", "completion"):   # completion.USAGE follows STATE
+            for m in ("hubconf", "i18n", "completion", "runtime_store"):   # completion.USAGE and the store follow STATE
                 sys.modules.pop(m, None)
             sys.modules.update(mods)
             spec = importlib.util.spec_from_file_location("gsp_golden", ROOT / "bin" / "gen-status-page.py")
@@ -241,6 +244,8 @@ class StatusPage(unittest.TestCase):
                                                                  backup_module=False)),
             ("an alert on ntfy could not be sent", quiet_options(alerts={"ntfy": {"topic": "t"}}, secrets=False, failures={
                 "secrets": {"at": iso(-H), "text": "HTTP 500"}})),
+            # a fresh install or a restore before its first install: no platform run starts, said in red
+            ("no checked copy of the coding agent", quiet_options(store=False)),
         ]
         for name, o in variants:
             pages = self.build(base / name.split(",")[0].replace(" ", "-"), o)

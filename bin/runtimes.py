@@ -47,7 +47,10 @@ def show_runtime(name: str) -> list[str]:
     if "distribution" not in runtime_ports.capabilities(name):
         return [_("{runtime}: unversioned (no way to install or check a fixed version)", runtime=name)]
     mod = runtime_ports._module(name)
-    exe = mod.binary() if callable(getattr(mod, "binary", None)) else None
+    try:
+        exe = mod.binary() if callable(getattr(mod, "binary", None)) else None
+    except runtime_ports.Unsupported as e:   # no checked copy: what platform runs start is nothing, said
+        return [_("{runtime}: platform runs start nothing: {reason}", runtime=name, reason=e)]
     found = shutil.which(exe) if exe else None
     now = mod.version_of(found) if found else None
     lines = [_("{runtime}: platform runs start {binary} ({version})", runtime=name, binary=found or exe or "-",

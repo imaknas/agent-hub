@@ -220,7 +220,7 @@ class StreamContract(unittest.TestCase):
     def test_same_neutral_events(self):
         shapes = {}
         for name in self.streaming():
-            rt = runtime_ports.load(name)
+            rt = runtime_ports.load(name, platform_runs=False)   # parsing: what a lease's reader does, starting nothing
             events = [e for line in self.SCENARIOS[name] for e in rt.parse_stream(json.dumps(line))]
             for e in events:
                 self.assertIn(e.type, runtime_ports.STREAM_TYPES, name)
@@ -236,13 +236,13 @@ class StreamContract(unittest.TestCase):
 
     def test_exit_classification(self):
         for name in self.streaming():
-            rt = runtime_ports.load(name)
+            rt = runtime_ports.load(name, platform_runs=False)   # parsing: what a lease's reader does, starting nothing
             self.assertEqual(rt.classify_exit(1, "Login expired, please run /login").data["error"], "agent_login", name)
             self.assertEqual(rt.classify_exit(1, "segfault").data["error"], "process_crashed", name)
 
     def test_resume_command(self):
         for name in self.streaming():
-            cmd, hint = runtime_ports.load(name).resume_command("s1")
+            cmd, hint = runtime_ports.load(name, platform_runs=False).resume_command("s1")
             self.assertIn("s1", cmd)
             self.assertTrue(hint)
 

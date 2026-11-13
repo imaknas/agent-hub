@@ -296,14 +296,14 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
                                 "retried", provider=target["provider"], model=target["model"], max_tokens=max_tokens))
             raise Refused(f"{target['provider']}/{target['model']}:{res.stop}:{res.error}")
         if schema is None:
-            return _out(point, target, res.text, None, cost_total)
+            return _out(point, target, res.text, None, cost_total, res)
         try:
             obj = parse_json(res.text)
             last_errs = minischema.errors(schema, obj)
         except ValueError:
             obj, last_errs = None, [_("not JSON")]
         if not last_errs:
-            return _out(point, target, res.text, obj, cost_total)
+            return _out(point, target, res.text, obj, cost_total, res)
         if left == 0:
             break
         req = req._replace(prompt=prompt + "\n\n---\nThe previous answer was not valid (" + "; ".join(last_errs[:5])
@@ -313,10 +313,13 @@ def run(point: str, spec: dict, prompt: str, schema: dict | None, sleep=time.sle
     raise Refused(_("output does not match the schema (after one retry): {errors}", errors="; ".join(last_errs[:3])))
 
 
-def _out(point, target, text, obj, cost) -> dict:
+def _out(point, target, text, obj, cost, res=None) -> dict:
     # the field names are the ones llm.py has always given its callers (librarian, consolidate… read these)
-    return {"type": "result", "is_error": False, "result": text, "structured_output": obj, "total_cost_usd": cost or None,
-            "llm_point": point, "provider": target["provider"], "model": target["model"], "llm_model": target["model"]}
+    out = {"type": "result", "is_error": False, "result": text, "structured_output": obj, "total_cost_usd": cost or None,
+           "llm_point": point, "provider": target["provider"], "model": target["model"], "llm_model": target["model"]}
+    if getattr(res, "runtime_version", None):   # a runtime's completion: the version of its checked copy that ran
+        out["llm_runtime_version"] = res.runtime_version
+    return out
 
 
 def health_all() -> list[tuple[str, bool, str]]:

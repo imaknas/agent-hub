@@ -226,7 +226,7 @@ class E3(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             proj = pathlib.Path(d) / "rates"
             e3.build(proj, "new", "note")
-            rules = e3.runtime_ports.load().instructions_file(proj).read_text()
+            rules = e3.runtime_ports.load(ports=("instructions",)).instructions_file(proj).read_text()
             self.assertTrue(rules.startswith("<!-- brunna:begin -->"))
             self.assertNotIn("{{owner}}", rules, "names are filled in")
             for f in (".agent-memory/AGENT.md", ".agent-memory/STATE.md", "README.md"):
@@ -335,7 +335,7 @@ class E3(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             proj = pathlib.Path(d) / "rates"
             e3.build(proj, "new", "mcp")
-            self.assertFalse(e3.runtime_ports.load().instructions_file(proj).exists(), "no rules file: MCP only")
+            self.assertFalse(e3.runtime_ports.load(ports=("instructions",)).instructions_file(proj).exists(), "no rules file: MCP only")
             cfg = json.loads(e3.mcp_config(pathlib.Path(d) / "mcp.json", "new", pathlib.Path(d),
                                            {"AGENT_HUB_CONFIG": "/c", "AGENT_HUB_STATE": "/s"}).read_text())
         server = cfg["mcpServers"]["brunna"]

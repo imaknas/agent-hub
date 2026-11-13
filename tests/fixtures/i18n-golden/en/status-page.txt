@@ -253,3 +253,18 @@ sqlite3.DatabaseError: file is not a database</span></li></ul></section></div>
 <div class=sub>No reports yet</div>
 <footer class=sub>the hub machine · generated 2026-10-30 10:00 · refreshes every 5 minutes · schedules are defined in the project registry (projects/) and schedule.yaml · config ccccccc</footer>
 </main>
+=== no checked copy of the coding agent
+<main>
+<header class=top><div class=brand><svg class=mark viewBox="0 0 256 256" aria-hidden="true"><g stroke="currentColor" stroke-width="14" stroke-linecap="round"><line x1="128" y1="69.5" x2="128" y2="103.5"/><line x1="195.5" y1="186.5" x2="166.1" y2="169.5"/><line x1="60.5" y1="186.5" x2="89.9" y2="169.5"/></g><g fill="currentColor"><circle cx="128" cy="69.5" r="22"/><circle cx="195.5" cy="186.5" r="22"/><circle cx="60.5" cy="186.5" r="22"/><circle cx="128" cy="147.5" r="26"/></g><circle cx="128" cy="147.5" r="44" fill="none" stroke="currentColor" stroke-width="14"/></svg><div><div class=name>brunna</div><h1>Schedule status</h1></div></div><span class='pill bad'><i class=dot></i>1 problem</span></header>
+<nav class=links><a href="digest.html">Digest</a> · <a href="todo.html">To-do</a> · <a href="reflect/">Weekly review</a></nav>
+<div class=tiles><div class='tile '><b>0</b><span>need you</span></div><div class='tile '><b>0</b><span>letters open</span></div><div class='tile hot'><b>1</b><span>problem</span></div><div class='tile '><b>09:55</b><span>scheduler ticking</span></div></div>
+<div class=grid><section class=card><h2>Needs you<span class=sub>newest first</span></h2><div class=empty><i class='dot good'></i>Nothing needs you right now.</div><div class=sub>What needs you could not be read: TypeError(&quot;string indices must be integers, not &#x27;str&#x27;&quot;)</div></section><section class=card><h2>Mail<span class=sub>open letters by project</span></h2><div class=empty><i class='dot good'></i>No open letters</div></section><section class='card wide'><h2>Problems<span class=sub>1</span></h2><ul class='alerts bad'><li><i class=dot></i><span>The platform starts no claude run: no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)</span></li></ul></section></div>
+<h2>Scheduled jobs<span class=sub>1</span></h2>
+<div class=tbl><table class=jobs><thead><tr><th>Job</th><th>When</th><th>Last</th><th>Next</th></tr></thead>
+<tbody><tr class='job'><td class=name><i class='dot c3'></i><b>alpha/daily</b></td><td class=when>weekly on Mon, Wed, Fri at 08:00</td><td class=last><span class='st ok'>succeeded</span> <span class=sub>10-30 08:00</span></td><td class=next data-l='Next'>Mon 11/02 08:00</td></tr></tbody></table></div>
+<h2>Project mailboxes</h2><div class=sub>No open letters</div>
+<h2>Parallel sessions (worktrees)</h2><div class=sub>No worktrees in progress</div>
+<h2>Claude job reports</h2>
+<div class=sub>No reports yet</div>
+<footer class=sub>the hub machine · generated 2026-10-30 10:00 · refreshes every 5 minutes · schedules are defined in the project registry (projects/) and schedule.yaml · config ccccccc</footer>
+</main>

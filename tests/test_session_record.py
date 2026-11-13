@@ -716,14 +716,15 @@ class SessionStatus(unittest.TestCase):
         self.rc = runtime_claude
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
-        self.exe = self.tmp / "claude"
-        p = mock.patch.object(hubconf, "tool", lambda name: str(self.exe))
-        p.start()
-        self.addCleanup(p.stop)
+        # the CLI is the platform's checked copy: a stand-in store, empty until cli() promotes one
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import store_fixture
+        self.store = store_fixture.Store(self.tmp).patch()
+        self.addCleanup(self.store.stop)
+        self.versions = iter(range(400, 500))
 
     def cli(self, body):
-        self.exe.write_text("#!/bin/sh\n" + body)
-        self.exe.chmod(0o755)
+        self.store.start("#!/bin/sh\n" + body, version=f"2.1.{next(self.versions)}")
 
     def listing(self, *rows):
         self.cli(f"cat <<'E'\n{json.dumps(list(rows))}\nE\n")

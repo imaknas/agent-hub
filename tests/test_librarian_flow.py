@@ -29,8 +29,10 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
 import names  # noqa: E402
+import store_fixture  # noqa: E402
 import todo_tokens  # noqa: E402
 
 # a zh-Hant instance: the memory repos' content (tests/fixtures/librarian-flow.zh-Hant.json) and STATE.md's to-do tokens
@@ -114,6 +116,7 @@ class Env:
         (self.hub / "templates" / "prompts").symlink_to(ROOT / "templates" / "prompts")   # the judgment points' prompts
         for d in ("projects", ".state", ".logs", "digest"):
             (self.hub / d).mkdir()
+        store_fixture.promote_into(self.hub / ".state" / "runtimes")   # what llm_ready reads: a checked copy is there
         (self.hub / "index.md").write_text("# index\n")
         (self.hub / "hub.json").write_text(json.dumps({
             "v": 1, "registry_dir": "projects", "memory_copies": str(tmp / "copies"), "git_origin": str(tmp / "bare"),

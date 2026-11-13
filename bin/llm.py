@@ -365,8 +365,9 @@ def run(a) -> int:
         # that gets the mail tools needs the runtime to attach the platform's server
         ports = ("agent",) + (("confine",) if confined else ()) + (("rule_check",) if spec.get("settings") == "platform" else ()) \
             + (("run_server",) if mail_tools(spec, os.environ) else ())
-        rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports)
-    except runtime_ports.Unsupported as e:   # no coding agent: take the declared failure path, reason spelled out
+        # a dry run starts nothing: it describes the run even with no checked copy of the tool to start it with
+        rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports, platform_runs=not getattr(a, "dry_run", False))
+    except runtime_ports.Unsupported as e:   # no coding agent, or no checked copy of it: the declared failure path, said
         return fail(key, spec, str(e))
     # works_in: memory: the folder is a copy of a project's memory branch, so an agent started there loads what the project wrote. What
     # holds it is this look at the files, on every runtime: only notes, or no run
@@ -620,18 +621,21 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str 
             print(_("llm.py: {point}: this runtime does not support long-running streaming sessions", point=a.point),
                   file=sys.stderr)
             return 2
-        rt.exec_stream(task)
+        try:
+            rt.exec_stream(task)
+        except (ValueError, runtime_ports.Unsupported) as e:   # no checked copy (or it changed): not started, said
+            return fail(key, spec, str(e))
         return 0
     if getattr(a, "dry_run", False):
         try:
             print(json.dumps(rt.describe(task), ensure_ascii=False))
-        except ValueError as e:   # the declaration can't be met (e.g. settings: platform without its project)
+        except (ValueError, runtime_ports.Unsupported) as e:   # the declaration can't be met (e.g. settings: platform without its project)
             print(e, file=sys.stderr)
             return 2
         return 0
     try:
         res = rt.run(task)
-    except ValueError as e:
+    except (ValueError, runtime_ports.Unsupported) as e:
         return fail(key, spec, str(e))
     if how:   # a strength the project chose: every run is a usage row (the metered ones count toward the budget)
         import completion
@@ -646,11 +650,13 @@ def _launch(a, spec: dict, rt, env: dict, prompt: str, model, run_dir, how: str 
             return fail(key, spec, _("output does not match the schema: {errors}", errors="; ".join(errs[:3])))
     # the output field names are llm.py's agreement with its callers (librarian, consolidate, lease-runner… read
     # these), not changed by the runtime
-    print(json.dumps({"type": "result", "is_error": res.incomplete, "result": res.text,
-                      "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
-                      "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
-                      "permission_denials": list(res.denials), "llm_point": key, "llm_model": model},
-                     ensure_ascii=False))
+    out = {"type": "result", "is_error": res.incomplete, "result": res.text,
+           "structured_output": res.structured_output, "total_cost_usd": res.cost_usd,
+           "session_id": res.session_id, "num_turns": res.turns, "subtype": res.stop,
+           "permission_denials": list(res.denials), "llm_point": key, "llm_model": model}
+    if getattr(res, "runtime_version", None):   # the version of the tool's checked copy the run started
+        out["llm_runtime_version"] = res.runtime_version
+    print(json.dumps(out, ensure_ascii=False))
     return 0
 
 

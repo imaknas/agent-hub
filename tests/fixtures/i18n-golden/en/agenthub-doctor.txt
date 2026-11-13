@@ -35,7 +35,8 @@ $ agenthub doctor    # launchd, problems
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ scheduled agent jobs that send mail (mail: true): available
 ✓ a project's own agent calls (brunna agent): available
-· the runtime claude has no checked copy in the store yet (brunna runtimes install claude); the nightly brunna/update-runtimes makes one
+✗ the runtime claude starts no platform run: no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)
+    → no npm from nvm's node on this machine: the platform installs its own copy of Claude Code with it. Install nvm and a node version (nvm install --lts), then run brunna runtimes install claude
 ✗ agent login (headless token): missing
     → rerun `claude setup-token` and write it to <TMP>/home/.claude/headless-oauth-token
 ! agent login (~/.claude/.credentials.json): missing
@@ -54,7 +55,7 @@ $ agenthub doctor    # launchd, problems
 ! background services, project settings: 2 changes not applied yet
     → brunna config plan, then brunna config apply
 
-5 problems, 5 reminders
+6 problems, 5 reminders
 --- stderr
 
 $ agenthub doctor    # launchd, all fine
@@ -85,7 +86,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ a sandboxed project can't write what its sessions load hooks and settings from: available
 ✓ scheduled agent jobs that send mail (mail: true): available
 ✓ a project's own agent calls (brunna agent): available
-· the runtime claude has no checked copy in the store yet (brunna runtimes install claude); the nightly brunna/update-runtimes makes one
+✓ the runtime claude: checked copy 2.1.400 in the store
 ! 2 letters in the last 7 days woke a session that then didn't take them (the latest: <ID> to beta); the coding agent may have changed how it handles the wake
     → the status page's mailbox section shows each letter's path; hub-event.log has each waiter's end
 ✓ agent login (headless token): present
@@ -203,7 +204,7 @@ $ agenthub doctor    # two coding agents
 ✓ claude: the platform's rules go into CLAUDE.local.md
 · acp: no rules file; its sessions get the platform's rules from the MCP server's instructions (brunna mcp) or their session-start hook
 · the runtime acp has no way to tell whether a session is busy, idle or waiting on a dialog or way to read how a session's last reply ended: routing a letter takes its sessions as idle, and reads nothing they said
-· the runtime claude has no checked copy in the store yet (brunna runtimes install claude); the nightly brunna/update-runtimes makes one
+✓ the runtime claude: checked copy 2.1.400 in the store
 · the runtime acp is unversioned: the platform can't install or check a fixed version of it, so its runs use whichever copy is on PATH
 · the runtime acp runs in a project's folder, and whether it runs git of its own there, outside any sandbox, isn't known: a sandboxed project's repo config could then run as you
 ✓ agent login (headless token): present

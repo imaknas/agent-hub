@@ -267,6 +267,8 @@ class Golden(unittest.TestCase):
                        alerts={"discord_token_file": "a", "discord_channel_file": "b"})
         (self.tmp / "home" / ".claude").mkdir()
         (self.tmp / "home" / ".claude" / "headless-oauth-token").write_text("t\n")
+        import store_fixture   # and its checked copy in the store (the scenario above has none: red, said why)
+        store_fixture.promote_into(self.tmp / "state" / "runtimes")
         self.heartbeat(0)
         # a newer release is out (doctor asks the remote: no record yet), and the checkout moved by hand since upgrade
         (self.tmp / "state" / "upgrade.json").write_text(json.dumps({"commit": "b" * 40, "version": "v0.1.0"}))

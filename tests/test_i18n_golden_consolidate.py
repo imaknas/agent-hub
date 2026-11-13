@@ -58,6 +58,9 @@ class Consolidate(unittest.TestCase):
         for d in ("bare", "copies", "hub/.state", "hub/.logs", "bin", "data", "private"):
             (self.tmp / d).mkdir(parents=True)
         sys.path.insert(0, str(ROOT / "bin"))
+        sys.path.insert(0, str(ROOT / "tests"))
+        import store_fixture
+        store_fixture.stand_in(self)   # what llm_ready reads: a checked copy is there
         import hubconf
         private = mock.patch.object(hubconf, "private_tmp", lambda: self.tmp / "private")   # a run it keeps stays there, not in the tree's
         private.start()

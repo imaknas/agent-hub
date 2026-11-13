@@ -19,6 +19,7 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+sys.path.insert(0, str(ROOT / "tests"))
 import completion  # noqa: E402
 import i18n  # noqa: E402
 import runtime_fake  # noqa: E402
@@ -436,6 +437,8 @@ class ReadOnlySecrets(Base):
         never = mock.patch("subprocess.run", side_effect=AssertionError("nothing may run"))
         never.start()
         self.addCleanup(never.stop)
+        import store_fixture
+        store_fixture.stand_in(self)   # the checked copy is there: what refuses is the run's folder
         self.llm = None   # no llm section (Base's settings read it at call time): llm.py's run goes to the runtime
 
     def test_the_premise_private_tmp_raises(self):
@@ -477,6 +480,8 @@ class CompletionContract(unittest.TestCase):
     """The completion interface: every runtime that has it and every provider implement it completely."""
 
     def test_every_impl_loads(self):
+        import store_fixture
+        store_fixture.stand_in(self)   # a runtime's completion runs its checked copy
         names = [*runtime_ports.PROVIDERS, *[n for n in runtime_ports.RUNTIMES
                                              if "completion" in runtime_ports.capabilities(n)]]
         self.assertIn("claude", names)
@@ -486,28 +491,33 @@ class CompletionContract(unittest.TestCase):
                 self.assertTrue(callable(m.complete) and callable(m.health))
 
     def test_claude_runs_without_tools_from_stdin_in_an_empty_dir(self):
+        import sys
+        import tempfile
+        import hubconf
         import runtime_claude
-        seen = {}
-
-        def fake_run(cmd, **kw):
-            seen.update(cmd=cmd, **kw)
-            seen["files"] = os.listdir(kw["cwd"])
-            class R:
-                returncode, stderr = 0, ""
-                stdout = json.dumps({"result": "", "structured_output": {"answer": "c"}, "total_cost_usd": 0.01,
-                                     "usage": {"input_tokens": 3, "output_tokens": 2}})
-            return R()
-
-        with mock.patch.object(runtime_claude.subprocess, "run", fake_run), \
+        import store_fixture
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        seen = tmp / "seen.json"
+        result = {"type": "result", "result": "", "structured_output": {"answer": "c"}, "total_cost_usd": 0.01,
+                  "usage": {"input_tokens": 3, "output_tokens": 2}}
+        # the checked copy notes what it was given and answers in stream-json, as complete() reads it
+        store_fixture.stand_in(self, body=f"#!{sys.executable}\nimport json, os, sys\n"
+                               f"json.dump({{'cmd': sys.argv[1:], 'input': sys.stdin.read(), 'files': os.listdir('.')}}, open({str(seen)!r}, 'w'))\n"
+                               f"print({store_fixture.INIT!r})\nprint({json.dumps(result)!r})\n")
+        private = tmp / "private"
+        private.mkdir()
+        with mock.patch.object(hubconf, "private_tmp", lambda: private), \
              mock.patch.object(runtime_claude, "auth_env", lambda mode, env: ({"PATH": "/usr/bin"}, "")):
             r = runtime_claude.complete(REQ, {})
         self.assertEqual(json.loads(r.text), {"answer": "c"})
-        cmd = seen["cmd"]
+        got = json.loads(seen.read_text())
+        cmd = got["cmd"]
         self.assertEqual(cmd[cmd.index("--tools") + 1], "")
         self.assertIn("--strict-mcp-config", cmd)
         self.assertNotIn("hi", cmd, "the prompt comes on stdin, not in argv")
-        self.assertEqual(seen["input"], "hi")
-        self.assertEqual(seen["files"], [], "runs in an empty temp directory")
+        self.assertEqual(got["input"], "hi")
+        self.assertEqual(got["files"], [], "runs in an empty temp directory")
 
 
 if __name__ == "__main__":

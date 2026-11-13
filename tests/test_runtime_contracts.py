@@ -119,20 +119,16 @@ class ClaudeFixture:
         return m, {"CLAUDE_CODE_SESSION_ID": SID}
 
     def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
-        """Put a fake claude first on PATH: calls no model, prints claude -p's JSON or fails, depending on mode."""
-        b = tmp / "bin"
-        b.mkdir(exist_ok=True)
+        """A fake claude as the platform's checked copy, in a stand-in store: calls no model, prints claude -p's JSON or
+        fails, depending on mode."""
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import store_fixture
         out = {"ok": {"type": "result", "is_error": False, "result": RUN_OK["text"], "structured_output": RUN_OK["structured_output"],
                       "total_cost_usd": RUN_OK["cost"], "session_id": RUN_OK["session"], "num_turns": RUN_OK["turns"], "subtype": "success"},
                "incomplete": {"type": "result", "is_error": True, "result": "stopped", "num_turns": 50, "subtype": "error_max_turns"}}
-        script = b / "claude"
-        if mode == "fail":
-            script.write_text("#!/bin/sh\necho 'boom: login expired' >&2\nexit 1\n")
-        else:
-            script.write_text("#!/bin/sh\ncat <<'EOF'\n" + json.dumps(out[mode]) + "\nEOF\n")
-        script.chmod(0o755)
-        self._path = os.environ["PATH"]
-        os.environ["PATH"] = f"{b}:{self._path}"
+        self._store = store_fixture.Store(tmp)
+        self._store.start("#!/bin/sh\necho 'boom: login expired' >&2\nexit 1\n" if mode == "fail"
+                          else "#!/bin/sh\ncat <<'EOF'\n" + json.dumps(out[mode]) + "\nEOF\n")
         return dict(os.environ)
 
     def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
@@ -174,8 +170,9 @@ class ClaudeFixture:
         if getattr(self, "_secrets", None):
             self._secrets.stop()
             self._secrets = None
-        if getattr(self, "_path", None):
-            os.environ["PATH"] = self._path
+        if getattr(self, "_store", None):
+            self._store.stop()
+            self._store = None
         if getattr(self, "_home", None):
             os.environ["HOME"] = self._home
 
@@ -435,9 +432,11 @@ class WakeContract(unittest.TestCase):
         for name in ("acp", "command", "none"):
             with self.subTest(runtime=name):
                 self.assertNotIn("session_status", runtime_ports.capabilities(name))
-        import hubconf
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import store_fixture
+        store_fixture.empty(self)   # no copy to list with: within the vocabulary still (unlisted)
         for name in having("session_status"):
-            with self.subTest(runtime=name), mock.patch.object(hubconf, "tool", lambda t: "/nonexistent/agent"):
+            with self.subTest(runtime=name):
                 self.assertIn(runtime_ports._module(name).session_status("00000000-0000-4000-8000-000000000000"),
                               runtime_ports.SESSION_STATUSES)
 

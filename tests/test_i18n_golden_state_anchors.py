@@ -102,6 +102,9 @@ class Golden(unittest.TestCase):
 
     def test_state_anchors(self):
         m = load()
+        sys.path.insert(0, str(ROOT / "tests"))
+        import store_fixture
+        store_fixture.stand_in(self)   # what llm_ready reads: a checked copy is there
         out = []
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"AGENT_HUB_DATA": d}):
             d_ = pathlib.Path(d)

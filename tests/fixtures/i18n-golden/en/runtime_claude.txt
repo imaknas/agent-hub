@@ -4,6 +4,10 @@
 (False, "the sandbox is not in this project's settings yet (sandbox.enabled is not true)")
 === transcript format
 <TMP>/transcripts/<TMP-SLUG>-ws/s1.jsonl: 5 records, none in a known format (did Claude Code change its transcript format?)
+=== run: no checked copy
+(False, 'no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)')
+=== health: no checked copy
+(False, 'no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)')
 === run: timeout
 (False, 'over 20 minutes')
 === run: not found
@@ -56,7 +60,9 @@ StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1: s
 (False, 'error', 'over 30 seconds')
 === complete: not found
 (False, 'error', 'claude not found')
-=== health: not found
-(False, 'claude not found')
+=== complete: a tool
+(False, 'error', 'the run of p listed tools a completion never has (Bash): ended, its result refused')
+=== complete: no init event
+(False, 'error', "the run of p gave no init event before its result, so its tools can't be told: its result refused")
 === health: token missing
 (False, '<TMP>/home/.claude/headless-oauth-token does not exist (the default is the headless token; to use the subscription login, declare auth: subscription)')

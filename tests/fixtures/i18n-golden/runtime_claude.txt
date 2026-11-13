@@ -4,6 +4,10 @@
 (False, 'sandbox 還沒寫進這個專案的設定(sandbox.enabled 不是 true)')
 === transcript format
 <TMP>/transcripts/<TMP-SLUG>-ws/s1.jsonl:5 筆紀錄沒有一筆是認得的格式(Claude Code 改了對話紀錄格式?)
+=== run: no checked copy
+(False, '還沒有檢查過的 Claude Code:brunna runtimes install claude 會做一份(每晚的 brunna/update-runtimes 也會)')
+=== health: no checked copy
+(False, '還沒有檢查過的 Claude Code:brunna runtimes install claude 會做一份(每晚的 brunna/update-runtimes 也會)')
 === run: timeout
 (False, '超過 20 分鐘')
 === run: not found
@@ -56,7 +60,9 @@ StreamEvent(type='error', data={'error': 'process_crashed', 'detail': 'exit 1:se
 (False, 'error', '超過 30 秒')
 === complete: not found
 (False, 'error', '找不到 claude')
-=== health: not found
-(False, '找不到 claude')
+=== complete: a tool
+(False, 'error', 'p 的執行列出了 completion 不該有的工具(Bash):已中止,結果不採用')
+=== complete: no init event
+(False, 'error', 'p 的執行在結果之前沒有 init 事件,看不出它有哪些工具:結果不採用')
 === health: token missing
 (False, '沒有 <TMP>/home/.claude/headless-oauth-token(預設用 headless token;要用訂閱登入就宣告 auth: subscription)')

@@ -80,6 +80,12 @@ $ llm.py run agent-job    # no agent
 {"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "runtime none has no agent runs (brunna.json runtime.default; to use this feature, install a coding agent that supports it)"}
 --- stderr
 
+$ llm.py run agent-job    # no checked copy
+[exit 1]
+--- stdout
+{"type": "result", "is_error": true, "structured_output": null, "llm_point": "agent-job", "llm_error": "no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)"}
+--- stderr
+
 $ llm.py run agent-job    # token missing
 [exit 1]
 --- stdout

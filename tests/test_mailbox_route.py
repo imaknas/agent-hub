@@ -1174,12 +1174,7 @@ class ThroughTheService(tbs.WorktreeFixture):
 
     def setUp(self):
         super().setUp()
-        self.bin = self.tmp / "fakebin"
-        self.bin.mkdir()
         self.calls = self.tmp / "agents-calls"
-        exe = self.bin / "claude"
-        exe.write_text(f'#!/bin/sh\necho "$@" >> "{self.calls}"\ncat "{self.tmp / "agents.json"}"\n')
-        exe.chmod(0o755)
         (self.tmp / "agents.json").write_text(json.dumps([{"sessionId": self.SID, "status": "idle"}]))
         self.sessions = self.tmp / "secrets" / "sessions"
         self.sessions.mkdir(parents=True, exist_ok=True)
@@ -1194,15 +1189,37 @@ class ThroughTheService(tbs.WorktreeFixture):
         (self.sessions / f"{self.SID}.live").write_text(json.dumps({"runtime": "claude", "pid": self.proc.pid, "start": start, "cwd": str(self.ws[project]), "project": project}))
         (self.sessions / f"{self.SID}.waiter").write_text("1-a")
 
+    def checked_copy(self):
+        """The platform's checked copy, in the child's store (<its STATE>/runtimes, this process's hubconf.STATE too):
+        the agents listing's stand-in."""
+        import runtime_store
+        import store_fixture
+        runtime_store.install("claude", "2.1.400", store_fixture.Dist(
+            f'#!/bin/sh\necho "$@" >> "{self.calls}"\ncat "{self.tmp / "agents.json"}"\n'))
+        runtime_store.promote("claude", "2.1.400")
+
     def run_dispatch(self):
-        env = {**self.env, "PATH": f"{self.bin}:{tbs.os.environ['PATH']}"}
+        env = dict(self.env)
         r = tbs.subprocess.run([sys.executable, str(tbs.BIN / "hubbus"), "dispatch"], env=env, cwd=self.tmp, capture_output=True, text=True, timeout=120)
         self.assertEqual(r.returncode, 0, r.stderr)
 
     def requests(self):
         return [p for p in self.sessions.iterdir() if ".wake-" in p.name]
 
+    def test_with_no_checked_copy_it_routes_and_wakes_nobody(self):
+        """An empty store (a fresh install, a restore): the listing can't be asked, so the session is unlisted; the letter is
+        routed to it (its hook shows it at the next turn) and no wake, fork or triage starts (runtime-versions.md section 3)."""
+        self.on_record("open")
+        mid = self.letter_id(self.hubbus("send", "--from", "brunna", "--to", "open", "--type", "request", "--text", "please look").stdout)
+        self.run_dispatch()
+        self.assertEqual([json.loads(r["payload"]).get("by") for r in self.rows("type='message.routed' AND ref=?", (mid,))], ["only"])
+        self.assertEqual(self.rows("type='message.woken' AND ref=?", (mid,)), [])
+        self.assertEqual(self.requests(), [])
+        self.assertFalse(self.calls.exists(), "nothing ran")
+        self.assertEqual(self.rows("type='message.delivered' AND ref=?", (mid,)), [])
+
     def test_the_whole_way(self):
+        self.checked_copy()
         self.on_record("open")
         mid = self.letter_id(self.hubbus("send", "--from", "brunna", "--to", "open", "--type", "request", "--text", "please look").stdout)
         self.run_dispatch()
@@ -1289,13 +1306,11 @@ class StatusOncePerTick(Harness):
 
     def test_through_the_router_one_look_for_many_sessions(self):
         import runtime_ports
-        exe = self.tmp / "claude"
+        import store_fixture
         calls = self.tmp / "calls"
         rows = [{"sessionId": "a", "status": "busy"}, {"sessionId": "b", "status": "waiting"}]
-        exe.write_text(f"#!/bin/sh\necho x >> '{calls}'\ncat <<'E'\n{json.dumps(rows)}\nE\n")
-        exe.chmod(0o755)
-        with mock.patch.object(self.m.hubconf, "tool", lambda name: str(exe)):
-            got = runtime_ports.Sessions(["claude"]).session_statuses(["a", "b", "c"])
+        store_fixture.stand_in(self, body=f"#!/bin/sh\necho x >> '{calls}'\ncat <<'E'\n{json.dumps(rows)}\nE\n")
+        got = runtime_ports.Sessions(["claude"]).session_statuses(["a", "b", "c"])
         self.assertEqual(got, {"a": "busy", "b": "waiting", "c": "unknown"})
         self.assertEqual(calls.read_text().count("x"), 1)
 

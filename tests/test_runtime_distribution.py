@@ -92,14 +92,17 @@ class BinarySeam(unittest.TestCase):
         runtime_claude.check_binary(None)
 
     def test_only_in_process(self):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import store_fixture
+        exe = str(store_fixture.stand_in(self))   # outside a check, the store's checked copy
         with mock.patch.object(runtime_claude, "_CHECKED", None), \
                 mock.patch.dict(os.environ, {"BRUNNA_CLAUDE": "/evil", "CLAUDE_BINARY": "/evil", "AGENT_HUB_CLAUDE": "/evil"}):
-            self.assertNotEqual(runtime_claude.binary(), "/evil", "no environment variable chooses it")
+            self.assertEqual(runtime_claude.binary(), exe, "no environment variable chooses it")
         runtime_claude.check_binary("/store/2.1.400/node_modules/.bin/claude")
         self.assertEqual(runtime_claude.binary(), "/store/2.1.400/node_modules/.bin/claude")
         self.assertEqual(runtime_claude._exe(), runtime_claude.binary())
         runtime_claude.check_binary(None)
-        self.assertNotEqual(runtime_claude.binary(), "/store/2.1.400/node_modules/.bin/claude")
+        self.assertEqual(runtime_claude.binary(), exe)
 
 
 if __name__ == "__main__":

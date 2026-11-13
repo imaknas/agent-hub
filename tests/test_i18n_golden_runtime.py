@@ -34,6 +34,7 @@ from runtime_ports import CompletionResult, Task, TaskResult  # noqa: E402
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import golden_lang  # noqa: E402
+import store_fixture  # noqa: E402
 
 GOLDEN = golden_lang.GOLDEN
 UPDATE = os.environ.get("I18N_GOLDEN_UPDATE") == "1"
@@ -125,6 +126,11 @@ class RuntimeGolden(unittest.TestCase):
         except sessions.SessionFormatError as e:
             self.say("transcript format", str(e))
 
+        store_fixture.empty(self)
+        self.say("run: no checked copy", tuple(rc.run(Task(point="p", prompt="hi", spec={}, env={"PATH": "/usr/bin"}))[i]
+                                               for i in (0, 9)))
+        self.say("health: no checked copy", rc.health({"auth": "subscription"}))
+        store_fixture.stand_in(self)
         task = Task(point="p", prompt="hi", spec={}, timeout_s=1200, env={"PATH": "/usr/bin"})
         cases = (("timeout", subprocess.TimeoutExpired("claude", 1)), ("not found", FileNotFoundError()),
                  ("exit", subprocess.CompletedProcess([], 2, "", "bad things")),
@@ -162,14 +168,23 @@ class RuntimeGolden(unittest.TestCase):
             self.say(f"credential {c.mode}", (c.name, c.label, c.renew, c.lifetime, c.used_by, c.note))
 
         req = runtime_ports.CompletionRequest(point="p", prompt="hi", model=None, schema=None, max_tokens=10, timeout_s=30)
-        for label, exc in (("timeout", subprocess.TimeoutExpired("claude", 30)), ("not found", FileNotFoundError())):
-            with mock.patch.object(rc.subprocess, "run", side_effect=exc):
+        import threading
+        timer = threading.Timer
+        store_fixture.stand_in(self, body="#!/bin/sh\nexec sleep 30\n")
+        with mock.patch("threading.Timer", lambda _s, fn: timer(0.2, fn)):   # its 30 seconds, passed at once
+            r = rc.complete(req, {"auth": "subscription"})
+        self.say("complete: timeout", (r.ok, r.stop, r.error))
+        with mock.patch.object(rc.subprocess, "Popen", side_effect=FileNotFoundError()):
+            r = rc.complete(req, {"auth": "subscription"})
+        self.say("complete: not found", (r.ok, r.stop, r.error))
+        for label, tools in (("a tool", ["Bash"]), ("no init event", None)):
+            init = json.dumps({"type": "system", "subtype": "init", "tools": tools})
+            store_fixture.stand_in(self, body="#!/bin/sh\ncat > /dev/null\n" + (f"echo '{init}'\n" if tools else "")
+                                   + "echo '{\"type\": \"result\", \"result\": \"ok\"}'\n")
+            with mock.patch("alert.once", lambda *a, **k: None):
                 r = rc.complete(req, {"auth": "subscription"})
             self.say(f"complete: {label}", (r.ok, r.stop, r.error))
-        with mock.patch.object(rc, "_exe", lambda: str(self.tmp / "no-claude")):
-            self.say("health: not found", rc.health({"auth": "subscription"}))
-        with mock.patch.object(rc, "_exe", lambda: sys.executable):
-            self.say("health: token missing", rc.health({"auth": "token"}))
+        self.say("health: token missing", rc.health({"auth": "token"}))
         self.check("runtime_claude")
 
     # ---------- completion ----------
@@ -268,6 +283,9 @@ class RuntimeGolden(unittest.TestCase):
         self.cli("runtime without stream", ["exec", "lease-session"], fake)
         self.cli("no completion", ["run", "reflect-week"], none)
         self.cli("no agent", ["run", "agent-job"], none)
+        store_fixture.empty(self)
+        self.cli("no checked copy", ["run", "agent-job"], claude)
+        store_fixture.stand_in(self)
         self.cli("token missing", ["run", "agent-job"], claude)
         runtime_fake.set_reply("consolidate", TaskResult(True, text="", structured_output={"bad": 1}))
         copy = self.tmp / "memory-copy"   # it works in a copy of a memory branch, and starts nowhere else (llm.py: works_in)

@@ -8,7 +8,9 @@ Regenerate only when the judgment point declarations (contracts/llm-points.yaml)
     LLM_GOLDEN_UPDATE=1 bin/py -m unittest tests.test_llm_golden
 
 Prints and stores no token value (a fake token file; only records "passed or not"). Machine-specific paths become
-<HUB>, <HOME>, claude.
+<HUB>, <HOME>, claude. The run's environment is recorded by name only (which of the variables that pin the platform's
+checked copy and choose its config dir it gets, and the head of its PATH inside a stand-in store, <STORE>), never a
+value (docs/design/runtime-versions.md step 2, item 5).
 """
 import argparse
 import contextlib
@@ -24,10 +26,14 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import store_fixture  # noqa: E402
 GOLDEN = ROOT / "tests" / "fixtures" / "llm-golden.json"
 TOKEN_ENV = "CLAUDE_CODE_OAUTH_TOKEN"
 # what a run without the sealing flag would load from the environment (fixture names)
 AMBIENT = ["claude_ai_Example", "fixture-prod-db", "plugin_example_tools"]
+# the variables whose presence the golden records (never their values)
+ENV_NAMES = ("CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "npm_config_prefix", "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS")
 
 try:
     import yaml  # noqa: F401  llm.py needs it
@@ -57,6 +63,10 @@ class Golden(unittest.TestCase):
         home = mock.patch.dict(os.environ, {"HOME": str(tmp)})
         home.start()
         self.addCleanup(home.stop)
+        # the platform's checked copy: a stand-in store under the test's own state
+        self.exe = store_fixture.stand_in(self)
+        import hubconf
+        self.store = hubconf.runtimes_dir()
         self.m = load_llm()
         self.prompt = tmp / "prompt.txt"
         self.prompt.write_text("golden prompt")
@@ -69,6 +79,20 @@ class Golden(unittest.TestCase):
             s = s.replace(real, tag).replace(json.dumps(real)[1:-1], tag)
         return json.loads(s)
 
+    def run_env(self, task) -> dict:
+        """The names the run's environment gets (ENV_NAMES present) and the head of its PATH: the entries inside the store,
+        as <STORE>/…, up to the first one outside it."""
+        import runtime_claude
+        env = runtime_claude._env(task)
+        head = []
+        for p in env.get("PATH", "").split(":"):
+            if not p.startswith(str(self.store) + "/"):
+                break
+            head.append("<STORE>/" + p[len(str(self.store)) + 1:])
+        return {"names": [n for n in ENV_NAMES if n in env], "path_head": head,
+                "config_dir": "platform" if env.get("CLAUDE_CONFIG_DIR", "").startswith(str(self.store) + "/") else
+                "shared" if "CLAUDE_CONFIG_DIR" not in env else "other"}
+
     def observe(self, point: str, variant: dict) -> dict:
         spec = self.m.points()["points"][point]
         env = {k: v for k, v in os.environ.items() if k not in ("LLM_AUTH", TOKEN_ENV)}
@@ -78,7 +102,9 @@ class Golden(unittest.TestCase):
         import runtime_claude
         ambient = mock.patch.object(runtime_claude, "ambient_servers",
                                     lambda task: None if runtime_claude._sealed(task) else list(AMBIENT))
-        with mock.patch.dict(os.environ, env, clear=True), ambient:
+        tasks, describe = [], runtime_claude.describe
+        seen = mock.patch.object(runtime_claude, "describe", lambda task: (tasks.append(task), describe(task))[1])
+        with mock.patch.dict(os.environ, env, clear=True), ambient, seen:
             # login is observed at the auth interface: which kind (auth), whether an extra credential variable is passed
             # (token_passed); variable names are not checked
             import runtime_ports
@@ -90,8 +116,9 @@ class Golden(unittest.TestCase):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 code = self.m.run(a)
+            run_env = self.run_env(tasks[-1]) if code == 0 and tasks else None
         return {"exit": code, "auth": auth, "token_passed": bool(agent_env) and agent_env != rt.clean_env(agent_env),
-                "cmd": self.norm(json.loads(out.getvalue())) if code == 0 else None}
+                "cmd": self.norm(json.loads(out.getvalue())) if code == 0 else None, "env": run_env}
 
     def current(self) -> dict:
         return {f"{p}/{v}": self.observe(p, var) for p in sorted(self.m.points()["points"])

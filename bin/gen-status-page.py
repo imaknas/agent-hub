@@ -466,6 +466,15 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS "
                                 "notifications in {settings} alerts): it cannot alert when the scheduler stops")))
 
+    # the coding agent's checked copy (docs/design/runtime-versions.md section 3): with none, no platform run starts
+    try:
+        import runtime_ports
+        for rname in dict.fromkeys(n for n in runtime_ports.installed() if n != "none"):
+            if (why := runtime_ports.no_checked_copy(rname)):
+                alerts.append(("bad", _("The platform starts no {runtime} run: {reason}", runtime=rname, reason=why)))
+    except Exception as e:  # the status page must not crash because of this
+        alerts.append(("bad", _("Cannot tell whether the coding agent has a checked copy: {e}", e=e)))
+
     # no alert channel at all: one setup reminder, not red (a feature that is off does not turn the page red)
     if not hubconf.get("alerts"):
         alerts.append(("notify", _("No alerts set up ({settings} has no alerts): a stopped scheduler or a dead service only "

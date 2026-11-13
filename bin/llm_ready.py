@@ -7,7 +7,8 @@ the reason, instead of failing on every item it would have handled).
 
 What counts as "can be called" follows bin/llm.py's dispatch: a `shape: completion` point needs {settings}'s llm section
 (providers) or a runtime with the completion interface; any other point needs a runtime with agent runs ({settings}
-`llm.points.<point>.runtime` > the declaration's `runtime` > runtime.default). It reads the declaration itself rather
+`llm.points.<point>.runtime` > the declaration's `runtime` > runtime.default). Either way, a runtime that runs a store's
+checked copy of its tool needs one (runtime_ports.no_checked_copy). It reads the declaration itself rather
 than importing llm.py (llm.py is a script; tests stand it in).
 """
 from __future__ import annotations
@@ -38,8 +39,15 @@ def unsupported(point: str) -> str | None:
     pin = ((hubconf.get("llm") or {}).get("points") or {}).get(point) or {}
     name = pin.get("runtime") or spec.get("runtime") or runtime_ports.default_name()
     if spec.get("shape") == "completion":
-        if completion.settings() or "completion" in runtime_ports.capabilities(name):
-            return None
+        if completion.settings():
+            try:
+                impl = completion.resolve(point, spec).get("impl")
+            except Exception:   # nowhere to go is the call's own failure, said when it runs
+                impl = None
+            # a provider whose impl is a runtime runs that runtime's checked copy
+            return runtime_ports.no_checked_copy(impl) if impl in runtime_ports.RUNTIMES else None
+        if "completion" in runtime_ports.capabilities(name):
+            return runtime_ports.no_checked_copy(name)
         return _("runtime {name} has no completion interface, and {settings} has no llm section (set one up with "
                  "brunna llm setup)", name=name)
     try:

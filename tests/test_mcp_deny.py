@@ -84,12 +84,9 @@ class Fixture(unittest.TestCase):
         self.listing = self.tmp / "list.txt"
         self.listing.write_text(LIST)
         self.called = self.tmp / "called"
-        exe = self.tmp / "claude"
-        exe.write_text(FAKE_CLAUDE)
-        exe.chmod(0o755)
-        p = mock.patch.object(runtime_claude, "_exe", lambda: str(exe))
-        p.start()
-        self.addCleanup(p.stop)
+        sys.path.insert(0, str(ROOT / "tests"))
+        import store_fixture
+        store_fixture.stand_in(self, body=FAKE_CLAUDE)   # the platform's checked copy
         # no machine's managed file
         p = mock.patch.object(runtime_claude, "MANAGED_MCP", (self.tmp / "managed-mcp.json",))
         p.start()

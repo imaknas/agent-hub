@@ -205,5 +205,7 @@
  "no propose run for this project; its sessions handle it": "這個專案不跑 propose,由它的 session 處理",
  "routed": "派給 session",
  "passed on": "轉交下一個",
- "today's runs or wakes are used up": "今天的執行或叫醒次數用完了"
+ "today's runs or wakes are used up": "今天的執行或叫醒次數用完了",
+ "Cannot tell whether the coding agent has a checked copy: {e}": "看不出 coding agent 有沒有檢查過的那份:{e}",
+ "The platform starts no {runtime} run: {reason}": "平台不啟動任何 {runtime} 執行:{reason}"
 }

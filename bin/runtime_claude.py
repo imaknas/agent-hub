@@ -157,14 +157,28 @@ def _spelled(paths) -> list[str]:
     return list(dict.fromkeys(x for p in paths for x in _spellings(p)))
 
 
+def _config_dir_var(env) -> str | None:
+    """$CLAUDE_CONFIG_DIR in env, unless it is the platform's own config dir (platform_config_dir): that one is set
+    only in the environment of the platform's runs, and the user's folder is still ~/.claude for them (what becomes
+    every sandboxed project's denies is read from here, runtime-versions.md DV3)."""
+    v = env.get("CLAUDE_CONFIG_DIR")
+    if not v:
+        return None
+    try:
+        mine = os.path.realpath(platform_config_dir())
+    except Exception:   # no store can be named (no hub settings): it can't be the platform's
+        return v
+    return None if os.path.realpath(os.path.expanduser(v)) == mine else v
+
+
 def _home() -> pathlib.Path:
-    """Claude Code's user-level folder: $CLAUDE_CONFIG_DIR, else ~/.claude."""
-    return pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or pathlib.Path.home() / ".claude").expanduser()
+    """Claude Code's user-level folder: $CLAUDE_CONFIG_DIR (never the platform's own), else ~/.claude."""
+    return pathlib.Path(_config_dir_var(os.environ) or pathlib.Path.home() / ".claude").expanduser()
 
 
 def _user_config_file() -> pathlib.Path:
-    """~/.claude.json, or the one in $CLAUDE_CONFIG_DIR (as configured_servers reads it)."""
-    return (_home() if os.environ.get("CLAUDE_CONFIG_DIR") else pathlib.Path.home()) / ".claude.json"
+    """~/.claude.json, or the one in $CLAUDE_CONFIG_DIR (as configured_servers reads it; never the platform's own)."""
+    return (_home() if _config_dir_var(os.environ) else pathlib.Path.home()) / ".claude.json"
 
 
 def credential_paths() -> dict:
@@ -536,12 +550,14 @@ def session_statuses(sids) -> dict:
     listing that errors, times out or isn't a JSON list (a version that changed it) makes every session unlisted, not
     unknown: unknown counts as idle and would wake sessions that may be busy (runtime-versions.md section 5)."""
     from types import SimpleNamespace
+    import runtime_ports
     try:
+        # the user's sessions, listed from the user's folder: the shared one, whatever row a run would get
         r = subprocess.run([_exe(), "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
-                           stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None)))
+                           stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None), own=False))
         rows = json.loads(r.stdout) if r.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError, ValueError):
-        rows = None
+    except (OSError, subprocess.SubprocessError, ValueError, runtime_ports.Unsupported):
+        rows = None   # no checked copy to list them with is a listing that failed too: routed, never woken
     if not isinstance(rows, list):
         return {s: "unlisted" for s in sids}
     out = {s: "unknown" for s in sids}
@@ -757,19 +773,64 @@ NO_FOLDER_GIT = {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"}
 FOLDER_GIT_OFF = True   # runtime_ports.folder_git_unknown
 
 
-def _env(task) -> dict:
-    """claude's environment variables: no git of its own in the folder (above), and PATH gets nvm's default-version bin added.
-    claude itself can be called by its full path, but plugin hooks (e.g. vercel's SessionEnd `node …`) find node through PATH;
-    under the scheduler PATH has no nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command
-    not found every time."""
+RESUMING = ("--resume", "--fork-session", "--continue")   # a run's args that take up a session stored somewhere
+
+
+def run_kind(task, own: bool | None = None) -> str:
+    """Which row of the run environment table a run is (runtime-versions.md step 2, item 5), by what the run is:
+      own           the token is in its environment and it neither resumes nor forks a session, and its declaration's
+                    shape isn't agent (or the caller says so: every completion): the platform's config dir
+      shared        any other token run (agent-shaped points, resumed by id by the owner; mailbox forks; leases):
+                    the user's ~/.claude
+      subscription  no token (the login-check point, connectors jobs): the user's ~/.claude and its Keychain login
+    Every token run gets the refusing `security` first on PATH; a subscription run can't (it reads the Keychain)."""
+    env = os.environ if task.env is None else task.env
+    if not env.get(TOKEN_VAR):
+        return "subscription"
+    if own is None:
+        spec = getattr(task, "spec", None) or {}
+        args = [str(a) for a in (*(spec.get("extra_args") or ()), *(getattr(task, "extra", None) or ()))]
+        resumes = any(a == r or a.startswith(r + "=") for a in args for r in RESUMING)
+        own = bool(spec.get("shape")) and spec.get("shape") != "agent" and not resumes
+    return "own" if own else "shared"
+
+
+def _env(task, own: bool | None = None) -> dict:
+    """claude's environment variables. No git of its own in the folder (above). The checked copy it runs is the one on
+    PATH, first (nothing a run starts finds the user's claude by name), its updater pinned off (pin_env), the config dir
+    and the refusing `security` by run_kind. nvm's default-version bin after it: claude itself is called by its full
+    path, but plugin hooks (e.g. vercel's SessionEnd `node …`) find node through PATH; under the scheduler PATH has no
+    nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command not found every time.
+    In a conformance check (check_binary) the check's world already set the config dir, the stub and the pin
+    (conformance_claude.enter): only the binary's folder goes first. Raises NoCheckedCopy with no checked copy, and
+    ValueError when a token run's refusing `security` or the platform's config dir can't be there."""
+    import runtime_ports
     env = {**(os.environ if task.env is None else task.env), **NO_FOLDER_GIT}
+    head = []
+    if _CHECKED:
+        head.append(str(pathlib.Path(_CHECKED).parent))
+    else:
+        e, why = checked_copy()
+        if e is None:
+            raise runtime_ports.NoCheckedCopy(why)
+        kind = run_kind(task, own)
+        env.update(pin_env(e.folder))
+        if kind == "own":
+            env["CLAUDE_CONFIG_DIR"] = str(_platform_dir(platform_config_dir()))
+        elif env.get("CLAUDE_CONFIG_DIR") and _config_dir_var(env) is None:
+            del env["CLAUDE_CONFIG_DIR"]   # the platform's dir never carries over into a run on the user's folder
+        if kind != "subscription":
+            head.append(str(_stub_dir()))
+        head.append(str(e.exe.parent))
     try:
         import hubconf
         nvm = hubconf.nvm_bin()
     except Exception:
         nvm = None
-    if nvm and str(nvm) not in env.get("PATH", "").split(":"):
-        env["PATH"] = f"{nvm}:{env['PATH']}" if env.get("PATH") else str(nvm)
+    rest = [p for p in env.get("PATH", "").split(":") if p and p not in head]
+    if nvm and str(nvm) not in rest:
+        rest.insert(0, str(nvm))
+    env["PATH"] = ":".join([*head, *rest])
     return env
 
 
@@ -1038,11 +1099,11 @@ def _notes_rules(allowed, project, cwd) -> list[str]:
     return [] if base in notes.parents else [str(notes.parent)]
 
 
-def _flags(task) -> list:
+def _flags(task, exe: str | None = None) -> list:
     spec = task.spec
     # the prompt goes on stdin (run()), never as an argument: a prompt is often a project's text, and one starting with
     # "--" would be read as an option (docs/design/project-agent-calls.md A4)
-    cmd = [_exe(), "-p"]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
+    cmd = [exe or _described_exe(), "-p"]   # the scheduler's PATH has no nvm: PATH first, then the platform's (nvm default)
     if task.model:
         cmd += ["--model", task.model]
     mode, allowed, prompts = _rules(task)
@@ -1161,9 +1222,12 @@ def _listed_servers(task) -> list[str]:
     """The runtime's own answer, for this run: `claude mcp list` in the run's folder with the run's environment (login,
     config directory): the only place the account's connectors show up. It health-checks each server (connects and
     lists its tools, calls none), as the run itself would on starting."""
+    import runtime_ports
     try:
         r = subprocess.run([_exe(), "mcp", "list"], cwd=task.cwd or None, env=_env(task), capture_output=True,
                            text=True, timeout=MCP_LIST_TIMEOUT_S, stdin=subprocess.DEVNULL)
+    except runtime_ports.Unsupported as e:   # no checked copy to ask: can't tell, said
+        raise ValueError(str(e)) from None
     except subprocess.TimeoutExpired:
         raise ValueError(_("`claude mcp list` took over {seconds} seconds", seconds=MCP_LIST_TIMEOUT_S)) from None
     except OSError as e:
@@ -1240,22 +1304,44 @@ def servers_named(task) -> list[str]:
     return sorted(out)
 
 
-def describe(task) -> list:
-    cmd = _flags(task) + ["--output-format", "json"]
+def _described_exe() -> str:
+    """The claude a description names: the checked copy, or with none the bare name (a description is never run;
+    run() and exec_stream() start only binary())."""
+    import runtime_ports
+    try:
+        return binary()
+    except runtime_ports.Unsupported:
+        return NAME
+
+
+def _command(task, exe: str | None = None) -> list:
+    cmd = _flags(task, exe) + ["--output-format", "json"]
     if task.output_schema is not None:
         cmd += ["--json-schema", json.dumps(task.output_schema, ensure_ascii=False)]
     return cmd
 
 
+def describe(task) -> list:
+    return _command(task)
+
+
 def run(task) -> TaskResult:
-    cmd = describe(task)
+    import runtime_ports
+    try:
+        exe = _exe()
+        env = _env(task)
+    except (runtime_ports.Unsupported, ValueError) as e:   # no checked copy (or it changed after its check), no stub: not run, said
+        return TaskResult(False, error=str(e))
+    version = run_version()
+    cmd = _command(task, exe)
     try:
         r = subprocess.run(cmd, cwd=task.cwd or None, capture_output=True, text=True, timeout=task.timeout_s,
-                           env=_env(task), input=task.prompt)
+                           env=env, input=task.prompt)
     except subprocess.TimeoutExpired:
-        return TaskResult(False, error=_("over {minutes} {minutes:minute|minutes}", minutes=task.timeout_s // 60))
+        return TaskResult(False, error=_("over {minutes} {minutes:minute|minutes}", minutes=task.timeout_s // 60),
+                          runtime_version=version)
     except FileNotFoundError:
-        return TaskResult(False, error=_(NOT_FOUND))
+        return TaskResult(False, error=_(NOT_FOUND), runtime_version=version)
     import sys
     sys.stderr.write(r.stderr)
     if r.returncode != 0 or not r.stdout.strip():
@@ -1266,11 +1352,12 @@ def run(task) -> TaskResult:
             cost = None
         return TaskResult(False, error=_("exit {code}: {detail}", code=r.returncode,
                                                  detail=(r.stderr.strip() or r.stdout.strip())[-300:]),
-                          cost_usd=cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None)
+                          cost_usd=cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None,
+                          runtime_version=version)
     try:
         out = json.loads(r.stdout)
     except ValueError:
-        return TaskResult(False, error=_("output is not JSON: {output}", output=r.stdout[:200]))
+        return TaskResult(False, error=_("output is not JSON: {output}", output=r.stdout[:200]), runtime_version=version)
     # exit 0 with readable JSON = it ran to the end (ok). is_error only marks it incomplete: llm.py always passed it on
     # to the caller as is, and the librarian relies on that ("still goes by the actual file changes"), so it can't
     # become a failure
@@ -1278,7 +1365,7 @@ def run(task) -> TaskResult:
         ok=True, incomplete=bool(out.get("is_error")), text=str(out.get("result") or ""),
         structured_output=out.get("structured_output"), cost_usd=out.get("total_cost_usd"),
         session_id=out.get("session_id"), turns=out.get("num_turns"), stop=str(out.get("subtype") or ""),
-        denials=tuple(out.get("permission_denials") or ()))
+        denials=tuple(out.get("permission_denials") or ()), runtime_version=version)
 
 
 def exec_stream(task) -> None:
@@ -1286,9 +1373,13 @@ def exec_stream(task) -> None:
     stdin/stdout handed to the caller.
     Temporary: layer 1's open_session will replace it (who does the lease contract neutralisation m10251446 isn't
     decided yet), so it isn't in the interface."""
-    cmd = _flags(task)   # no prompt argument (never is): messages come from stdin (stream-json)
+    import runtime_store
+    exe = _exe()   # binary(): raises NoCheckedCopy, llm.py says why
+    env = _env(task)
+    cmd = _flags(task, exe)   # no prompt argument (never is): messages come from stdin (stream-json)
     cmd += ["--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--verbose"]
-    os.execvpe(cmd[0], cmd, _env(task))
+    runtime_store.inheritable(NAME)   # the lease's process keeps the version it runs held (runtime_store.held)
+    os.execvpe(cmd[0], cmd, env)
 
 
 # ---------- events (runtime_ports' lifecycle interface) ----------
@@ -2067,16 +2158,127 @@ def check_binary(path: str | None) -> None:
     _CHECKED = str(path) if path else None
 
 
+# A `security` that refuses every call ("item not found"): first on PATH of every token run of a checked copy, and of a
+# conformance check's runs, so no run reaches the macOS Keychain's login items through it (runtime-versions.md
+# section 3a, DV5 (c); conformance_claude's auth-keychain check holds that the tool still goes through it)
+SECURITY_STUB = ("#!/bin/sh\n# a platform run of Claude Code may not read the Keychain (runtime-versions.md section 3a, "
+                 "DV5 (c))\nexit 44\n")
+
+
+def _store() -> pathlib.Path:
+    import hubconf
+    return hubconf.runtimes_dir() / NAME
+
+
+def platform_config_dir() -> pathlib.Path:
+    """The config dir of the platform's own runs that neither resume nor fork a session (run_kind "own"): in the store,
+    which no sandbox writes and the store's prune leaves alone; set only in those runs' environment (DV3)."""
+    return _store() / "config"
+
+
+def _platform_dir(d: pathlib.Path) -> pathlib.Path:
+    """d made (mode 700) when missing; ValueError when it can't be."""
+    try:
+        d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    except OSError as e:
+        raise ValueError(_("the folder {folder} a platform run of Claude Code needs can't be made: {error}", folder=d,
+                           error=e.strerror or e)) from None
+    return d
+
+
+def _stub_dir() -> pathlib.Path:
+    """The folder holding the refusing `security` (SECURITY_STUB), written when missing or changed (to a fresh name,
+    then renamed: runs start at once). ValueError when it can't be there: a token run doesn't start without it."""
+    d = _store() / "stub"
+    f = d / "security"
+    try:
+        if not (f.is_file() and os.access(f, os.X_OK) and f.read_text() == SECURITY_STUB):
+            _platform_dir(d)
+            tmp = d / f".security-{os.getpid()}-{os.urandom(4).hex()}"
+            tmp.write_text(SECURITY_STUB)
+            tmp.chmod(0o700)
+            os.replace(tmp, f)
+    except OSError as e:
+        raise ValueError(_("the refusing `security` a token run needs first on its PATH can't be written ({error}); "
+                           "not run", error=e.strerror or e)) from None
+    return d
+
+
+NO_COPY = "no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)"
+
+
+def checked_copy() -> tuple:
+    """(the store's current copy, None) once this process holds it and it is still what was checked, or (None, why not):
+    none promoted yet, or it changed after its check. In a conformance check (check_binary) the copy under check counts:
+    (None, None). The ports that start platform runs read it through runtime_ports.load (runtime-versions.md section 3,
+    "No checked copy, no run"); nothing falls back to another copy."""
+    if _CHECKED:
+        return None, None
+    import runtime_store
+    try:
+        e, why = runtime_store.held(NAME)
+    except (OSError, ValueError) as err:
+        return None, _("the store of checked copies of Claude Code can't be read: {error}", error=getattr(err, "strerror", None) or err)
+    if e is None:
+        return None, _(NO_COPY)
+    return (None, why) if why else (e, None)
+
+
+def run_version() -> str | None:
+    """The version of the checked copy this process's runs start (held by checked_copy), for the run's record."""
+    if _CHECKED:
+        return None
+    e, _why = checked_copy()
+    return e.version if e is not None else None
+
+
 def binary() -> str:
-    """The claude a platform run starts: the one under check in a conformance child, else the one on the platform's PATH
-    (nvm's; step 2 makes it the store's checked copy)."""
+    """The claude a platform run starts: the one under check in a conformance child, else the store's current copy,
+    held and verified (checked_copy). Never one on PATH: with no checked copy this raises NoCheckedCopy."""
     if _CHECKED:
         return _CHECKED
+    import runtime_ports
+    e, why = checked_copy()
+    if e is None:
+        raise runtime_ports.NoCheckedCopy(why)
+    return str(e.exe)
+
+
+def resume_exec(sid: str, env=None) -> tuple[list, dict]:
+    """A resume of a session in a terminal (bin/lease-resume): (argv, the environment) with the checked copy, its updater
+    pinned off and the hold passed on to it (it is about to be exec'd; it updates itself otherwise, V-M5). On the
+    user's folder (the session is stored there); the headless token, with the refusing `security` first, only when
+    the copy isn't logged in there itself (under SSH it can't read the Keychain). Raises NoCheckedCopy."""
+    import runtime_store
+    from types import SimpleNamespace
+    if not re.fullmatch(r"[0-9a-f-]{36}", sid or ""):
+        raise ValueError(_("not a session id: {sid}", sid=sid))
+    exe = binary()
+    base = clean_env(dict(os.environ if env is None else env))
+    run_env = _env(SimpleNamespace(env=base), own=False)
     try:
-        import hubconf
-        return hubconf.tool("claude")
-    except Exception:
-        return "claude"
+        r = subprocess.run([exe, "auth", "status"], capture_output=True, text=True, timeout=60, env=run_env,
+                           stdin=subprocess.DEVNULL)
+        logged_in = r.returncode == 0 and '"loggedIn": true' in r.stdout
+    except (OSError, subprocess.SubprocessError):
+        logged_in = False
+    if not logged_in:
+        with_token, _why = auth_env("token", base)
+        if with_token is not None:
+            run_env = _env(SimpleNamespace(env=with_token), own=False)
+    runtime_store.inheritable(NAME)
+    return [exe, "--resume", sid], run_env
+
+
+def install_blocker() -> str | None:
+    """Why the store's copies of Claude Code can't be installed on this machine (npm, from nvm's node, is what installs
+    them), or None."""
+    import hubconf
+    nb = hubconf.nvm_bin()
+    if nb and (nb / "npm").exists():
+        return None
+    return _("no npm from nvm's node on this machine: the platform installs its own copy of Claude Code with it. Install "
+             "nvm and a node version (nvm install --lts), then run brunna runtimes install claude")
 
 
 def _npm_env() -> dict:
@@ -2197,8 +2399,10 @@ def pin_env(folder) -> dict:
 
 def completion_command(req) -> list:
     """The argv of a completion (complete() runs it; conformance_claude checks the same one has no tools)."""
-    # --restricted: no settings file or rules file of any folder (real run: docs/design/mailbox-session-first.md, step 3's record)
-    cmd = [_exe(), "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
+    # --restricted: no settings file or rules file of any folder (real run: docs/design/mailbox-session-first.md, step 3's record).
+    # stream-json: complete() reads the run's init event and every tool_use as they come (runtime-versions.md section 4)
+    cmd = [_exe(), "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format",
+           "stream-json", "--verbose"]
     if req.model:
         cmd += ["--model", req.model]
     if req.system:
@@ -2208,14 +2412,71 @@ def completion_command(req) -> list:
     return cmd
 
 
+def completion_tools(schema) -> set:
+    """The only tools a completion's run may list (V-M7): none, or with a schema only the one that returns it."""
+    return {"StructuredOutput"} if schema is not None else set()
+
+
+def _tools_alert(point: str, why: str | None) -> None:
+    """A completion whose run had a tool beyond the pinned set is a safety stop the owner hears of (once, reminded every
+    24 hours, said again when it runs clean); a broken alert doesn't change the outcome."""
+    try:
+        import alert
+        alert.once(f"completion-tools:{NAME}", [why] if why else [],
+                   _("Claude Code's completions run with no tools again"))
+    except Exception:
+        pass
+
+
+def _read_completion(proc, allowed: set, point: str) -> tuple:
+    """Reads a completion's stream-json as it comes: (the result event or None, why the result is refused or None). The
+    init event lists the run's tools; any beyond the allowed set ends the run there. A tool_use of another name refuses
+    the result. No init event before the result refuses it too: what it ran with can't be told."""
+    init_seen, result, why = False, None, None
+    for line in proc.stdout:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(e, dict):
+            continue
+        if e.get("type") == "system" and e.get("subtype") == "init":
+            init_seen = True
+            extra = sorted({str(t) for t in (e.get("tools") or [])} - allowed)
+            if extra:
+                why = _("the run of {point} listed tools a completion never has ({tools}): ended, its result refused",
+                        point=point, tools=", ".join(extra[:8]))
+                break
+        elif e.get("type") == "assistant":
+            used = [c.get("name") for c in ((e.get("message") or {}).get("content") or [])
+                    if isinstance(c, dict) and c.get("type") == "tool_use"]
+            if (bad := sorted({str(n) for n in used if n not in allowed})):
+                why = _("the run of {point} used a tool a completion never has ({tools}): its result refused", point=point,
+                        tools=", ".join(bad[:8]))
+                break
+        elif e.get("type") == "result":
+            result = e
+            if not init_seen:
+                why = _("the run of {point} gave no init event before its result, so its tools can't be told: its result "
+                        "refused", point=point)
+            break
+    return result, why
+
+
 def complete(req, conf) -> CompletionResult:
     import tempfile
-    cmd = completion_command(req)
+    import threading
+    import runtime_ports
     env, why = auth_env(conf.get("auth") or "token", os.environ)
     if env is None:
         return CompletionResult(False, stop="error", error=why)
     env["HUB_LLM_POINT"] = req.point   # the process started (hooks included) knows it's a platform headless call
-    env = _env(type("T", (), {"env": env})())
+    try:
+        cmd = completion_command(req)
+        env = _env(type("T", (), {"env": env})(), own=True)
+    except (runtime_ports.Unsupported, ValueError) as e:   # no checked copy, or no stub: not run, said
+        return CompletionResult(False, stop="error", error=str(e))
+    version = run_version()
     import hubconf
     try:
         tmp = tempfile.TemporaryDirectory(prefix="hub-completion-", dir=hubconf.private_tmp(), ignore_cleanup_errors=True)
@@ -2223,34 +2484,64 @@ def complete(req, conf) -> CompletionResult:
         return CompletionResult(False, stop="error", error=_("could not make a folder for the run: {e}", e=e))
     with tmp as cwd:
         try:
-            r = subprocess.run(cmd, input=req.prompt, cwd=cwd, capture_output=True, text=True, timeout=req.timeout_s, env=env)
-        except subprocess.TimeoutExpired:
-            return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s))
+            proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, env=env)
         except FileNotFoundError:
             return CompletionResult(False, stop="error", error=_(NOT_FOUND))
-    try:
-        out = json.loads(r.stdout)
-    except ValueError:
-        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=r.returncode,
-                                                                    detail=(r.stderr.strip() or r.stdout.strip())[-300:]))
+        errs: list = []
+
+        def feed():
+            try:
+                proc.stdin.write(req.prompt)
+                proc.stdin.close()
+            except (OSError, ValueError):   # it ended before reading it all
+                pass
+        threading.Thread(target=feed, daemon=True).start()
+        threading.Thread(target=lambda: errs.append(proc.stderr.read()), daemon=True).start()
+        timer = threading.Timer(req.timeout_s, proc.kill)
+        timer.start()
+        out, refused = None, None
+        try:
+            out, refused = _read_completion(proc, completion_tools(req.schema), req.point)
+            if refused:
+                proc.kill()
+            else:
+                for _rest in proc.stdout:   # what follows the result, read to the end so the run ends on its own
+                    pass
+            code = proc.wait()
+        finally:
+            timed_out = not timer.is_alive() and not refused and out is None
+            timer.cancel()
+            proc.stdout.close()
+        stderr = errs[0] if errs and isinstance(errs[0], str) else ""
+    if refused:
+        _tools_alert(req.point, refused)
+        return CompletionResult(False, stop="error", error=refused, runtime_version=version)
+    if out is None and timed_out:
+        return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s),
+                                runtime_version=version)
+    _tools_alert(req.point, None)
+    if out is None:
+        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=code,
+                                                                    detail=stderr.strip()[-300:]), runtime_version=version)
     usage = out.get("usage") or {}
     tokens_in = sum(usage.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")) or None
-    if r.returncode != 0 or out.get("is_error"):
-        text = str(out.get("result") or r.stderr.strip())[-300:]
-        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=r.returncode, detail=text),
-                                input_tokens=tokens_in,
-                                output_tokens=usage.get("output_tokens"), cost_usd=out.get("total_cost_usd"))
+    if code != 0 or out.get("is_error"):
+        text = str(out.get("result") or stderr.strip())[-300:]
+        return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=code, detail=text),
+                                input_tokens=tokens_in, output_tokens=usage.get("output_tokens"),
+                                cost_usd=out.get("total_cost_usd"), runtime_version=version)
     so = out.get("structured_output")
     return CompletionResult(True, text=json.dumps(so, ensure_ascii=False) if so is not None else str(out.get("result") or ""),
                             stop="end", input_tokens=tokens_in, output_tokens=usage.get("output_tokens"),
-                            cost_usd=out.get("total_cost_usd"))
+                            cost_usd=out.get("total_cost_usd"), runtime_version=version)
 
 
 def health(conf) -> tuple:
-    """No request made (the hourly claude-login already makes real ones): whether claude is there and whether the login
-    to use is there."""
-    import shutil
-    if not shutil.which(_exe()) and not pathlib.Path(_exe()).is_file():
-        return False, _(NOT_FOUND)
+    """No request made (the hourly claude-login already makes real ones): whether the checked copy is there and whether
+    the login to use is there."""
+    e, why = checked_copy()
+    if e is None and not _CHECKED:
+        return False, why
     env, why = auth_env(conf.get("auth") or "token", {})
     return (env is not None), why

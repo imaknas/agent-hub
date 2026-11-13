@@ -35,7 +35,8 @@ $ agenthub doctor    # launchd, problems
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ 會寄信的排程 agent job(mail: true):可以用
 ✓ 專案自己的 agent 呼叫(brunna agent):可以用
-· runtime claude 在 store 裡還沒有檢查過的那份(brunna runtimes install claude);每晚的 brunna/update-runtimes 會做一份
+✗ runtime claude 不啟動任何平台執行:還沒有檢查過的 Claude Code:brunna runtimes install claude 會做一份(每晚的 brunna/update-runtimes 也會)
+    → 這台電腦沒有 nvm 的 node 帶的 npm:平台用它安裝自己的 Claude Code。先裝 nvm 和一個 node 版本(nvm install --lts),再跑 brunna runtimes install claude
 ✗ agent 登入(headless token):沒有
     → 重跑 `claude setup-token` 寫進 <TMP>/home/.claude/headless-oauth-token
 ! agent 登入(~/.claude/.credentials.json):沒有
@@ -54,7 +55,7 @@ $ agenthub doctor    # launchd, problems
 ! 背景服務、專案設定:有 2 項還沒套用
     → bin/hub config plan,再 bin/hub config apply
 
-5 個問題、5 個提醒
+6 個問題、5 個提醒
 --- stderr
 
 $ agenthub doctor    # launchd, all fine
@@ -85,7 +86,7 @@ $ agenthub doctor    # launchd, all fine
 ✓ sandbox 專案寫不到它的 session 載入 hook 跟設定的檔案:可以用
 ✓ 會寄信的排程 agent job(mail: true):可以用
 ✓ 專案自己的 agent 呼叫(brunna agent):可以用
-· runtime claude 在 store 裡還沒有檢查過的那份(brunna runtimes install claude);每晚的 brunna/update-runtimes 會做一份
+✓ runtime claude:store 裡有檢查過的 2.1.400
 ! 最近 7 天有 2 封信叫醒了 session,那個 session 卻沒接(最近一封:<ID>,給 beta);coding agent 處理叫醒的方式可能變了
     → 狀態頁的信箱區列出每封信怎麼走的;hub-event.log 記著每個等待程序怎麼結束
 ✓ agent 登入(headless token):有
@@ -203,7 +204,7 @@ $ agenthub doctor    # two coding agents
 ✓ claude:平台規則寫進 CLAUDE.local.md
 · acp:沒有規則檔;它的 session 從 MCP server 的 instructions(brunna mcp)或 session 開始的 hook 拿到平台規則
 · 執行環境 acp 沒有判斷 session 在忙、閒置或卡在對話框的方法、讀取 session 最後回覆結尾的方法:分派信件時把它的 session 當作閒置,也不讀它們說過的話
-· runtime claude 在 store 裡還沒有檢查過的那份(brunna runtimes install claude);每晚的 brunna/update-runtimes 會做一份
+✓ runtime claude:store 裡有檢查過的 2.1.400
 · runtime acp 沒有版本管理:平台沒辦法安裝或檢查它的固定版本,所以它的執行用的是 PATH 上找到的那一份
 · 執行環境 acp 在專案資料夾裡跑,但不確定它會不會在沙箱外自己跑 git:這樣的話,沙箱專案的 repo 設定可能以你的身分執行
 ✓ agent 登入(headless token):有

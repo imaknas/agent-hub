@@ -2,48 +2,56 @@
  "agent-job-confined/default": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "agent-job-confined/model": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "agent-job-confined/subscription": {
   "auth": "subscription",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": false
  },
  "agent-job-confined/token": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "agent-job-event/default": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "agent-job-event/model": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "agent-job-event/subscription": {
   "auth": "subscription",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": false
  },
  "agent-job-event/token": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
@@ -64,6 +72,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -86,6 +106,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -106,6 +138,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -126,6 +169,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -151,6 +206,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"the date files fully consolidated this time, which may be git rm'd (only the ones given this time)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"e.g. memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"the files the content went into (memory/reference/<topic>.md or STATE.md); list one too when the content was already there\"}, \"dropped\": {\"type\": \"string\", \"description\": \"the content not kept and why (process noise / duplicate / overturned by a newer record), in the content language named in the prompt; an empty string when everything was kept\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"the date files given this time that cannot be deleted yet, and why\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\", \"description\": \"why, in the content language named in the prompt\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"statements in reference/ or STATE.md changed because a newer record overturned or replaced them\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"the file changed\"}, \"before\": {\"type\": \"string\", \"description\": \"the original statement (verbatim)\"}, \"after\": {\"type\": \"string\", \"description\": \"what it was changed to (verbatim)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"the file it is based on (usually a newer date file)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"a sentence copied verbatim from evidence_file that shows the change is right\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"what was done this time, at most three sentences, for a person spot-checking; in the content language named in the prompt\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -176,6 +243,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"the date files fully consolidated this time, which may be git rm'd (only the ones given this time)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"e.g. memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"the files the content went into (memory/reference/<topic>.md or STATE.md); list one too when the content was already there\"}, \"dropped\": {\"type\": \"string\", \"description\": \"the content not kept and why (process noise / duplicate / overturned by a newer record), in the content language named in the prompt; an empty string when everything was kept\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"the date files given this time that cannot be deleted yet, and why\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\", \"description\": \"why, in the content language named in the prompt\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"statements in reference/ or STATE.md changed because a newer record overturned or replaced them\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"the file changed\"}, \"before\": {\"type\": \"string\", \"description\": \"the original statement (verbatim)\"}, \"after\": {\"type\": \"string\", \"description\": \"what it was changed to (verbatim)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"the file it is based on (usually a newer date file)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"a sentence copied verbatim from evidence_file that shows the change is right\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"what was done this time, at most three sentences, for a person spot-checking; in the content language named in the prompt\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -201,6 +280,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"the date files fully consolidated this time, which may be git rm'd (only the ones given this time)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"e.g. memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"the files the content went into (memory/reference/<topic>.md or STATE.md); list one too when the content was already there\"}, \"dropped\": {\"type\": \"string\", \"description\": \"the content not kept and why (process noise / duplicate / overturned by a newer record), in the content language named in the prompt; an empty string when everything was kept\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"the date files given this time that cannot be deleted yet, and why\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\", \"description\": \"why, in the content language named in the prompt\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"statements in reference/ or STATE.md changed because a newer record overturned or replaced them\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"the file changed\"}, \"before\": {\"type\": \"string\", \"description\": \"the original statement (verbatim)\"}, \"after\": {\"type\": \"string\", \"description\": \"what it was changed to (verbatim)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"the file it is based on (usually a newer date file)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"a sentence copied verbatim from evidence_file that shows the change is right\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"what was done this time, at most three sentences, for a person spot-checking; in the content language named in the prompt\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -226,6 +316,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"folded\": {\"type\": \"array\", \"description\": \"the date files fully consolidated this time, which may be git rm'd (only the ones given this time)\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"e.g. memory/2026-09-25.md\"}, \"destinations\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"the files the content went into (memory/reference/<topic>.md or STATE.md); list one too when the content was already there\"}, \"dropped\": {\"type\": \"string\", \"description\": \"the content not kept and why (process noise / duplicate / overturned by a newer record), in the content language named in the prompt; an empty string when everything was kept\"}}, \"required\": [\"file\", \"destinations\", \"dropped\"]}}, \"kept\": {\"type\": \"array\", \"description\": \"the date files given this time that cannot be deleted yet, and why\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\"}, \"reason\": {\"type\": \"string\", \"description\": \"why, in the content language named in the prompt\"}}, \"required\": [\"file\", \"reason\"]}}, \"corrections\": {\"type\": \"array\", \"description\": \"statements in reference/ or STATE.md changed because a newer record overturned or replaced them\", \"items\": {\"type\": \"object\", \"properties\": {\"file\": {\"type\": \"string\", \"description\": \"the file changed\"}, \"before\": {\"type\": \"string\", \"description\": \"the original statement (verbatim)\"}, \"after\": {\"type\": \"string\", \"description\": \"what it was changed to (verbatim)\"}, \"evidence_file\": {\"type\": \"string\", \"description\": \"the file it is based on (usually a newer date file)\"}, \"evidence_quote\": {\"type\": \"string\", \"description\": \"a sentence copied verbatim from evidence_file that shows the change is right\"}}, \"required\": [\"file\", \"before\", \"after\", \"evidence_file\", \"evidence_quote\"]}}, \"summary\": {\"type\": \"string\", \"description\": \"what was done this time, at most three sentences, for a person spot-checking; in the content language named in the prompt\"}}, \"required\": [\"folded\", \"kept\", \"corrections\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -243,6 +345,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -260,6 +375,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -277,6 +405,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -294,6 +433,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"state\", \"summary\"], \"properties\": {\"state\": {\"type\": \"string\", \"description\": \"the whole STATE.md, in the content language named in the prompt\"}, \"summary\": {\"type\": \"string\", \"description\": \"one or two sentences on what this project is and where it stands (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -311,6 +463,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"the main points of this conversation, 3–6 sentences (in the content language named in the prompt)\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"the decisions settled this time and why (in the content language named in the prompt)\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"questions with no answer yet, for the owner to answer (in the content language named in the prompt)\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}, \"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\", \"description\": \"the earlier item this task is, when the prompt lists earlier items\"}}}, \"description\": \"things only the owner can do (in the content language named in the prompt)\"}, \"ended\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"ref\", \"outcome\", \"basis\"], \"properties\": {\"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\"}, \"outcome\": {\"enum\": [\"done\", \"not_needed\"]}, \"basis\": {\"type\": \"string\", \"minLength\": 1}}}, \"description\": \"earlier items (listed in the prompt) this conversation shows have ended, and how it shows it\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"raw notes (markdown) for the project's memory: what was discussed, the decisions, the problems run into; uncertain wording kept (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -328,6 +492,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"the main points of this conversation, 3–6 sentences (in the content language named in the prompt)\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"the decisions settled this time and why (in the content language named in the prompt)\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"questions with no answer yet, for the owner to answer (in the content language named in the prompt)\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}, \"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\", \"description\": \"the earlier item this task is, when the prompt lists earlier items\"}}}, \"description\": \"things only the owner can do (in the content language named in the prompt)\"}, \"ended\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"ref\", \"outcome\", \"basis\"], \"properties\": {\"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\"}, \"outcome\": {\"enum\": [\"done\", \"not_needed\"]}, \"basis\": {\"type\": \"string\", \"minLength\": 1}}}, \"description\": \"earlier items (listed in the prompt) this conversation shows have ended, and how it shows it\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"raw notes (markdown) for the project's memory: what was discussed, the decisions, the problems run into; uncertain wording kept (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -345,6 +521,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"the main points of this conversation, 3–6 sentences (in the content language named in the prompt)\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"the decisions settled this time and why (in the content language named in the prompt)\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"questions with no answer yet, for the owner to answer (in the content language named in the prompt)\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}, \"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\", \"description\": \"the earlier item this task is, when the prompt lists earlier items\"}}}, \"description\": \"things only the owner can do (in the content language named in the prompt)\"}, \"ended\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"ref\", \"outcome\", \"basis\"], \"properties\": {\"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\"}, \"outcome\": {\"enum\": [\"done\", \"not_needed\"]}, \"basis\": {\"type\": \"string\", \"minLength\": 1}}}, \"description\": \"earlier items (listed in the prompt) this conversation shows have ended, and how it shows it\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"raw notes (markdown) for the project's memory: what was discussed, the decisions, the problems run into; uncertain wording kept (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -362,6 +549,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"summary\", \"decisions\", \"open_questions\", \"tasks_for_owner\", \"notes_markdown\"], \"properties\": {\"summary\": {\"type\": \"string\", \"description\": \"the main points of this conversation, 3–6 sentences (in the content language named in the prompt)\"}, \"decisions\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"what\", \"why\"], \"properties\": {\"what\": {\"type\": \"string\"}, \"why\": {\"type\": \"string\"}}}, \"description\": \"the decisions settled this time and why (in the content language named in the prompt)\"}, \"open_questions\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"questions with no answer yet, for the owner to answer (in the content language named in the prompt)\"}, \"tasks_for_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\"}, \"due\": {\"type\": \"string\", \"pattern\": \"^\\\\d{4}-\\\\d{2}-\\\\d{2}$\"}, \"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\", \"description\": \"the earlier item this task is, when the prompt lists earlier items\"}}}, \"description\": \"things only the owner can do (in the content language named in the prompt)\"}, \"ended\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"ref\", \"outcome\", \"basis\"], \"properties\": {\"ref\": {\"type\": \"string\", \"pattern\": \"^T\\\\d+$\"}, \"outcome\": {\"enum\": [\"done\", \"not_needed\"]}, \"basis\": {\"type\": \"string\", \"minLength\": 1}}}, \"description\": \"earlier items (listed in the prompt) this conversation shows have ended, and how it shows it\"}, \"notes_markdown\": {\"type\": \"string\", \"description\": \"raw notes (markdown) for the project's memory: what was discussed, the decisions, the problems run into; uncertain wording kept (in the content language named in the prompt)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -383,6 +582,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -404,6 +615,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -425,6 +648,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -446,6 +680,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -467,6 +713,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -488,6 +746,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -509,6 +779,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -530,6 +811,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -545,6 +838,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -560,6 +866,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -575,6 +894,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -590,6 +920,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-index (shadow mode): returns a list of edits to index.md outside the roster block, which the platform applies (bin/edits.py)\", \"properties\": {\"index_updated\": {\"type\": \"boolean\"}, \"edits\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words\"}}, \"required\": [\"index_updated\", \"edits\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -610,6 +953,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -630,6 +985,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -650,6 +1017,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -670,6 +1048,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"index_updated\": {\"type\": \"boolean\", \"description\": \"whether index.md was edited\"}, \"relations_found\": {\"type\": \"string\", \"description\": \"a short account of the cross-project connections found today, in the content language named in the prompt; with no clear connection, say so in a few words rather than invent one\"}}, \"required\": [\"index_updated\", \"relations_found\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -685,6 +1075,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -700,6 +1103,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -715,6 +1131,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -730,6 +1157,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-state (shadow mode): the model has no tools and returns a list of edits to STATE.md, which the platform applies (bin/edits.py)\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether to change STATE.md; when false, edits is empty\"}, \"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt\"}, \"reason\": {\"type\": \"string\", \"description\": \"why it changes this (or nothing), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"edits\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -753,6 +1193,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -776,6 +1228,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -799,6 +1263,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -822,6 +1297,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"properties\": {\"state_updated\": {\"type\": \"boolean\", \"description\": \"whether STATE.md was edited this time\"}, \"worth_digesting\": {\"type\": \"boolean\", \"description\": \"whether this time's content is worth putting into the cross-project digest; false when it only confirms things work and nothing substantive changed\"}, \"summary\": {\"type\": \"string\", \"description\": \"a summary for the cross-project digest, at most three sentences, in the content language named in the prompt (when worth_digesting is false, it may briefly say why nothing was updated, or be empty)\"}, \"reason\": {\"type\": \"string\", \"description\": \"why this judgement was made (updating STATE.md or not), for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"state_updated\", \"worth_digesting\", \"summary\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -837,6 +1324,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -852,6 +1352,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -867,6 +1380,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -882,6 +1406,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the completion version of librarian-todo-format: the model has no tools and returns a list of edits that fix only the format of STATE.md's to-do section, which the platform applies (bin/edits.py) and checks again with check-state-todo\", \"properties\": {\"edits\": {\"type\": \"array\", \"description\": \"applied in order; each old must be a passage that occurs exactly once in the current STATE.md (newlines included), and new is the text that replaces it (an empty string deletes it)\", \"items\": {\"type\": \"object\", \"properties\": {\"old\": {\"type\": \"string\"}, \"new\": {\"type\": \"string\"}}, \"required\": [\"old\", \"new\"]}}, \"reason\": {\"type\": \"string\", \"description\": \"what was wrong and what the edits change, for a person spot-checking later; in the content language named in the prompt\"}}, \"required\": [\"edits\", \"reason\"]}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -903,6 +1440,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -924,6 +1473,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -945,6 +1506,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -966,6 +1538,18 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -982,6 +1566,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -998,6 +1593,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -1014,6 +1620,17 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -1030,54 +1647,74 @@
    "--output-format",
    "json"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
  "mailbox-conversation/default": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "mailbox-conversation/model": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "mailbox-conversation/subscription": {
   "auth": "subscription",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": false
  },
  "mailbox-conversation/token": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "mailbox-escalation/default": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "mailbox-escalation/model": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "mailbox-escalation/subscription": {
   "auth": "subscription",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": false
  },
  "mailbox-escalation/token": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
@@ -1097,6 +1734,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the propose version of a mailbox assignment (bin/propose_apply.py): the agent writes only memory notes in a throwaway worktree; the letters to send and the ones to close go here, and the platform sends them\", \"properties\": {\"replies\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"reply_to\", \"type\", \"text\"], \"properties\": {\"reply_to\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters\"}, \"type\": {\"enum\": [\"done\", \"info\"], \"description\": \"done; info only when the letter tells you to reply that way\"}, \"text\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"done\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\"], \"properties\": {\"id\": {\"type\": \"string\"}, \"note\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"deferred\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"why\"], \"properties\": {\"id\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters, left open on purpose\"}, \"why\": {\"type\": \"string\", \"description\": \"waits for a code change, or for the owner (asked in ask_owner); in the content language named in the prompt\"}}}}, \"ask_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"what to ask the owner (which project, what to decide, the options), in the content language named in the prompt\"}}}}, \"summary\": {\"type\": \"string\", \"description\": \"one line per letter: the id, how it was handled (in the content language named in the prompt)\"}}, \"required\": [\"replies\", \"done\", \"ask_owner\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1118,6 +1767,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the propose version of a mailbox assignment (bin/propose_apply.py): the agent writes only memory notes in a throwaway worktree; the letters to send and the ones to close go here, and the platform sends them\", \"properties\": {\"replies\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"reply_to\", \"type\", \"text\"], \"properties\": {\"reply_to\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters\"}, \"type\": {\"enum\": [\"done\", \"info\"], \"description\": \"done; info only when the letter tells you to reply that way\"}, \"text\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"done\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\"], \"properties\": {\"id\": {\"type\": \"string\"}, \"note\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"deferred\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"why\"], \"properties\": {\"id\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters, left open on purpose\"}, \"why\": {\"type\": \"string\", \"description\": \"waits for a code change, or for the owner (asked in ask_owner); in the content language named in the prompt\"}}}}, \"ask_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"what to ask the owner (which project, what to decide, the options), in the content language named in the prompt\"}}}}, \"summary\": {\"type\": \"string\", \"description\": \"one line per letter: the id, how it was handled (in the content language named in the prompt)\"}}, \"required\": [\"replies\", \"done\", \"ask_owner\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1137,6 +1798,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the propose version of a mailbox assignment (bin/propose_apply.py): the agent writes only memory notes in a throwaway worktree; the letters to send and the ones to close go here, and the platform sends them\", \"properties\": {\"replies\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"reply_to\", \"type\", \"text\"], \"properties\": {\"reply_to\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters\"}, \"type\": {\"enum\": [\"done\", \"info\"], \"description\": \"done; info only when the letter tells you to reply that way\"}, \"text\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"done\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\"], \"properties\": {\"id\": {\"type\": \"string\"}, \"note\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"deferred\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"why\"], \"properties\": {\"id\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters, left open on purpose\"}, \"why\": {\"type\": \"string\", \"description\": \"waits for a code change, or for the owner (asked in ask_owner); in the content language named in the prompt\"}}}}, \"ask_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"what to ask the owner (which project, what to decide, the options), in the content language named in the prompt\"}}}}, \"summary\": {\"type\": \"string\", \"description\": \"one line per letter: the id, how it was handled (in the content language named in the prompt)\"}}, \"required\": [\"replies\", \"done\", \"ask_owner\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -1156,6 +1828,18 @@
    "--json-schema",
    "{\"type\": \"object\", \"description\": \"the propose version of a mailbox assignment (bin/propose_apply.py): the agent writes only memory notes in a throwaway worktree; the letters to send and the ones to close go here, and the platform sends them\", \"properties\": {\"replies\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"reply_to\", \"type\", \"text\"], \"properties\": {\"reply_to\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters\"}, \"type\": {\"enum\": [\"done\", \"info\"], \"description\": \"done; info only when the letter tells you to reply that way\"}, \"text\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"done\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\"], \"properties\": {\"id\": {\"type\": \"string\"}, \"note\": {\"type\": \"string\", \"description\": \"in the content language named in the prompt\"}}}}, \"deferred\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"why\"], \"properties\": {\"id\": {\"type\": \"string\", \"description\": \"the id of one of this assignment's letters, left open on purpose\"}, \"why\": {\"type\": \"string\", \"description\": \"waits for a code change, or for the owner (asked in ask_owner); in the content language named in the prompt\"}}}}, \"ask_owner\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"text\"], \"properties\": {\"text\": {\"type\": \"string\", \"description\": \"what to ask the owner (which project, what to decide, the options), in the content language named in the prompt\"}}}}, \"summary\": {\"type\": \"string\", \"description\": \"one line per letter: the id, how it was handled (in the content language named in the prompt)\"}}, \"required\": [\"replies\", \"done\", \"ask_owner\", \"summary\"]}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1173,6 +1857,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the label of the one candidate session the letter should go to, as listed (s1, s2…)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1190,6 +1887,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the label of the one candidate session the letter should go to, as listed (s1, s2…)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1207,6 +1917,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the label of the one candidate session the letter should go to, as listed (s1, s2…)\"}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -1224,30 +1945,47 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"session\"], \"properties\": {\"session\": {\"type\": \"string\", \"description\": \"the label of the one candidate session the letter should go to, as listed (s1, s2…)\"}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
  "project-agent/default": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "project-agent/model": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
  "project-agent/subscription": {
   "auth": "subscription",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": false
  },
  "project-agent/token": {
   "auth": "token",
   "cmd": null,
+  "env": null,
   "exit": 2,
   "token_passed": true
  },
@@ -1266,6 +2004,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"the week in one line, ≤ 30 characters: an image or turn of phrase for what mattered most, a little poetic but true to this week's facts, no numbers (in the content language named in the prompt)\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 sentences overall: the week's focus, what got done, the biggest problem (in the content language named in the prompt)\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"the insight's conclusion in one sentence, ≤ 22 characters (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences of analysis: what pattern shows, and why (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"concrete evidence: statistics or what the summaries say (in the content language named in the prompt)\"}, \"so_what\": {\"type\": \"string\", \"description\": \"what it means and how to take it, 1 sentence (in the content language named in the prompt)\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"what was worked on this week (with summaries: down to features/decisions; without: the shape of the effort) (in the content language named in the prompt)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"assessment of progress: how far it moved, whether the output matches the effort (in the content language named in the prompt)\"}, \"status\": {\"type\": \"string\", \"enum\": [\"advancing\", \"stable\", \"stuck\", \"diverging\", \"wrapping_up\"], \"description\": \"advancing: moved forward toward its goal; stable: kept at a stable pace, no notable progress or trouble; stuck: blocked, or effort without visible progress; diverging: effort spread over several directions or topics instead of converging on one; wrapping_up: finishing or closing out\"}, \"next\": {\"type\": \"string\", \"description\": \"the one thing most worth doing next (in the content language named in the prompt)\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"the working rhythm in one sentence (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences: what the hours, late nights and long stretches mean, and their likely effect on output and on the quality of judgment (in the content language named in the prompt)\"}, \"pattern\": {\"type\": \"string\", \"description\": \"the most visible rhythm pattern (in the content language named in the prompt)\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"delegation\", \"description\", \"discernment\", \"diligence\"], \"description\": \"the 4D AI fluency framework: one item per dimension\"}, \"level\": {\"type\": \"string\", \"enum\": [\"strength\", \"stable\", \"needs_work\"], \"description\": \"strength: a clear strength the data shows; stable: adequate, nothing notable either way; needs_work: could improve, including a gap the data shows or a practice worth changing\"}, \"observation\": {\"type\": \"string\", \"description\": \"2 sentences of observation (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"the statistics or summary content it rests on; if they can't carry a judgment, say so (in the content language named in the prompt)\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"a concrete practice, 1 sentence (in the content language named in the prompt)\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"one thing that can be done as written (in the content language named in the prompt)\"}, \"why\": {\"type\": \"string\", \"description\": \"which observation it answers, the expected effect (in the content language named in the prompt)\"}}}}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1284,6 +2035,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"the week in one line, ≤ 30 characters: an image or turn of phrase for what mattered most, a little poetic but true to this week's facts, no numbers (in the content language named in the prompt)\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 sentences overall: the week's focus, what got done, the biggest problem (in the content language named in the prompt)\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"the insight's conclusion in one sentence, ≤ 22 characters (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences of analysis: what pattern shows, and why (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"concrete evidence: statistics or what the summaries say (in the content language named in the prompt)\"}, \"so_what\": {\"type\": \"string\", \"description\": \"what it means and how to take it, 1 sentence (in the content language named in the prompt)\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"what was worked on this week (with summaries: down to features/decisions; without: the shape of the effort) (in the content language named in the prompt)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"assessment of progress: how far it moved, whether the output matches the effort (in the content language named in the prompt)\"}, \"status\": {\"type\": \"string\", \"enum\": [\"advancing\", \"stable\", \"stuck\", \"diverging\", \"wrapping_up\"], \"description\": \"advancing: moved forward toward its goal; stable: kept at a stable pace, no notable progress or trouble; stuck: blocked, or effort without visible progress; diverging: effort spread over several directions or topics instead of converging on one; wrapping_up: finishing or closing out\"}, \"next\": {\"type\": \"string\", \"description\": \"the one thing most worth doing next (in the content language named in the prompt)\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"the working rhythm in one sentence (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences: what the hours, late nights and long stretches mean, and their likely effect on output and on the quality of judgment (in the content language named in the prompt)\"}, \"pattern\": {\"type\": \"string\", \"description\": \"the most visible rhythm pattern (in the content language named in the prompt)\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"delegation\", \"description\", \"discernment\", \"diligence\"], \"description\": \"the 4D AI fluency framework: one item per dimension\"}, \"level\": {\"type\": \"string\", \"enum\": [\"strength\", \"stable\", \"needs_work\"], \"description\": \"strength: a clear strength the data shows; stable: adequate, nothing notable either way; needs_work: could improve, including a gap the data shows or a practice worth changing\"}, \"observation\": {\"type\": \"string\", \"description\": \"2 sentences of observation (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"the statistics or summary content it rests on; if they can't carry a judgment, say so (in the content language named in the prompt)\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"a concrete practice, 1 sentence (in the content language named in the prompt)\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"one thing that can be done as written (in the content language named in the prompt)\"}, \"why\": {\"type\": \"string\", \"description\": \"which observation it answers, the expected effect (in the content language named in the prompt)\"}}}}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  },
@@ -1302,6 +2066,17 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"the week in one line, ≤ 30 characters: an image or turn of phrase for what mattered most, a little poetic but true to this week's facts, no numbers (in the content language named in the prompt)\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 sentences overall: the week's focus, what got done, the biggest problem (in the content language named in the prompt)\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"the insight's conclusion in one sentence, ≤ 22 characters (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences of analysis: what pattern shows, and why (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"concrete evidence: statistics or what the summaries say (in the content language named in the prompt)\"}, \"so_what\": {\"type\": \"string\", \"description\": \"what it means and how to take it, 1 sentence (in the content language named in the prompt)\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"what was worked on this week (with summaries: down to features/decisions; without: the shape of the effort) (in the content language named in the prompt)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"assessment of progress: how far it moved, whether the output matches the effort (in the content language named in the prompt)\"}, \"status\": {\"type\": \"string\", \"enum\": [\"advancing\", \"stable\", \"stuck\", \"diverging\", \"wrapping_up\"], \"description\": \"advancing: moved forward toward its goal; stable: kept at a stable pace, no notable progress or trouble; stuck: blocked, or effort without visible progress; diverging: effort spread over several directions or topics instead of converging on one; wrapping_up: finishing or closing out\"}, \"next\": {\"type\": \"string\", \"description\": \"the one thing most worth doing next (in the content language named in the prompt)\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"the working rhythm in one sentence (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences: what the hours, late nights and long stretches mean, and their likely effect on output and on the quality of judgment (in the content language named in the prompt)\"}, \"pattern\": {\"type\": \"string\", \"description\": \"the most visible rhythm pattern (in the content language named in the prompt)\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"delegation\", \"description\", \"discernment\", \"diligence\"], \"description\": \"the 4D AI fluency framework: one item per dimension\"}, \"level\": {\"type\": \"string\", \"enum\": [\"strength\", \"stable\", \"needs_work\"], \"description\": \"strength: a clear strength the data shows; stable: adequate, nothing notable either way; needs_work: could improve, including a gap the data shows or a practice worth changing\"}, \"observation\": {\"type\": \"string\", \"description\": \"2 sentences of observation (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"the statistics or summary content it rests on; if they can't carry a judgment, say so (in the content language named in the prompt)\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"a concrete practice, 1 sentence (in the content language named in the prompt)\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"one thing that can be done as written (in the content language named in the prompt)\"}, \"why\": {\"type\": \"string\", \"description\": \"which observation it answers, the expected effect (in the content language named in the prompt)\"}}}}}}"
   ],
+  "env": {
+   "config_dir": "shared",
+   "names": [
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": false
  },
@@ -1320,6 +2095,19 @@
    "--json-schema",
    "{\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"headline\", \"summary\", \"insights\", \"projects\", \"rhythm\", \"fluency\", \"next_week\"], \"properties\": {\"headline\": {\"type\": \"string\", \"description\": \"the week in one line, ≤ 30 characters: an image or turn of phrase for what mattered most, a little poetic but true to this week's facts, no numbers (in the content language named in the prompt)\"}, \"summary\": {\"type\": \"string\", \"description\": \"3–4 sentences overall: the week's focus, what got done, the biggest problem (in the content language named in the prompt)\"}, \"insights\": {\"type\": \"array\", \"minItems\": 3, \"maxItems\": 5, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"title\", \"analysis\", \"evidence\", \"so_what\"], \"properties\": {\"title\": {\"type\": \"string\", \"description\": \"the insight's conclusion in one sentence, ≤ 22 characters (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences of analysis: what pattern shows, and why (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"concrete evidence: statistics or what the summaries say (in the content language named in the prompt)\"}, \"so_what\": {\"type\": \"string\", \"description\": \"what it means and how to take it, 1 sentence (in the content language named in the prompt)\"}}}}, \"projects\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"name\", \"focus\", \"assessment\", \"status\", \"next\"], \"properties\": {\"name\": {\"type\": \"string\"}, \"focus\": {\"type\": \"string\", \"description\": \"what was worked on this week (with summaries: down to features/decisions; without: the shape of the effort) (in the content language named in the prompt)\"}, \"assessment\": {\"type\": \"string\", \"description\": \"assessment of progress: how far it moved, whether the output matches the effort (in the content language named in the prompt)\"}, \"status\": {\"type\": \"string\", \"enum\": [\"advancing\", \"stable\", \"stuck\", \"diverging\", \"wrapping_up\"], \"description\": \"advancing: moved forward toward its goal; stable: kept at a stable pace, no notable progress or trouble; stuck: blocked, or effort without visible progress; diverging: effort spread over several directions or topics instead of converging on one; wrapping_up: finishing or closing out\"}, \"next\": {\"type\": \"string\", \"description\": \"the one thing most worth doing next (in the content language named in the prompt)\"}}}}, \"rhythm\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"verdict\", \"analysis\", \"pattern\"], \"properties\": {\"verdict\": {\"type\": \"string\", \"description\": \"the working rhythm in one sentence (in the content language named in the prompt)\"}, \"analysis\": {\"type\": \"string\", \"description\": \"2–3 sentences: what the hours, late nights and long stretches mean, and their likely effect on output and on the quality of judgment (in the content language named in the prompt)\"}, \"pattern\": {\"type\": \"string\", \"description\": \"the most visible rhythm pattern (in the content language named in the prompt)\"}}}, \"fluency\": {\"type\": \"array\", \"minItems\": 4, \"maxItems\": 4, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"dimension\", \"level\", \"observation\", \"evidence\", \"suggestion\"], \"properties\": {\"dimension\": {\"type\": \"string\", \"enum\": [\"delegation\", \"description\", \"discernment\", \"diligence\"], \"description\": \"the 4D AI fluency framework: one item per dimension\"}, \"level\": {\"type\": \"string\", \"enum\": [\"strength\", \"stable\", \"needs_work\"], \"description\": \"strength: a clear strength the data shows; stable: adequate, nothing notable either way; needs_work: could improve, including a gap the data shows or a practice worth changing\"}, \"observation\": {\"type\": \"string\", \"description\": \"2 sentences of observation (in the content language named in the prompt)\"}, \"evidence\": {\"type\": \"string\", \"description\": \"the statistics or summary content it rests on; if they can't carry a judgment, say so (in the content language named in the prompt)\"}, \"suggestion\": {\"type\": \"string\", \"description\": \"a concrete practice, 1 sentence (in the content language named in the prompt)\"}}}}, \"next_week\": {\"type\": \"array\", \"minItems\": 2, \"maxItems\": 3, \"items\": {\"type\": \"object\", \"additionalProperties\": false, \"required\": [\"action\", \"why\"], \"properties\": {\"action\": {\"type\": \"string\", \"description\": \"one thing that can be done as written (in the content language named in the prompt)\"}, \"why\": {\"type\": \"string\", \"description\": \"which observation it answers, the expected effect (in the content language named in the prompt)\"}}}}}}"
   ],
+  "env": {
+   "config_dir": "platform",
+   "names": [
+    "CLAUDE_CONFIG_DIR",
+    "DISABLE_AUTOUPDATER",
+    "npm_config_prefix",
+    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS"
+   ],
+   "path_head": [
+    "<STORE>/claude/stub",
+    "<STORE>/claude/2.1.400/node_modules/.bin"
+   ]
+  },
   "exit": 0,
   "token_passed": true
  }

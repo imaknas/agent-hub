@@ -132,7 +132,7 @@ def build(proj: pathlib.Path, arm: str, scenario: str) -> None:
     git("init", "-q", "-b", "main")
     git("add", "-A")
     git("commit", "-q", "-m", "chore: initial commit")
-    rt = runtime_ports.load()
+    rt = runtime_ports.load(ports=("instructions",))
     ignores = [".agent-memory/", *rt.local_ignores()]
     with (proj / ".git" / "info" / "exclude").open("a") as f:
         f.write("\n".join(ignores) + "\n")
@@ -321,7 +321,7 @@ def one(scenario: str, arm: str, i: int, run_dir: pathlib.Path, env: dict) -> di
             point = "lease-session"
             preamble = render_as(tree, "lease", renv, project=PROJECT, mode=LEASE[scenario])
             (out / "preamble.txt").write_text(preamble)
-            with runtime_ports.load().instructions_file(proj).open("a") as f:
+            with runtime_ports.load(ports=("instructions",)).instructions_file(proj).open("a") as f:
                 f.write("\n" + preamble + "\n")
             (out / "prompt.txt").write_text(d["scenarios"][scenario]["prompt"])
         if scenario in ("letter", "mcp"):

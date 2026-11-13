@@ -393,6 +393,9 @@ PORTS = {
     # a run of that copy from updating itself. MIN_VERSION beside them. Without it a runtime is unversioned (doctor says so)
     "distribution": ("latest", "install", "version_of", "pin_env"),
 }
+# Beside the distribution port, a runtime that runs a store's checked copy (bin/runtime_store.py) has checked_copy() →
+# (the copy, None) or (None, why there is none): load() refuses the ports that start platform runs while it says why
+# (NoCheckedCopy, below), and no_checked_copy() tells doctor, the status page and llm_ready.
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
@@ -538,6 +541,8 @@ class TaskResult(NamedTuple):
     stop: str = ""                   # why it ended (the runtime's own wording, only for the log)
     denials: tuple = ()              # actions that were refused
     error: str = ""                  # the reason when ok is False
+    runtime_version: str | None = None   # the version of the tool's copy the run started, when the runtime keeps a store
+                                         # of checked copies (llm.py's llm_runtime_version)
 
 
 class CompletionRequest(NamedTuple):
@@ -563,6 +568,7 @@ class CompletionResult(NamedTuple):
     cost_usd: float | None = None    # filled only if the implementation knows the cost itself (e.g. Claude Code returns
                                      # it); APIs return only tokens, and completion.py prices them from the price list
     retry_after_s: float | None = None   # when stop is rate_limited, how long the service suggests waiting
+    runtime_version: str | None = None   # a runtime's completion: the version of the copy it started (as TaskResult)
 
 
 # end = finished normally; length = truncated by length (a retry would truncate the same way, so no retry); refused =
@@ -583,6 +589,19 @@ class Unsupported(Exception):
     """This runtime has no such interface at all (e.g. runtime_none, a completion-only adapter): not an error, a lack of
     capability. Callers treat it as "unsupported": switch that feature off explicitly and say why (str(e)), **never run
     on empty data** (docs/design/tool-agnostic.md principle 3)."""
+
+
+class NoCheckedCopy(Unsupported):
+    """The runtime has the interface, but no checked copy of the tool to start a platform run with (none promoted yet,
+    or the one promoted changed after it was checked; docs/design/runtime-versions.md section 3, "No checked copy, no
+    run"). Only the ports that start platform runs (PLATFORM_RUNS) are refused for it, never by a fallback to another
+    copy; the ports that describe the user's sessions stay."""
+
+
+# The ports that start a platform run of the tool: load() refuses them with NoCheckedCopy while the runtime says it has
+# no checked copy (its checked_copy()). auth stays loadable (it only describes and cleans), and capabilities() is
+# unchanged, so what reads it (the sandboxed projects' hooks, CAGED_NEEDS) keeps every protection with an empty store.
+PLATFORM_RUNS = ("agent", "completion", "stream", "confine")
 
 
 def _module(name: str):
@@ -613,10 +632,22 @@ def default_name() -> str:
         return DEFAULT
 
 
-def load(name: str | None = None, ports=None):
+def no_checked_copy(name: str | None = None) -> str | None:
+    """Why this runtime has no checked copy to start platform runs with (its optional checked_copy() → (copy, why)), or
+    None: it has one, or it keeps no store of copies (unversioned). For doctor, the status page and llm_ready."""
+    fn = getattr(_module(name or default_name()), "checked_copy", None)
+    if not callable(fn):
+        return None
+    _copy, why = fn()
+    return why or None
+
+
+def load(name: str | None = None, ports=None, platform_runs: bool = True):
     """Get a runtime's module. A requested interface only partly implemented → MissingFunctions (a bug, not something
     that breaks only when called); entirely absent → Unsupported (lack of capability: the caller says why and switches
-    the feature off)."""
+    the feature off). platform_runs: a port that starts platform runs (PLATFORM_RUNS) is asked for to start one, so with
+    no checked copy of the tool it is refused (NoCheckedCopy, with the runtime's reason). False only for a caller that
+    reads or parses through those ports and starts no run itself (a lease's reader, mailbox dispatch's routing)."""
     name = name or default_name()
     mod = _module(name)
     ports = tuple(p for p in PORTS if p not in OPTIONAL) if ports is None else ports
@@ -633,6 +664,8 @@ def load(name: str | None = None, ports=None):
         labels = port_labels()
         raise Unsupported(_("runtime {name} has no {missing} ({settings} runtime.default; to use this feature, install a "
                             "coding agent that supports it)", name=name, missing=or_list(labels.get(p, p) for p in absent)))
+    if platform_runs and set(ports) & set(PLATFORM_RUNS) and (why := no_checked_copy(name)):
+        raise NoCheckedCopy(why)
     return mod
 
 

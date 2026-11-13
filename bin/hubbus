@@ -2989,10 +2989,13 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
     mailbox-session-first.md "Each tick"). Returns the number of letters still waiting for a hook. wakes: what to send later goes
     here, for a caller that writes the views first; with none it goes now."""
     ours = rt is None
+    no_runs = None   # why the platform can start no agent run now (no checked copy of the tool): routes only
     if rt is None:
         import runtime_ports  # the runtime is only reached through the interface (Claude Code is one implementation)
         try:
-            runtime_ports.load(ports=("agent", "sessions"))   # the runtime the platform starts: as before A1
+            # the runtime the platform starts: as before A1. Routing, holds and wakes need only its sessions, so they
+            # go on with no checked copy of it (runtime-versions.md section 3); forks and triage need that copy
+            runtime_ports.load(ports=("agent", "sessions"), platform_runs=False)
             rt = runtime_ports.Sessions()   # the sessions of every installed runtime, each call routed by its id
         except runtime_ports.Unsupported as e:
             # no coding agent (runtime.default: none): no agent dispatched, letters stay in the mailbox for a person
@@ -3000,6 +3003,13 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
             log_once("dispatch-unsupported", _("mailbox delegation dispatches no agent: {e}", e=e))
             return 0
         log_once("dispatch-unsupported", "")
+        try:
+            runtime_ports.load(ports=("agent",))
+        except runtime_ports.NoCheckedCopy as e:
+            no_runs = str(e)
+        # a fork or triage started now would fail and use up the letter's one chance: they wait for a checked copy
+        log_once("dispatch-no-copy", _("mailbox dispatch routes letters to sessions but starts no agent run: {e}", e=no_runs)
+                 if no_runs else "")
     try:
         live = rt.live_sessions()
         opened = rt.open_sessions() if callable(getattr(rt, "open_sessions", None)) else {}
@@ -3114,7 +3124,7 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
                 continue
             # From here on the platform would start something; a session can still come. Too old, or held (the loop guard
             # or a failed propose run asked the owner once already): it starts nothing more
-            if r["ts"] < run_cut or has_via(c, r["id"], "held"):
+            if r["ts"] < run_cut or has_via(c, r["id"], "held") or no_runs:
                 waiting += 1
                 continue
             # One fork per letter, on both paths: claim's fixed id means runs_today and platform_rounds don't rise for a

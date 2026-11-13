@@ -502,14 +502,25 @@ def agent_presets() -> dict[str, dict]:
     return out
 
 
-def agent_found(info: dict) -> pathlib.Path | None:
-    """The tool's command: under nvm's default node (the platform's copy), else on PATH."""
+def agent_found(info: dict, name: str | None = None) -> pathlib.Path | None:
+    """The tool's command: the user's own copy, under nvm's default node, else on PATH (what the commands init runs by
+    name use: the token's setup, a tool's login, the MCP registration). With the runtime's name, the platform's checked
+    copy in the store counts too (docs/design/runtime-versions.md section 3): either one is the agent being there."""
     import shutil
     nb = hubconf.nvm_bin()
     if nb and (nb / info["find"]).exists():
         return nb / info["find"]
     w = shutil.which(info["find"])
-    return pathlib.Path(w) if w else None
+    if w:
+        return pathlib.Path(w)
+    if name:
+        import runtime_store
+        try:
+            cur = runtime_store.current(name)
+        except (OSError, ValueError):
+            cur = None
+        return cur.exe if cur is not None else None
+    return None
 
 
 def agent_env() -> dict:
@@ -523,10 +534,10 @@ def choose_agent(args: dict, presets: dict[str, dict]) -> str:
     (or --yes) the first one found, else none."""
     if args.get("agent"):
         return args["agent"]
-    found = [n for n, info in presets.items() if agent_found(info)]
+    found = [n for n, info in presets.items() if agent_found(info, n)]
     default = found[0] if found else "none"
     options = [(n, f"{info['label']}: {info['gives']} ("
-                   + (_("installed") if agent_found(info) else _("not installed")) + ")") for n, info in presets.items()]
+                   + (_("installed") if agent_found(info, n) else _("not installed")) + ")") for n, info in presets.items()]
     options.append(("none", _("None for now: memory, schedules and the mailbox work; agent features stay off")))
     return UI().menu("agent", _("Which AI agent should brunna use for its own work (nightly tidy-up, the mailbox)?"),
                      options, default)
@@ -552,6 +563,8 @@ def install_agent(choice: str, presets: dict[str, dict]) -> bool:
     if choice == "none":
         return True
     info = presets[choice]
+    if (why := install_blocker(choice)):   # said now: the platform's own copy can't be installed here either
+        print(_("⚠️ {reason}", reason=why))
     if agent_found(info):
         return True
     print(_("{label} is not installed. Installing it runs:", label=info["label"]))
@@ -571,6 +584,49 @@ def install_agent(choice: str, presets: dict[str, dict]) -> bool:
           _("{label} still isn't found; open a new terminal and run brunna init --agent {name}",
             label=info["label"], name=choice))
     return ok
+
+
+def install_blocker(choice: str) -> str | None:
+    """Why this machine can't install the runtime's checked copy (the adapter's install_blocker: Claude Code's needs
+    nvm's npm), or None."""
+    import runtime_ports
+    if choice not in runtime_ports.RUNTIMES:
+        return None
+    fn = getattr(runtime_ports._module(choice), "install_blocker", None)
+    return fn() if callable(fn) else None
+
+
+def store_install(choice: str) -> bool:
+    """The chosen runtime's checked copy in the platform's store, when it keeps one and has none yet (the first install:
+    bin/runtimes.py install, which downloads the tool and runs its checks before promoting it;
+    docs/design/runtime-versions.md section 3). Said first, as is a machine that can't install it or a missing login the
+    checks need. Whether a checked copy is there afterwards (True for a runtime that keeps no store)."""
+    import runtime_ports
+    if choice not in runtime_ports.RUNTIMES or "distribution" not in runtime_ports.capabilities(choice):
+        return True
+    if not runtime_ports.no_checked_copy(choice):
+        return True
+    if (why := install_blocker(choice)):
+        print(_("⚠️ {reason}", reason=why))
+        return False
+    try:
+        creds = runtime_ports.load(choice, ports=("auth",)).credentials()
+    except runtime_ports.Unsupported:
+        creds = []
+    if (missing := [c for c in creds if c.mode == "token" and not c.present]):
+        print(_("The platform's own copy of {runtime} is installed and checked with its login for unattended runs, and "
+                "that isn't there yet ({label}). Later: brunna runtimes install {runtime}", runtime=choice,
+                label=missing[0].label))
+        return False
+    print(_("brunna runs its own checked copy of {runtime}, separate from yours: it downloads it now (about 300 MB) and "
+            "runs its checks on it, which take some minutes", runtime=choice))
+    rc = subprocess.run([*hubconf.launch(BIN / "runtimes.py"), "install", choice]).returncode
+    if rc != 0 or runtime_ports.no_checked_copy(choice):
+        print(_("⚠️ no checked copy of {runtime} yet; brunna doctor says why. Later: brunna runtimes install {runtime}",
+                runtime=choice))
+        return False
+    print(_("✓ a checked copy of {runtime} is in the store", runtime=choice))
+    return True
 
 
 def agent_login_check() -> str | None:
@@ -612,6 +668,9 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
                 print(_("{file} isn't there yet. Later: brunna init --agent {name}", file=f, name=choice))
                 return
         if not UI().acts:
+            return
+        # the login check runs the platform's own checked copy: installed and checked first, with the token just made
+        if not store_install(choice):
             return
         if (why := agent_login_check()):
             print(_("⚠️ {label} did not answer with that login: {reason}", label=info["label"], reason=why[:300]))
@@ -1549,18 +1608,23 @@ def doctor_propose(add) -> None:
 
 
 def doctor_store(add, name: str) -> None:
-    """The runtime's checked copy in the store (docs/design/runtime-versions.md section 3): the version, none yet, or one
-    held back. Until platform runs move to the store they still start the copy on PATH, so these are information."""
+    """The runtime's checked copy in the store (docs/design/runtime-versions.md section 3): the version, none (red:
+    platform runs start only a checked copy, so none of them runs: what makes one, or why this machine can't), or one
+    held back."""
+    import runtime_ports
     import runtime_store
     cur = runtime_store.current(name)
     try:
         held = json.loads((hubconf.STATE / "runtime-held.json").read_text()).get(name) or {}
     except (OSError, ValueError, AttributeError):
         held = {}
-    if cur is None:
-        add("info", _("the runtime {runtime} has no checked copy in the store yet (brunna runtimes install {runtime}); "
-                      "the nightly brunna/update-runtimes makes one", runtime=name))
-    else:
+    blocker = getattr(runtime_ports._module(name), "install_blocker", None)
+    blocker = blocker() if callable(blocker) else None
+    if (why := runtime_ports.no_checked_copy(name)):
+        add("bad", _("the runtime {runtime} starts no platform run: {reason}", runtime=name, reason=why),
+            blocker or _("brunna runtimes install {runtime} (it downloads the tool and runs its checks, for some minutes)",
+                         runtime=name))
+    elif cur is not None:
         add("ok", _("the runtime {runtime}: checked copy {version} in the store", runtime=name, version=cur.version))
     if held.get("version"):
         add("info", _("the runtime {runtime}: {version} held back since {since} (brunna runtimes shows why)", runtime=name,

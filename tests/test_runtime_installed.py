@@ -27,6 +27,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import runtime_claude  # noqa: E402
 import runtime_ports  # noqa: E402
+import store_fixture  # noqa: E402
 
 SID = "0a1b2c3d-0000-4000-8000-00000000abcd"
 
@@ -57,6 +58,7 @@ class Bus(unittest.TestCase):
             p = mock.patch.object(hubconf, name, value)
             p.start()
             self.addCleanup(p.stop)
+        store_fixture.stand_in(self)   # the platform's checked copy: forks and triage can start
         self.c = hb.db()
         self.addCleanup(self.c.close)
         self.he = load_file("hub_event_installed", BIN / "hub-event")

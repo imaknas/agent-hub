@@ -87,8 +87,9 @@ _c = i18n.domain(__file__, content=True)   # the note written into the project's
 
 def rt():
     """The runtime this runner uses (runtime_ports; for now always hub.json's runtime.default). All of Claude Code's
-    details are inside it."""
-    return runtime_ports.load()
+    details are inside it. It parses, cleans and looks up through it and starts nothing with it (llm.py exec starts the
+    session, and refuses with no checked copy of the tool): a lease's reader keeps reading whatever the store does."""
+    return runtime_ports.load(platform_runs=False)
 
 HUB = hubconf.ROOT
 HOST, PORT = "127.0.0.1", int(os.environ.get("LEASE_RUNNER_PORT", "18797"))

@@ -99,6 +99,8 @@ class Golden(unittest.TestCase):
 
     def test_reflect_llm(self):
         import reflect_llm as m
+        import store_fixture
+        store_fixture.stand_in(self)   # what llm_ready reads: a checked copy is there
         fake_llm = types.SimpleNamespace(model_for=lambda point: None)   # EXCLUDED None: no session digests asked for
         out = []
         import hubconf
