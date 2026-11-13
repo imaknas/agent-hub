@@ -16,5 +16,7 @@
  "{runtime}: no previous version to go back to": "{runtime}:沒有上一個版本可以退回",
  "{runtime}: not going back to {version}: its safety checks didn't pass, or it is below {floor}": "{runtime}:不退回 {version}:它的安全檢查沒過,或比 {floor} 還舊",
  "runtimes: {root} is a linked worktree of the hub; the store is changed only from the main checkout ({main})": "runtimes:{root} 是 hub 的 linked worktree;store 只從主 checkout({main})改",
- "{runtime}: platform runs start nothing: {reason}": "{runtime}:平台執行什麼都不啟動:{reason}"
+ "{runtime}: platform runs start nothing: {reason}": "{runtime}:平台執行什麼都不啟動:{reason}",
+ "  versions your sessions ran in the last {days} days:": "  你的 session 最近 {days} 天跑過的版本:",
+ "  no version of your sessions seen in the last {days} days": "  最近 {days} 天沒看到你的 session 的版本"
 }

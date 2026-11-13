@@ -200,6 +200,9 @@ class Lease:
         # records from before the change lack this field, and counting from 0, the ids used for replays
         # (lease-<id>-<n>-…) would later collide with the real n-th handover
         self.handovers = max(int(d.get("handovers") or 0), handovers_logged(self.id))
+        # the version of the tool its session was last run with: what lease-resume resumes it with must have passed
+        # resuming one (docs/design/runtime-versions.md section 5)
+        self.version = d.get("version") if isinstance(d.get("version"), str) else None
         self.recent: list[dict] = []          # recent events (text_delta included), for SSE replays
         self.cond = threading.Condition(_lock)
 
@@ -207,7 +210,8 @@ class Lease:
         return {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread, "cwd": self.cwd,
                 "state": self.state, "started_once": self.started_once, "max_turns": self.max_turns,
                 "last_activity": self.last_activity, "idle_warned_at": self.idle_warned_at, "warned_at": self.warned_at,
-                "seq": self.seq, "seen_msgs": self.seen_msgs[-200:], "handovers": self.handovers}
+                "seq": self.seq, "seen_msgs": self.seen_msgs[-200:], "handovers": self.handovers,
+                **({"version": self.version} if self.version else {})}
 
     def public(self) -> dict:
         return {"lease_id": self.id, "project": self.project, "mode": self.mode, "thread": self.thread,
@@ -361,6 +365,7 @@ def start_proc(lease: Lease, resume: bool) -> None:
            "--permission-prompt-tool", runtime_claude.APPROVE_TOOL,
            "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project, lease.mode),
            "--max-turns", str(lease.max_turns)]
+    lease.version = run_version() or lease.version
     lease.dir.mkdir(parents=True, exist_ok=True)
     err = open(lease.dir / "stderr.log", "a")
     lease.proc = subprocess.Popen(cmd, cwd=lease.cwd, env=env_for(lease), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -374,6 +379,17 @@ def start_proc(lease: Lease, resume: bool) -> None:
     else:
         lease.set_state("running", pid=lease.proc.pid, resumed=can_resume)
     threading.Thread(target=reader, args=(lease, lease.proc), daemon=True).start()
+
+
+def run_version() -> str | None:
+    """The version of the platform's checked copy a run starts with now (the store's current), which is what writes the
+    lease's session; None when there is none."""
+    try:
+        import runtime_store
+        cur = runtime_store.current(runtime_ports.default_name())
+    except (OSError, ValueError):
+        return None
+    return cur.version if cur else None
 
 
 def stop_proc(lease: Lease, new_state: str) -> None:

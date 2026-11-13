@@ -78,5 +78,10 @@
  "{folder} in {project}: its sessions can't write {names} (each entry present there is denied, so the agent's or the app's own writes there fail too)": "{project} 的 {folder}:它的 session 不能寫 {names}(那裡現有的每一項都擋寫,所以 agent 或 app 自己往那裡寫也會失敗)",
  "{folder} in {project}: {n} {n:entry has|entries have} a name no rule can hold ({names}: a glob character, a space, a parenthesis…), so no rule names {n:it|them} and its sessions can write {n:it|them}; rename {n:it|them}": "{project} 的 {folder}:有 {n} 項的名字規則裝不下({names}:萬用字元、空白、括號…),沒有規則指到,它的 session 寫得到;請改名",
  "{project}: {n} tool {n:folder|folders} can't be listed ({names}: a link, or unreadable), so nothing in {n:it|them} is denied by name: its sessions can write {n:it|them}": "{project}:有 {n} 個工具資料夾列不出內容({names}:是連結,或讀不到),裡面沒有任何東西被指名擋寫:它的 session 寫得到",
- "{project}: {n} denied {n:entry is a link|entries are links} ({names}): the rules name the link, so what it points to stays writable from its sessions' Bash": "{project}:有 {n} 個被擋的項目是連結({names}):規則指的是連結本身,它指向的地方從 session 的 Bash 仍寫得到"
+ "{project}: {n} denied {n:entry is a link|entries are links} ({names}): the rules name the link, so what it points to stays writable from its sessions' Bash": "{project}:有 {n} 個被擋的項目是連結({names}):規則指的是連結本身,它指向的地方從 session 的 Bash 仍寫得到",
+ "npm could not list the published versions (exit {code})": "npm 列不出已發布的版本(結束碼 {code})",
+ "this session was written by Claude Code {version}, and the platform's copy {current} {how}: not resumed (brunna runtimes shows the checks)": "這個 session 是 Claude Code {version} 寫的,而平台的版本 {current}{how}:不接續(brunna runtimes 看檢查結果)",
+ "npm could not list the published versions: {error}": "npm 列不出已發布的版本:{error}",
+ "failed to resume one ({reason})": "接續這種 session 失敗({reason})",
+ "hasn't been checked resuming one yet": "還沒檢查過能不能接續這種 session"
 }

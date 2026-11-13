@@ -20,18 +20,20 @@ import json, sys
 d = json.load(open(sys.argv[3]))
 l = d.get(sys.argv[1]) or sys.exit(sys.argv[2])
 print(l['cwd'])" "$id" "$(hub_msg "no such lease: {id}" id="$id")" "$HUB/.state/lease-runner/leases.json")
+# the lease's record names the version that wrote its session: the copy resumes it only when that pair passed
 exec "$HUB/bin/py" -I -B -c '
-import os, sys
+import json, os, sys
 sys.path.insert(0, sys.argv[1])
 import runtime_ports
 try:
+    written_by = (json.load(open(sys.argv[5])).get(sys.argv[2]) or {}).get("version")
     rt = runtime_ports.load(ports=("stream",))
     resume = getattr(rt, "resume_exec", None)
     if not callable(resume):
         sys.exit(sys.argv[3])
-    argv, env = resume(sys.argv[2])
-except (runtime_ports.Unsupported, ValueError) as e:
+    argv, env = resume(sys.argv[2], written_by=written_by if isinstance(written_by, str) else None)
+except (runtime_ports.Unsupported, ValueError, OSError) as e:
     sys.exit(str(e))
 os.chdir(sys.argv[4])
 os.execve(argv[0], argv, env)
-' "$HUB/bin" "$id" "$(hub_msg "the platform's coding agent can't resume a session in a terminal")" "$cwd"
+' "$HUB/bin" "$id" "$(hub_msg "the platform's coding agent can't resume a session in a terminal")" "$cwd" "$HUB/.state/lease-runner/leases.json"

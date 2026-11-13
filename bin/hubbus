@@ -145,6 +145,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import hashlib
+import inspect
 import json
 import os
 import pathlib
@@ -2156,14 +2157,24 @@ def mcp_sessions(c, proj) -> list:
     return [r for r in rows if r["seen"] >= (tool_cut if r["via"] == "tool" else init_cut) and mcp_process(r["session"])]
 
 
-def active_sessions(c, proj, live, mcp=None) -> list[str]:
+def active_sessions(c, proj, live, mcp=None, rt=None) -> list[str]:
     """Sessions using this project now: one the runtime reports live with a hook within CONVERSATION_WAIT_MIN, and
-    the MCP sessions (mcp_sessions; mcp: already computed)."""
+    the MCP sessions (mcp_sessions; mcp: already computed). Never a gated session (gated: rt's say): a letter doesn't
+    wait for one."""
     cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     mine = own_names(proj)
     return [r["session"] for r in c.execute(f"SELECT session FROM presence WHERE project IN ({','.join('?' * len(mine))})"
                                             " AND seen >= ? AND session NOT LIKE 'mcp:%'", (*mine, cutoff))
-            if r["session"] in live] + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
+            if r["session"] in live and not gated(rt, r["session"])] \
+        + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
+
+
+def gated(rt, sid) -> bool:
+    """Whether the platform starts no work in this session: a sandboxed project's session whose version failed a safety
+    check (runtime_ports.Sessions.gated, the one place it is decided; docs/design/runtime-versions.md section 6). A
+    runtime object without the question (a test's, one runtime as before) gates none."""
+    fn = getattr(rt, "gated", None)
+    return bool(callable(fn) and sid and fn(sid))
 
 
 def session_cwd(c, sid, ws) -> pathlib.Path | None:
@@ -2208,7 +2219,7 @@ def can_resume(rt, sid) -> bool:
     the one that runs it, with the agent port). A runtime object without the question (one runtime, as before A1) can
     resume all of its sessions."""
     fn = getattr(rt, "can_resume", None)
-    return bool(fn(sid)) if callable(fn) else True
+    return not gated(rt, sid) and (bool(fn(sid)) if callable(fn) else True)
 
 
 def recent_session(c, proj, live, rt=None, keep=None) -> str | None:
@@ -2658,7 +2669,7 @@ class Tick:
 
     def __init__(self, c, rt, live, opened, leases):
         self.c, self.rt, self.live, self.opened, self.leases = c, rt, live, opened, leases
-        self.statuses, self.owed, self.on, self.wakeable = {}, {}, {}, {}
+        self.statuses, self.owed, self.on, self.wakeable, self.gates = {}, {}, {}, {}, {}
         self.listed, self.spent = False, 0.0
         self.asked, self.where = set(), None   # projects a mailbox-route call started for this tick; where the point runs
 
@@ -2676,10 +2687,16 @@ class Tick:
             self.on[proj] = wake_on(proj)
         return self.on[proj]
 
+    def gated(self, sid) -> bool:
+        """A gated session (gated): never woken, routed to or waited for."""
+        if sid not in self.gates:
+            self.gates[sid] = gated(self.rt, sid)
+        return self.gates[sid]
+
     def can_wake(self, sid) -> bool:
         if sid not in self.wakeable:
             fn = getattr(self.rt, "can_wake", None)
-            self.wakeable[sid] = bool(fn(sid)) if callable(fn) else False
+            self.wakeable[sid] = not self.gated(sid) and (bool(fn(sid)) if callable(fn) else False)
         return self.wakeable[sid]
 
     def timed(self, fn, *args):
@@ -2697,7 +2714,10 @@ class Tick:
             many = getattr(self.rt, "session_statuses", None)
             if callable(many):
                 ask = sorted({s for s in self.opened if s in self.live and self.can_wake(s)} | {sid})
-                got = self.timed(many, ask)
+                # the listing's own deadline is what is left of the tick's budget (runtime-versions.md section 5)
+                takes = "deadline" in inspect.signature(many).parameters
+                left = time.monotonic() + max(0.0, STATUS_TICK_S - self.spent)
+                got = self.timed(many, ask, *((left,) if takes else ()))
                 self.statuses.update(got if isinstance(got, dict) else {})
                 if isinstance(got, dict):   # said while it lasts: no session is woken meanwhile, only routed to
                     log_once("sessions-unlisted", _(
@@ -2755,7 +2775,7 @@ def candidates(c, t: Tick, proj: str, r) -> list[str]:
     letter (a forged to_session or reply_to) can add a session: other projects' sessions aren't in the list to pick from."""
     return [sid for sid in t.opened
             if t.of_project(sid, proj) and sid in t.live and sid not in t.leases and not sid.startswith("mcp:")
-            and not own_letter(r, sid) and not tried(c, r, sid) and t.can_wake(sid)]
+            and not own_letter(r, sid) and not tried(c, r, sid) and not t.gated(sid) and t.can_wake(sid)]
 
 
 def last_in_thread(c, r, cands: list[str]) -> str | None:
@@ -3091,10 +3111,11 @@ def dispatch(c, rt=None, wakes: list | None = None) -> int:
             # bounded by the letter's age. One that has already had this letter isn't waited on
             if r["ts"] >= wait_cut:
                 mcp = mcp_sessions(c, proj) if mcp is None else mcp
-                using = [s for s in active_sessions(c, proj, live, mcp) if s not in cands and not own_letter(r, s) and not tried(c, r, s)]
+                using = [s for s in active_sessions(c, proj, live, mcp, rt) if s not in cands and not own_letter(r, s)
+                         and not tried(c, r, s)]
                 # the session a reply names, unless its own record says it is another project's: that name is only a hint
                 asked = conversation and to_s in live and to_s not in cands and not tried(c, r, to_s) \
-                    and (to_s not in opened or t.of_project(to_s, proj))
+                    and (to_s not in opened or t.of_project(to_s, proj)) and not t.gated(to_s)
                 if using or asked:
                     waiting += 1
                     continue
@@ -3302,6 +3323,10 @@ def take(c, proj: str, entry, live=None) -> None:
         refuse(_("hubbus: not an outbox entry (an object with v 1)"))
     session = own_session(c, proj, entry.get("session"))
     op = entry.get("op")
+    if op in ("ack", "told") and session and gated(sessions_port(), session):
+        # a gated session (runtime-versions.md section 6, r3) neither takes nor is told a letter through the CLI: it would
+        # hold the letter away from the project's other sessions. Read past, as a file naming another project's would be
+        return
     if op == "send":
         _strings(entry, ("id", *(k for k in SEND_FIELDS if k not in NOT_TEXT)))
         if not OUTBOX_ID.fullmatch(entry.get("id") or ""):
@@ -3527,6 +3552,7 @@ def prune(c) -> None:
 
 
 ADDRESS_GRACE_S = 600   # a wake address younger than this is kept even if its session isn't seen live yet
+VERSION_KEEP_DAYS = 30  # a session's <session>.version, written at each of its records, outlives it this long
 
 
 def prune_wake_addresses(live=None) -> list[str]:
@@ -3537,8 +3563,9 @@ def prune_wake_addresses(live=None) -> list[str]:
     start time it recorded, however long the session has been idle (live_sessions reads these records, so they are
     never judged by live). What's in runtime_ports.WITH_RECORD goes with that record, whatever its age: the last reply, and a
     waiter's record, whose stale heartbeat is what says the session's waiter was killed (Sessions.wake_gap). With no
-    record running those go when they are old, as a wake request or a dot file (one being written or taken) does. Returns
-    the sessions whose files went."""
+    record running those go when they are old, as a wake request or a dot file (one being written or taken) does. A
+    session's version (<session>.version) goes VERSION_KEEP_DAYS after it was last written. Returns the sessions whose
+    files went."""
     d = hubconf.session_addresses_dir()
     if not d.is_dir():
         return []
@@ -3562,6 +3589,10 @@ def prune_wake_addresses(live=None) -> list[str]:
             elif session and f.name.endswith(tuple(f".{k}" for k in runtime_ports.WITH_RECORD)) \
                     and hubconf.session_file(session, runtime_ports.SESSION_RECORD) in running:
                 continue
+            elif session and f.name.endswith(f".{runtime_ports.SESSION_VERSION}"):
+                # kept past the session's end (runtime-versions.md, r3): the gate on a closed session reads it
+                if time.time() - f.lstat().st_mtime <= VERSION_KEEP_DAYS * 86400:
+                    continue
             elif time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:
                 continue
             if f.name.endswith(".json") and session in (live or set()):

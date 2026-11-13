@@ -2,9 +2,11 @@
 """`brunna runtimes`: the coding agents' versions, as the platform knows them (docs/design/runtime-versions.md section 6).
 
   runtimes.py                     per runtime in use: the binary platform runs start now and its version, each version's
-                                  conformance result (bin/conformance.py), and the versions the user's sessions ran in
-                                  the last 7 days with how many of their transcript lines the readers skipped (a version
-                                  that skips more than 5% changed its format: the weekly statistics may undercount it)
+                                  conformance result (bin/conformance.py), each version the user's sessions ran in the
+                                  last 7 days as their hooks read it, with its session-side checks (bin/session_versions.py:
+                                  passed, pending, unreadable, not installable, failed and which check; Desktop's builds),
+                                  and the versions their transcripts name with how many lines the readers skipped (a
+                                  version that skips more than 5% changed its format: the weekly statistics may undercount it)
   runtimes.py check <runtime> [--binary <exe>] [--only <check>]... [--report]
                                   run the conformance checks (bin/conformance.py run)
   runtimes.py install <runtime>   a checked copy in the store: the first install, or a newer version checked and
@@ -68,6 +70,17 @@ def show_runtime(name: str) -> list[str]:
         if (n := conformance.unrun_safety(doc)):
             lines.append(_("    {n} safety {n:check|checks} not run yet", n=n))
     return lines
+
+
+def show_session_versions(name: str) -> list[str]:
+    """The versions the user's sessions ran, as their hooks read them, and how each one's session-side checks went."""
+    import session_versions
+    rows = session_versions.summary(name)
+    out = [_("  versions your sessions ran in the last {days} days:", days=DAYS) if rows else
+           _("  no version of your sessions seen in the last {days} days", days=DAYS)]
+    out += [f"    {session_versions.describe(name, r)}" for r in rows]
+    out += [f"    {line}" for line in session_versions.unusable_rows(name)]
+    return out
 
 
 def show_sessions() -> list[str]:
@@ -136,6 +149,8 @@ def main(argv: list[str]) -> int:
         return 2
     for name in in_use():
         print("\n".join(show_runtime(name)))
+        if "distribution" in runtime_ports.capabilities(name):
+            print("\n".join(show_session_versions(name)))
     print("\n".join(show_sessions()))
     return 0
 

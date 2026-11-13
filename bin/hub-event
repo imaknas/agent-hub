@@ -55,11 +55,13 @@ import sys
 BIN = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import names  # noqa: E402
 import project_git  # noqa: E402
 import runtime_ports  # noqa: E402
 
 LOG = hubconf.LOGS / "hub-event.log"
+_ = i18n.domain(__file__)
 
 
 def _load(name: str, path: pathlib.Path):
@@ -225,11 +227,52 @@ def session_record(ev, ws):
     if not callable(fn) or platform_run(os.environ) or not _project_of_folder(ev.cwd):
         return None
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
+    version = getattr(_RT, "session_version", None)
     if pid:
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
                                      wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
-                                     project_of=_project_of_folder)
+                                     project_of=_project_of_folder, version=version if callable(version) else None)
     return None
+
+
+def _hook_version() -> tuple[str, str | None] | None:
+    """(version, build) of the tool this hook's session runs, read from its process (the runtime's session_pid and
+    session_version, files only); None when the runtime can't say."""
+    pid_of, version_of = getattr(_RT, "session_pid", None), getattr(_RT, "session_version", None)
+    pid = pid_of(os.environ) if callable(pid_of) else None
+    if not pid or not callable(version_of):
+        return None
+    got = version_of(pid)
+    return got if isinstance(got, tuple) and len(got) == 2 else None
+
+
+_GATE: dict = {}   # session → the safety checks its version failed (gated), asked once per hook
+
+
+def gate(ev) -> list[str]:
+    """The per-version gate (runtime_ports.gated; docs/design/runtime-versions.md section 6): the safety checks this
+    session's version failed when its project's sessions are sandboxed, [] otherwise. The version is this hook's own
+    process's (at a start, the record on file can still be the last process's), the project its folder's, asked only
+    when that version has a failure on record."""
+    if ev.session in _GATE:
+        return _GATE[ev.session]
+    got, rec = _hook_version(), None
+    if got and runtime_ports.checkable_version(got[0]):
+        rec = {"runtime": _RT_NAME, "version": got[0], **({"build": got[1]} if got[1] else {})}
+        if runtime_ports.failed_checks(runtime_ports.session_result(_RT_NAME, got[0]), "safety"):
+            rec["project"] = _project_of_folder(ev.cwd) or ""
+    _GATE[ev.session] = runtime_ports.gated(ev.session, rec)
+    return _GATE[ev.session]
+
+
+def gate_notice(ev, failed) -> str:
+    """What a gated session is told once, at its start."""
+    v = runtime_ports.session_version(ev.session) or {}
+    got = _hook_version() or (v.get("version"), None)
+    return _("This session's {runtime} version {version} failed the platform's sandbox check ({checks}): the platform "
+             "delivers no letters to this session and wakes it for none. Letters for this project wait for another "
+             "session, and `brunna inbox` here doesn't take them. Updating the tool and opening a new session ends this.",
+             runtime=_RT_NAME, version=got[0] or "?", checks=", ".join(failed))
 
 
 def wake_address_drop(ev, ws):
@@ -338,10 +381,20 @@ def _no_event(rt, name: str, event: str, raw: str) -> None:
     except Exception as e:
         reason = f"unusable_raised:{type(e).__name__}"
     if reason:
-        _log(event, None, [], [], f"unusable={reason} runtime={name}")
+        try:   # the version of the tool that sent it, as its process says (bin/session-versions.py counts them)
+            got = _hook_version()
+        except Exception:
+            got = None
+        version = got[0] if got and runtime_ports.checkable_version(got[0]) else runtime_ports.UNREADABLE
+        _log(event, None, [], [], f"unusable={reason} runtime={name} version={version}")
 
 
 CAGED_NEEDS = {"control", "confine"}
+# The per-version gate (gate; docs/design/runtime-versions.md section 6): the handlers that start work in a session, off for
+# a sandboxed project's session whose version failed a safety check. mail goes with presence (a gated session isn't
+# counted as using the project). Everything else runs as for any session: its record and its end, memory sync, the
+# deny handler.
+GATED_OFF = {"mail", "wake_address", "nudge"}
 
 
 def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
@@ -375,6 +428,9 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     texts, reasons, ran, failed = [], [], [], []
     for name, fn in HANDLERS[event]:
         try:
+            if name in GATED_OFF and gate(ev):
+                failed.append(f"{name}:gated")   # the log says what the gate kept from running
+                continue
             if name in NOT_IN_FOLDER or folder_ok or (memory_ok and name in MEMORY_ONLY):
                 out = fn(ev, ws)
             elif inside and name in AS_PROJECT and not needed:
@@ -396,6 +452,12 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
             continue
         if out:
             (reasons if name in DENY_HANDLERS else texts).append(out)
+    if event == "session_start":
+        try:
+            if (failed_checks := gate(ev)):
+                texts.append(gate_notice(ev, failed_checks))
+        except Exception as e:
+            failed.append(f"gate:{type(e).__name__}")
     _log(event, ws.name if ws else None, ran, failed)
     if reasons:
         return rt.deny(event, reasons[0])
@@ -442,10 +504,18 @@ def worktree(what: str, raw: str, name: str | None = None) -> int:
     cage = project_git.sandbox_of(ev.cwd)
     refused = cage and not CAGED_NEEDS <= runtime_ports.capabilities(_RT_NAME)
     steps = [("session_record", lambda: session_record(ev, ws))]
-    if not refused:
+    texts, ran, failed = [], [], []
+    try:
+        gated = gate(ev)
+    except Exception as e:   # can't tell: nothing that starts work runs
+        gated = [f"gate:{type(e).__name__}"]
+    if gated:   # the per-version gate, as in handle: the record runs, the mail and the reminder don't
+        failed += ["nudge:gated", "mail:gated"] if what == "nudge" else ["mail:gated"]
+        if what == "start" and not gated[0].startswith("gate:"):
+            texts.append(gate_notice(ev, gated))
+    elif not refused:
         steps += [("nudge", lambda: _worktree_nudge(ev, ws, cage))] if what == "nudge" else []
         steps += [("mail", lambda: mail(ev, ws))]
-    texts, ran, failed = [], [], []
     for name, fn in steps:
         try:
             out = fn()

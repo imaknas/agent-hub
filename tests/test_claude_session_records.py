@@ -326,7 +326,8 @@ class HookPath(HookFixture):
             self.assertIn(B, runtime_claude.live_sessions(), event)
         self.assertIn("ran=session_record", self.m.LOG.read_text())
         self.hook("session_end", B)
-        self.assertEqual(list(self.dir.iterdir()), [])
+        # what outlives the end: the version its hooks read (runtime-versions.md, r3), for the gate on a closed session
+        self.assertEqual([f.name for f in self.dir.iterdir()], [f"{B}.version"])
         self.assertNotIn(B, runtime_claude.live_sessions())
 
     def test_agent_hubs_own_sessions_are_recorded(self):

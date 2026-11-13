@@ -1,0 +1,3 @@
+{
+ "This session's {runtime} version {version} failed the platform's sandbox check ({checks}): the platform delivers no letters to this session and wakes it for none. Letters for this project wait for another session, and `brunna inbox` here doesn't take them. Updating the tool and opening a new session ends this.": "這個 session 的 {runtime} 版本 {version} 沒通過平台的沙箱檢查({checks}):平台不會把信送進這個 session,也不會為任何信喚醒它。給這個專案的信會等別的 session,在這裡跑 `brunna inbox` 也不會把信接走。更新工具、開一個新的 session 就會解除。"
+}

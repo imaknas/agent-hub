@@ -1,0 +1,731 @@
+"""The user's sessions' versions (docs/design/runtime-versions.md sections 5 and 6, step 3): read from the session's
+process when its hooks run, kept past its end, checked when first seen by brunna/session-versions, and the narrow gate:
+a sandboxed project's session whose version failed a safety check gets no letters, wakes, routes, forks or resumes.
+
+A temporary state, secrets folder, store and bus; the session processes are `sleep`s this test starts; the tool is a
+stand-in script and the conformance runner is replaced where a check would run. Nothing reaches a live file, no
+Claude session or model call is started.
+
+    bin/py -m unittest tests.test_session_versions
+"""
+import datetime
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+import time
+import types
+import unittest
+from unittest import mock
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+BIN = ROOT / "bin"
+sys.path.insert(0, str(BIN))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import alert  # noqa: E402
+import conformance  # noqa: E402
+import hubconf  # noqa: E402
+import runtime_claude  # noqa: E402
+import runtime_ports  # noqa: E402
+import runtime_store  # noqa: E402
+import session_versions  # noqa: E402
+import store_fixture  # noqa: E402
+import test_bus_sender as tbs  # noqa: E402
+import test_claude_session_records as tcsr  # noqa: E402
+import test_mailbox_dispatch as tmd  # noqa: E402
+import test_mailbox_wake as tmw  # noqa: E402
+
+A, B, C = tcsr.A, tcsr.B, tcsr.C
+OLD, NEW = "2.1.300", "2.1.400"   # a version the user's sessions run; the platform's current copy (store_fixture's)
+DOCS = {"box": {"v": 2, "name": "box", "enforce": {"sandbox": True}}, "open": {"v": 2, "name": "open"}}
+
+
+class Instance(unittest.TestCase):
+    """A temporary state, secrets folder and registry (box sandboxed, open not)."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        for target, value in ((hubconf, {"STATE": self.tmp / "state", "LOGS": self.tmp / "logs"}),):
+            for k, v in value.items():
+                p = mock.patch.object(target, k, v)
+                p.start()
+                self.addCleanup(p.stop)
+        for name, fn in (("secrets_dir", lambda: self.tmp / "secrets"), ("projects", lambda: DOCS)):
+            p = mock.patch.object(hubconf, name, fn)
+            p.start()
+            self.addCleanup(p.stop)
+        d = mock.patch.object(runtime_ports, "default_name", lambda: "claude")
+        d.start()
+        self.addCleanup(d.stop)
+
+    def version_file(self, sid, version=OLD, project="box", build=None):
+        f = hubconf.session_file(sid, runtime_ports.SESSION_VERSION)
+        f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        f.write_text(json.dumps({"runtime": "claude", "version": version, "project": project,
+                                 **({"build": build} if build else {})}))
+        return f
+
+    def result(self, version=OLD, current=NEW, **checks):
+        """A session version's result: name=(kind, state)."""
+        doc = {"runtime": "claude", "version": version, "current": current, "side": "session", "at": "x",
+               "checks": {n.replace("_", "-"): {"port": "p", "kind": k, "state": s, "reason": "why"}
+                          for n, (k, s) in checks.items()}}
+        f = runtime_ports.session_result_file("claude", version)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(doc))
+        return doc
+
+
+# ---------- the version at session start ----------
+
+class Layouts(unittest.TestCase):
+    """runtime_claude.version_at: each layout's version from its real path, read as files, never run."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        home = self.tmp / "home"
+        for patch in (mock.patch.object(pathlib.Path, "home", lambda: home),
+                      mock.patch.object(runtime_claude, "_home", lambda: home / ".claude"),
+                      mock.patch.object(runtime_claude, "_store", lambda: self.tmp / "runtimes" / "claude"),
+                      mock.patch.object(hubconf, "nvm_dir", lambda: self.tmp / "nvm")):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.home = home
+
+    def file(self, path, text="x"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        return path
+
+    def package(self, top, version):
+        pkg = top / "lib" / "node_modules" / "@anthropic-ai" / "claude-code"
+        self.file(pkg / "package.json", json.dumps({"name": "@anthropic-ai/claude-code", "version": version}))
+        return self.file(pkg / "bin" / "claude.exe")
+
+    def test_desktops_file_names_the_version_and_its_build(self):
+        exe = self.file(self.home / ".claude" / "remote" / "ccd-cli" / "2.1.317-42a2f87f038a")
+        self.assertEqual(runtime_claude.version_at(exe), ("2.1.317", "42a2f87f038a"))
+
+    def test_a_store_copy_by_its_folder(self):
+        exe = self.file(self.tmp / "runtimes" / "claude" / NEW / "node_modules" / "@anthropic-ai" / "claude-code" / "bin"
+                        / "claude.exe")
+        self.assertEqual(runtime_claude.version_at(exe), (NEW, None))
+
+    def test_nvms_copy_by_its_package(self):
+        exe = self.package(self.tmp / "nvm" / "versions" / "node" / "v24.0.0", "2.1.350")
+        self.assertEqual(runtime_claude.version_at(exe), ("2.1.350", None))
+
+    def test_anything_else_is_unreadable(self):
+        no = (runtime_ports.UNREADABLE, None)
+        pkg = self.tmp / "ws" / "proj" / "node_modules" / "@anthropic-ai" / "claude-code"
+        self.file(pkg / "package.json", json.dumps({"name": "@anthropic-ai/claude-code", "version": "2.1.350"}))
+        project_copy = self.file(pkg / "bin" / "claude.exe")
+        for exe in (project_copy,                                                         # a project's own node_modules
+                    self.file(self.tmp / "elsewhere" / "remote" / "ccd-cli" / "2.1.317-42a2f87f038a"),   # not the home's
+                    self.file(self.home / ".claude" / "remote" / "ccd-cli" / "latest"),  # not a version-build name
+                    self.file(self.tmp / "runtimes" / "claude" / "stub" / "security"),   # in the store, not a version
+                    self.file(self.tmp / "usr" / "bin" / "claude")):
+            with self.subTest(exe=exe.relative_to(self.tmp)):
+                self.assertEqual(runtime_claude.version_at(exe), no)
+
+    def test_a_package_json_that_names_another_package_is_not_believed(self):
+        top = self.tmp / "nvm" / "versions" / "node" / "v24.0.0"
+        exe = self.package(top, "2.1.350")
+        self.file(top / "lib" / "node_modules" / "@anthropic-ai" / "claude-code" / "package.json",
+                  json.dumps({"name": "other", "version": "2.1.350"}))
+        self.assertEqual(runtime_claude.version_at(exe), (runtime_ports.UNREADABLE, None))
+
+    def test_from_a_process_never_running_it(self):
+        p = tcsr.session_process(self)   # sleep: a layout the adapter doesn't know
+        self.assertEqual(runtime_ports.process_path(p.pid), os.path.realpath(runtime_ports.process_path(p.pid)))
+        with mock.patch.object(subprocess, "run", side_effect=AssertionError("ran something")):
+            self.assertEqual(runtime_claude.session_version(p.pid), (runtime_ports.UNREADABLE, None))
+        self.assertEqual(runtime_claude.session_version(None), (runtime_ports.UNREADABLE, None))
+        self.assertEqual(runtime_ports.process_path(os.getpid()), os.path.realpath(sys.executable))
+
+
+class RecordKeepsTheVersion(tcsr.SecretsDir):
+    """record_session carries the version on every write and keeps it in <session>.version past the session's end."""
+
+    def setUp(self):
+        super().setUp()
+        self.asked = []
+
+    def version(self, pid):
+        self.asked.append(pid)
+        return ("2.1.321", "0add941e9cdd")
+
+    def read(self, sid, kind="live"):
+        return json.loads(hubconf.session_file(sid, kind).read_text())
+
+    def test_at_the_start(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(B, "claude", p.pid, "/ws/box", project_of=lambda f: "box", version=self.version)
+        self.assertEqual({k: self.read(B)[k] for k in ("version", "build", "project")},
+                         {"version": "2.1.321", "build": "0add941e9cdd", "project": "box"})
+        self.assertEqual(self.read(B, "version"),
+                         {"runtime": "claude", "version": "2.1.321", "build": "0add941e9cdd", "project": "box"})
+
+    def test_a_clear_takes_over_with_the_version(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(B, "claude", p.pid, "/ws/box", project_of=lambda f: "box", version=self.version)
+        runtime_ports.record_session(C, "claude", p.pid, "/ws/box", project_of=lambda f: "box", version=self.version)
+        self.assertFalse(hubconf.session_file(B, "live").exists())
+        self.assertEqual(self.read(C)["version"], "2.1.321")
+        self.assertEqual(self.read(C, "version")["project"], "box")
+        self.assertTrue(hubconf.session_file(B, "version").exists(), "the session it replaced keeps its version")
+
+    def test_a_record_written_before_versions_gets_one_at_its_next_hook_then_costs_nothing(self):
+        p = tcsr.session_process(self)
+        f = hubconf.session_file(B, "live")
+        f.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        f.write_text(json.dumps({"runtime": "claude", "pid": p.pid, "start": runtime_ports.process_start(p.pid),
+                                 "cwd": "/ws/box", "project": "box"}))
+        self.assertTrue(runtime_ports.record_session(B, "claude", p.pid, "/ws/box", refresh=False, version=self.version))
+        self.assertEqual(self.read(B)["version"], "2.1.321")
+        self.assertEqual(self.read(B, "version")["version"], "2.1.321")
+        self.asked.clear()
+        self.assertFalse(runtime_ports.record_session(B, "claude", p.pid, "/ws/box", refresh=False, version=self.version))
+        self.assertEqual(self.asked, [])
+
+    def test_what_cant_be_read_is_said_unreadable(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(B, "claude", p.pid, "/ws/box", version=lambda pid: (None, None))
+        self.assertEqual(self.read(B)["version"], runtime_ports.UNREADABLE)
+        runtime_ports.record_session(C, "claude", p.pid, "/ws/box", version=lambda pid: 1 / 0)
+        self.assertEqual(self.read(C)["version"], runtime_ports.UNREADABLE)
+
+    def test_kept_past_the_end_and_pruned_after_30_days(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(B, "claude", p.pid, "/ws/box", version=self.version)
+        self.assertNotIn(hubconf.session_file(B, "version"), hubconf.session_files(B), "the session's end leaves it")
+        tcsr.end(p)
+        hb = tmd.load_hubbus()
+        hb.prune_wake_addresses(live=set())
+        self.assertTrue(hubconf.session_file(B, "version").exists())
+        old = time.time() - (hb.VERSION_KEEP_DAYS + 1) * 86400
+        os.utime(hubconf.session_file(B, "version"), (old, old))
+        hb.prune_wake_addresses(live=set())
+        self.assertFalse(hubconf.session_file(B, "version").exists())
+
+    def test_a_closed_sessions_version_comes_from_its_file(self):
+        p = tcsr.session_process(self)
+        runtime_ports.record_session(B, "claude", p.pid, "/ws/box", project_of=lambda f: "box", version=self.version)
+        hubconf.session_file(B, "live").unlink()
+        self.assertEqual(runtime_ports.session_version(B)["version"], "2.1.321")
+        self.assertIsNone(runtime_ports.session_version(A), "nothing on file: pending")
+
+
+# ---------- the gate ----------
+
+class Gate(Instance):
+    """runtime_ports.gated: a sandboxed project's session whose version failed a safety check; nothing else."""
+
+    def test_a_failed_safety_check_in_a_sandboxed_project(self):
+        self.version_file("S1", project="box")
+        self.result(control=("safety", "fail"), lifecycle_events=("function", "pass"))
+        self.assertEqual(runtime_ports.gated("S1"), ["control"])
+        s = runtime_ports.Sessions(["claude"])
+        self.assertEqual(s.gated("S1"), ["control"])
+        self.assertFalse(s.can_resume("S1"))
+
+    def test_never_for_an_unsandboxed_project(self):
+        self.version_file("S1", project="open")
+        self.result(control=("safety", "fail"))
+        self.assertEqual(runtime_ports.gated("S1"), [])
+
+    def test_not_while_pending_or_for_anything_but_a_safety_fail(self):
+        self.version_file("S1", project="box")
+        self.assertEqual(runtime_ports.gated("S1"), [], "no result yet")
+        for checks in ({"control": ("safety", "error")}, {"control": ("safety", "not-checkable")},
+                       {"lifecycle_events": ("function", "fail")}, {"control": ("safety", "pass")}):
+            with self.subTest(checks=checks):
+                self.result(**checks)
+                self.assertEqual(runtime_ports.gated("S1"), [])
+        self.version_file("S2", version=runtime_ports.UNREADABLE, project="box")
+        self.assertEqual(runtime_ports.gated("S2"), [])
+        self.assertEqual(runtime_ports.gated("S3"), [], "no version on file")
+
+    def test_a_project_renamed_since_is_found_by_its_former_name(self):
+        self.version_file("S1", project="oldbox")
+        self.result(control=("safety", "fail"))
+        with mock.patch.object(hubconf, "former_names", lambda n: ["oldbox"] if n == "box" else []):
+            self.assertEqual(runtime_ports.gated("S1"), ["control"])
+
+    def test_a_registry_that_cant_be_read_gates_a_recorded_failure(self):
+        self.version_file("S1", project="box")
+        self.result(control=("safety", "fail"))
+        with mock.patch.object(hubconf, "projects", side_effect=OSError("unreadable")):
+            self.assertEqual(runtime_ports.gated("S1"), ["control"])
+
+
+class Forks(Instance):
+    """Section 5: a fork or resume of a session with the platform's current copy needs the pair to have passed
+    sessions-fork; a pair not checked yet is as before; a lease names the version that wrote its session."""
+
+    def setUp(self):
+        super().setUp()
+        store_fixture.stand_in(self)   # current: NEW
+        self.version_file("S1", project="open")
+
+    def test_a_failed_pair_is_refused_like_a_missing_port(self):
+        self.result(sessions_fork=("function", "fail"))
+        self.assertIsNotNone(runtime_ports.fork_refusal("S1"))
+        self.assertFalse(runtime_ports.Sessions(["claude"]).can_resume("S1"))
+
+    def test_kept_while_pending_passed_or_the_copys_own_version(self):
+        s = runtime_ports.Sessions(["claude"])
+        self.assertTrue(s.can_resume("S1"), "no result yet")
+        self.result(sessions_fork=("function", "pass"))
+        self.assertTrue(s.can_resume("S1"))
+        self.result(sessions_fork=("function", "fail"), current="2.1.399")
+        self.assertIsNone(runtime_ports.fork_refusal("S1"), "checked against another copy: pending again")
+        self.result(sessions_fork=("function", "error"))
+        self.assertIsNone(runtime_ports.fork_refusal("S1"))
+        self.version_file("S2", version=NEW, project="open")
+        self.assertEqual(runtime_ports.pair_state("claude", NEW)[0], "same")
+
+    def test_lease_resume_refuses_a_pair_that_didnt_pass(self):
+        sid = A
+        for checks, word in (({"sessions_fork": ("function", "fail")}, "fail"), ({}, "pending")):
+            with self.subTest(word):
+                self.result(**checks) if checks else runtime_ports.session_result_file("claude", OLD).unlink()
+                with self.assertRaises(runtime_ports.Unsupported):
+                    runtime_claude.resume_exec(sid, env={}, written_by=OLD)
+        self.result(sessions_fork=("function", "pass"))
+        argv, _env = runtime_claude.resume_exec(sid, env={}, written_by=OLD)
+        self.assertEqual(argv[1:], ["--resume", sid])
+        argv, _env = runtime_claude.resume_exec(sid, env={}, written_by=NEW)
+        self.assertEqual(argv[1:], ["--resume", sid])
+
+
+class Listing(Instance):
+    """One `agents --json` a tick, within the deadline it is given; a session whose version failed session-status is
+    unlisted, one not checked yet keeps the listing's word."""
+
+    def setUp(self):
+        super().setUp()
+        self.ran = self.tmp / "ran"
+        rows = json.dumps([{"sessionId": "S1", "status": "idle"}, {"sessionId": "S2", "status": "idle"}])
+        store_fixture.stand_in(self, body=f"#!/bin/sh\ntouch '{self.ran}'\nprintf '%s' '{rows}'\n")
+
+    def test_a_failed_session_status_check_is_unlisted(self):
+        self.version_file("S1")
+        self.result(session_status=("function", "fail"))
+        self.assertEqual(runtime_claude.session_statuses(["S1", "S2"]), {"S1": "unlisted", "S2": "idle"})
+
+    def test_pending_keeps_the_listing(self):
+        self.version_file("S1")
+        self.assertEqual(runtime_claude.session_statuses(["S1", "S2"]), {"S1": "idle", "S2": "idle"})
+
+    def test_no_time_left_is_unlisted_and_nothing_runs(self):
+        self.assertEqual(runtime_claude.session_statuses(["S1"], deadline=time.monotonic() - 1), {"S1": "unlisted"})
+        self.assertFalse(self.ran.exists())
+
+    def test_the_tick_passes_what_is_left_of_its_budget(self):
+        got = []
+        rt = types.SimpleNamespace(session_statuses=lambda sids, deadline: got.append(deadline) or {s: "idle" for s in sids},
+                                   can_wake=lambda s: True)
+        hb = tmd.load_hubbus()
+        t = hb.Tick(None, rt, {"S1"}, {"S1": {}}, set())
+        t.spent = hb.STATUS_TICK_S - 2
+        before = time.monotonic()
+        self.assertEqual(t.status("S1"), "idle")
+        self.assertTrue(before + 1 <= got[0] <= time.monotonic() + 2)
+
+
+class HookGate(Instance):
+    """hub-event: for a gated session the record, its end and the deny run; mail (and with it presence), the wake
+    address and the reminder don't, and it is told once at its start."""
+
+    def setUp(self):
+        super().setUp()
+        m = self.m = tmw.load_file("hub_event_gate", BIN / "hub-event")
+        m.LOG = self.tmp / "hub-event.log"
+        m._workspace = lambda cwd: None
+        m.project_git = types.SimpleNamespace(sandbox_of=lambda cwd: None, scope_of=lambda ws: None)
+        m._hubbus = lambda: types.SimpleNamespace(project_of=lambda cwd: self.project)
+        self.project, self.ran = "box", []
+        record = lambda name: (lambda ev, ws: self.ran.append(name))   # noqa: E731
+        m.HANDLERS = {k: [(n, record(n)) for n, _f in v] for k, v in m.HANDLERS.items()}
+        m.NOT_IN_FOLDER = m.NOT_IN_FOLDER | {"nudge", "memory_sync"}   # run here as where git may run
+        m.session_record = record("session_record")
+        m.mail = record("mail")
+        self.p = tcsr.session_process(self)
+        for patch in (mock.patch.dict(os.environ, {"CLAUDE_PID": str(self.p.pid)}),
+                      mock.patch.object(runtime_claude, "session_version", lambda pid: (OLD, None))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        for var in ("HUB_LLM_POINT", "HUBBUS_LEASE", "HUB_AS_PROJECT"):
+            os.environ.pop(var, None)
+
+    def hook(self, event):
+        return self.m.handle(event, json.dumps({"session_id": B, "cwd": str(self.tmp)}), runtime_claude, "claude")
+
+    def test_a_gated_session_gets_only_what_always_runs_and_is_told_at_its_start(self):
+        self.result(control=("safety", "fail"))
+        out = self.hook("session_start")
+        self.assertNotIn("mail", self.ran)
+        self.assertNotIn("wake_address", self.ran)
+        self.assertNotIn("nudge", self.ran)
+        self.assertIn("session_record", self.ran)
+        self.assertIn("control", out)
+        self.assertIn("mail:gated", self.m.LOG.read_text())
+        self.ran.clear()
+        self.assertEqual(self.hook("prompt"), "")
+        self.assertEqual(self.ran, ["session_record"])
+        self.ran.clear()
+        self.hook("session_end")
+        self.assertEqual(sorted(self.ran), ["mail_end", "memory_sync", "wake_address_drop"])
+
+    def test_pending_and_unsandboxed_run_as_before(self):
+        for case in ("pending", "open"):
+            with self.subTest(case):
+                self.ran.clear()
+                self.m._GATE.clear()
+                if case == "open":
+                    self.result(control=("safety", "fail"))
+                    self.project = "open"
+                self.hook("session_start")
+                self.assertIn("mail", self.ran)
+                self.assertIn("wake_address", self.ran)
+
+    def test_the_worktree_entry_too(self):
+        self.result(control=("safety", "fail"))
+        raw = json.dumps({"session_id": B, "cwd": str(self.tmp)})
+        with mock.patch("sys.stdout", new=__import__("io").StringIO()) as out:
+            self.m.worktree("start", raw, "claude")
+        self.assertEqual(self.ran, ["session_record"])
+        self.assertIn("control", out.getvalue())
+        self.ran.clear()
+        self.m.worktree("nudge", raw, "claude")
+        self.assertEqual(self.ran, ["session_record"])
+        self.assertIn("nudge:gated", self.m.LOG.read_text())
+
+
+class GatingRuntime(tmw.WakingRuntime):
+    """tests.test_mailbox_wake's runtime with the gate: the sessions in `gates` failed a safety check."""
+
+    def __init__(self):
+        super().__init__()
+        self.gates = set()
+
+    def gated(self, sid):
+        return ["control"] if sid in self.gates else []
+
+    def can_resume(self, sid):
+        return True
+
+
+class DispatchGate(tmw.Harness):
+    """hubbus: a gated session is no candidate, isn't woken (notices and holders included), isn't waited for, and is
+    never forked or resumed; a letter for it goes on as if it weren't there."""
+
+    def setUp(self):
+        super().setUp()
+        self.rt = GatingRuntime()
+
+    def test_never_a_candidate_never_woken(self):
+        self.rt.live |= {"S1", "S2"}
+        self.rt.gates.add("S1")
+        self.seen("S1", minutes_ago=1)
+        self.seen("S2", minutes_ago=3)
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual([s for s, _t in self.rt.woken], ["S2"])
+
+    def test_alone_it_isnt_waited_for_or_forked_and_the_letter_goes_to_triage(self):
+        self.rt.live.add("S1")
+        self.rt.gates.add("S1")
+        self.seen("S1")
+        self.send("m1", "proj", "question", to_session="S1")
+        self.dispatch()
+        self.assertEqual(self.rt.woken, [])
+        self.assertEqual(self.resumed, [])
+        self.assertEqual(self.handled, [("proj", ["m1"])])
+
+    def test_a_notice_for_it_wakes_nothing(self):
+        self.rt.live.add("S1")
+        self.rt.gates.add("S1")
+        self.send("m1", "proj", "info", to_session="S1")
+        self.dispatch()
+        self.assertEqual(self.rt.woken, [])
+
+    def test_each_choke_point(self):
+        m = self.m
+        self.rt.live |= {"S1", "S2"}
+        self.rt.gates.add("S1")
+        self.seen("S1")
+        self.seen("S2")
+        t = m.Tick(self.c, self.rt, self.rt.live, self.rt.open_sessions(), set())
+        self.assertEqual((t.can_wake("S1"), t.can_wake("S2")), (False, True))
+        self.assertEqual(m.active_sessions(self.c, "proj", self.rt.live, [], self.rt), ["S2"])
+        self.assertEqual(sorted(m.active_sessions(self.c, "proj", self.rt.live, [])), ["S1", "S2"], "no runtime: no gate")
+        self.assertEqual((m.can_resume(self.rt, "S1"), m.can_resume(self.rt, "S2")), (False, True))
+        self.send("m1", "proj", "request")
+        self.assertEqual(m.candidates(self.c, t, "proj", m.get_message(self.c, "m1")), ["S2"])
+
+    def test_pending_is_as_before(self):
+        self.rt.live.add("S1")
+        self.seen("S1")
+        self.send("m1", "proj", "request")
+        self.dispatch()
+        self.assertEqual([s for s, _t in self.rt.woken], ["S1"])
+
+
+class OutboxGate(tbs.Fixture):
+    """A gated session's `brunna inbox` (told) and `brunna ack` through its project's outbox are read past: it can't hold
+    a letter away from the project's other sessions."""
+
+    on_bus = tbs.Outbox.on_bus
+
+    def take(self, gated):
+        req = self.letter_id(self.hubbus("send", "--to", "box", "--type", "request", "--text", "r", cwd=self.ws["open"]).stdout)
+        m = self.on_bus()
+        m.sessions_port = lambda: types.SimpleNamespace(live_sessions=lambda: {"s-box"},
+                                                       gated=lambda s: ["control"] if gated else [])
+        c = m.db()
+        self.addCleanup(c.close)
+        m.record_presence(c, "s-box", "box", self.ws["box"])
+        self.drop({"v": 1, "op": "told", "ids": [req], "session": "s-box"}, name="1.json")
+        self.drop({"v": 1, "op": "ack", "ids": [req], "session": "s-box"}, name="2.json")
+        with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
+            m.take_outboxes(c)
+        self.assertEqual(list(self.outbox().iterdir()), [], "both files taken in and deleted")
+        return [json.loads(r["payload"]).get("via") for r in self.rows("type='message.delivered' AND ref=?", (req,))]
+
+    def test_ignored_from_a_gated_session(self):
+        self.assertEqual(self.take(gated=True), [])
+
+    def test_taken_from_any_other(self):
+        self.assertEqual(sorted(self.take(gated=False)), ["ack", "inbox"])
+
+
+# ---------- the check job ----------
+
+class Dist(store_fixture.Dist):
+    """The distribution port the job sees: installs a stand-in, publishes `published`."""
+
+    def __init__(self, published=(OLD,)):
+        super().__init__("#!/bin/sh\n")
+        self.published_list, self.asked = list(published), 0
+
+    def published(self):
+        self.asked += 1
+        if isinstance(self.published_list, Exception):
+            raise self.published_list
+        return list(self.published_list)
+
+
+class Job(Instance):
+    def setUp(self):
+        super().setUp()
+        store_fixture.stand_in(self)   # current: NEW
+        self.dist = Dist()
+        self.live: dict = {}
+        self.runs, self.outcome = [], {}
+        self.alerts = []
+        for patch in (mock.patch.object(runtime_ports, "_module", lambda n: self.dist),
+                      mock.patch.object(runtime_ports, "open_sessions", lambda: dict(self.live)),
+                      mock.patch.object(conformance, "run", self.fake_run),
+                      mock.patch.object(conformance, "RESULTS", self.tmp / "state" / "runtime-conformance"),
+                      mock.patch.object(alert, "once", lambda key, lines, ok, ids=None: self.alerts.append((key, ids)))):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def fake_run(self, runtime, exe, only=None, pair=None):
+        version = pathlib.Path(exe).relative_to(runtime_store.root(runtime)).parts[0]
+        self.runs.append((version, tuple(only or ()), pair))
+        checks = {n: {"port": "p", "kind": "safety" if n in ("control", "confine-sandbox") else "function",
+                      "state": self.outcome.get(n, "pass"), "reason": "r", "tries": 1} for n in only}
+        return {"runtime": runtime, "version": version, "binary": exe, "digest": "d", "at": "now", "checks": checks}
+
+    def live_session(self, sid, version, build=None):
+        self.live[sid] = {"runtime": "claude", "pid": 1, "start": "1", "cwd": "/ws/box", "project": "box",
+                          "version": version, **({"build": build} if build else {})}
+
+    def run_job(self):
+        return session_versions.run_runtime("claude")
+
+    def test_live_first_then_closed_within_seven_days_never_a_transcript(self):
+        self.live_session("S1", "2.1.302", build="ab12")
+        self.version_file("S2", version="2.1.301")
+        old = self.version_file("S3", version="2.1.299")
+        t = time.time() - 8 * 86400
+        os.utime(old, (t, t))
+        st = {}
+        order = session_versions.note_seen("claude", st, session_versions.seen_now("claude", session_versions._now()),
+                                           session_versions._now())
+        self.assertEqual(order, ["2.1.302", "2.1.301"])
+        self.assertEqual(list(st["seen"]["2.1.302"]["builds"]), ["ab12"])
+
+    def test_a_version_is_installed_checked_paired_with_current_and_recorded(self):
+        self.live_session("S1", OLD)
+        self.run_job()
+        cur = runtime_store.current("claude")
+        self.assertEqual(self.runs, [(OLD, tuple(conformance.session_checks("claude")), str(cur.exe))])
+        self.assertIn(runtime_ports.FORK_CHECK, conformance.session_checks("claude"))
+        doc = runtime_ports.session_result("claude", OLD)
+        self.assertEqual((doc["side"], doc["current"]), ("session", NEW))
+        self.assertEqual(runtime_store.installed("claude", OLD)["kind"], runtime_store.SESSION)
+        self.assertIsNone(runtime_store.entry("claude", OLD), "never promoted")
+        self.assertEqual(conformance.recorded("claude"), [], "beside the full results, not one of them")
+        self.runs.clear()
+        self.run_job()
+        self.assertEqual(self.runs, [], "checked once")
+
+    def test_at_most_three_installs_a_day(self):
+        versions = ["2.1.301", "2.1.302", "2.1.303", "2.1.304"]
+        self.dist.published_list = versions
+        for i, v in enumerate(versions):
+            self.live_session(f"S{i}", v)
+        self.run_job()
+        self.assertEqual(len(self.runs), 3)
+        self.run_job()
+        self.assertEqual(len(self.runs), 3, "the fourth waits for tomorrow")
+        st = session_versions.load("claude")
+        st["installs"]["date"] = "2000-01-01"
+        session_versions.save("claude", st)
+        self.run_job()
+        self.assertEqual(len(self.runs), 4)
+
+    def test_not_published_is_not_installable_and_tried_again_weekly(self):
+        self.dist.published_list = [NEW]
+        self.live_session("S1", OLD)
+        self.run_job()
+        self.assertEqual(self.runs, [])
+        self.assertEqual([r["state"] for r in session_versions.summary("claude") if r["version"] == OLD], ["not-installable"])
+        self.dist.published_list = [OLD]
+        self.run_job()
+        self.assertEqual(self.runs, [], "not before a week")
+        st = session_versions.load("claude")
+        st["not_installable"][OLD]["at"] = "2000-01-01T00:00:00+00:00"
+        session_versions.save("claude", st)
+        self.run_job()
+        self.assertEqual([v for v, _o, _p in self.runs], [OLD])
+
+    def test_a_vendor_that_cant_be_asked_marks_nothing(self):
+        self.dist.published_list = RuntimeError("offline")
+        self.live_session("S1", OLD)
+        self.run_job()
+        self.assertEqual(self.runs, [])
+        self.assertNotIn(OLD, session_versions.load("claude").get("not_installable") or {})
+
+    def test_a_failed_safety_check_alerts_per_version_and_check_until_the_version_is_gone(self):
+        self.outcome["control"] = "fail"
+        self.live_session("S1", OLD)
+        self.run_job()
+        self.assertIn((f"session-version-claude-{OLD}", ["control"]), self.alerts)
+        self.assertEqual([r["state"] for r in session_versions.summary("claude")], ["failed"])
+        self.assertEqual([lvl for lvl, _t in session_versions.doctor_rows("claude")], ["warn"])
+        self.live.clear()
+        st = session_versions.load("claude")
+        st["seen"][OLD]["last"] = "2000-01-01T00:00:00+00:00"
+        session_versions.save("claude", st)
+        self.alerts.clear()
+        self.run_job()
+        self.assertIn((f"session-version-claude-{OLD}", []), self.alerts)
+
+    def test_a_pair_checked_against_another_copy_reruns_the_fork_alone_and_an_error_daily(self):
+        self.live_session("S1", OLD)
+        self.result(current="2.1.399", control=("safety", "pass"), sessions_fork=("function", "pass"))
+        self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), [runtime_ports.FORK_CHECK])
+        self.run_job()
+        self.assertEqual([o for _v, o, _p in self.runs], [(runtime_ports.FORK_CHECK,)])
+        doc = runtime_ports.session_result("claude", OLD)
+        self.assertEqual((doc["current"], sorted(doc["checks"])), (NEW, ["control", "sessions-fork"]))
+        self.result(current=NEW, control=("safety", "error"))
+        self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), ["control"])
+        doc = json.loads(runtime_ports.session_result_file("claude", OLD).read_text())
+        doc["retried"] = session_versions._today()
+        runtime_ports.session_result_file("claude", OLD).write_text(json.dumps(doc))
+        self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW), "once a day")
+
+    def test_unusable_payloads_three_times_alert_by_event_and_reason(self):
+        now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        hubconf.LOGS.mkdir(parents=True, exist_ok=True)
+        line = f"{now} prompt - ran=- failed=- unusable=not_json runtime=claude version={OLD}\n"
+        other = f"{now} session_end - ran=- failed=- unusable=not_json runtime=claude version={OLD}\n"
+        (hubconf.LOGS / "hub-event.log").write_text(line * 2 + other * 5)
+        self.run_job()
+        self.assertFalse([k for k, _i in self.alerts if k.startswith("session-unusable")])
+        (hubconf.LOGS / "hub-event.log").write_text(line * 3)
+        self.run_job()
+        self.assertIn(("session-unusable-claude-prompt-not_json", ["prompt:not_json"]), self.alerts)
+        self.assertTrue(session_versions.unusable_rows("claude"))
+
+    def test_from_a_linked_worktree_it_refuses(self):
+        with mock.patch.object(hubconf, "worktree_lookup", lambda: True):
+            self.assertEqual(session_versions.main([]), 1)
+        self.assertEqual(self.runs, [])
+
+    def test_said_by_version(self):
+        self.live_session("S1", OLD, build="ab12")
+        self.live_session("S2", runtime_ports.UNREADABLE)
+        self.live_session("S3", "2.1.301")
+        self.result(version="2.1.301", sessions_fork=("function", "fail"))
+        self.dist.published_list = RuntimeError("offline")
+        self.run_job()
+        rows = {r["version"]: r for r in session_versions.summary("claude")}
+        self.assertEqual({v: r["state"] for v, r in rows.items()},
+                         {OLD: "pending", runtime_ports.UNREADABLE: "unreadable", "2.1.301": "failed"})
+        self.assertEqual(rows[OLD]["builds"], ["ab12"])
+        self.assertEqual(rows["2.1.301"]["checks"], ["sessions-fork"])
+        self.assertEqual({lvl for lvl, _t in session_versions.doctor_rows("claude")}, {"info"}, "no safety failure")
+
+
+class StorePrune(unittest.TestCase):
+    """runtime_store.prune and the session copies: kept while seen in 7 days, at most 5, never a held one; a promoted
+    copy keeps the promoted copies' rule."""
+
+    def setUp(self):
+        store_fixture.empty(self)
+
+    def copy(self, version, days_ago):
+        runtime_store.install("claude", version, store_fixture.Dist("#!/bin/sh\n"), kind=runtime_store.SESSION)
+        when = (datetime.datetime.now().astimezone() - datetime.timedelta(days=days_ago)).isoformat(timespec="seconds")
+        self.assertTrue(runtime_store.seen("claude", version, when))
+
+    def test_seen_lately_kept_five_at_most_held_never_removed(self):
+        for i in range(7):
+            self.copy(f"2.1.{300 + i}", days_ago=i)          # 2.1.300 seen today … 2.1.306 six days ago
+        self.copy("2.1.299", days_ago=9)
+        with runtime_store.hold_version("claude", "2.1.306"):
+            gone = runtime_store.prune("claude")
+        self.assertEqual(sorted(gone), ["2.1.299", "2.1.305"])
+        self.assertEqual(runtime_store.versions("claude"), [f"2.1.{300 + i}" for i in range(5)] + ["2.1.306"])
+
+    def test_seen_never_moves_back_and_a_promoted_copy_follows_its_own_rule(self):
+        self.copy(OLD, days_ago=0)
+        self.copy(OLD, days_ago=20)
+        self.assertEqual(runtime_store.prune("claude"), [])
+        self.copy("2.1.301", days_ago=30)
+        runtime_store.promote("claude", "2.1.301")
+        self.assertEqual(runtime_store.prune("claude"), [], "current")
+        self.assertFalse(runtime_store.seen("claude", NEW, "x"), "not in the store")
+
+
+class Results(Instance):
+    def test_a_session_result_is_written_beside_the_full_one(self):
+        with mock.patch.object(conformance, "RESULTS", self.tmp / "state" / "runtime-conformance"):
+            doc = {"runtime": "claude", "version": OLD, "binary": "b", "digest": "d", "at": "t", "checks": {}}
+            conformance.record(doc)
+            f = conformance.record_session(doc, NEW)
+            self.assertEqual(f.name, f"{OLD}.session.json")
+            self.assertEqual([d["version"] for d in conformance.recorded("claude")], [OLD])
+            self.assertNotIn("current", conformance.recorded("claude")[0])
+            self.assertEqual(runtime_ports.session_result("claude", OLD)["current"], NEW)
+
+    def test_the_session_side_set(self):
+        sides = {c.name: c.side for c in conformance.checks("claude")}
+        self.assertEqual(sorted(n for n, s in sides.items() if s == "session"),
+                         sorted(["lifecycle-events", "lifecycle-deny", "lifecycle-context", "instructions-reach",
+                                 "sessions-read", "sessions-fork", "confine-sandbox", "control", "session-status",
+                                 "session-summary", "wake"]))
+        self.assertTrue(set(sides.values()) <= set(runtime_ports.CHECK_SIDES))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -554,17 +554,24 @@ def session_status(sid: str) -> str:
     return session_statuses([sid])[sid]
 
 
-def session_statuses(sids) -> dict:
+def session_statuses(sids, deadline: float | None = None) -> dict:
     """session_status for many sessions from one listing: the listing has them all, and each call starts a process. A
     listing that errors, times out or isn't a JSON list (a version that changed it) makes every session unlisted, not
-    unknown: unknown counts as idle and would wake sessions that may be busy (runtime-versions.md section 5)."""
+    unknown: unknown counts as idle and would wake sessions that may be busy (runtime-versions.md section 5). One listing,
+    by the platform's checked copy, within the caller's deadline (time.monotonic(); none left: unlisted). A session whose
+    own version failed the session-status check (the checked copy's listing doesn't read it right) is unlisted whatever
+    the listing says; a version not checked yet keeps the listing's word."""
+    import time
     from types import SimpleNamespace
     import runtime_ports
+    timeout = AGENTS_TIMEOUT_S if deadline is None else min(AGENTS_TIMEOUT_S, deadline - time.monotonic())
     try:
+        if timeout <= 0:
+            raise subprocess.TimeoutExpired("agents", 0)
         # the user's sessions, listed from the user's folder (the shared one, whatever row a run would get); it needs no
         # login, so it never reads the Keychain either
         exe, e = _run_copy()
-        r = subprocess.run([exe, "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
+        r = subprocess.run([exe, "agents", "--json"], capture_output=True, text=True, timeout=timeout,
                            stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None), own=False, entry=e, stub=True))
         rows = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError, runtime_ports.Unsupported):
@@ -576,7 +583,67 @@ def session_statuses(sids) -> dict:
         if isinstance(row, dict) and row.get("sessionId") in out:
             status = row.get("status")
             out[row["sessionId"]] = status if status in ("busy", "idle", "waiting") else "unknown"
+    for s in out:
+        v = runtime_ports.session_version(_session_key(s))
+        if v and runtime_ports.checkable_version(v.get("version")) \
+                and runtime_ports.check_state(NAME, v["version"], runtime_ports.STATUS_CHECK) == "fail":
+            out[s] = "unlisted"
     return out
+
+
+# Desktop's own copy of the CLI, one file per build: <claude home>/remote/ccd-cli/<version>-<build> (V-M4)
+DESKTOP_CLI = re.compile(r"^(\d+\.\d+\.\d+)-([0-9a-f]+)$")
+_SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def session_version(pid) -> tuple:
+    """(version, build) of the Claude Code a session's process runs (runtime-versions.md V-M4), from its executable's
+    real path (runtime_ports.process_path), never by running it; (UNREADABLE, None) when it can't be told."""
+    import runtime_ports
+    real = runtime_ports.process_path(pid)
+    return version_at(pathlib.Path(real)) if real else (runtime_ports.UNREADABLE, None)
+
+
+def version_at(exe: pathlib.Path) -> tuple:
+    """(version, build) from an executable's real path, read as files:
+    - Desktop's copy, the file <claude home>/remote/ccd-cli/<version>-<build>: both from its name;
+    - a copy in the platform's store, <runtimes>/claude/<version>/…: that folder's name;
+    - nvm's global copy, the executable under nvm's prefix in …/lib/node_modules/@anthropic-ai/claude-code/: that
+      package's package.json.
+    Anything else is (UNREADABLE, None): a layout the adapter doesn't know, or a claude in a project's own node_modules,
+    whose files the project writes."""
+    import hubconf
+    import runtime_ports
+    no = (runtime_ports.UNREADABLE, None)
+
+    def real(p) -> pathlib.Path | None:
+        try:
+            return pathlib.Path(os.path.realpath(p))
+        except (OSError, ValueError):
+            return None
+    homes = {real(pathlib.Path.home() / ".claude"), real(_home())}
+    if exe.parent.name == "ccd-cli" and exe.parent.parent.name == "remote" and real(exe.parent.parent.parent) in homes \
+            and (m := DESKTOP_CLI.match(exe.name)):
+        return m[1], m[2]
+    try:
+        store = real(_store())
+    except Exception:
+        store = None
+    if store and store in exe.parents:
+        top = exe.relative_to(store).parts[0]
+        return (top, None) if _SEMVER.match(top) else no
+    versions = real(hubconf.nvm_dir() / "versions" / "node")
+    if versions and versions in exe.parents:
+        parts = exe.relative_to(versions).parts
+        tail = ("lib", "node_modules", *PACKAGE.split("/"))
+        if len(parts) > 1 + len(tail) and parts[1:1 + len(tail)] == tail:
+            try:
+                pkg = json.loads(versions.joinpath(parts[0], *tail, "package.json").read_text())
+            except (OSError, ValueError):
+                return no
+            v = pkg.get("version") if isinstance(pkg, dict) and pkg.get("name") == PACKAGE else None
+            return (v, None) if isinstance(v, str) and _SEMVER.match(v) else no
+    return no
 
 
 def _keep_last(key: str, text) -> None:
@@ -2362,16 +2429,28 @@ def binary() -> str:
     return _run_copy()[0]
 
 
-def resume_exec(sid: str, env=None) -> tuple[list, dict]:
+def resume_exec(sid: str, env=None, written_by: str | None = None) -> tuple[list, dict]:
     """A resume of a session in a terminal (bin/lease-resume): (argv, the environment) with the checked copy, its updater
     pinned off and the hold passed on to it (it is about to be exec'd; it updates itself otherwise, V-M5). On the
     user's folder (the session is stored there); the headless token, with the refusing `security` first, only when
-    the copy isn't logged in there itself (under SSH it can't read the Keychain). Raises NoCheckedCopy."""
+    the copy isn't logged in there itself (under SSH it can't read the Keychain). written_by: the version that wrote the
+    session (a lease's record): resumed only when it is the copy's own or that pair passed sessions-fork, else refused
+    with the reason (runtime-versions.md section 5); none recorded (an older lease) is as before. Raises NoCheckedCopy,
+    Unsupported for a pair not passed."""
+    import runtime_ports
     import runtime_store
     from types import SimpleNamespace
     if not re.fullmatch(r"[0-9a-f-]{36}", sid or ""):
         raise ValueError(_("not a session id: {sid}", sid=sid))
     exe, e = _run_copy()
+    if written_by and e is not None:
+        state, current, reason = runtime_ports.pair_state(NAME, written_by)
+        if state not in ("same", "pass"):
+            raise runtime_ports.Unsupported(_(
+                "this session was written by Claude Code {version}, and the platform's copy {current} {how}: not resumed "
+                "(brunna runtimes shows the checks)", version=written_by, current=current or e.version,
+                how=_("failed to resume one ({reason})", reason=reason or runtime_ports.FORK_CHECK) if state == "fail"
+                else _("hasn't been checked resuming one yet")))
     base = clean_env(dict(os.environ if env is None else env))
     run_env = _env(SimpleNamespace(env=base), own=False, entry=e)
     try:
@@ -2451,6 +2530,20 @@ def latest() -> str:
     if r.returncode != 0 or not re.fullmatch(r"\d+\.\d+\.\d+", got):
         raise RuntimeError(_("npm could not say the latest version (exit {code})", code=r.returncode))
     return got
+
+
+def published() -> list[str]:
+    """Every version npm publishes (a session's version is installed into the store only when it is one of them,
+    runtime-versions.md section 6). Raises RuntimeError with the reason when it can't be told."""
+    try:
+        r = subprocess.run([_npm(), "view", PACKAGE, "versions", "--json"], capture_output=True, text=True, timeout=120,
+                           env=_npm_env(), stdin=subprocess.DEVNULL)
+        got = json.loads(r.stdout) if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        raise RuntimeError(_("npm could not list the published versions: {error}", error=type(e).__name__)) from e
+    if not isinstance(got, list):
+        raise RuntimeError(_("npm could not list the published versions (exit {code})", code=r.returncode))
+    return [v for v in got if isinstance(v, str) and _SEMVER.match(v)]
 
 
 def install(version: str, folder) -> pathlib.Path:

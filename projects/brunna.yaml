@@ -138,6 +138,14 @@ jobs:
   background: true
   cwd: hub
   run: bin/py bin/update-runtimes.py
+# each version of a coding agent the user's sessions run, checked when first seen (docs/design/runtime-versions.md
+# section 6): installed into the store from the vendor and its session-side checks run; a sandboxed project's sessions
+# of a version that failed a safety check get no letters or wakes. Long only when there is a new version to check
+- name: session-versions
+  every: 15m
+  background: true
+  cwd: hub
+  run: bin/py bin/session_versions.py
 - name: registry-updates         # manifest.update letters from projects: validated, then applied or returned (zero LLM)
   every: 15m
   cwd: hub
