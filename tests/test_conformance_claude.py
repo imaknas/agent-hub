@@ -60,10 +60,12 @@ if "automated test of a sandbox" in prompt:   # control / confine-sandbox: one c
         else:
             fs = (st.get("sandbox") or {}).get("filesystem") or {}
             denied = any(target == path(e) or target.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or [])
+    # unread: no rule honoured, but a Write over a file it hasn't read fails validation (no denial, nothing written)
+    unread = mode == "unread" and tool == "Write" and pathlib.Path(target).exists()
     if mode != "idle":
         print(json.dumps({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "id": "t1", "name": tool, "input": inp}]}}))
-        if not denied:
+        if not denied and not unread:
             pathlib.Path(target).parent.mkdir(parents=True, exist_ok=True)
             pathlib.Path(target).write_text(word)
     print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done", "usage": {},
@@ -171,12 +173,31 @@ class Through(unittest.TestCase):
                 self.assertFalse(list(world.secrets.glob("canary-*")), "every canary gone again")
                 self.assertFalse((world.project / ".mcp.json").exists())
                 if name == "control":
+                    self.assertTrue((world.project / ".claude" / "agent-memory").is_dir(), "the seeded entry kept")
+                    self.assertIn("/.claude/agent-memory", json.dumps(settings["sandbox"]["filesystem"]["denyWrite"]))
+                    self.assertFalse((world.tool / "remote").exists(), "the user-level canaries' folders gone")
+                if name == "control":
                     self.assertTrue(got["reason"], "the residual is said")
 
     def test_they_fail_on_a_tool_that_ignores_them(self):
         for name in ("control", "confine-sandbox"):
             with self.subTest(check=name):
                 self.assertEqual(self.child(name, "ignore")[0]["state"], "fail")
+
+    def test_a_write_that_failed_for_another_reason_is_never_a_refusal(self):
+        """the rendered settings file exists: a Write over it the tool turns down as unread is no evidence of a rule"""
+        self.assertNotEqual(self.child("control", "unread")[0]["state"], "pass")
+        t = "/w/p/.claude/settings.local.json"
+        use = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Write",
+                                                             "input": {"file_path": t}}]}}
+
+        def run(*events):
+            return type("R", (), {"stdout": "\n".join(json.dumps(e) for e in events)})()
+        self.assertFalse(conformance_claude._refused(run(use, {"type": "result", "permission_denials": []}), t, "file"))
+        denied = {"type": "result", "permission_denials": [{"tool_name": "Write", "tool_input": {"file_path": t}}]}
+        self.assertTrue(conformance_claude._refused(run(use, denied), t, "file"))
+        bash = {"type": "result", "permission_denials": [{"tool_name": "Bash", "tool_input": {"command": f"x > {t}"}}]}
+        self.assertFalse(conformance_claude._refused(run(bash), t, "file"), "a file tool's denial only")
 
     def test_no_attempt_is_an_error_never_a_pass(self):
         for name in ("control", "confine-sandbox"):

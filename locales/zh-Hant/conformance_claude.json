@@ -44,7 +44,7 @@
  "the sandboxed project's settings have no sandbox": "沙盒專案的設定裡沒有沙盒",
  "written": "寫進去了",
  "{path} was written": "{path} 被寫進去了",
- "no attempt at {path}": "沒有試著寫 {path}",
+ "no refused attempt at {path}": "看不到寫 {path} 被擋下的跡象",
  "{path}'s rules can't be left out": "{path} 的規則拿不掉",
  "tests nothing: {path} wasn't written with its rules left out": "什麼都沒測到:拿掉 {path} 的規則後也沒寫進去",
  "refused": "被擋下",
