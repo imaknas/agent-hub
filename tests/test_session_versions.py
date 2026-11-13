@@ -113,6 +113,12 @@ class Layouts(unittest.TestCase):
                         / "claude.exe")
         self.assertEqual(runtime_claude.version_at(exe), (NEW, None))
 
+    def test_the_native_installers_copy_by_its_name(self):
+        exe = self.file(self.home / ".local" / "share" / "claude" / "versions" / "2.1.330")
+        self.assertEqual(runtime_claude.version_at(exe), ("2.1.330", None))
+        odd = self.file(self.home / ".local" / "share" / "claude" / "versions" / "latest")
+        self.assertEqual(runtime_claude.version_at(odd), (runtime_ports.UNREADABLE, None))
+
     def test_nvms_copy_by_its_package(self):
         exe = self.package(self.tmp / "nvm" / "versions" / "node" / "v24.0.0", "2.1.350")
         self.assertEqual(runtime_claude.version_at(exe), ("2.1.350", None))

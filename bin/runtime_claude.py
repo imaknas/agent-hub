@@ -608,6 +608,7 @@ def version_at(exe: pathlib.Path) -> tuple:
     """(version, build) from an executable's real path, read as files:
     - Desktop's copy, the file <claude home>/remote/ccd-cli/<version>-<build>: both from its name;
     - a copy in the platform's store, <runtimes>/claude/<version>/…: that folder's name;
+    - the native installer's copy, ~/.local/share/claude/versions/<version>: that name;
     - nvm's global copy, the executable under nvm's prefix in …/lib/node_modules/@anthropic-ai/claude-code/: that
       package's package.json.
     Anything else is (UNREADABLE, None): a layout the adapter doesn't know, or a claude in a project's own node_modules,
@@ -625,6 +626,10 @@ def version_at(exe: pathlib.Path) -> tuple:
     if exe.parent.name == "ccd-cli" and exe.parent.parent.name == "remote" and real(exe.parent.parent.parent) in homes \
             and (m := DESKTOP_CLI.match(exe.name)):
         return m[1], m[2]
+    native = real(pathlib.Path.home() / ".local" / "share" / "claude" / "versions")   # the native installer's copies
+    if native and native in exe.parents:
+        top = exe.relative_to(native).parts[0]
+        return (top, None) if _SEMVER.match(top) else no
     try:
         store = real(_store())
     except Exception:
