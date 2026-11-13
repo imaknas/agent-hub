@@ -23,8 +23,13 @@
 >   `active.json`, each only if that process started when recorded (a pid in the project's `state.json` is the
 >   project's to write; before, it was killed on that word). `timeout: 0m` is refused; a call's own pin, else the
 >   point's; the wait for cap-runner is two hours beyond `cap_runner.agent_max_timeout_s`.
-> - Not proven on this machine: no project declares `agents:` yet, so the live path (cap-runner → `llm.py agent` → the
->   coding agent) has only the fake runtime's tests behind it until the project that asked declares one.
+> - Run for real (11-13), on macOS with a throwaway unsandboxed project that declared `probe: {tier: fast, allow:
+>   [Read], timeout: 3m}`, removed afterwards: the live cap-runner started `llm.py agent`, which started the coding
+>   agent with the per-run settings, `dontAsk`, only `Read` allowed and no tool servers, at the fast tier. Asked to read
+>   a file and write another, it read it and said writing was refused; no file appeared. The ledger reserved 3 minutes
+>   and settled 1; one usage row per call under `<project>/probe`. An undeclared name and a second call while one ran
+>   were refused (exit 126); after the client was interrupted the agent kept running and `brunna cap-run --wait <id>`
+>   returned its answer. Not run for real: a sandboxed project's call, the daily cap reached, a timeout.
 > - B as built: the adapter's `billing(mode, env, restricted)` is part of the auth interface (a runtime without one is
 >   unknown, so refused); every run at a tier writes a usage row (`completion.record_run`); `agents` and
 >   `agents_per_day` wait for A, which reads them. After the cold review (11-11): `tier:` only on a job with `allow:`
