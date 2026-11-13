@@ -67,11 +67,12 @@
  "no npm from nvm's node on this machine: the platform installs its own copy of Claude Code with it. Install nvm and a node version (nvm install --lts), then run brunna runtimes install claude": "這台電腦沒有 nvm 的 node 帶的 npm:平台用它安裝自己的 Claude Code。先裝 nvm 和一個 node 版本(nvm install --lts),再跑 brunna runtimes install claude",
  "no checked copy of Claude Code yet: brunna runtimes install claude makes one (the nightly brunna/update-runtimes does too)": "還沒有檢查過的 Claude Code:brunna runtimes install claude 會做一份(每晚的 brunna/update-runtimes 也會)",
  "not a session id: {sid}": "不是 session id:{sid}",
- "Claude Code's completions run with no tools again": "Claude Code 的 completion 執行時又不帶任何工具了",
  "the folder {folder} a platform run of Claude Code needs can't be made: {error}": "平台執行 Claude Code 需要的資料夾 {folder} 建不起來:{error}",
  "the refusing `security` a token run needs first on its PATH can't be written ({error}); not run": "token 執行時要放在 PATH 最前面、一律拒絕的 `security` 寫不進去({error});不執行",
  "the store of checked copies of Claude Code can't be read: {error}": "讀不到放檢查過的 Claude Code 的 store:{error}",
  "the run of {point} listed tools a completion never has ({tools}): ended, its result refused": "{point} 的執行列出了 completion 不該有的工具({tools}):已中止,結果不採用",
  "the run of {point} used a tool a completion never has ({tools}): its result refused": "{point} 的執行用了 completion 不該有的工具({tools}):結果不採用",
- "the run of {point} gave no init event before its result, so its tools can't be told: its result refused": "{point} 的執行在結果之前沒有 init 事件,看不出它有哪些工具:結果不採用"
+ "the run of {point} gave no init event before its result, so its tools can't be told: its result refused": "{point} 的執行在結果之前沒有 init 事件,看不出它有哪些工具:結果不採用",
+ "{point}: Claude Code's completions run with no tools again": "{point}:Claude Code 的 completion 執行時又不帶任何工具了",
+ "the run of {point} gave an init event whose tools can't be read: ended, its result refused": "{point} 的執行給的 init 事件讀不出有哪些工具:已中止,結果不採用"
 }

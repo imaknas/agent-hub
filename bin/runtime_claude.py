@@ -2424,20 +2424,23 @@ def completion_tools(schema) -> set:
 
 
 def _tools_alert(point: str, why: str | None) -> None:
-    """A completion whose run had a tool beyond the pinned set is a safety stop the owner hears of (once, reminded every
-    24 hours, said again when it runs clean); a broken alert doesn't change the outcome."""
+    """A completion whose run had a tool beyond the pinned set is a safety stop the owner hears of, per point (once,
+    reminded every 24 hours, said again once that point's run is seen clean); a broken alert doesn't change the
+    outcome."""
     try:
         import alert
-        alert.once(f"completion-tools:{NAME}", [why] if why else [],
-                   _("Claude Code's completions run with no tools again"))
+        alert.once(f"completion-tools:{NAME}:{point}", [why] if why else [],
+                   _("{point}: Claude Code's completions run with no tools again", point=point),
+                   ids=["tools"] if why else [])
     except Exception:
         pass
 
 
 def _read_completion(proc, allowed: set, point: str) -> tuple:
-    """Reads a completion's stream-json as it comes: (the result event or None, why the result is refused or None). The
-    init event lists the run's tools; any beyond the allowed set ends the run there. A tool_use of another name refuses
-    the result. No init event before a result that isn't an error refuses it too: what it ran with can't be told."""
+    """Reads a completion's stream-json as it comes: (the result event or None, why the result is refused or None,
+    whether an init event came). The init event lists the run's tools; any beyond the allowed set, or a list that can't
+    be read, ends the run there. A tool_use of another name refuses the result. No init event before a result that
+    isn't an error refuses it too: what it ran with can't be told."""
     init_seen, result, why = False, None, None
     for line in proc.stdout:
         try:
@@ -2448,7 +2451,12 @@ def _read_completion(proc, allowed: set, point: str) -> tuple:
             continue
         if e.get("type") == "system" and e.get("subtype") == "init":
             init_seen = True
-            extra = sorted({str(t) for t in (e.get("tools") or [])} - allowed)
+            tools = e.get("tools")
+            if not isinstance(tools, list):   # a list it can't read is no evidence of none
+                why = _("the run of {point} gave an init event whose tools can't be read: ended, its result refused",
+                        point=point)
+                break
+            extra = sorted({str(t) for t in tools} - allowed)
             if extra:
                 why = _("the run of {point} listed tools a completion never has ({tools}): ended, its result refused",
                         point=point, tools=", ".join(extra[:8]))
@@ -2466,7 +2474,7 @@ def _read_completion(proc, allowed: set, point: str) -> tuple:
                 why = _("the run of {point} gave no init event before its result, so its tools can't be told: its result "
                         "refused", point=point)
             break
-    return result, why
+    return result, why, init_seen
 
 
 def complete(req, conf) -> CompletionResult:
@@ -2494,7 +2502,7 @@ def complete(req, conf) -> CompletionResult:
             proc = subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     text=True, env=env)
         except FileNotFoundError:
-            return CompletionResult(False, stop="error", error=_(NOT_FOUND))
+            return CompletionResult(False, stop="error", error=_(NOT_FOUND), runtime_version=version)
         errs: list = []
 
         def feed():
@@ -2508,9 +2516,9 @@ def complete(req, conf) -> CompletionResult:
         drain.start()
         timer = threading.Timer(req.timeout_s, proc.kill)
         timer.start()
-        out, refused = None, None
+        out, refused, init_seen = None, None, False
         try:
-            out, refused = _read_completion(proc, completion_tools(req.schema), req.point)
+            out, refused, init_seen = _read_completion(proc, completion_tools(req.schema), req.point)
             if refused:
                 proc.kill()
             else:
@@ -2533,7 +2541,8 @@ def complete(req, conf) -> CompletionResult:
     if out is None and timed_out:
         return CompletionResult(False, stop="error", error=_("over {seconds} {seconds:second|seconds}", seconds=req.timeout_s),
                                 runtime_version=version)
-    _tools_alert(req.point, None)
+    if out is not None and init_seen:   # a clean run seen whole: only that says a refusal is over
+        _tools_alert(req.point, None)
     if out is None:
         return CompletionResult(False, stop="error", error=_("exit {code}: {detail}", code=code,
                                                                     detail=stderr.strip()[-300:]), runtime_version=version)

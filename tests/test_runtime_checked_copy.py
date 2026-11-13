@@ -408,7 +408,7 @@ class CompletionTools(unittest.TestCase):
         argv = self.argv.read_text().split("\n")
         self.assertEqual(argv.count("stream-json"), 1)
         self.assertEqual(argv.count("--verbose"), 1)
-        self.assertEqual(self.alerts, [("completion-tools:claude", [])], "a clean run says the stop is over")
+        self.assertEqual(self.alerts, [("completion-tools:claude:p", [])], "a clean run says the stop is over")
 
     def test_a_schema_allows_only_structured_output(self):
         self.answering(self.init("StructuredOutput"),
@@ -424,8 +424,28 @@ class CompletionTools(unittest.TestCase):
         got = self.complete()
         self.assertFalse(got.ok)
         self.assertIn("Bash", got.error)
-        self.assertEqual(self.alerts[-1][0], "completion-tools:claude")
+        self.assertEqual(self.alerts[-1][0], "completion-tools:claude:p", "per point")
         self.assertTrue(self.alerts[-1][1])
+
+    def test_tools_it_cant_read_refuse(self):
+        for tools in ("Bash", None, {"Bash": 1}):
+            with self.subTest(tools=tools):
+                self.alerts.clear()
+                self.answering({"type": "system", "subtype": "init", "tools": tools})
+                self.assertFalse(self.complete().ok)
+                self.assertTrue(self.alerts and self.alerts[-1][1], "refused and alerted")
+
+    def test_a_run_that_says_nothing_clears_nothing(self):
+        """Only a clean run seen whole (its init event and a result) says a refusal is over: a crash or a timeout don't."""
+        store_fixture.stand_in(self, body="#!/bin/sh\ncat > /dev/null\nexit 1\n")
+        self.assertFalse(self.complete().ok)
+        self.assertEqual(self.alerts, [])
+
+    def test_a_missing_executable_still_says_its_version(self):
+        self.answering(self.init())
+        with mock.patch.object(runtime_claude.subprocess, "Popen", side_effect=FileNotFoundError()):
+            got = self.complete()
+        self.assertEqual((got.ok, got.runtime_version), (False, store_fixture.VERSION))
 
     def test_a_tool_use_of_another_name_refuses(self):
         use = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch", "input": {}}]}}
@@ -447,7 +467,7 @@ class CompletionTools(unittest.TestCase):
         self.assertFalse(got.ok)
         self.assertIn("Invalid API key", got.error)
         self.assertTrue(runtime_claude.is_login_error(got.error))
-        self.assertEqual(self.alerts, [("completion-tools:claude", [])], "nothing refused")
+        self.assertEqual(self.alerts, [], "nothing refused, and nothing seen that would clear a refusal")
 
     def test_its_error_output_is_read_to_the_end(self):
         store_fixture.stand_in(self, body="#!/bin/sh\ncat > /dev/null\necho 'the tool said why' >&2\nexit 3\n")
