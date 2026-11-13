@@ -1,4 +1,5 @@
 {
  "usage: lease-resume <session id>": "用法: lease-resume <session id>",
- "no such lease: {id}": "找不到這個租約:{id}"
+ "no such lease: {id}": "找不到這個租約:{id}",
+ "the platform's coding agent can't resume a session in a terminal": "平台的 coding agent 沒辦法在終端機接續 session"
 }

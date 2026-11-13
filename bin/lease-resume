@@ -2,9 +2,12 @@
 # Channel lease L3: resume a leased session in the terminal (the command the assistant gives when "resume in
 # terminal" is pressed).
 #   lease-resume <session id>
-# The runner has already stopped its own process; this cds into that project and brings the headless token (under SSH
-# claude can't read the keychain and would be "not logged in"; the cost: claude.ai connectors don't load), then rejoins
-# the same conversation. When done, go back to the assistant and press "reclaim" to do the handover.
+# The runner has already stopped its own process; this cds into that project and rejoins the same conversation with
+# the platform's checked copy of the tool, never one found on PATH by name (the runtime's resume_exec: its updater off,
+# the store's hold on that version passed on to it; the headless token, with the refusing `security`, only when the
+# copy isn't logged in itself: under SSH it can't read the keychain, and the cost is that claude.ai connectors don't
+# load). With no checked copy it says why and starts nothing. When done, go back to the assistant and press "reclaim"
+# to do the handover.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 id="${1:?$(hub_msg "usage: lease-resume <session id>")}"
@@ -15,8 +18,17 @@ d = json.load(open('$HUB/.state/lease-runner/leases.json'))
 l = d.get(sys.argv[1]) or sys.exit(sys.argv[2])
 print(l['cwd'])" "$id" "$(hub_msg "no such lease: {id}" id="$id")")
 cd "$cwd"
-token="$HOME/.claude/headless-oauth-token"
-if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true' && [ -r "$token" ]; then
-  export CLAUDE_CODE_OAUTH_TOKEN="$(cat "$token")"
-fi
-exec claude --resume "$id"
+exec "$HUB/bin/py" -c '
+import os, sys
+sys.path.insert(0, sys.argv[1])
+import runtime_ports
+try:
+    rt = runtime_ports.load(ports=("stream",))
+    resume = getattr(rt, "resume_exec", None)
+    if not callable(resume):
+        sys.exit(sys.argv[3])
+    argv, env = resume(sys.argv[2])
+except (runtime_ports.Unsupported, ValueError) as e:
+    sys.exit(str(e))
+os.execve(argv[0], argv, env)
+' "$HUB/bin" "$id" "$(hub_msg "the platform's coding agent can't resume a session in a terminal")"
