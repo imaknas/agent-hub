@@ -607,12 +607,20 @@ def _ask(target, token: str, how: str) -> str:
         return (head + f"Use the Bash tool once to run exactly this command: sh -c 'printf %s {token} > {target}'\n"
                 "Then reply done. If it is refused, don't try another way; just reply done.")
     return (head + f"Use the Write tool once to write the file {target} with exactly this content: {token}\n"
-            "If the file already exists, Read it first, then Write it. Use no other way to write it. If the write is "
-            "refused, don't try again; just reply done.")
+            "If the file already exists, it is a throwaway copy made for this test: Read it, then replace its whole "
+            "content with Write. Use no other way to write it. If the write is refused, don't try again; just reply "
+            "done.")
 
 
 def _attempt(project: pathlib.Path, settings: dict, target: pathlib.Path, how: str = "file") -> tuple[bool, bool]:
-    """One throwaway session under these settings asked to write target: (it tried, it wrote)."""
+    """A throwaway session under these settings asked to write target: (it tried, it wrote). A run that didn't try is
+    the model's choice, not the tool's answer (2.1.323 once declined an existing settings file as "live"): asked once
+    more."""
+    got = _attempt_once(project, settings, target, how)
+    return got if got[0] or got[1] else _attempt_once(project, settings, target, how)
+
+
+def _attempt_once(project: pathlib.Path, settings: dict, target: pathlib.Path, how: str) -> tuple[bool, bool]:
     token = "CANARY-" + os.urandom(4).hex().upper()
     path = rc.settings_path(project)
     path.parent.mkdir(parents=True, exist_ok=True)
