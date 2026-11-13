@@ -7,7 +7,7 @@
                                   passed, pending, unreadable, not installable, failed and which check; Desktop's builds),
                                   and the versions their transcripts name with how many lines the readers skipped (a
                                   version that skips more than 5% changed its format: the weekly statistics may undercount it)
-  runtimes.py check <runtime> [--binary <exe>] [--only <check>]... [--report]
+  runtimes.py check <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report]
                                   run the conformance checks (bin/conformance.py run)
   runtimes.py install <runtime>   a checked copy in the store: the first install, or a newer version checked and
                                   promoted (bin/update-runtimes.py for this runtime)
@@ -34,8 +34,8 @@ DAYS = 7
 
 
 def usage() -> str:
-    return _("usage: brunna runtimes [check <runtime> [--binary <exe>] [--only <check>]... [--report] | install <runtime> | "
-             "rollback <runtime>]")
+    return _("usage: brunna runtimes [check <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report] | "
+             "install <runtime> | rollback <runtime>]")
 
 
 def in_use() -> list[str]:

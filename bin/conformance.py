@@ -2,10 +2,11 @@
 """Conformance checks of a coding agent's binary (docs/design/runtime-versions.md section 2): whether this version of the
 tool still does what each of the platform's ports rests on.
 
-  conformance.py run <runtime> [--binary <exe>] [--only <check>]... [--report]
+  conformance.py run <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report]
         run the runtime's checks (conformance_<runtime>.CHECKS) against exe (default: the one platform runs start now) and
         record the result; --report prints it and records nothing (the only form a linked worktree of the hub allows:
-        a pass recorded from half-edited code would drive a promotion)
+        a pass recorded from half-edited code would drive a promotion); --pair: the copy a session-side check pairs exe
+        with (sessions-fork: a session exe wrote, forked by that copy; default: exe itself)
   conformance.py child <runtime> <check> <world> [<exe> [<pair>]]   internal: one check, in its throwaway world (pair:
         the platform's current copy, for a check of a session's version that pairs the two, world.pair)
 
@@ -53,7 +54,7 @@ REASON_MAX = 300
 
 
 def usage() -> str:
-    return _("usage: conformance.py run <runtime> [--binary <exe>] [--only <check>]... [--report]")
+    return _("usage: conformance.py run <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report]")
 
 
 # ---------- the throwaway world ----------
@@ -323,7 +324,7 @@ def main(argv: list[str]) -> int:
     if argv in (["-h"], ["--help"]):
         print(usage())
         return 0
-    if argv[:1] != ["run"] or len(argv) < 2 or not hubconf.known_args(argv[2:], {"--report"}, {"--binary", "--only"}):
+    if argv[:1] != ["run"] or len(argv) < 2 or not hubconf.known_args(argv[2:], {"--report"}, {"--binary", "--pair", "--only"}):
         print(usage(), file=sys.stderr)
         return 2
     report = "--report" in argv
@@ -337,9 +338,10 @@ def main(argv: list[str]) -> int:
         return 1
     rest = argv[2:]
     exe = rest[rest.index("--binary") + 1] if "--binary" in rest else None
+    pair = rest[rest.index("--pair") + 1] if "--pair" in rest else None
     only = [rest[i + 1] for i, a in enumerate(rest) if a == "--only"]
     try:
-        doc = run(argv[1], exe, only or None)
+        doc = run(argv[1], exe, only or None, *([pair] if pair else []))
     except (RuntimeError, KeyError) as e:
         print(f"conformance: {e}", file=sys.stderr)
         return 1

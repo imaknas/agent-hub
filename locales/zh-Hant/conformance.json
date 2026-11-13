@@ -1,5 +1,4 @@
 {
- "usage: conformance.py run <runtime> [--binary <exe>] [--only <check>]... [--report]": "用法:conformance.py run <runtime> [--binary <執行檔>] [--only <檢查>]... [--report]",
  "{runtime} {version}: {verdict} ({binary}, checked {at})": "{runtime} {version}:{verdict}({binary},{at} 檢查)",
  "not isolated: {places} outside the throwaway world": "沒有隔離好:{places} 在一次性環境之外",
  "the runtime {runtime} has no distribution port: it is unversioned, nothing to check": "runtime {runtime} 沒有 distribution port:沒有版本管理,沒有東西可以檢查",
@@ -14,5 +13,6 @@
  "conformance: --only runs part of the checks, so it only reports: add --report": "conformance:--only 只跑部分檢查,所以只能報告:請加 --report",
  "the check's world could not be prepared: {error}": "沒辦法準備檢查用的一次性環境:{error}",
  "  {n} safety {n:check|checks} not run yet (not-checkable): a pass says nothing about what {n:it guards|they guard}": "  {n} 個安全檢查還沒跑(not-checkable):pass 不代表它們守的東西沒問題",
- "not a version: {version!r}": "不是版本號:{version!r}"
+ "not a version: {version!r}": "不是版本號:{version!r}",
+ "usage: conformance.py run <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report]": "用法:conformance.py run <runtime> [--binary <執行檔>] [--pair <執行檔>] [--only <檢查>]... [--report]"
 }
