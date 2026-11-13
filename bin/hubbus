@@ -3323,9 +3323,14 @@ def take(c, proj: str, entry, live=None) -> None:
         refuse(_("hubbus: not an outbox entry (an object with v 1)"))
     session = own_session(c, proj, entry.get("session"))
     op = entry.get("op")
-    if op in ("ack", "told") and session and gated(sessions_port(), session):
+    named = entry.get("session")
+    if op in ("ack", "told") and isinstance(named, str) and named and not named.startswith("mcp:") \
+            and gated(sessions_port(), named):
         # a gated session (runtime-versions.md section 6, r3) neither takes nor is told a letter through the CLI: it would
-        # hold the letter away from the project's other sessions. Read past, as a file naming another project's would be
+        # hold the letter away from the project's other sessions. Read past, as a file naming another project's would be.
+        # Asked of the id as the file names it, not own_session's: a gated session has no presence (its hooks record
+        # none), and an ack that lost its session would hold the letter for good; gated reads the session's own record,
+        # written outside any sandbox
         return
     if op == "send":
         _strings(entry, ("id", *(k for k in SEND_FIELDS if k not in NOT_TEXT)))

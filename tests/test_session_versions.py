@@ -488,16 +488,19 @@ class OutboxGate(tbs.Fixture):
                                                        gated=lambda s: ["control"] if gated else [])
         c = m.db()
         self.addCleanup(c.close)
-        m.record_presence(c, "s-box", "box", self.ws["box"])
+        if not gated:   # a gated session has no presence: its hooks' mail, which records it, is off
+            m.record_presence(c, "s-box", "box", self.ws["box"])
         self.drop({"v": 1, "op": "told", "ids": [req], "session": "s-box"}, name="1.json")
         self.drop({"v": 1, "op": "ack", "ids": [req], "session": "s-box"}, name="2.json")
         with mock.patch.object(m.hubconf, "projects", lambda: self.docs):
             m.take_outboxes(c)
         self.assertEqual(list(self.outbox().iterdir()), [], "both files taken in and deleted")
+        self.held = m.being_handled(c, m.get_event(c, req), lambda s: True)
         return [json.loads(r["payload"]).get("via") for r in self.rows("type='message.delivered' AND ref=?", (req,))]
 
     def test_ignored_from_a_gated_session(self):
         self.assertEqual(self.take(gated=True), [])
+        self.assertFalse(self.held, "held neither by the gated session's ack nor by an ack that lost its session")
 
     def test_taken_from_any_other(self):
         self.assertEqual(sorted(self.take(gated=False)), ["ack", "inbox"])
