@@ -105,6 +105,10 @@
         "type": "string"
       },
       "description": "The call ids whose results this entry returns"
+    },
+    "version": {
+      "type": "string",
+      "description": "The version of the tool that wrote this entry, when its files say (a reader that skips more than a few of one version's lines can say which version changed its format)"
     }
   }
 }

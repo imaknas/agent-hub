@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
 from runtime_ports import Action  # noqa: E402
-from sessions import SessionFormatError, Turn  # noqa: E402
+from sessions import SessionFormatError, Turn, tally_line  # noqa: E402
 
 _ = i18n.domain(__file__)
 NAME = "codex"
@@ -137,8 +137,11 @@ def _entry(o: dict, sid: str, cwd: str, sub: bool, person: bool, new_style: bool
     return None, cwd
 
 
-def records(file: pathlib.Path):
+def records(file: pathlib.Path, tally: dict | None = None):
+    """The rollout's entries as Turns; tally (optional) counts its lines and those skipped under the Codex version
+    its session meta names (sessions.tally_line)."""
     meta = _meta(file) or {}
+    version = str(meta.get("cli_version") or "")
     sid = str(meta.get("id") or meta.get("session_id") or file.stem)
     cwd = str(meta.get("cwd") or "")
     sub = _is_subagent(meta)
@@ -151,20 +154,26 @@ def records(file: pathlib.Path):
     parsed = recognised = 0
     with file.open(errors="replace") as fh:
         for line in fh:
+            if not line.strip():
+                continue
             try:
                 o = json.loads(line)
             except ValueError:
+                tally_line(tally, version, True)
                 continue
             parsed += 1
             if not isinstance(o, dict) or not isinstance(o.get("type"), str) or o["type"] not in _KNOWN:
+                tally_line(tally, version, True)
                 continue
             recognised += 1
             try:
                 t, cwd = _entry(o, sid, cwd, sub, person, new_style)
             except (TypeError, ValueError, AttributeError):
+                tally_line(tally, version, True)
                 continue   # one malformed entry is skipped, not the whole run
+            tally_line(tally, version, False)
             if t:
-                yield t
+                yield t._replace(version=version)
     if parsed >= 5 and recognised == 0:
         raise SessionFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Codex change its "
                                    "session format?)", file=file, n=parsed))

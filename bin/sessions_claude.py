@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import i18n  # noqa: E402
 from runtime_ports import Action  # noqa: E402
-from sessions import SessionFormatError, Turn  # noqa: E402
+from sessions import SessionFormatError, Turn, tally_line  # noqa: E402
 
 _ = i18n.domain(__file__)
 NAME = "claude-code"
@@ -139,24 +139,36 @@ def _turn(o: dict, fallback_sid: str) -> Turn | None:
     return Turn(_parse_ts(ts), sid, "other", results=done, **common)
 
 
-def records(file: pathlib.Path):
+def records(file: pathlib.Path, tally: dict | None = None):
+    """The file's entries as Turns; tally (optional) counts the lines per Claude Code version and those skipped
+    (sessions.tally_line). Each entry names the version that wrote it; a line that doesn't is counted under the last
+    version seen in the file."""
     parsed = recognised = 0
+    version = ""
     with file.open(errors="replace") as fh:
         for line in fh:
+            if not line.strip():
+                continue
             try:
                 o = json.loads(line)
             except ValueError:
+                tally_line(tally, version, True)
                 continue
             parsed += 1
+            if isinstance(o, dict) and isinstance(o.get("version"), str) and o["version"]:
+                version = o["version"]
             if not isinstance(o, dict) or not isinstance(o.get("type"), str) or o["type"] not in _KNOWN:
+                tally_line(tally, version, True)
                 continue
             recognised += 1
             try:
                 t = _turn(o, file.stem)
             except (TypeError, ValueError, AttributeError):
+                tally_line(tally, version, True)
                 continue   # one malformed entry (a field of the wrong shape) is skipped, not the whole run
+            tally_line(tally, version, False)
             if t:
-                yield t
+                yield t._replace(version=version)
     if parsed >= 5 and recognised == 0:
         raise SessionFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Claude Code change "
                                    "its transcript format?)", file=file, n=parsed))

@@ -58,6 +58,17 @@ class Turn(NamedTuple):
     folder: str = ""         # the working folder the session was in at this entry
     subagent: bool = False   # an entry of a subagent the session started
     results: tuple = ()      # the call ids (Action.call) whose results this entry returns
+    version: str = ""        # the version of the tool that wrote this entry ("" when its files don't say)
+
+
+def tally_line(tally: dict | None, version: str, skipped: bool) -> None:
+    """Count one line a source read into tally (records(file, tally)): {version: [lines, skipped]}. A line counts as
+    skipped when it isn't an entry the source can read: not JSON, a type it doesn't know, a field of the wrong shape
+    (docs/design/runtime-versions.md section 6: readers count what they skip)."""
+    if tally is not None:
+        row = tally.setdefault(version or "", [0, 0])
+        row[0] += 1
+        row[1] += bool(skipped)
 
 
 class NoSessions(Exception):
@@ -110,7 +121,7 @@ class ImportFolder:
         return None   # a file may hold several sessions in several folders: read it whole
 
     @staticmethod
-    def records(file: pathlib.Path):
+    def records(file: pathlib.Path, tally: dict | None = None):
         import minischema
         schema = json.loads(CONTRACT.read_text())
         bad = good = 0
@@ -126,6 +137,8 @@ class ImportFolder:
                     t = from_record(o) if isinstance(o, dict) and not minischema.errors(schema, o) else None
                 except ValueError:
                     t = None
+                version = str(o.get("version") or "") if isinstance(o, dict) else ""
+                tally_line(tally, version, t is None)
                 if t is None:
                     bad += 1
                     continue
@@ -145,7 +158,7 @@ def from_record(o: dict) -> Turn:
     acts = tuple(Action(a["kind"], a.get("detail") or "", a.get("collab"), a.get("call") or "", a.get("command") or "",
                         bool(a.get("background"))) for a in o.get("actions") or ())
     return Turn(ts, o["session"], o["role"], "", acts, o.get("id") or "", o.get("folder") or "",
-                bool(o.get("subagent")), tuple(o.get("results") or ()))
+                bool(o.get("subagent")), tuple(o.get("results") or ()), str(o.get("version") or ""))
 
 
 def to_record(t: Turn) -> dict:
@@ -166,6 +179,8 @@ def to_record(t: Turn) -> dict:
                          **({"background": True} if a.background else {})} for a in t.actions]
     if t.results:
         o["results"] = list(t.results)
+    if t.version:
+        o["version"] = t.version
     return o
 
 
@@ -301,3 +316,40 @@ def last_activity(path) -> datetime.datetime | None:
     """When an entry was last written in this folder, by any session: one that started elsewhere and moved here (a
     worktree it entered) counts too."""
     return _activity().get(str(path).rstrip("/"))
+
+
+SKIP_LIMIT = 0.05   # a version whose files skip more than this share of their lines is said (runtime-versions.md section 6)
+
+
+def skipped(since: datetime.datetime) -> list[dict]:
+    """Per source and tool version, the lines of the files written since `since` and how many the source skipped:
+    [{source, version, lines, skipped, files, over}], over = the share skipped is above SKIP_LIMIT, so the statistics
+    may undercount that version's sessions. A file a source can't read at all counts as one error row of its own."""
+    rows: dict[tuple[str, str], dict] = {}
+    for src, files in _files():
+        for f in files:
+            try:
+                if _mtime(f) < since:
+                    continue
+            except OSError:
+                continue
+            tally: dict = {}
+            try:
+                for _t in src.records(f, tally):
+                    pass
+            except SessionFormatError:
+                tally.setdefault("", [0, 0])
+                tally[""][0] += 1
+                tally[""][1] += 1
+            except (OSError, TypeError):
+                continue   # a source whose records() takes no tally yet, or a file gone meanwhile
+            for version, (lines, skip) in tally.items():
+                row = rows.setdefault((src.NAME, version), {"source": src.NAME, "version": version, "lines": 0,
+                                                            "skipped": 0, "files": 0})
+                row["lines"] += lines
+                row["skipped"] += skip
+                row["files"] += 1
+    out = sorted(rows.values(), key=lambda r: (r["source"], r["version"]))
+    for r in out:
+        r["over"] = r["lines"] > 0 and r["skipped"] / r["lines"] > SKIP_LIMIT
+    return out

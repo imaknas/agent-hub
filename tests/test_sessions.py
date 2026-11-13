@@ -395,6 +395,60 @@ class CodexSource(Temp):
             list(sessions_codex.records(f))
 
 
+class VersionsAndSkips(Temp):
+    """Each entry carries the version of the tool that wrote it, and a reader counts per version what it skips, so a
+    version that changed the format is seen (docs/design/runtime-versions.md section 6)."""
+
+    def test_claude_versions_and_what_it_skips(self):
+        f = self.tmp / "x.jsonl"
+        a = {**pin.human(pin.at(1, 9), "S", "g1", pin.ALPHA), "version": "2.1.300"}
+        b = {**pin.human(pin.at(1, 10), "S", "g2", pin.ALPHA), "version": "2.1.301"}
+        f.write_text("".join(x + "\n" for x in (json.dumps(a), "not json", json.dumps({"type": "brand-new", "version":
+                     "2.1.301"}), json.dumps(b), "", json.dumps({**b, "uuid": "g3", "timestamp": 5}))))
+        tally = {}
+        got = list(sessions_claude.records(f, tally))
+        self.assertEqual([(t.id, t.version) for t in got], [("g1", "2.1.300"), ("g2", "2.1.301")])
+        self.assertEqual(tally, {"2.1.300": [2, 1], "2.1.301": [3, 2]},
+                         "a line that isn't JSON counts under the last version seen; an empty line isn't counted")
+        self.assertEqual([t.id for t in sessions_claude.records(f)], ["g1", "g2"], "the tally is optional")
+
+    def test_codex_version_from_the_session_meta(self):
+        codex_home(self.home)
+        f = next((self.home / ".codex" / "sessions").rglob("*-c1.jsonl"))
+        tally = {}
+        got = list(sessions_codex.records(f, tally))
+        self.assertEqual({t.version for t in got}, {"0.165.0"})
+        self.assertEqual(list(tally), ["0.165.0"])
+        self.assertEqual(tally["0.165.0"][1], 0)
+
+    def test_a_record_keeps_its_version(self):
+        t = Turn(datetime.datetime(2026, 10, 1, 9, tzinfo=UTC), "S", "human", version="2.1.300")
+        o = sessions.to_record(t)
+        self.assertEqual(o["version"], "2.1.300")
+        self.assertEqual(sessions.from_record(o), t)
+        self.assertNotIn("version", sessions.to_record(t._replace(version="")))
+
+    def test_skipped_per_source_and_version(self):
+        d = self.home / ".claude" / "projects" / "-w-alpha"
+        d.mkdir(parents=True)
+        ok = [{**pin.human(pin.at(1, 9, i), "S", f"g{i}", pin.ALPHA), "version": "2.1.300"} for i in range(19)]
+        (d / "a.jsonl").write_text("".join(json.dumps(x) + "\n" for x in ok) + "not json\n")
+        new = [{**pin.human(pin.at(1, 10, i), "T", f"h{i}", pin.ALPHA), "version": "2.1.301"} for i in range(5)]
+        (d / "b.jsonl").write_text("".join(json.dumps(x) + "\n" for x in new)
+                                   + "".join(json.dumps({"type": "brand-new", "version": "2.1.301"}) + "\n"
+                                             for _ in range(5)))
+        since = datetime.datetime(2000, 1, 1, tzinfo=UTC)
+        with self.reading():
+            rows = {r["version"]: r for r in sessions.skipped(since)}
+        self.assertEqual((rows["2.1.300"]["lines"], rows["2.1.300"]["skipped"], rows["2.1.300"]["over"]), (20, 1, False),
+                         "5% exactly is not over")
+        self.assertEqual((rows["2.1.301"]["lines"], rows["2.1.301"]["skipped"], rows["2.1.301"]["over"]), (10, 5, True))
+        self.assertEqual({r["source"] for r in rows.values()}, {"claude-code"})
+        with self.reading():
+            self.assertEqual(sessions.skipped(datetime.datetime.now(UTC) + datetime.timedelta(days=1)), [],
+                             "only files written since")
+
+
 class Nothing(Temp):
     def test_no_source_is_off_and_says_where_it_looked(self):
         with self.reading(), self.assertRaises(sessions.NoSessions) as cm:
