@@ -44,13 +44,19 @@ class Isolation(Temp):
     def test_a_child_outside_its_world_runs_nothing(self):
         for var in ("STATE", "SECRETS", "CONFIG", "DATA"):
             with self.subTest(left_out=var):
+                # the instance pointer as well: else the part falls back into the world's own instance folder
                 env = names.env_unset(self.world.env(), var)
+                if var != "STATE":
+                    env = names.env_set(env, "HOME", str(self.tmp / "elsewhere"))
                 got = self.child(env)
                 self.assertEqual(got["state"], "error")
                 self.assertNotIn("nosuch", got["reason"], "stopped before the check (in whichever language)")
                 self.assertIn(var.lower(), got["reason"])
         env = {**self.world.env(), "HOME": str(self.tmp)}
         self.assertIn("home", self.child(env)["reason"])
+        # the instance folder (a project's policy denies it whole; the live one holds the world)
+        env = names.env_set(self.world.env(), "HOME", str(self.tmp / "elsewhere"))
+        self.assertIn("instance", self.child(env)["reason"])
 
     def test_the_world_env_carries_nothing_of_the_callers(self):
         with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "k", "CLAUDE_CODE_OAUTH_TOKEN": "t", "BRUNNA_X": "y"}):

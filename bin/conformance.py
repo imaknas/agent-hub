@@ -11,7 +11,7 @@ tool still does what each of the platform's ports rests on.
 Neutral: the checks are the adapters' (bin/conformance_<runtime>.py: CHECKS, a list of runtime_ports.Check); only runtimes with the
 distribution port have versions to check. How every check runs:
 - in its own process, whose environment points the platform's config, state, data, secrets (and so the session records),
-  bus and logs, and HOME, at a throwaway world under hubconf.private_tmp() (never the system temp folder, which every
+  bus and logs, the instance directory, and HOME, at a throwaway world under hubconf.private_tmp() (never the system temp folder, which every
   sandboxed project can write as the same user). Before its check the child proves it: every place the platform would
   write resolves inside the world, or the check is an error. The tool's own config folder is the adapter's to point
   into the world (world.tool);
@@ -58,7 +58,7 @@ class World:
     """A throwaway project, home, tool folder and platform instance (config, state, data, secrets, bus), all under one
     root. The child's environment points the platform at it (env()); the adapter's checks point the tool at tool/."""
 
-    PARTS = ("project", "home", "tool", "config", "state", "data", "secrets", "bus", "tmp")
+    PARTS = ("project", "home", "tool", "config", "state", "data", "secrets", "bus", "tmp", "instance")
 
     def __init__(self, root: pathlib.Path):
         self.root = pathlib.Path(root)
@@ -79,7 +79,10 @@ class World:
         base = os.environ if base is None else base
         e = {k: base[k] for k in ("LANG", "LC_ALL", "LC_CTYPE", "USER", "LOGNAME", "SHELL") if k in base}
         e.update(PATH=hubconf.LAUNCHD_PATH, HOME=str(self.home), TMPDIR=str(self.tmp))
-        for var, part in (("CONFIG", self.config), ("STATE", self.state), ("DATA", self.data), ("SECRETS", self.secrets)):
+        # the instance directory too: else the hub's pointer names the live one, which holds the world (private_tmp is
+        # in its secrets) and which a sandboxed project's policy denies whole
+        for var, part in (("CONFIG", self.config), ("STATE", self.state), ("DATA", self.data), ("SECRETS", self.secrets),
+                          ("HOME", self.instance)):
             e = names.env_set(e, var, str(part))
         # bin/py finds the platform's Python under the home, which is the world's: name it, or the platform's own scripts
         # (the hooks a check fires) can't start there
@@ -90,7 +93,8 @@ class World:
         root = os.path.realpath(self.root)
         places = {"config": hubconf.config_dir(), "state": hubconf.STATE, "data": hubconf.data_dir(),
                   "secrets": hubconf.secrets_dir(), "sessions": hubconf.session_addresses_dir(), "bus": hubconf.BUS_DIR,
-                  "logs": hubconf.LOGS, "shared": hubconf.SHARED, "home": pathlib.Path.home()}
+                  "logs": hubconf.LOGS, "shared": hubconf.SHARED, "home": pathlib.Path.home(),
+                  "instance": hubconf.instance_home() or hubconf.ROOT}
         out = [k for k, p in places.items() if not os.path.realpath(p).startswith(root + os.sep)]
         return _("not isolated: {places} outside the throwaway world", places=", ".join(out)) if out else None
 

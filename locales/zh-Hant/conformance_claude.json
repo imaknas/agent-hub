@@ -36,5 +36,17 @@
  "could not add a server (exit {code})": "加不了伺服器(exit {code})",
  "the listing didn't parse: {error}": "清單解析失敗:{error}",
  "llm.py --dry-run gave no command (exit {code})": "llm.py --dry-run 沒給出指令(exit {code})",
- "no answer for 3 minutes": "3 分鐘沒有回答"
+ "no answer for 3 minutes": "3 分鐘沒有回答",
+ "residual: a new {folder}/<name> is {file} through Edit, {bash} through Bash (sh -c)": "殘餘:新的 {folder}/<名字> 經 Edit {file},經 Bash(sh -c){bash}",
+ "another project's folder": "別的專案的資料夾",
+ "the platform's secrets": "平台的機密",
+ "the throwaway project could not be registered": "拋棄式專案登記不進去",
+ "the sandboxed project's settings have no sandbox": "沙盒專案的設定裡沒有沙盒",
+ "written": "寫進去了",
+ "{path} was written": "{path} 被寫進去了",
+ "no attempt at {path}": "沒有試著寫 {path}",
+ "{path}'s rules can't be left out": "{path} 的規則拿不掉",
+ "tests nothing: {path} wasn't written with its rules left out": "什麼都沒測到:拿掉 {path} 的規則後也沒寫進去",
+ "refused": "被擋下",
+ "not tried": "沒有試"
 }

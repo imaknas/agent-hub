@@ -34,6 +34,42 @@ if a[:2] == ["mcp", "add"]:
     f.write_text((f.read_text() if f.exists() else "") + a[4] + "\n"); sys.exit(0)
 prompt = sys.stdin.read()
 token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
+if "automated test of a sandbox" in prompt:   # control / confine-sandbox: one canary write per run
+    import re
+    bash = re.search(r"sh -c 'printf %s (\S+) > (\S+)'", prompt)
+    if bash:
+        tool, word, target = "Bash", bash[1], bash[2]
+        inp = {"command": f"sh -c 'printf %s {word} > {target}'"}
+    else:
+        m = re.search(r"write the file (\S+) with exactly this content: (\S+)", prompt)
+        tool, target, word = "Write", m[1], m[2]
+        inp = {"file_path": target, "content": word}
+    f = pathlib.Path.cwd() / ".claude" / "settings.local.json"
+    st = json.loads(f.read_text()) if f.exists() else {}
+    home = os.environ["HOME"]
+    def path(spec):
+        return home + spec[1:] if spec.startswith("~") else spec[1:] if spec.startswith("//") else spec
+    def glob(spec, p):   # the tool's reading of a rule: ** any depth, * one name
+        rx = re.escape(path(spec)).replace(r"/\*\*/", "/(.*/)?").replace(r"/\*\*", "(/.*)?").replace(r"\*", "[^/]*")
+        return re.fullmatch(rx, p, re.I) is not None
+    denied = False
+    if mode in ("good", "honour"):
+        if tool == "Write":
+            denied = any(glob(r[5:-1], target) for r in (st.get("permissions") or {}).get("deny") or []
+                         if r.startswith("Edit("))
+        else:
+            fs = (st.get("sandbox") or {}).get("filesystem") or {}
+            denied = any(target == path(e) or target.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or [])
+    if mode != "idle":
+        print(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": tool, "input": inp}]}}))
+        if not denied:
+            pathlib.Path(target).parent.mkdir(parents=True, exist_ok=True)
+            pathlib.Path(target).write_text(word)
+    print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done", "usage": {},
+                      "permission_denials": [{"tool_name": tool, "tool_use_id": "t1", "tool_input": inp}] if denied
+                      else [], "session_id": "s-2"}))
+    sys.exit(0)
 if not token:   # what DV5 (c) guards: with no token it asks the Keychain, for its own config dir's item
     subprocess.run(["security", "find-generic-password", "-s", "Claude Code-credentials-1a2b3c4d"], capture_output=True)
 bad = token.startswith("sk-ant-oat01-000") or not token
@@ -86,7 +122,7 @@ class Through(unittest.TestCase):
 
     def test_the_checks_a_stand_in_can_satisfy_pass(self):
         for name in ("agent-result", "completion-no-tools", "instructions-reach", "sessions-read", "stream-exchange",
-                     "tool-servers-listed", "auth-login-error"):
+                     "tool-servers-listed", "auth-login-error", "control", "confine-sandbox"):
             with self.subTest(check=name):
                 got = self.one(name)
                 self.assertEqual(got.state, "pass", got)
@@ -112,6 +148,52 @@ class Through(unittest.TestCase):
         r = subprocess.run([sys.executable, str(BIN / "conformance.py"), "child", "claude", check.name, str(world.root),
                             str(self.exe)], capture_output=True, text=True, env=env, timeout=120)
         self.assertEqual(json.loads(r.stdout.strip().splitlines()[-1])["state"], "fail")
+
+    def child(self, name, mode):
+        """One check in its own child, the stand-in told how to behave (run_one's world environment carries nothing
+        of the caller's); the world is kept for the test to look at."""
+        import subprocess
+        world = conformance.World(self.tmp / f"w-{name}-{mode}").create()
+        conformance_claude.prepare(world)
+        r = subprocess.run([sys.executable, str(BIN / "conformance.py"), "child", "claude", name, str(world.root),
+                            str(self.exe)], capture_output=True, text=True, env={**world.env(), "STAND_IN_MODE": mode},
+                           timeout=300)
+        return json.loads(r.stdout.strip().splitlines()[-1]), world
+
+    def test_the_session_checks_hold_on_a_tool_that_honours_the_settings(self):
+        for name in ("control", "confine-sandbox"):
+            with self.subTest(check=name):
+                got, world = self.child(name, "honour")
+                self.assertEqual(got["state"], "pass", got)
+                settings = json.loads((world.project / ".claude" / "settings.local.json").read_text())
+                self.assertTrue(settings["sandbox"]["enabled"], "rendered through policy → settings")
+                self.assertNotIn("hooks", settings)
+                self.assertFalse(list(world.secrets.glob("canary-*")), "every canary gone again")
+                self.assertFalse((world.project / ".mcp.json").exists())
+                if name == "control":
+                    self.assertTrue(got["reason"], "the residual is said")
+
+    def test_they_fail_on_a_tool_that_ignores_them(self):
+        for name in ("control", "confine-sandbox"):
+            with self.subTest(check=name):
+                self.assertEqual(self.child(name, "ignore")[0]["state"], "fail")
+
+    def test_no_attempt_is_an_error_never_a_pass(self):
+        for name in ("control", "confine-sandbox"):
+            with self.subTest(check=name):
+                self.assertEqual(self.child(name, "idle")[0]["state"], "error")
+
+    def test_a_canarys_control_leaves_out_every_rule_covering_it(self):
+        settings = {"permissions": {"deny": ["Edit(//w/p/**/.claude/hooks/**)", "Edit(//w/p/**/.mcp.json)",
+                                             "Read(//w/p/**/.claude/hooks/**)"]},
+                    "sandbox": {"filesystem": {"denyWrite": ["/w/p/.claude/hooks"], "denyRead": ["/w/other"]}}}
+        target = pathlib.Path("/w/p/.claude/hooks/canary")
+        self.assertTrue(conformance_claude._covered(settings, target))
+        loose = conformance_claude._without(settings, target)
+        self.assertFalse(conformance_claude._covered(loose, target))
+        self.assertEqual(loose["permissions"]["deny"], ["Edit(//w/p/**/.mcp.json)", "Read(//w/p/**/.claude/hooks/**)"])
+        self.assertEqual(loose["sandbox"]["filesystem"], {"denyWrite": [], "denyRead": ["/w/other"]})
+        self.assertTrue(conformance_claude._covered(settings, pathlib.Path("/w/p/.MCP.json")), "case-insensitive")
 
     def test_no_token_is_a_refusal_not_a_fail(self):
         with mock.patch.object(runtime_claude, "_token_file", lambda: self.tmp / "none"), self.assertRaises(RuntimeError):
