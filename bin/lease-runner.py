@@ -358,6 +358,15 @@ def start_proc(lease: Lease, resume: bool) -> None:
     import runtime_claude  # the flags are still Claude Code's (to move into the runtime with the long-running sessions)
     wanted = resume or lease.started_once
     can_resume = wanted and rt().resumable(lease.id)
+    pair = "same"
+    if can_resume and lease.version:
+        # the copy that resumes it now must have passed resuming a session the lease's version wrote (runtime-versions.md
+        # section 5): refused on a failed pair, as before while it isn't checked yet
+        pair, current, reason = runtime_ports.pair_state(runtime_ports.default_name(), lease.version)
+        if pair == "fail":
+            raise RuntimeError(_("this conversation was written by version {version}, and the platform's copy {current} "
+                                 "failed resuming one ({reason}): not resumed", version=lease.version,
+                                 current=current or "-", reason=reason or runtime_ports.FORK_CHECK))
     flag = ["--resume", lease.id] if can_resume else ["--session-id", lease.id]
     point = "lease-work" if lease.mode == "work" else "lease-session"
     cmd = [PY, str(HUB / "bin" / "llm.py"), "exec", point, "--cwd", lease.cwd, "--",
@@ -365,7 +374,10 @@ def start_proc(lease: Lease, resume: bool) -> None:
            "--permission-prompt-tool", runtime_claude.APPROVE_TOOL,
            "--settings", str(deny_settings(lease.project)), "--append-system-prompt", preamble(lease.project, lease.mode),
            "--max-turns", str(lease.max_turns)]
-    lease.version = run_version() or lease.version
+    if not can_resume or (lease.version and pair in ("same", "pass")):
+        # the version that wrote it: a fresh conversation's, or one the copy now has been checked resuming. A resume of a
+        # pair not checked yet keeps the older version, which lease-resume then asks about
+        lease.version = run_version() or lease.version
     lease.dir.mkdir(parents=True, exist_ok=True)
     err = open(lease.dir / "stderr.log", "a")
     lease.proc = subprocess.Popen(cmd, cwd=lease.cwd, env=env_for(lease), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -1241,7 +1253,8 @@ class H(http.server.BaseHTTPRequestHandler):
                            "cwd": str(ws), "started_once": bool(b.get("resume")), "state": "attaching",
                            "max_turns": int(b.get("max_turns") or DEFAULT_MAX_TURNS),
                            "seq": prev.seq if prev else 0, "seen_msgs": prev.seen_msgs if prev else [],
-                           "handovers": prev.handovers if prev else 0})
+                           "handovers": prev.handovers if prev else 0,
+                           "version": prev.version if prev else None})
             LEASES[sid] = lease
             lease.emit("state", state="attaching", project=proj)
             try:

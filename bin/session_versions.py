@@ -128,11 +128,15 @@ def seen_now(runtime: str, now: datetime.datetime) -> list[tuple[str, str | None
         v = runtime_ports.session_version(sid, runtime_ports._json_file(f))
         if v and v.get("runtime") == runtime:
             out.append((v["version"], v.get("build"), False))
-    if runtime == runtime_ports.default_name():   # a lease's session, which lease-resume resumes with current
+    if runtime == runtime_ports.default_name():
+        # a lease's session, which the lease runner and lease-resume resume with current: every lease written by another
+        # version, however long it has been idle (a lease isn't seen again until it is resumed, and that waits on this)
+        import runtime_store
+        cur = runtime_store.current(runtime)
         leases = runtime_ports._json_file(hubconf.STATE / "lease-runner" / "leases.json") or {}
         for lease in leases.values():
             if isinstance(lease, dict) and isinstance(lease.get("version"), str) \
-                    and _age_days(lease.get("last_activity"), now) <= SEEN_DAYS:
+                    and (cur is None or lease["version"] != cur.version):
                 out.append((lease["version"], None, False))
     return out
 

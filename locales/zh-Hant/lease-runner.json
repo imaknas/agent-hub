@@ -47,5 +47,6 @@
  "## Lease conversation {time} (session {session})": "## 租借對話 {time}(session {session})",
  "{project}: the earlier to-dos could not be read, the handover goes without them: {e!r}": "{project}:讀不到之前的待辦,交接不帶它們:{e!r}",
  "{id}: handover task ref {ref} is not an earlier item (or is used twice); sent as a new task": "{id}:交接的待辦 ref {ref} 不是之前的那幾件(或用了兩次),當成新的待辦送出",
- "{id}: handover ended item is not an earlier item; ignored": "{id}:交接列為已結束的那件不是之前的待辦,不處理"
+ "{id}: handover ended item is not an earlier item; ignored": "{id}:交接列為已結束的那件不是之前的待辦,不處理",
+ "this conversation was written by version {version}, and the platform's copy {current} failed resuming one ({reason}): not resumed": "這段對話是版本 {version} 寫的,而平台的版本 {current} 接續這種對話失敗({reason}):不接續"
 }

@@ -301,6 +301,37 @@ class Forks(Instance):
         self.assertEqual(argv[1:], ["--resume", sid])
 
 
+class LeaseRunner(unittest.TestCase):
+    """The lease runner's own resume of a lease (section 5): refused on a failed pair, as before while it is pending; the
+    version a lease records moves to the copy that runs it only when that copy wrote it or was checked resuming it."""
+    import test_lease_runner_resume as _tlr
+    setUp, tearDown, lease, flag = _tlr.Resume.setUp, _tlr.Resume.tearDown, _tlr.Resume.lease, _tlr.Resume.flag
+
+    def start(self, pair, resume=True):
+        self.has_transcript = True
+        lease = self.lease(started_once=True, version=OLD)
+        with mock.patch.object(runtime_ports, "pair_state", lambda runtime, version: (pair, NEW, "why")), \
+                mock.patch.object(self.m, "run_version", lambda: NEW):
+            self.m.start_proc(lease, resume=resume)
+        return lease
+
+    def test_a_failed_pair_is_refused(self):
+        with self.assertRaises(RuntimeError):
+            self.start("fail")
+        self.assertEqual(self.cmds, [])
+
+    def test_pending_resumes_and_keeps_the_version_that_wrote_it(self):
+        self.assertEqual(self.start("pending").version, OLD)
+        self.assertEqual(self.flag(), "--resume")
+
+    def test_a_passed_pair_takes_the_copys_version(self):
+        self.assertEqual(self.start("pass").version, NEW)
+
+    def test_the_record_keeps_it(self):
+        lease = self.lease(version=OLD)
+        self.assertEqual(self.m.Lease(lease.dump()).version, OLD)
+
+
 class Listing(Instance):
     """One `agents --json` a tick, within the deadline it is given; a session whose version failed session-status is
     unlisted, one not checked yet keeps the listing's word."""
@@ -588,6 +619,14 @@ class Job(Instance):
                                            session_versions._now())
         self.assertEqual(order, ["2.1.302", "2.1.301"])
         self.assertEqual(list(st["seen"]["2.1.302"]["builds"]), ["ab12"])
+
+    def test_a_lease_by_another_version_counts_however_long_it_has_been_idle(self):
+        f = hubconf.STATE / "lease-runner" / "leases.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"a": {"version": OLD, "last_activity": "2000-01-01T00:00:00+00:00"},
+                                 "b": {"version": NEW, "last_activity": "2000-01-01T00:00:00+00:00"},
+                                 "c": {"last_activity": "2000-01-01T00:00:00+00:00"}}))
+        self.assertEqual(session_versions.seen_now("claude", session_versions._now()), [(OLD, None, False)])
 
     def test_a_version_is_installed_checked_paired_with_current_and_recorded(self):
         self.live_session("S1", OLD)
