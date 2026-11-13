@@ -184,14 +184,15 @@ class Through(unittest.TestCase):
                 self.assertEqual(self.child(name, "idle")[0]["state"], "error")
 
     def test_a_canarys_control_leaves_out_every_rule_covering_it(self):
-        settings = {"permissions": {"deny": ["Edit(//w/p/**/.claude/hooks/**)", "Edit(//w/p/**/.mcp.json)",
-                                             "Read(//w/p/**/.claude/hooks/**)"]},
+        # a rule on the folder entry alone keeps the canary's folder from being made; a Read deny refuses a write too
+        settings = {"permissions": {"deny": ["Edit(//w/p/**/.claude/hooks)", "Edit(//w/p/**/.mcp.json)",
+                                             "Read(//w/p/**/.claude/hooks/**)", "Bash(rm *)"]},
                     "sandbox": {"filesystem": {"denyWrite": ["/w/p/.claude/hooks"], "denyRead": ["/w/other"]}}}
         target = pathlib.Path("/w/p/.claude/hooks/canary")
         self.assertTrue(conformance_claude._covered(settings, target))
         loose = conformance_claude._without(settings, target)
         self.assertFalse(conformance_claude._covered(loose, target))
-        self.assertEqual(loose["permissions"]["deny"], ["Edit(//w/p/**/.mcp.json)", "Read(//w/p/**/.claude/hooks/**)"])
+        self.assertEqual(loose["permissions"]["deny"], ["Edit(//w/p/**/.mcp.json)", "Bash(rm *)"])
         self.assertEqual(loose["sandbox"]["filesystem"], {"denyWrite": [], "denyRead": ["/w/other"]})
         self.assertTrue(conformance_claude._covered(settings, pathlib.Path("/w/p/.MCP.json")), "case-insensitive")
 

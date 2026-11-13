@@ -532,11 +532,14 @@ def _spelled(target) -> set[str]:
 
 
 def _covers_rule(rule: str, target, home: str) -> bool:
+    """A file tools' or Read deny on target, or on a folder above it (a deny on the folder entry alone keeps it from being
+    made, and so the file in it: `.claude/hooks`)."""
     m = re.fullmatch(r"(\w+)\((.*)\)", rule)
-    if not m or m[1] not in FILE_TOOLS:
+    if not m or m[1] not in (*FILE_TOOLS, "Read"):   # a Read deny refuses a write too (2.1.323)
         return False
     rx = _rule_regex(m[2], home)
-    return bool(rx) and any(rx.fullmatch(s) for s in _spelled(target))
+    places = {str(p) for s in _spelled(target) for p in (pathlib.Path(s), *pathlib.Path(s).parents)}
+    return bool(rx) and any(rx.fullmatch(s) for s in places)
 
 
 def _covers_entry(entry: str, target, home: str) -> bool:

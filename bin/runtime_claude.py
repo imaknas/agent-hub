@@ -1855,7 +1855,9 @@ def present_controls(workspace) -> tuple[list[pathlib.Path], list[str]]:
         except OSError:
             continue
         for n in names:
-            if n in TOOL_FOLDER_WRITABLE or n in TOOL_FOLDER_OWN:
+            # the settings file the platform renders is a control name already: as a present entry its own writing
+            # would change what is rendered (a plan never empty after apply)
+            if n in TOOL_FOLDER_WRITABLE or n in TOOL_FOLDER_OWN or n == settings_path(folder).name:
                 continue
             if GLOB_CHARS & set(n):
                 unrendered.append(str((base / n).relative_to(ws)))
@@ -1878,7 +1880,7 @@ def control_notes(workspace) -> list[tuple[str, str]]:
     """doctor's rows on a sandboxed project's tool folder, (level, text): which entries its sessions can no longer write
     (each present entry is denied, so the agent's own writes there fail too), and which no rule names."""
     paths, unrendered = present_controls(workspace)
-    own = {"settings.json", "settings.local.json"}   # the platform's and the tool's own settings, not its tools' writes
+    own = {"settings.json"}   # the tool's own settings, not what its tools write
     shown = sorted({p.name for p in paths} - own)
     out = []
     if shown:
