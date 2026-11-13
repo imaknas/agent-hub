@@ -644,17 +644,29 @@ class Job(Instance):
         self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW), "once a day")
 
     def test_unusable_payloads_three_times_alert_by_event_and_reason(self):
-        now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-        hubconf.LOGS.mkdir(parents=True, exist_ok=True)
-        line = f"{now} prompt - ran=- failed=- unusable=not_json runtime=claude version={OLD}\n"
-        other = f"{now} session_end - ran=- failed=- unusable=not_json runtime=claude version={OLD}\n"
-        (hubconf.LOGS / "hub-event.log").write_text(line * 2 + other * 5)
-        self.run_job()
-        self.assertFalse([k for k, _i in self.alerts if k.startswith("session-unusable")])
-        (hubconf.LOGS / "hub-event.log").write_text(line * 3)
+        """The lines as hub-event itself writes them (its own clock and format), not a copy of the format."""
+        hook = tmw.load_file("hub_event_unusable_job", BIN / "hub-event")
+        hook.LOG = hubconf.LOGS / "hub-event.log"
+        p = tcsr.session_process(self)
+        with mock.patch.dict(os.environ, {"CLAUDE_PID": str(p.pid)}), \
+                mock.patch.object(runtime_claude, "session_version", lambda pid: (OLD, None)):
+            def send(event, n):
+                for _i in range(n):
+                    hook.handle(event, "not json", runtime_claude, "claude")
+            send("prompt", 2)
+            send("session_end", 5)   # not an event letters depend on
+            self.run_job()
+            self.assertFalse([k for k, _i in self.alerts if k.startswith("session-unusable")])
+            send("prompt", 1)
         self.run_job()
         self.assertIn(("session-unusable-claude-prompt-not_json", ["prompt:not_json"]), self.alerts)
         self.assertTrue(session_versions.unusable_rows("claude"))
+        old = (datetime.datetime.now() - datetime.timedelta(days=8)).isoformat(timespec="seconds")
+        hook.LOG.write_text("".join(f"{old} prompt - ran=- failed=- unusable=not_json runtime=claude version={OLD}\n"
+                                    for _i in range(5)))
+        self.alerts.clear()
+        self.run_job()
+        self.assertIn(("session-unusable-claude-prompt-not_json", []), self.alerts, "older than 7 days: resolved")
 
     def test_from_a_linked_worktree_it_refuses(self):
         with mock.patch.object(hubconf, "worktree_lookup", lambda: True):

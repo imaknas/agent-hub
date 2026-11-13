@@ -111,8 +111,10 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          failed (an error, a listing a new version changed) is
                                                          "unlisted": a letter is routed to it but it isn't woken
                                                          (docs/design/runtime-versions.md section 5)
-    session_statuses(sids) -> {sid: str}                 optional: the same for many sessions in one look, for a runtime
-                                                         whose look returns them all anyway (a tick asks it once)
+    session_statuses(sids, deadline=None) -> {sid: str}  optional: the same for many sessions in one look, for a runtime
+                                                         whose look returns them all anyway (a tick asks it once);
+                                                         deadline: the time.monotonic() its look ends by (the tick's
+                                                         budget), past it unlisted
   session_summary (optional; same design, "The last reply"): how a session's last reply ended
     session_summary(sid) -> str | None                   what wait kept (below); None: nothing is kept
     Outside the port, a runtime may also provide wake_address(env) -> dict | None: what a session's hook environment

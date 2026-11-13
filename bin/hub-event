@@ -35,8 +35,13 @@ neutral things and know no runtime's format.
 
 Invariants (the same as the `|| true` after every hook used to be): always exit 0; not a real session, or not in an
 onboarded project: do nothing. A hook's error output is thrown away, so every run logs one line in .logs/hub-event.log
-(event, project, which ran, which failed), and so does an input that gave no event, as `unusable=<reason> runtime=<name>`
-(an unknown event, or a payload the runtime's `unusable` names), except an empty one, which is no session on purpose.
+(event, project, which ran, which failed), and so does an input that gave no event, as `unusable=<reason> runtime=<name>
+version=<version>` (an unknown event, or a payload the runtime's `unusable` names; the version the session's process runs,
+which bin/session_versions.py counts), except an empty one, which is no session on purpose.
+
+The per-version gate (gate; docs/design/runtime-versions.md section 6): a sandboxed project's session whose tool version
+failed a safety check gets none of GATED_OFF (its mail and presence, its wake address, the reminder) and is told so once
+at its start; its record, its end, memory sync and the deny handler run as for any session.
 
 Runs on the platform's Python (bin/py, 3.13 minimum).
 """
@@ -256,7 +261,11 @@ def gate(ev) -> list[str]:
     when that version has a failure on record."""
     if ev.session in _GATE:
         return _GATE[ev.session]
-    got, rec = _hook_version(), None
+    try:
+        got = _hook_version()
+    except Exception:   # a version that can't be read is unreadable: pending, never gated
+        got = None
+    rec = None
     if got and runtime_ports.checkable_version(got[0]):
         rec = {"runtime": _RT_NAME, "version": got[0], **({"build": got[1]} if got[1] else {})}
         if runtime_ports.failed_checks(runtime_ports.session_result(_RT_NAME, got[0]), "safety"):

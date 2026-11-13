@@ -22,5 +22,5 @@
  "{runtime} {version}: the checks could not run: {error}": "{runtime} {version}:檢查跑不起來:{error}",
  "{runtime}: session_versions broke: {error}": "{runtime}:session_versions 壞了:{error}",
  "{runtime}: the published versions can't be told: {error}": "{runtime}:查不到已發布的版本:{error}",
- " (Desktop: {builds} {builds:build|builds}, {list})": "(Desktop 的 {builds} 個建置:{list})"
+ " ({builds} {builds:build|builds}: {list})": "({builds} 個建置:{list})"
 }

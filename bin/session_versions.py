@@ -9,7 +9,7 @@ For each runtime the user opens sessions with (runtime_ports.installed) that has
    in the last SEEN_DAYS days, as their hooks read them from the session's process (runtime_ports.record_session), and
    the versions that wrote the leases' sessions (lease-resume resumes one with current). Never a transcript's word: a
    sandboxed session can write its transcripts. Kept in <state>/session-versions/<runtime>.json
-   (when each was last seen, live or not, Desktop's builds of it); each session copy in the store is told when a
+   (when each was last seen, live or not, the builds of it the tool names); each session copy in the store is told when a
    session of its version was last seen (runtime_store.seen), which keeps it.
 2. Hook payloads the platform couldn't read (hub-event.log's unusable= lines) of an event letters depend on
    (MAIL_EVENTS), UNUSABLE_ALERT or more of one event and reason from one version in SEEN_DAYS days: an alert keyed by
@@ -88,8 +88,10 @@ def _iso(t: datetime.datetime) -> str:
 
 
 def _age_days(when: str | None, now: datetime.datetime) -> float:
+    """How long ago an ISO time was, in days; a time with no zone (hub-event.log's) is local. Unreadable: forever."""
     try:
-        return (now - datetime.datetime.fromisoformat(str(when))).total_seconds() / 86400
+        t = datetime.datetime.fromisoformat(str(when))
+        return (now - (t.astimezone() if t.tzinfo is None else t)).total_seconds() / 86400
     except (TypeError, ValueError):
         return float("inf")
 
@@ -379,7 +381,7 @@ def unusable_rows(runtime: str) -> list[str]:
 
 
 def describe(runtime: str, row: dict) -> str:
-    builds = _(" (Desktop: {builds} {builds:build|builds}, {list})", builds=len(row["builds"]),
+    builds = _(" ({builds} {builds:build|builds}: {list})", builds=len(row["builds"]),
                                      list=", ".join(row["builds"])) \
         if row["builds"] else ""
     head = f"{runtime} {row['version']}{builds}"
