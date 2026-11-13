@@ -1,0 +1,12 @@
+{
+ "the platform's {runtime} changed after it was checked ({what})": "平台的 {runtime} 在檢查之後被改過({what})",
+ "not a runtime name: {name!r}": "不是 runtime 名稱:{name!r}",
+ "not a version: {version!r}": "不是版本號:{version!r}",
+ "{version}'s executable isn't a file inside its folder": "{version} 的執行檔不是它資料夾裡的檔案",
+ "no previous version of {runtime} to go back to": "{runtime} 沒有上一個版本可以退回",
+ "its executable points elsewhere": "它的執行檔指到別的地方",
+ "its executable's size or time": "它的執行檔大小或時間",
+ "its executable's content": "它的執行檔內容",
+ "{version} isn't installed in the store": "{version} 沒有裝在 store 裡",
+ "its executable is gone": "它的執行檔不見了"
+}
