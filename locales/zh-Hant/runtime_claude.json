@@ -54,5 +54,14 @@
  "{rule} names the platform's own tool server, which only the platform gives a run": "{rule} 指名平台自己的工具伺服器,那只有平台能給一次執行",
  "{rule}: a run whose prompt anyone can write fetches only from the domains in its project's network: list": "{rule}:prompt 誰都能寫的執行,只能從專案 network: 清單裡的網域抓取",
  "{rule}: a run whose prompt anyone can write (an event job, a mail handler) may name only reading and editing files, and WebFetch to its project's own domains": "{rule}:prompt 誰都能寫的執行(事件 job、信箱處理者)只能列讀寫檔案的工具,以及到專案自己網域的 WebFetch",
- "{rule} names a tool server, and this run loads none": "{rule} 指名一個工具伺服器,而這次執行一個都不載入"
+ "{rule} names a tool server, and this run loads none": "{rule} 指名一個工具伺服器,而這次執行一個都不載入",
+ "npm could not be asked for the latest version: {error}": "沒辦法問 npm 最新版本:{error}",
+ "npm could not say the latest version (exit {code})": "npm 說不出最新版本(exit {code})",
+ "not a version: {version!r}": "不是版本號:{version!r}",
+ "npm install did not run: {error}": "npm install 沒跑起來:{error}",
+ "npm install failed (exit {code})": "npm install 失敗(exit {code})",
+ "the install left no readable package-lock.json": "安裝後沒有可讀的 package-lock.json",
+ "the install resolved packages with no integrity hash: {names}": "安裝取得的套件沒有 integrity 雜湊:{names}",
+ "(none resolved)": "(一個都沒取得)",
+ "the installed claude does not say version {version}": "裝好的 claude 不是說自己是 {version} 版"
 }

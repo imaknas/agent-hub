@@ -228,7 +228,8 @@ def port_labels() -> dict[str, str]:
             "session_summary": _("way to read how a session's last reply ended"),
             "tool_servers": _("way to tell which tool servers a run loads"),
             "rule_check": _("check of what a confined run's own rules may be"),
-            "run_server": _("way to give a run the platform's mail tools")}
+            "run_server": _("way to give a run the platform's mail tools"),
+            "distribution": _("way to install and pin a checked version")}
 
 
 def _feature_settings() -> tuple[bool, bool]:
@@ -338,7 +339,14 @@ def missing_session_ports(name: str | None = None) -> list[str]:
     """The optional ports this runtime lacks that no feature row names, for people (doctor's row for them)."""
     named = {p for _f, need in features() for p in need}
     have = capabilities(name)
-    return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named]
+    return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named and p != "distribution"]
+
+
+def unversioned(name: str | None = None) -> bool:
+    """A runtime that starts platform runs but has no distribution port: the platform can't install, pin or check a fixed
+    version of it, so its runs use whatever copy is on PATH (docs/design/runtime-versions.md section 1; doctor says so)."""
+    have = capabilities(name)
+    return "agent" in have and "distribution" not in have
 
 
 def folder_git_unknown(name: str | None = None) -> bool:
@@ -379,10 +387,15 @@ PORTS = {
     "wake": ("wake", "can_wake"),
     "session_status": ("session_status",),
     "session_summary": ("session_summary",),
+    # distribution (docs/design/runtime-versions.md section 1): getting, installing and pinning the tool. latest() the newest
+    # version the vendor publishes; install(version, folder) that exact version into folder, its integrity checked as the
+    # vendor publishes it, returning the executable; version_of(exe) what an executable says it is; pin_env(folder) what keeps
+    # a run of that copy from updating itself. MIN_VERSION beside them. Without it a runtime is unversioned (doctor says so)
+    "distribution": ("latest", "install", "version_of", "pin_env"),
 }
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
-OPTIONAL = ("wake", "session_status", "session_summary")
+OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
 # session_status's answers: running a turn; idle; a dialog is open, for a person; can't tell (counts as idle)
 SESSION_STATUSES = ("busy", "idle", "waiting", "unknown", "unlisted")
 # Why a session can't be woken (Sessions.wake_gap): its runtime has no wake port; nothing is armed to wake it (no turn has

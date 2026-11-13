@@ -2045,11 +2045,112 @@ from runtime_ports import CompletionResult  # noqa: E402
 
 
 def _exe() -> str:
+    return binary()
+
+
+# ---------- distribution (docs/design/runtime-versions.md section 1): getting, installing and pinning Claude Code ----------
+
+PACKAGE = "@anthropic-ai/claude-code"
+# The oldest version the platform's runs are known to work on: the completion flags (--restricted, --strict-mcp-config,
+# --no-session-persistence) and the measurements V-M1 to V-M11 were all taken on 2.1.319 (runtime-versions.md, 11-09).
+# Step 2 never promotes a version below it.
+MIN_VERSION = "2.1.319"
+_VERSION = re.compile(r"\s*(\d+\.\d+\.\d+)")
+_CHECKED: str | None = None   # the binary a conformance check runs; set in process only (check_binary), never from the environment
+
+
+def check_binary(path: str | None) -> None:
+    """For bin/conformance.py's child alone: make this process's runs use the binary under check. Not an environment
+    variable or a flag of llm.py, so nothing a project hands a run can choose which binary runs (runtime-versions.md, the
+    advisor's 11-13 rule)."""
+    global _CHECKED
+    _CHECKED = str(path) if path else None
+
+
+def binary() -> str:
+    """The claude a platform run starts: the one under check in a conformance child, else the one on the platform's PATH
+    (nvm's; step 2 makes it the store's checked copy)."""
+    if _CHECKED:
+        return _CHECKED
     try:
         import hubconf
         return hubconf.tool("claude")
     except Exception:
         return "claude"
+
+
+def _npm_env() -> dict:
+    """npm is a `#!/usr/bin/env node` script: PATH must find nvm's node."""
+    import hubconf
+    return {**os.environ, "PATH": hubconf.LAUNCHD_PATH}
+
+
+def _npm() -> str:
+    import hubconf
+    d = hubconf.nvm_bin()
+    return str(d / "npm") if d else "npm"
+
+
+def latest() -> str:
+    """The newest version npm publishes. Raises RuntimeError with the reason when it can't be told."""
+    try:
+        r = subprocess.run([_npm(), "view", PACKAGE, "version"], capture_output=True, text=True, timeout=120,
+                           env=_npm_env(), stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(_("npm could not be asked for the latest version: {error}", error=type(e).__name__)) from e
+    got = r.stdout.strip()
+    if r.returncode != 0 or not re.fullmatch(r"\d+\.\d+\.\d+", got):
+        raise RuntimeError(_("npm could not say the latest version (exit {code})", code=r.returncode))
+    return got
+
+
+def install(version: str, folder) -> pathlib.Path:
+    """Install exactly this version from npm into folder (its own prefix, nothing global) and return its claude. npm checks
+    each tarball against the registry's integrity hash as it installs; this also refuses an install whose lockfile lacks
+    one for any package it resolved (the wrapper and the platform package with the executable, optional ones included).
+    Raises RuntimeError with the reason."""
+    folder = pathlib.Path(folder)
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version or ""):
+        raise RuntimeError(_("not a version: {version!r}", version=version))
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        r = subprocess.run([_npm(), "install", "--prefix", str(folder), f"{PACKAGE}@{version}", "--no-audit", "--no-fund",
+                            "--save-exact"], capture_output=True, text=True, timeout=900, env=_npm_env(),
+                           stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e
+    if r.returncode != 0:
+        raise RuntimeError(_("npm install failed (exit {code})", code=r.returncode))
+    try:
+        lock = json.loads((folder / "package-lock.json").read_text())
+    except (OSError, ValueError):
+        raise RuntimeError(_("the install left no readable package-lock.json")) from None
+    packages = {k: v for k, v in (lock.get("packages") or {}).items() if k and isinstance(v, dict)}
+    unhashed = sorted(k for k, v in packages.items() if v.get("resolved") and not v.get("integrity"))
+    if not packages or unhashed:
+        raise RuntimeError(_("the install resolved packages with no integrity hash: {names}",
+                             names=", ".join(unhashed) or _("(none resolved)")))
+    exe = folder / "node_modules" / ".bin" / "claude"
+    if version_of(exe) != version:
+        raise RuntimeError(_("the installed claude does not say version {version}", version=version))
+    return exe
+
+
+def version_of(exe) -> str | None:
+    """The version this claude says it is (`claude --version`), or None."""
+    try:
+        r = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                           env=_npm_env())
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _VERSION.match(r.stdout)
+    return m.group(1) if r.returncode == 0 and m else None
+
+
+def pin_env(folder) -> dict:
+    """What keeps a run of this copy from updating itself (V-M5): the updater off, and npm's global prefix at the copy's
+    own folder, so an updater that ignored the flag could write only into this copy, where the digest check sees it."""
+    return {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": str(folder)}
 
 
 def complete(req, conf) -> CompletionResult:

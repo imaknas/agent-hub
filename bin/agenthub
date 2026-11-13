@@ -1369,6 +1369,10 @@ def cmd_doctor(argv: list[str]) -> int:
             add("info", _("the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads "
                           "nothing they said", runtime=name, missing=runtime_ports.or_list(miss)))
     for name in dict.fromkeys([rname, *installed]):
+        if name != "none" and runtime_ports.unversioned(name):
+            add("info", _("the runtime {runtime} is unversioned: the platform can't install or check a fixed version of it, "
+                          "so its runs use whichever copy is on PATH", runtime=name))
+    for name in dict.fromkeys([rname, *installed]):
         if runtime_ports.folder_git_unknown(name):
             add("info", _("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any "
                           "sandbox, isn't known: a sandboxed project's repo config could then run as you", runtime=name))
