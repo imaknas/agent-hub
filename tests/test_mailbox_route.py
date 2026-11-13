@@ -1306,9 +1306,18 @@ class StatusOncePerTick(Harness):
         self.open("S1")
         self.rt.statuses["S1"] = "unlisted"
         self.send("m1", "proj", "request", src="third")
-        self.dispatch()
+        said = []
+        with mock.patch.object(self.m, "log_once", lambda key, msg: said.append((key, msg))):
+            self.dispatch()
         self.assertFalse(self.woken())
         self.assertEqual([s for s, _by in self.by("m1")], ["S1"], "the letter is routed")
+        self.assertTrue([m for k, m in said if k == "sessions-unlisted" and m], "said, so wakes don't stop in silence")
+        self.rt.statuses["S1"] = "idle"
+        self.send("m2", "proj", "request", src="third")
+        said.clear()
+        with mock.patch.object(self.m, "log_once", lambda key, msg: said.append((key, msg))):
+            self.dispatch()
+        self.assertIn(("sessions-unlisted", ""), said, "cleared once the listing works")
 
     def test_a_runtime_that_cant_list_is_left_out_of_the_routers_answer(self):
         import runtime_fake

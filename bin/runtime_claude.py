@@ -465,7 +465,7 @@ WAITER_FRESH_S = 10          # a waiter whose heartbeat is older is taken as gon
 REQUEST_TTL_S = 600          # a request no waiter took within this is dropped unshown (its letter is routed by then)
 HEADLESS_ENTRYPOINTS = {"sdk-cli", "sdk-ts", "sdk-py"}   # -p (the CLI turns "cli" into sdk-cli), Agent SDK programs
 LAST_CHARS = 500             # how much of a session's last reply wait() keeps
-AGENTS_TIMEOUT_S = 5         # the agents listing: about 0.1 s when measured; past this the status is unknown
+AGENTS_TIMEOUT_S = 5         # the agents listing: about 0.1 s when measured (again 11-13); past this it is unlisted
 
 
 def note(port: str) -> str | None:
@@ -1373,7 +1373,7 @@ def unusable(event: str, raw: str) -> str | None:
 
 
 def parse_event(event: str, raw: str):
-    data, _ = _hook_input(raw)
+    data = _hook_input(raw)[0]
     if data is None:   # no hook JSON = no real session running (onboard/recover also run the setup), or unusable
         return None
     session = data["session_id"]

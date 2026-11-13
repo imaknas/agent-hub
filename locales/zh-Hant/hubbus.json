@@ -228,5 +228,6 @@
  "hubbus: this run only starts new letters ({cmd} is for the project's sessions and its mail handlers)": "hubbus:這次執行只能寄新的信({cmd} 是專案的 session 和信箱處理者用的)",
  "hubbus: this run only starts new letters: request, question, info or progress, with no --reply-to or --question": "hubbus:這次執行只能寄新的信:request、question、info 或 progress,不能加 --reply-to 或 --question",
  "hubbus: {id!r} is not a valid letter id": "hubbus:{id!r} 不是合法的信件 id",
- "hubbus: a confined run closes only letters ({id} is not one)": "hubbus:受限執行只能結掉信({id} 不是信)"
+ "hubbus: a confined run closes only letters ({id} is not one)": "hubbus:受限執行只能結掉信({id} 不是信)",
+ "what sessions are doing can't be read (the agent's session listing failed): letters are routed but no session is woken until it works again": "讀不到各 session 在做什麼(agent 的 session 清單失敗):信照樣分派,但在恢復之前不會叫醒任何 session"
 }
