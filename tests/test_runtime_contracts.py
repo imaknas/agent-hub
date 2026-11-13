@@ -296,7 +296,40 @@ class AcpFixture:
             os.chdir(self._cwd)
 
 
-FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture, "acp": AcpFixture}
+class CodexFixture:
+    """Codex (runtime_codex): its hook input as 0.169 sends it (tests/fixtures/codex), a rollout in a scratch CODEX_HOME for
+    the context size, the thread id a tool shell carries. Its hooks are user-level: nothing per project to install."""
+
+    def setup(self, tmp: pathlib.Path):
+        import runtime_codex as m
+        self.m, home = m, tmp / "codex-home"
+        day = home / "sessions" / "2026" / "10" / "20"
+        day.mkdir(parents=True)
+        lines = [{"type": "session_meta", "payload": {"session_id": SID, "cwd": WS, "originator": "codex_cli_rs"}},
+                 {"type": "event_msg", "payload": {"type": "token_count", "info": {
+                     "last_token_usage": {"input_tokens": 1000, "cached_input_tokens": 600, "output_tokens": 10}}}}]
+        (day / f"rollout-2026-10-20T09-00-00-{SID}.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines))
+        self._home = mock.patch.object(m, "codex_home", lambda: home)
+        self._home.start()
+        return m, {"CODEX_THREAD_ID": SID}
+
+    def raw(self, sid, cwd, command=None, target_cwd=None, elsewhere=None):
+        d = json.loads((ROOT / "tests" / "fixtures" / "codex" / "post_tool_use.from-source.json").read_text())
+        d["cwd"] = cwd
+        if sid:
+            d["session_id"] = sid
+        else:
+            del d["session_id"]
+        if command is not None:
+            d["tool_input"] = {"command": command}
+        return json.dumps(d)
+
+    def teardown(self):
+        self._home.stop()
+
+
+FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture, "acp": AcpFixture,
+            "codex": CodexFixture}
 ALL_REPORTS = frozenset({"cost", "session", "turns", "incomplete"})
 
 
@@ -537,10 +570,13 @@ class LifecycleContract(unittest.TestCase):
             ev = m.parse_event("prompt", fx.raw(SID, WS))
             self.assertEqual((ev.event, ev.session, ev.cwd), ("prompt", SID, WS))
             self.assertEqual(m.parse_event("tool_used", fx.raw(SID, WS, command="git commit -m x")).command, "git commit -m x")
-            t = m.parse_event("open_session_attempt", fx.raw(SID, WS, target_cwd="/elsewhere")).target
-            self.assertEqual((t["cwd"], t["elsewhere"]), ("/elsewhere", None))
-            t = m.parse_event("open_session_attempt", fx.raw(SID, WS, elsewhere="machine")).target
-            self.assertEqual(t["elsewhere"], {"kind": "machine"})
+            if "open_session_attempt" in getattr(m, "EVENTS_MAPPED", runtime_ports.EVENTS):
+                t = m.parse_event("open_session_attempt", fx.raw(SID, WS, target_cwd="/elsewhere")).target
+                self.assertEqual((t["cwd"], t["elsewhere"]), ("/elsewhere", None))
+                t = m.parse_event("open_session_attempt", fx.raw(SID, WS, elsewhere="machine")).target
+                self.assertEqual(t["elsewhere"], {"kind": "machine"})
+            for ev in set(runtime_ports.EVENTS) - set(getattr(m, "EVENTS_MAPPED", runtime_ports.EVENTS)):
+                self.assertIsNone(m.parse_event(ev, fx.raw(SID, WS)), f"{ev} isn't mapped: no event, never a guess")
             self.assertIsNone(m.parse_event("prompt", fx.raw(None, WS)), "no session = not a real session running")
             self.assertIsNone(m.parse_event("prompt", "not json"))
             why = getattr(m, "unusable", None)
@@ -560,7 +596,10 @@ class LifecycleContract(unittest.TestCase):
                 self.assertEqual(m.inject(ev, ""), "", f"{ev}: no text, no output")
             for ev in ("session_end", "pre_compact", "open_session_attempt"):
                 self.assertEqual(m.inject(ev, "hello"), "", f"{ev} cannot go into the context")
-            self.assertIn("no", m.deny("open_session_attempt", "no"))
+            if "open_session_attempt" in getattr(m, "EVENTS_MAPPED", runtime_ports.EVENTS):
+                self.assertIn("no", m.deny("open_session_attempt", "no"))
+            else:
+                self.assertEqual(m.deny("open_session_attempt", "no"), "", "nothing it maps can be blocked")
             self.assertEqual(m.deny("prompt", "no"), "")
         self.each(check)
 
@@ -568,6 +607,13 @@ class LifecycleContract(unittest.TestCase):
         def check(m, fx, tmp):
             ws = tmp / "ws"
             ws.mkdir()
+            if getattr(m, "USER_LEVEL_HOOKS", False):
+                # its hooks are the user's, written only by the owner's own command (docs/design/runtime-codex.md r2 B1):
+                # hub-event install and render-project-settings change nothing in any project
+                self.assertFalse(m.install_lifecycle(ws, check=True))
+                self.assertFalse(m.install_lifecycle(ws))
+                self.assertFalse(list(ws.rglob("*")), "nothing is written in the project")
+                return
             self.assertTrue(m.install_lifecycle(ws, check=True), "nothing installed yet: installing would change it")
             self.assertFalse([p for p in ws.rglob("*") if p.is_file()], "check writes nothing")
             self.assertTrue(m.install_lifecycle(ws))

@@ -1,0 +1,21 @@
+{
+ "In Codex: if a `brunna` command (send, inbox, done, ack) fails because this session's sandbox can't write the mailbox, use the same tools of the brunna MCP server instead; if this session has no such server, tell the user (brunna mcp config prints what to register).": "在 Codex 裡:`brunna` 指令(send、inbox、done、ack)若因為這個 session 的沙箱寫不了信箱而失敗,改用 brunna MCP server 的同名工具;這個 session 沒有那個 server 的話,告訴使用者(brunna mcp config 會印出要登記的內容)。",
+ "Codex reads no untracked rules file, so the platform's rules arrive by its session-start hook instead": "Codex 不讀未納入版控的規則檔,所以平台規則改由它的 session 開始 hook 送進去",
+ "a Codex thread runs on in its daemon after its window closes, so it is never woken until the platform can tell a window is attached": "Codex 的 thread 在視窗關掉後仍在它的 daemon 裡跑著,所以在平台能判斷有視窗連著之前,一律不叫醒",
+ "the platform starts no Codex runs yet": "平台還不會啟動 Codex 的執行",
+ "Codex sessions get letters at their start only, as a notice to read them with brunna inbox; their hooks are installed for your user with brunna user-settings --install --runtime codex": "Codex session 只在開始時收到信,形式是請它用 brunna inbox 讀信的通知;它的 hook 用 brunna user-settings --install --runtime codex 裝在你的使用者設定裡",
+ "the platform's Codex hooks in {hooks} and their trust in {config}": "{hooks} 裡平台的 Codex hook,以及 {config} 裡它們的信任",
+ "the platform's Codex hooks in {file}": "{file} 裡平台的 Codex hook",
+ "the platform's Codex hooks aren't installed for your user: Codex sessions get no letters, notes reminders or rules from the platform": "平台的 Codex hook 沒有裝在你的使用者設定裡:Codex session 收不到平台的信、筆記提醒或規則",
+ "some of the platform's Codex hooks aren't trusted in config.toml (Codex skips them without a word)": "平台的 Codex hook 有些在 config.toml 裡沒有被信任(Codex 會一聲不響地跳過它們)",
+ "{file} is a link": "{file} 是連結",
+ "{file} isn't in the shape Codex reads": "{file} 不是 Codex 讀得懂的格式",
+ "config.toml would change more than the platform's trust entries; nothing was written": "config.toml 會被改到平台的信任項目以外的地方;什麼都沒寫",
+ "the platform's Codex hooks can't be checked: {why}": "平台的 Codex hook 無法檢查:{why}",
+ "{file} isn't JSON ({error})": "{file} 不是 JSON({error})",
+ "config.toml doesn't parse ({error})": "config.toml 解析不了({error})",
+ "config.toml would not parse after the edit ({error})": "config.toml 改完會解析不了({error})",
+ "config.toml sets the trust of {key} in a form this writer doesn't edit": "config.toml 用這個寫入器不改的寫法設定了 {key} 的信任",
+ "the platform's Codex hooks in {file}: remove them by hand (they share a group with yours)": "{file} 裡平台的 Codex hook:請手動移除(它們和你的 hook 在同一組)",
+ "the platform's Codex hooks in {file}: remove them by hand (yours come after them)": "{file} 裡平台的 Codex hook:請手動移除(你的 hook 排在它們後面)"
+}

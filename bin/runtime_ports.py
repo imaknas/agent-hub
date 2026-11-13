@@ -129,6 +129,21 @@ The current interfaces (the other layers get added one at a time, following the 
     beside the session's id (record_session below; its live_sessions adds recorded_sessions(<its name>)), so a session
     whose id is on no command line (a fork) still counts as live; with person_session(pid, env) -> bool: whether that
     session is one a person works in (a headless run gets no record)
+  What a runtime's hooks do besides the ports, declared as module constants (docs/design/runtime-codex.md, Step 2), each
+  absent meaning what Claude Code does:
+    EVENTS_MAPPED            the EVENTS its hooks deliver (absent: all)
+    TELLS_ON                 the events where a letter a hook shows is measured to reach the model (absent: every one with
+                             mail); at the others its hooks record presence and tell nothing (hubbus.mail_text show="none")
+    LETTERS_AS_NOTICE        its injected context outranks the user (a system or developer role): a hook shows letters as a
+                             notice of ids and the `brunna inbox` pointer, never a letter's text
+    RULES_AT_START           it has no rules file: the platform's rules go into its session-start context (rules_note() ->
+                             str adds its own lines)
+    PLATFORM_RUNS_FIRE_HOOKS a platform run can't skip the user's hooks: hub-event does nothing under HUB_LLM_POINT
+    SESSION_STALE_S          one process runs many of its sessions (a daemon): the records are keyed by session, never drop
+                             each other, and stop counting after this long without a hook (record_session stale_s)
+    END_BUDGET_S             the tool kills a session-end hook after this long: slow handlers there are detached
+    USER_LEVEL_HOOKS         its hooks are the user's, installed only by the owner (`brunna user-settings --install
+                             --runtime <name>`, its user_install(apply)); install_lifecycle is a per-project no-op
   auth (layer 6, login): the platform says only "which kind of login" (mode: token = a long-lived credential for
   unattended use, subscription = the interactive login, for jobs that need connectors; the names follow the auth field
   of contracts/llm-points.yaml); where the credentials are and what the environment variables are called is the
@@ -196,7 +211,7 @@ _ = i18n.domain(__file__)
 # Registration table: name → module. Several runtimes can be registered at once; each session uses its own (design
 # principle 9).
 RUNTIMES = {"claude": "runtime_claude", "fake": "runtime_fake", "none": "runtime_none", "command": "runtime_command",
-            "acp": "runtime_acp"}
+            "acp": "runtime_acp", "codex": "runtime_codex"}
 DEFAULT = "claude"   # the default when hub.json has no runtime.default
 # Whose a hook is when it doesn't say (`hub-event <event>` with no --runtime): every hook written before hooks named their
 # runtime is Claude Code's, so it is that one, never runtime.default's, which may be another agent by now
@@ -214,6 +229,16 @@ THROWAWAY_POINTS = ("mailbox-propose",)
 # Judgment points whose callers pass the default runtime's own arguments (resuming a session): they cannot be pinned
 # to another runtime (hub.json llm.points.<point>.runtime), which would drop those arguments.
 RUNTIME_ARG_POINTS = ("mailbox-conversation", "lease-handover")
+
+
+# What a runtime needs for its sessions in a sandboxed project to be served (hub-event, render-project-settings): the platform
+# protects the files its sessions load settings and hooks from, and can confine its runs. A runtime without both gets
+# nothing from the platform's hooks there (fail closed), and doctor says, per sandboxed project, whose sessions are confined
+CONFINED_SESSION_PORTS = ("control", "confine")
+
+
+def sessions_confined(name: str) -> bool:
+    return set(CONFINED_SESSION_PORTS) <= capabilities(name)
 
 
 def throwaway_only(name: str | None = None) -> bool:
@@ -836,6 +861,13 @@ class Sessions:
             raise Unsupported(missing_label(runtime_of(sid)[0], "wake") if m else sid)
         return fn(native, text)
 
+    def tells_later(self, sid) -> bool:
+        """Whether this session's hooks show letters after its start (its runtime's TELLS_ON names an event besides
+        session_start, or it declares none): dispatch waits for one such session using the project, not for another."""
+        m, _native = self._mod(sid)
+        tells = getattr(m, "TELLS_ON", None) if m else None
+        return tells is None or any(e != "session_start" for e in tells)
+
     def can_wake(self, sid) -> bool:
         """False for a runtime with no wake port: nothing could wake it."""
         m, native = self._mod(sid)
@@ -982,7 +1014,10 @@ def process_start(pid: int) -> str | None:
 # directory: written by the hook outside any sandbox, in every sandbox's deny_read, not backed up, removed at the
 # session's end with its other files): {runtime, pid, start, cwd, project}. A record counts while that pid runs with that
 # start time, so a reused pid never fakes it. One process runs one session at a time: writing a record drops the others
-# naming the same process (a /clear, a fork whose first hook still carried the parent's id).
+# naming the same process (a /clear, a fork whose first hook still carried the parent's id). Except for a runtime whose one
+# process (a daemon) runs many sessions (its SESSION_STALE_S): its records carry stale_s, drop no other, take no project
+# from another, are touched at every hook, and count only while the last hook is younger than stale_s (a window that
+# closed fires no end, and the daemon runs on; docs/design/runtime-codex.md r2 B2).
 # project is the project of the folder the process was first recorded in, and it stays with the process whichever session
 # id or folder later hooks carry: a compaction after wandering into another folder doesn't move it. A record with none
 # (written before this field) gets it at its next hook, from the record's own folder. Two processes under one id (a fork whose
@@ -1059,14 +1094,15 @@ def _write_version(session: str, rec: dict) -> None:
 
 
 def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project_of=None,
-                   version=None) -> bool:
+                   version=None, stale_s: int | None = None) -> bool:
     """Record that this session (a platform id) runs in process pid. refresh=False (the hooks after a session's start)
     leaves a record naming the same process as it is, so a tool call costs no process lookup, except that one with no
     project or no version gets them. A record naming another process that still runs stays. wanted(pid): asked only when it
     would write a new record (the runtime's person_session: a headless run gets none). project_of(folder): which project a
     folder is in; a process already on record keeps the one it has, or takes it from its record's folder, never this hook's.
     version(pid): the runtime's session_version, read on every write (start, a /clear's takeover, a backfill) and kept in
-    <session>.version too. Whether it wrote."""
+    <session>.version too. stale_s: the runtime's processes are shared (its SESSION_STALE_S, above): the record says so,
+    and a hook of the same process touches it. Whether it wrote."""
     import hubconf
     f = hubconf.session_file(session, SESSION_RECORD)
     if not f or not isinstance(pid, int) or pid <= 1:
@@ -1077,6 +1113,11 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
             if process_starts([old["pid"]]).get(old["pid"]) == old["start"]:
                 return False
         elif not refresh:
+            if stale_s:
+                try:
+                    os.utime(f)
+                except OSError:
+                    pass
             project = None if _project_named(old) else _folder_project(old, project_of)
             fields = {} if old.get("version") else _version_fields(version, pid)
             if project or fields:
@@ -1089,15 +1130,15 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     start = process_start(pid)
     if not start:
         return False
-    same = [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
-            if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
+    same = [] if stale_s else [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
+                               if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
     # its own record's first: a /clear's new id takes the project of the record it replaces
     same.sort(key=lambda x: x[0] != f)
     project = next((_project_named(rec) for _other, rec in same if _project_named(rec)), None) \
         or (_folder_project(same[0][1], project_of) if same else None) \
         or (project_of(cwd) if callable(project_of) else None)
     rec = {"runtime": runtime, "pid": pid, "start": start, "cwd": cwd, **({"project": project} if project else {}),
-           **_version_fields(version, pid)}
+           **_version_fields(version, pid), **({"stale_s": int(stale_s)} if stale_s else {})}
     _write_record(f, rec)
     _write_version(session, rec)
     for other, _rec in same:
@@ -1250,10 +1291,24 @@ def fork_refusal(session: str) -> str | None:
              runtime=v["runtime"], version=v["version"], current=current or "-", reason=reason or FORK_CHECK)
 
 
+def _fresh_record(path, rec, now: float) -> bool:
+    """A shared process's record (stale_s) counts only while its session's last hook is younger than stale_s."""
+    stale = rec.get("stale_s")
+    if not isinstance(stale, int) or isinstance(stale, bool) or stale <= 0:
+        return True
+    try:
+        return now - path.stat().st_mtime <= stale
+    except OSError:
+        return False
+
+
 def running_records(paths, strict: bool = False) -> dict:
-    """Of these session records, the ones whose process still runs with the start time recorded: {path: record}. One
-    process lookup for all of them. strict: see process_starts."""
-    recs = {p: r for p in paths if (r := _read_record(p))}
+    """Of these session records, the ones whose process still runs with the start time recorded (and, for a shared
+    process, whose session had a hook within its stale_s): {path: record}. One process lookup for all of them. strict: see
+    process_starts."""
+    import time
+    now = time.time()
+    recs = {p: r for p in paths if (r := _read_record(p)) and _fresh_record(p, r, now)}
     starts = process_starts([r["pid"] for r in recs.values()], strict=strict)
     return {p: r for p, r in recs.items() if starts.get(r["pid"]) == r["start"]}
 

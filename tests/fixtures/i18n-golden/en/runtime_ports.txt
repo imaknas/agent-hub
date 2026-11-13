@@ -25,7 +25,7 @@ scheduled agent jobs that send mail (mail: true) | False | agent runs, confined 
 === feature (none)
 a project's own agent calls (brunna agent) | False | agent runs, confined runs (declared permissions only), check of what a confined run's own rules may be, or login state
 === unknown runtime
-no registered runtime: nosuch (have: claude, fake, none, command, acp)
+no registered runtime: nosuch (have: claude, fake, none, command, acp, codex)
 === unsupported ('agent', 'lifecycle', 'instructions', 'control', 'sessions', 'stream', 'auth', 'completion', 'confine', 'tool_servers', 'rule_check', 'run_server', 'wake', 'session_status', 'session_summary', 'distribution')
 runtime none has no agent runs, session events (hooks), rules file, map of where sessions load settings and hooks from, session state, long-running streaming sessions, login state, completion interface, confined runs (declared permissions only), way to tell which tool servers a run loads, check of what a confined run's own rules may be, way to give a run the platform's mail tools, way to wake an idle session, way to tell whether a session is busy, idle or waiting on a dialog, way to read how a session's last reply ended, or way to install and pin a checked version (brunna.json runtime.default; to use this feature, install a coding agent that supports it)
 === unsupported ('completion',)
@@ -35,4 +35,4 @@ runtime half (golden_half_runtime) is missing: agent.describe
 === missing functions (provider)
 provider halfp is missing: health
 === unknown completion impl
-no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command, acp)
+no such completion implementation: nosuch (have: anthropic, openai, ollama, claude, fake, none, command, acp, codex)

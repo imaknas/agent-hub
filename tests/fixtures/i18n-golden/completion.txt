@@ -32,7 +32,7 @@ The previous answer was not valid ($:缺 answer). This time reply with one valid
 === run: budget
 今天的模型花費已經到預算(llm.budget.daily_usd $5),這次不送
 === health_all
-[('f', True, ''), ('k', False, '沒有 key:<TMP>/secrets/nokey 不在(bin/hub llm set-key 寫進去)'), ('x', False, "'沒有這個 completion 實作:nosuch(有:anthropic, openai, ollama, claude, fake, none, command, acp)'")]
+[('f', True, ''), ('k', False, '沒有 key:<TMP>/secrets/nokey 不在(bin/hub llm set-key 寫進去)'), ('x', False, "'沒有這個 completion 實作:nosuch(有:anthropic, openai, ollama, claude, fake, none, command, acp, codex)'")]
 === config_errors
 providers.a.key.secret 看起來是 key 的值——值放 secrets 目錄({"secret": 檔名})或環境變數({"env": 名稱})
 providers.a.models.huge:組名只能是 fast / standard / strong
@@ -41,7 +41,7 @@ providers.a.models.standard 要是模型名稱,或 {name, context?, price?}
 providers.b:執行環境 none 沒有 completion 介面
 providers.b.key.secret 只寫檔名(放在平台的 secrets 目錄裡)
 providers.b.location 只能是 cloud / local
-providers.c.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command, acp)
+providers.c.impl `nope` 不認得(有:anthropic, openai, ollama, claude, fake, none, command, acp, codex)
 providers.c.key 要寫成 {"secret": 檔名} 或 {"env": 變數名}(只能一種)
 providers.c:location local 只准本機、私有網段、tailnet 的 base_url(現在是 'https://api.example.com')
 providers.d 要是物件
