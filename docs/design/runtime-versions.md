@@ -294,7 +294,8 @@ entry present except `worktrees` plus a deny on new top-level entries.
 - **Services (Seatbelt): one rule.** `(deny file-write* (require-all (subpath "<ws>/.claude") (require-not (subpath
   "<ws>/.claude/worktrees"))))`. It denies new entries, writes, removals and renames under `.claude/`, and renaming `.claude`
   itself, while writes inside `worktrees/` go through. This replaces the enumerated control paths in the service profile.
-  - Landlock (Linux) can't be measured here, so Linux services keep the enumerated paths, and doctor says so.
+  - Landlock (Linux) enforces none of it: it can only allow, and the project's own folder is writable, so neither the
+    enumerated paths (`protect`) nor this rule hold there (landlock.py, "Can't enforce"); doctor says so.
 - **Sessions (Claude's rules): not expressible as one rule.**
   - A deny wins over every allow, in the sandbox's `denyWrite`/`allowWrite` as well as in permission rules.
   - The glob matchers (node-ignore for rules, regexes for the sandbox) have no negation and match case-insensitively.
@@ -513,6 +514,30 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    a write of a CONTROL name under `.claude/worktrees/x/` still denied, an ordinary file under `.claude/worktrees/x/` allowed);
    present entries rendered for the workspace and a worktree; a glob-named entry not rendered as a rule; the checks against a
    stand-in claude that honours or ignores the rendered settings (pass and fail), and one with no attempt (error).
+
+   **Progress (11-14): built on its branch, not merged.**
+   - **Services:** `seatbelt.root_denies` sits beside `protect_denies` in `_isolation`, so cap-run jobs get it as well as
+     services. The folder comes from `runtime_claude.control_root()`, an optional function of the control port, through
+     `policy.protect_roots`.
+   - **The services rule's cost:** project-git-job's write ops (copy-back) now refuse a tracked `.claude/<other>` file.
+     project-git-job says so on a PermissionError, and doctor (`doctor_control`) says it too. There is no fast-forward op
+     in project-git-job; merge-branch's fast-forward runs in the session, where the present-entry denies stop it the same
+     way.
+   - **Sessions:** `present_controls` and `control_notes` are in runtime_claude; the doctor rows come from the adapter.
+   - **Present entries:** an entry's rules name its resolved folder and its own name, never what a linked entry points
+     to. The platform's rendered `settings.local.json` is not counted as a present entry: it is a control name already,
+     and counting it changed what was rendered on every apply (test_appliers). Backslash joins the glob characters.
+   - **Doctor on Linux:** says that Landlock enforces none of it.
+   - **The checks:** `control` and `confine_sandbox` are in conformance_claude. The world now points the instance
+     directory into itself as well. The hub's pointer had named the live instance, which holds the world (private_tmp is
+     in its secrets) and which a sandboxed project's policy denies whole.
+   - **Found by the real runs:**
+     - A positive control has to leave out more than the rules on the canary. A deny on a folder entry alone
+       (`.claude/hooks`) keeps the folder from being made, and a **Read deny refuses a write too** (2.1.323).
+     - The model once declined to overwrite the rendered settings file as "live". The prompt now says the file is a
+       throwaway copy, and a run that didn't try is asked once more.
+   - **The real run on 2.1.323 (11-14, from the worktree, `--report`):** confine-sandbox and control pass. The residual
+     is a new `.claude/<name>`, which is written through Edit (bypass) and through Bash (`sh -c`), as V-M9 found.
 
    ## Step 3: the user's sessions, checked when first seen, said by version (sections 5, 6), built second
 
