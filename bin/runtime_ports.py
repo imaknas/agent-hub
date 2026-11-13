@@ -237,6 +237,20 @@ RUNTIME_ARG_POINTS = ("mailbox-conversation", "lease-handover")
 CONFINED_SESSION_PORTS = ("control", "confine")
 
 
+def tells_later(sid) -> bool:
+    """Whether this session's hooks show letters after its start: its runtime's TELLS_ON names an event besides
+    session_start, or it declares none (an MCP id, or one of no runtime, as before). Dispatch waits only for such a session
+    using the project, and a session told only at its start holds a letter for a short while (hubbus NOTICE_HOLD_MIN)."""
+    name, _native = runtime_of(sid)
+    if name is None:
+        return True
+    try:
+        tells = getattr(_module(name), "TELLS_ON", None)
+    except (KeyError, ImportError):
+        return True
+    return tells is None or any(e != "session_start" for e in tells)
+
+
 def sessions_confined(name: str) -> bool:
     return set(CONFINED_SESSION_PORTS) <= capabilities(name)
 
@@ -862,11 +876,9 @@ class Sessions:
         return fn(native, text)
 
     def tells_later(self, sid) -> bool:
-        """Whether this session's hooks show letters after its start (its runtime's TELLS_ON names an event besides
-        session_start, or it declares none): dispatch waits for one such session using the project, not for another."""
+        """tells_later(sid) below, for this instance's runtimes: a session of none of them shows letters as before."""
         m, _native = self._mod(sid)
-        tells = getattr(m, "TELLS_ON", None) if m else None
-        return tells is None or any(e != "session_start" for e in tells)
+        return True if m is None else tells_later(sid)
 
     def can_wake(self, sid) -> bool:
         """False for a runtime with no wake port: nothing could wake it."""
@@ -1029,6 +1041,8 @@ def process_start(pid: int) -> str | None:
 SESSION_RECORD = "live"
 SESSION_SUMMARY = "last"   # <session>.last: a runtime's, read through its session_summary
 SESSION_VERSION = "version"   # <session>.version: the tool's version its hooks read, kept past its end (record_session)
+SESSION_ENDED = "ended"       # <session>.ended: it ended on record (mark_ended), kept past its end: what a runtime's check
+#                               for sessions run without its hooks reads (runtime_codex.unrecorded)
 UNREADABLE = "unreadable"     # a version the runtime's session_version couldn't read: pending, never gated
 # What stays while the session's process runs, whatever its age: its last reply, and a waiter's record, whose stale heartbeat
 # is the only word of why that session can't be woken (Sessions.wake_gap)
@@ -1147,6 +1161,19 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     for other, _rec in same:
         if other != f:
             other.unlink(missing_ok=True)
+    return True
+
+
+def mark_ended(session: str) -> bool:
+    """At a session's end, before its files go: <session>.ended when it was on record (its process record is there), so a
+    session that ended normally isn't taken for one its hooks never saw. Whether it wrote."""
+    import hubconf
+    f, rec = hubconf.session_file(session, SESSION_RECORD), None
+    rec = _read_record(f) if f else None
+    out = hubconf.session_file(session, SESSION_ENDED)
+    if not rec or not out:
+        return False
+    _write_record(out, {"runtime": rec["runtime"], **({"project": rec["project"]} if _project_named(rec) else {})})
     return True
 
 

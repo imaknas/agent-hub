@@ -219,6 +219,10 @@ RECORDS = bool(_MB.get("records", False))
 # delivery into a session only counts as "seen"; no ack/reply/done for this long → treated as untaken, dispatched as
 # usual
 TAKE_TIMEOUT_MIN = int(_MB.get("take_timeout_min", 60))
+# a session told only at its start (its runtime's hooks show nothing later: runtime_ports.tells_later) holds a letter only
+# this long from the telling: it saw a notice, not the letter, and no later hook brings it back, so a session that can be
+# woken gets it soon after. An ack (brunna ack) takes it as anyone's does (docs/design/runtime-codex.md, Step 2)
+NOTICE_HOLD_MIN = 10
 # these only mean the letter appeared on some session's screen, not that anyone took it on
 # if the resumed context exceeds this, dispatch a new one (with the whole thread)
 SEEN_VIA = ("session-start", "prompt", "post-tool", "inbox", "show")
@@ -1176,7 +1180,9 @@ def route_ended(c, r, route, taken, live) -> str | None:
         pickup = datetime.datetime.fromisoformat(woken) + datetime.timedelta(minutes=WAKE_PICKUP_MIN)
         if now() >= pickup and (not told or datetime.datetime.fromisoformat(told) > pickup):
             return "pickup"
-    span = datetime.timedelta(minutes=TAKE_TIMEOUT_MIN)
+    import runtime_ports
+    short = route.session and not runtime_ports.tells_later(route.session)
+    span = datetime.timedelta(minutes=NOTICE_HOLD_MIN if short else TAKE_TIMEOUT_MIN)
     end = datetime.datetime.fromisoformat(route.ts) + span
     if told and datetime.datetime.fromisoformat(told) <= end:
         end = max(end, datetime.datetime.fromisoformat(told) + span)
@@ -1399,7 +1405,7 @@ def questions_note(c, project, texts: bool = True) -> str | None:
                "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
     lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')}" + (f" {q['text'][:120]}{assumed(q)}" if texts else "")
-              for q in qs[-5:]]
+              for q in qs[-5:] if texts or (EVENT_ID.match(q["id"] or "") and len(q["id"]) <= NOTICE_ID_MAX)]
     return "\n".join(lines)
 
 
@@ -3628,8 +3634,9 @@ def prune_wake_addresses(live=None) -> list[str]:
             elif session and f.name.endswith(tuple(f".{k}" for k in runtime_ports.WITH_RECORD)) \
                     and hubconf.session_file(session, runtime_ports.SESSION_RECORD) in running:
                 continue
-            elif session and f.name.endswith(f".{runtime_ports.SESSION_VERSION}"):
-                # kept past the session's end (runtime-versions.md, r3): the gate on a closed session reads it
+            elif session and f.name.endswith(tuple(f".{k}" for k in hubconf.KEPT_SUFFIXES)):
+                # kept past the session's end (runtime-versions.md, r3): the gate on a closed session reads its version,
+                # a runtime's check for sessions run without its hooks its end mark
                 if time.time() - f.lstat().st_mtime <= VERSION_KEEP_DAYS * 86400:
                     continue
             elif time.time() - f.lstat().st_mtime <= ADDRESS_GRACE_S:

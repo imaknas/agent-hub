@@ -205,6 +205,7 @@ def guard(ev, ws):
 _RT = None   # the runtime whose hook this is (handle sets it): wake_address, session_record ask it about the hook's
 #              environment
 _RT_NAME = None   # its name: presence records it
+_RAW = ""   # the hook's input (handle sets it): a runtime's person_session may read what it names
 
 
 def wake_address(ev, ws):
@@ -264,8 +265,10 @@ def session_record(ev, ws):
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     version = getattr(_RT, "session_version", None)
     if pid:
+        import inspect
+        raw = {"raw": _RAW} if callable(person) and "raw" in inspect.signature(person).parameters else {}
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
-                                     wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
+                                     wanted=(lambda p: person(p, os.environ, **raw)) if callable(person) else None,
                                      project_of=_project_of_folder, version=version if callable(version) else None,
                                      stale_s=stale)
     return None
@@ -338,6 +341,14 @@ def gate_notice(ev, failed) -> str:
              runtime=_RT_NAME, version=got[0] or "?", checks=", ".join(failed))
 
 
+def end_mark(ev, ws):
+    """The session ended on record: <session>.ended, for a runtime that checks for sessions run without its hooks (its
+    unrecorded()), so this one isn't taken for such. Before wake_address_drop takes the record."""
+    if callable(getattr(_RT, "unrecorded", None)) and not platform_run(os.environ):
+        runtime_ports.mark_ended(ev.session)
+    return None
+
+
 def wake_address_drop(ev, ws):
     """The session ended: its address, its waiter's record (the waiter sees it gone and exits), any wake request left
     for it and its process record go."""
@@ -391,7 +402,8 @@ HANDLERS = {
     # session_record before mail: a session told a letter is on record by then, or the tick in between could judge it closed
     "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup), ("rules", rules),
                       ("nudge", nudge), ("session_record", session_record), ("mail", mail), ("wake_address", wake_address)],
-    "session_end": [("mail_end", mail_end), ("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
+    "session_end": [("mail_end", mail_end), ("end_mark", end_mark), ("wake_address_drop", wake_address_drop),
+                    ("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
     "prompt": [("session_record", session_record), ("mail", mail)],
     "tool_used": [("nudge", nudge), ("session_record", session_record), ("mail", mail)],
@@ -407,7 +419,7 @@ DENY_HANDLERS = {"guard"}
 AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
 # What runs no git and no script of the folder's. Any other handler, a new one included, runs only where the folder lets it: as
 # the project, or as the user where project_git.user_git_ok says so. The default is no.
-NOT_IN_FOLDER = {"session_record", "mail", "mail_end", "wake_address", "wake_address_drop", "guard"}
+NOT_IN_FOLDER = {"session_record", "mail", "mail_end", "end_mark", "wake_address", "wake_address_drop", "guard"}
 # What runs only in the project's memory checkout (project_git.memory_dir), so it can go on where its folder is only a worktree
 MEMORY_ONLY = {"memory_pull", "memory_sync", "rules"}
 
@@ -463,8 +475,9 @@ GATED_OFF = {"mail", "wake_address", "nudge"}
 def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     """Run one event and return the native output to print to stdout ("" if none). For main and tests. name: whose
     hook (--runtime); none = runtime_ports.UNNAMED_HOOKS (a hook written before they named it)."""
-    global _RT, _RT_NAME
+    global _RT, _RT_NAME, _RAW
     _RT_NAME = name = name or runtime_ports.UNNAMED_HOOKS
+    _RAW = raw
     rt = _RT = rt or runtime_ports.load(name, ports=("lifecycle",))
     if getattr(rt, "PLATFORM_RUNS_FIRE_HOOKS", False) and os.environ.get("HUB_LLM_POINT"):
         return ""   # the platform's own run of a runtime whose runs load the user's hooks: nothing (r2, Step 2)
