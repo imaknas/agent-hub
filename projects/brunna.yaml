@@ -128,6 +128,16 @@ jobs:
   every: 15m
   cwd: hub
   run: bin/py bin/render-project-settings.py
+# the coding agents' checked copies (docs/design/runtime-versions.md section 3): a newer version installed, checked and
+# promoted or held back, the daily checks on the current one, the user's own copy raised to it (replaced
+# claude/update-claude, 11-14)
+- name: update-runtimes
+  legacy_name: claude/update-claude
+  at: "01:15"
+  max_attempts_per_day: 2
+  background: true
+  cwd: hub
+  run: bin/py bin/update-runtimes.py
 - name: registry-updates         # manifest.update letters from projects: validated, then applied or returned (zero LLM)
   every: 15m
   cwd: hub

@@ -1,6 +1,5 @@
 {
  "Built-in owner side: notices of new to-dos and questions (close and answer with brunna owner)": "內建的 owner 端:新的待辦、問題通知(結案、回答用 brunna owner)",
- "Claude Code login check, updates, headless token expiry reminders": "Claude Code 的登入檢查、更新、headless token 到期提醒",
  "Every Monday: the previous week's cross-project review (reflect/)": "每週一產生上一週的跨專案回顧(reflect/)",
  "Nightly encrypted cloud backup + monthly restore test": "每晚加密雲端備份 + 每月還原測試",
  "Nightly: folds memory date files older than 14 days into reference/ (before the librarian)": "每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)",
@@ -10,5 +9,6 @@
  "issue a new application key in the Backblaze console and write it into .secrets/b2-env": "Backblaze 後台重發 application key,寫進 .secrets/b2-env",
  "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old": "每晚:移除標了 org.testcontainers、超過一天的 Docker 容器",
  "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token",
- "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)": "你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡);brunna 自己的背景工作和判斷還不在 Codex 上跑(這段期間要設一家 LLM provider)"
+ "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)": "你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡);brunna 自己的背景工作和判斷還不在 Codex 上跑(這段期間要設一家 LLM provider)",
+ "Claude Code login check, headless token expiry reminders": "Claude Code 的登入檢查、headless token 到期提醒"
 }

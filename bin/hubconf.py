@@ -172,6 +172,16 @@ def legacy_secrets_dir() -> pathlib.Path:
 _SESSION_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 
 
+def runtimes_dir() -> pathlib.Path:
+    """The store of the coding agents' checked copies (bin/runtime_store.py; docs/design/runtime-versions.md section 3):
+    <instance>/runtimes, in no sandbox's writes; on an old layout (no instance directory) the hub's .state/runtimes,
+    which no sandbox writes either; a throwaway state (a test's, a check's world) keeps its own."""
+    if STATE != MAIN / ".state":
+        return STATE / "runtimes"
+    home = instance_home()
+    return home / "runtimes" if home else STATE / "runtimes"
+
+
 def session_addresses_dir() -> pathlib.Path:
     """Where a live session's wake address is kept (docs/design/mailbox-runtimes.md B1): under the secrets directory,
     which every sandbox is denied, because whoever holds it can post into that session. Not in the bus or .state

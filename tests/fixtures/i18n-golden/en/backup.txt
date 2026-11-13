@@ -104,7 +104,8 @@ What is backed up (what only the hub machine has, and cannot be recovered once l
   - the directories listed in brunna.json backup.include (the assistant's data, platform state, secrets, service data,
     Claude Code transcripts)
 Not backed up: transcripts of the work profile (company content), GitHub mirrors, whole workspaces, generated videos,
-venv/cache, and live sessions' wake addresses (hubconf.session_addresses_dir: one only works while its session runs).
+venv/cache, and live sessions' wake addresses (hubconf.session_addresses_dir: one only works while its session runs), and the
+store of the coding agents' checked copies (hubconf.runtimes_dir: rebuilt from the vendor, ~300 MB a copy).
 On failure: job.failed on the bus and exit 1 (the scheduler records the failure → the status page goes red). The result
 is written to .state/backup/last.json.
 

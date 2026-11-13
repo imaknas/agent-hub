@@ -19,7 +19,6 @@
  "bin/render-project-settings.py": 2,
  "bin/run-agent-job.sh": 3,
  "bin/transcript-backup.sh": 4,
- "bin/update-claude.py": 1,
  "bin/worktree-memory.sh": 1,
  "bin/worktrees.py": 1,
  "contracts/llm-points.yaml": 13,

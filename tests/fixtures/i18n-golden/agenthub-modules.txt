@@ -3,7 +3,7 @@ $ agenthub modules
 --- stdout
   assistant    Muninn(選用的個人助理):問題對帳、通道租借
 ✓ backup       每晚加密雲端備份 + 每月還原測試
-  claude       Claude Code 的登入檢查、更新、headless token 到期提醒
+  claude       Claude Code 的登入檢查、headless token 到期提醒
   codex        你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡);brunna 自己的背景工作和判斷還不在 Codex 上跑(這段期間要設一家 LLM provider)
   consolidate  每晚把超過 14 天的 memory 日期檔整理進 reference/(在 librarian 之前)(要有 LLM:brunna llm setup)
   mirror       每晚更新 mirror-list.txt 裡每個 repo 的 --mirror clone

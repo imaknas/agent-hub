@@ -278,11 +278,11 @@ def agent_run(repo: pathlib.Path, guarded: bool = True, exe: str | None = None, 
 
 
 def filter_probe(tmp: pathlib.Path, exe: str | None = None, run=None) -> str | None:
-    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong (prefixed "FAIL:" when the
-    property doesn't hold, "NONE:" when the unguarded run shows nothing to guard; otherwise the probe couldn't tell). A plain `git status` shows git fires the filter, and the
-    same run without the variable shows claude still would: with either silent, a pass would say nothing. run(repo,
-    guarded) makes the request (agent_run by default). Also update-claude.py's, on the claude platform runs start now,
-    in a folder of hubconf.private_tmp() (the system's temp folder is every sandboxed project's to write)."""
+    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong, prefixed "FAIL:" when the
+    property doesn't hold and "NONE:" when the unguarded run shows nothing to guard (otherwise the probe couldn't tell).
+    A plain `git status` shows git fires the filter, and the same run without the variable shows claude still would:
+    with either silent, a pass would say nothing. run(repo, guarded) makes the request (agent_run by default). It was
+    update-claude.py's until 11-14; brunna/update-runtimes now runs it with each new version's checks."""
     exe = exe or rc.binary()
     run = run or (lambda repo, guarded: agent_run(repo, guarded, exe, tmp))
     env0 = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}

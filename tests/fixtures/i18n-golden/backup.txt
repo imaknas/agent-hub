@@ -98,7 +98,7 @@ exit 2
     (兩者都由專案自己的 job 產生,project_git.py;它的 sandbox 拒絕時,manifest 列為 skipped)、
     .env*(三層內,例:backend/.env)
   - brunna.json backup.include 列的目錄(助理的資料、平台狀態、secrets、服務的資料、Claude Code transcript)
-不備份:工作 profile 的 transcript(公司內容)、GitHub mirror、完整 workspace、產生的影片、venv/cache,還有開著的 session 的叫醒位址(hubconf.session_addresses_dir:session 結束就沒用了)。
+不備份:工作 profile 的 transcript(公司內容)、GitHub mirror、完整 workspace、產生的影片、venv/cache,開著的 session 的叫醒位址(hubconf.session_addresses_dir:session 結束就沒用了),還有 coding agent 檢查過的那幾份(hubconf.runtimes_dir:從原廠重裝就有,一份約 300 MB)。
 失敗就在匯流排發 job.failed,exit 1(排程器記失敗 → 狀態頁紅)。結果寫 .state/backup/last.json。
 
 

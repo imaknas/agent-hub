@@ -27,7 +27,8 @@ go back (`brunna upgrade --to <previous>`, which runs the same steps on the old 
   brunna user-settings --update (the platform's own entries in the user's tool settings brought to this version: only
   entries the owner installed, such as the worktree hooks; nothing is added to settings that have none) ·
   brunna install-cli --dir <where the wrapper is> (only when the brunna on PATH is install-cli's wrapper) ·
-  brunna doctor (the report: its problems are shown, they do not fail the upgrade)
+  update-runtimes.py --first (a checked copy of each coding agent in the store; its failure is doctor's to show, it
+  does not fail the upgrade) · brunna doctor (the report: its problems are shown, they do not fail the upgrade)
 When they all pass, .state/upgrade.json records the commit they ran for (brunna init writes it too, for a fresh
 install). The checkout already at the target with no such record for it (a manual `git pull` or checkout) gets
 setup-python and the steps without a move; going back then means to the commit that record last named.
@@ -423,6 +424,11 @@ def run_steps(back: str | None, full: bool = True, manual_back: bool = False) ->
         if rc != 0:
             return failed(name, rc, back, manual_back)
     record_in_step()
+    if full and (ROOT / "bin" / "update-runtimes.py").exists():
+        # a checked copy of each coding agent in the store (docs/design/runtime-versions.md section 3): a failure here
+        # (offline, no npm, no token for the checks) is for doctor to show, never a halted upgrade
+        print("\n→ runtimes", flush=True)
+        subprocess.run(py_step(ROOT / "bin" / "update-runtimes.py", "--first"), cwd=ROOT)
     print("\n→ doctor", flush=True)
     rc = subprocess.run(py_step(ROOT / "bin" / "agenthub", "doctor"), cwd=ROOT).returncode
     print("\n" + _("✓ brunna is at {version}", version=describe())

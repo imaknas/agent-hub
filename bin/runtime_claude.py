@@ -752,7 +752,7 @@ from runtime_ports import TaskResult  # noqa: E402
 # At its start `claude -p` runs `git status` in its folder for the prompt, outside any sandbox: the CLI turns fsmonitor, hooks and
 # signatures off, not a repo's clean filter, and a sandboxed project writes its own repo's config. This variable stops that git
 # (real runs, 2.1.319: docs/design/mailbox-session-first.md, step 3's record). It is a tool's feature and an update could drop
-# it: update-claude.py runs a real probe for each new version and alerts.
+# it: conformance_claude's confine-folder-git check probes each new version (brunna/update-runtimes) and alerts.
 NO_FOLDER_GIT = {"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1"}
 FOLDER_GIT_OFF = True   # runtime_ports.folder_git_unknown
 
@@ -1925,7 +1925,7 @@ def _creds_file() -> pathlib.Path:
 
 def install_info() -> dict:
     """What `agenthub init`'s agent step needs to offer Claude Code (docs/design/newcomer-path.md B4): how to find it,
-    how to install it (through nvm only: the platform's one copy, kept current by update-claude), its credential for
+    how to install it (through nvm only: the platform's one copy, kept current by brunna/update-runtimes), its credential for
     unattended runs, and the settings that make it the platform's agent. The steps are shell lines run on the owner's
     yes, user level only."""
     return {"label": "Claude Code",
@@ -2080,9 +2080,36 @@ def binary() -> str:
 
 
 def _npm_env() -> dict:
-    """npm is a `#!/usr/bin/env node` script: PATH must find nvm's node."""
+    """npm is a `#!/usr/bin/env node` script: PATH must find nvm's node. None of the caller's npm settings (a sandboxed
+    session points npm's cache into its own repo): the cache is the store's."""
     import hubconf
-    return {**os.environ, "PATH": hubconf.LAUNCHD_PATH}
+    env = {k: v for k, v in os.environ.items() if not k.lower().startswith("npm_config_")}
+    env.update(PATH=hubconf.LAUNCHD_PATH, npm_config_cache=str(hubconf.runtimes_dir() / ".npm-cache"))
+    return env
+
+
+def user_copy() -> pathlib.Path | None:
+    """The user's own claude, the one nvm's npm installs globally (section 8), or None."""
+    import hubconf
+    d = hubconf.nvm_bin()
+    return d / "claude" if d and (d / "claude").exists() else None
+
+
+def install_global(version: str) -> None:
+    """Raise the user's own copy (nvm's global one) to this version; npm checks each tarball's integrity as it installs.
+    Raises RuntimeError, also when the copy doesn't say the version afterwards."""
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version or ""):
+        raise RuntimeError(_("not a version: {version!r}", version=version))
+    try:
+        r = subprocess.run([_npm(), "install", "-g", f"{PACKAGE}@{version}", "--no-audit", "--no-fund"],
+                           capture_output=True, text=True, timeout=900, env=_npm_env(), stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e
+    if r.returncode != 0:
+        raise RuntimeError(_("npm install failed (exit {code})", code=r.returncode))
+    exe = user_copy()
+    if exe is None or version_of(exe) != version:
+        raise RuntimeError(_("the installed claude does not say version {version}", version=version))
 
 
 def _npm() -> str:
@@ -2131,7 +2158,8 @@ def install(version: str, folder) -> pathlib.Path:
         raise RuntimeError(_("the install resolved packages with no integrity hash: {names}",
                              names=", ".join(unhashed) or _("(none resolved)")))
     exe = folder / "node_modules" / ".bin" / "claude"
-    if version_of(exe) != version:
+    # asking it its version runs the candidate's code: with a home of its own and the updater off, never the live home
+    if version_of(exe, env={"HOME": str(folder), "DISABLE_AUTOUPDATER": "1", "LANG": os.environ.get("LANG", "C")}) != version:
         raise RuntimeError(_("the installed claude does not say version {version}", version=version))
     return exe
 

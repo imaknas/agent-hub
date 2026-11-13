@@ -378,8 +378,12 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   **node (and claude) are managed only by nvm**: services and schedules use the nvm default version
   (`hubconf.nvm_bin()`, `$PLATFORM_PATH` in env); don't install node with Homebrew (the reason is in known-issues.md
   "Settings, installs, credentials").
-  The claude module (`modules/claude.yaml`): `brunna/update-claude` (nightly, `bin/update-claude.py`) makes sure
-  claude does not silently fall behind; `claude-login` (hourly, `bin/check-claude-login.py`) actually makes a request
+  **The coding agents' versions** (docs/design/runtime-versions.md): `brunna/update-runtimes` (nightly,
+  `bin/update-runtimes.py`) keeps each runtime the platform uses on a checked copy in the store (`bin/runtime_store.py`,
+  `<instance>/runtimes`): a new version is installed, run through its conformance checks (`bin/conformance.py`, the
+  tool's `bin/conformance_<runtime>.py`) and promoted or held back with an alert, and the user's own copy is raised to it;
+  `brunna runtimes` shows what runs and what was checked. The claude module (`modules/claude.yaml`): `claude-login`
+  (hourly, `bin/check-claude-login.py`) actually makes a request
   and checks expiry dates, alerting when it is broken or about to expire; the platform's `claude -p` (`llm.py`) uses the
   headless token by default, and only a job whose registry entry says `connectors: true` (it needs claude.ai
   connectors) uses the subscription login

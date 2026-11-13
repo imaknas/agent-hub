@@ -159,18 +159,18 @@ class StandIn(unittest.TestCase):
 
 
 class Probe(unittest.TestCase):
+    """conformance_claude.filter_probe (the one copy: a conformance check, and update-claude's before it), the request a
+    stand-in: the probe's own logic, its positive controls included."""
+
     def setUp(self):
-        self.m = load("update_claude_probe", BIN / "update-claude.py")
+        import conformance_claude
+        self.m = conformance_claude
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
-        self.private = self.tmp / "private"
-        self.private.mkdir()
-        p = mock.patch.object(hubconf, "private_tmp", lambda: self.private)
-        p.start()
-        self.addCleanup(p.stop)
-        c = mock.patch.object(self.m, "restricted_check", return_value=None)
-        c.start()
-        self.addCleanup(c.stop)
+        (self.tmp / "probe").mkdir()
+
+    def probe(self, run):
+        return self.m.filter_probe(self.tmp / "probe", exe="/bin/false", run=run)
 
     @staticmethod
     def status(repo):
@@ -183,18 +183,22 @@ class Probe(unittest.TestCase):
             self.status(repo)
 
     def test_a_run_that_leaves_the_filter_alone_only_with_the_variable(self):
-        self.assertIsNone(self.m.filter_probe(run=self.as_claude_is))
+        self.assertIsNone(self.probe(self.as_claude_is))
 
     def test_a_run_that_runs_git_status_with_the_variable_is_said(self):
-        self.assertIn("NO_FOLDER_GIT", self.m.filter_probe(run=lambda repo, guarded: self.status(repo)))
+        why = self.probe(lambda repo, guarded: self.status(repo))
+        self.assertTrue(why.startswith("FAIL:"))
+        self.assertIn("NO_FOLDER_GIT", why)
 
     def test_a_version_that_doesnt_run_it_without_the_variable_either_is_said(self):
-        """Or the probe passes forever, telling nothing."""
-        self.assertIn("no longer tests", self.m.filter_probe(run=lambda repo, guarded: None))
+        """Or the probe passes forever, telling nothing: said as nothing to guard (NONE:), not as a pass."""
+        why = self.probe(lambda repo, guarded: None)
+        self.assertTrue(why.startswith("NONE:"))
+        self.assertIn("no longer tests", why)
 
     def test_a_run_that_couldnt_be_made_is_said(self):
-        self.assertIn("no login", self.m.filter_probe(run=lambda repo, guarded: "no login"))
-        self.assertIn("no login", self.m.filter_probe(run=lambda repo, guarded: "no login" if guarded else self.status(repo)))
+        self.assertIn("no login", self.probe(lambda repo, guarded: "no login"))
+        self.assertIn("no login", self.probe(lambda repo, guarded: "no login" if guarded else self.status(repo)))
 
     def test_a_probe_whose_control_shows_nothing_is_said(self):
         real = pathlib.Path.write_text
@@ -202,89 +206,26 @@ class Probe(unittest.TestCase):
         def no_attributes(path, *a, **k):
             return 0 if path.name == "attributes" else real(path, *a, **k)
         with mock.patch.object(pathlib.Path, "write_text", no_attributes):
-            why = self.m.filter_probe(run=lambda repo, guarded: self.fail("never got this far"))
+            why = self.probe(lambda repo, guarded: self.fail("never got this far"))
         self.assertIn("git status", why)
 
-    def test_it_is_built_where_no_sandbox_writes(self):
+    def test_it_is_built_in_the_folder_it_is_given(self):
         seen = []
 
         def run(repo, guarded):
             seen.append(repo)
             self.as_claude_is(repo, guarded)
-        self.m.filter_probe(run=run)
+        self.probe(run)
         self.assertTrue(seen)
-        self.assertTrue(all(r.is_relative_to(self.private) for r in seen))
-        self.assertEqual(list(self.private.iterdir()), [], "and gone")
+        self.assertTrue(all(self.tmp in r.parents for r in seen))
 
     def test_the_folder_is_denied_to_every_sandbox_both_ways(self):
         import policy
-        mock.patch.stopall()
         with mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets"):
             d = hubconf.private_tmp()
             self.assertEqual(d.stat().st_mode & 0o777, 0o700)
             self.assertEqual(d.parent.stat().st_mode & 0o777, 0o700, "a secrets folder it had to make, too")
             self.assertTrue(any(d.is_relative_to(x) for x in policy.secret_dirs()), "every sandbox's deny_read; no write list has it")
-
-    def test_anything_that_breaks_alerts_and_nothing_is_recorded(self):
-        for boom in (OSError(66, "not empty"), subprocess.CalledProcessError(1, "git"), ValueError("x")):
-            with self.subTest(boom=boom), self.state(self.tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: self.tmp), \
-                    mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
-                    mock.patch.object(self.m, "filter_probe", side_effect=boom):
-                self.m.probe_new_version()
-                self.assertEqual(once.call_args[0][0], "claude-git-filter")
-                self.assertTrue(once.call_args[0][1], "a problem, not a recovery")
-                self.assertFalse((self.tmp / "probed.json").exists())
-
-    def state(self, tmp):
-        return mock.patch.object(self.m, "PROBED", pathlib.Path(tmp) / "probed.json")
-
-    def test_once_per_version(self):
-        with tempfile.TemporaryDirectory() as tmp, self.state(tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: pathlib.Path(tmp)), \
-                mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
-                mock.patch.object(self.m, "filter_probe", return_value=None) as probe:
-            self.m.probe_new_version()
-            self.m.probe_new_version()
-            self.assertEqual(probe.call_count, 1, "one small request per version")
-            self.assertEqual(once.call_args[0][1], [])
-        with tempfile.TemporaryDirectory() as tmp, self.state(tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: pathlib.Path(tmp)), \
-                mock.patch.object(self.m.alert, "once"), mock.patch.object(self.m, "filter_probe", return_value=None) as probe:
-            for v in ("1.0.0", "1.0.1"):
-                with mock.patch.object(self.m, "version", lambda c, v=v: v):
-                    self.m.probe_new_version()
-            self.assertEqual(probe.call_count, 2, "whoever installed it: it goes by the version")
-
-    def test_a_filter_that_ran_alerts_and_is_tried_again(self):
-        with tempfile.TemporaryDirectory() as tmp, self.state(tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: pathlib.Path(tmp)), \
-                mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
-                mock.patch.object(self.m, "filter_probe", return_value="it ran") as probe:
-            self.m.probe_new_version()
-            self.assertEqual(once.call_args[0][0], "claude-git-filter")
-            self.assertIn("it ran", once.call_args[0][1][0])
-            self.m.probe_new_version()
-            self.assertEqual(probe.call_count, 2, "not marked as probed")
-
-    def test_a_completion_that_fails_alerts_and_is_tried_again(self):
-        """Claude's own auto-update brings versions the update never asked."""
-        with tempfile.TemporaryDirectory() as tmp, self.state(tmp), mock.patch.object(self.m.hubconf, "nvm_bin", lambda: pathlib.Path(tmp)), \
-                mock.patch.object(self.m.alert, "once") as once, mock.patch.object(self.m, "version", lambda c: "9.9.9"), \
-                mock.patch.object(self.m, "filter_probe", return_value=None) as probe, mock.patch.object(self.m, "restricted_check", return_value="unknown option"):
-            self.m.probe_new_version()
-            said = {c[0][0]: c[0][1] for c in once.call_args_list}
-            self.assertIn("unknown option", said["claude-restricted"][0])
-            self.assertEqual(said["claude-git-filter"], [])
-            self.m.probe_new_version()
-            self.assertEqual(probe.call_count, 2, "not marked as probed")
-
-    def test_the_job_runs_it_and_a_dry_run_doesnt(self):
-        with mock.patch.object(self.m, "update", lambda dry: (True, "x")), mock.patch.object(self.m.alert, "once"), \
-                mock.patch.object(self.m, "probe_new_version") as probe:
-            with mock.patch.object(sys, "argv", ["update-claude.py"]):
-                self.m.main()
-            self.assertEqual(probe.call_count, 1)
-            with mock.patch.object(sys, "argv", ["update-claude.py", "--dry-run"]):
-                self.m.main()
-            self.assertEqual(probe.call_count, 1)
-
 
 class PrivateTmpPrune(unittest.TestCase):
     def setUp(self):
@@ -380,55 +321,8 @@ class PrivateTmpPrune(unittest.TestCase):
         self.assertTrue((target / "f").exists())
 
 
-class CheckAfterAnUpdate(unittest.TestCase):
-    """What every completion passes is asked of the version being installed, not of the one being replaced."""
-
-    def setUp(self):
-        self.m = load("update_claude_flag", BIN / "update-claude.py")
-        self.bin = pathlib.Path(tempfile.mkdtemp()) / "v1" / "bin"
-        self.bin.mkdir(parents=True)
-        (self.bin / "claude").write_text("")
-
-    def update(self, versions, checks, smokes, runs=None):
-        calls = []
-
-        def run(*args, **kw):
-            calls.append(args)
-            return subprocess.CompletedProcess(args, 0, "2.0.0\n" if "view" in args else "", "")
-        with mock.patch.object(self.m.hubconf, "nvm_bin", return_value=self.bin), mock.patch.object(self.m, "run", run), \
-                mock.patch.object(self.m, "version", side_effect=list(versions)), mock.patch.object(self.m, "smoke", side_effect=list(smokes)), \
-                mock.patch.object(self.m, "restricted_check", side_effect=list(checks)) as check:
-            res = self.m.update(False)
-        return res, calls, check
-
-    def test_an_old_version_without_the_flag_upgrades_and_the_new_one_is_asked(self):
-        (ok, _msg), calls, check = self.update(["1.0.0", "2.0.0"], [None], [None, None])
-        self.assertTrue(ok)
-        self.assertEqual(check.call_count, 1, "once, after the install")
-        self.assertTrue(any("@anthropic-ai/claude-code@2.0.0" in c for c in calls))
-
-    def test_a_new_version_that_fails_it_goes_back_and_doesnt_say_it_wouldnt_install(self):
-        (ok, msg), calls, _check = self.update(["1.0.0", "2.0.0", "1.0.0"], ["unknown option --restricted"], [None, None])
-        self.assertFalse(ok)
-        self.assertIn("--restricted", msg)
-        self.assertTrue(any("@anthropic-ai/claude-code@1.0.0" in c for c in calls), "put back")
-
-    def test_it_runs_the_way_a_completion_does(self):
-        secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
-        seen = secrets / "argv.json"
-        exe = secrets / "claude"
-        exe.write_text(f"#!{sys.executable}\nimport json, sys\njson.dump(sys.argv[1:], open({str(seen)!r}, 'w'))\n"
-                       "print('unknown option --restricted', file=sys.stderr)\nsys.exit(1)\n")
-        exe.chmod(0o755)
-        with mock.patch.object(hubconf, "secrets_dir", lambda: secrets), mock.patch.object(runtime_claude, "_exe", lambda: str(exe)), \
-                mock.patch.object(runtime_claude, "auth_env", lambda mode, env: (dict(env), "")):
-            why = self.m.restricted_check()
-        self.assertIn("--restricted", why)
-        self.assertIn("--restricted", json.loads(seen.read_text()))
-
-
 class ProbeThroughTheRealPath(tbs.Fixture):
-    """agent_run on the platform's path, the agent a stand-in: the request reaches it in the repo, with the variable."""
+    """conformance_claude.agent_run on the platform's path, the agent a stand-in: the request reaches it in the repo, with the variable."""
 
     def test_llm_runs_it_in_the_folder_with_the_variable(self):
         (self.tmp / "config" / "hub.json").write_text(json.dumps({**json.loads((self.tmp / "config" / "hub.json").read_text()),
@@ -451,9 +345,7 @@ class ProbeThroughTheRealPath(tbs.Fixture):
         got = json.loads(seen.read_text())
         self.assertEqual((got["var"], got["cwd"]), ("1", str(repo)))
         # both of the probe's runs, the same flags, with the variable and without it
-        code = ("import importlib.machinery as im, importlib.util as iu, sys\n"
-                f"le = im.SourceFileLoader('uc', {str(BIN / 'update-claude.py')!r})\n"
-                "m = iu.module_from_spec(iu.spec_from_loader('uc', le)); le.exec_module(m)\n"
+        code = (f"import sys; sys.path.insert(0, {str(BIN)!r}); import conformance_claude as m\n"
                 f"import pathlib; print(repr(m.agent_run(pathlib.Path({str(repo)!r}), sys.argv[1] == 'guarded')))\n")
         seen_argv = {}
         for how, want in (("guarded", "1"), ("bare", None)):
