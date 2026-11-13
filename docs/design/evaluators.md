@@ -4,6 +4,10 @@
 > two rounds of sealing experiments in between. r5 goes by the second (recorded) experiment: the raw output is in
 > `.state/seal-check/2026-10-27/` (`FINDINGS.md` is the summary, `../seal_exp2.py` the program). Implementation starts
 > after the last blind review.
+> **Status (11-13)**: that review hasn't happened. Parts of step 0 were built another way since: MCP sealing
+> (`--strict-mcp-config`), the connectors jobs' tool-server deny, and `--restricted` in place of the inline-settings
+> sealing. Recording, replay and scoring exist only through i18n's E2 (`bin/evals/`). Not built: the per-call init
+> verdict, the seal check, and phases one and two.
 
 ## Goal and scope
 

@@ -6,7 +6,9 @@
 > the design at the time.
 
 > **Status**: on 10-24 the owner confirmed A–F as proposed; phase one (read-only) is implemented. Phase two (work mode)
-> is not done yet; it waits for the owner to ask for it.
+> is built too (11-13 check: `/mode`, `enforce.work`, `work_ready`, judgment point `lease-work`). Left: the archive
+> endpoint for dropped ideas (F), the walk-through from the phone, and loosening work mode's per-command prompts (waits
+> on a Keychain block for sessions).
 
 > 10-24 19:54 the assistant read this and replied (`m10241954-b179`): same direction, no gaps. What it does on its side
 > has been written into the sections below, marked "confirmed by the assistant".

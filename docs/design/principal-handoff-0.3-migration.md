@@ -1,5 +1,9 @@
 # Moving agent-hub and Muninn to Principal Handoff 0.3: a contract v2 proposal
 
+> **Status (11-13)**: done. All four phases are cut over and v1 is retired (the v1 transport stays only for info, progress
+> and asks, by design); later versions continue in `principal-handoff-0.6-upgrade.md`. The text below is the 10-27
+> proposal.
+
 > agent-hub session · 2026-10-27 · the owner on 10-27: "start moving agent-hub and Muninn to 0.3; coordinate contract v2
 > with Muninn first". The spec is in `~/workspace/agent-ops-specs/specs/principal-handoff/` (Core 0.3, Acts 0.3,
 > Decisions 0.3, commit 2fe74dc). This is a **proposal**: Muninn's contracts (`messages.v1`, `handoffs.v1`) are defined

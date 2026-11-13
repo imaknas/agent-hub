@@ -5,7 +5,9 @@ is for them. The lowest bar should be "paste one line" or, for someone who never
 to your agent". This design covers four user stories, the building blocks they need, how the project describes itself,
 and what a user without an always-on machine gets.
 
-Status: design, nothing implemented. To be scheduled by the release session.
+Status (11-13): built. B0–B8 landed 11-01/02 ("Order of work" below marks each). Left: the dry run of story 2 in both
+desktop apps (B3), and the two layouts that wait on `projects-and-repos.md` steps 2–3 and 7 (a monorepo as several
+projects, several repos as one).
 r6: B0, the language is the first question (owner, 11-01). Since 11-01 the agent-hub session owns UX and builds this
 design; the release session cuts releases.
 r5: the threat model is stated; consent goes through a native dialog, not the page; onboard re-checks the allowlist.

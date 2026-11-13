@@ -1,6 +1,9 @@
 # Renaming agent-hub to brunna
 
-Status: design, 11-02. Nothing built yet. This is the fourth version: it was rewritten from scratch after seven
+Status (11-13): built and shipped in v0.6.0, v0.6.1 and v0.7.0 (readers of both names, then the switch); the assistant
+agreed on party ids 11-02. Left: `brunna.v1.schema.json` beside `hub.v1`, step 4 (writers stop falling back to the old
+spellings, "when wanted"), and the renames outside this repo other than GitHub's.
+Design, 11-02: this is the fourth version: it was rewritten from scratch after seven
 cold-review rounds of the earlier versions, then reviewed three more times; the last round found nothing blocking.
 
 Decided by the owner on 11-02:

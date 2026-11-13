@@ -1,5 +1,9 @@
 # New users: from zero to the first nightly tidy-up, and the architecture changes in that direction
 
+> **Status (11-13)**: built, steps 0–7 (the history rewrite before going public included). Left: the `sync-local-setup`
+> applier in the config pipeline (1.5), and question 4 (rewriting the owner's name in code comments; the name baseline
+> isn't zero) is the owner's. The header below is the 10-26 design's.
+
 > agent-hub session · 2026-10-26 · design only; nothing is done before the owner confirms (except step 0, see
 > "Steps"). Continues `.state/phase1-design.md` ("no project names in the platform's **code**") and
 > `runtime-abstraction.md` ("Claude Code is just one implementation"), without reopening what those two settled

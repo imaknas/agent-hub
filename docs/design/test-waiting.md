@@ -3,7 +3,9 @@
 > agent-hub session · 2026-10-31, r14 2026-11-01. Owner's observation: in the projects being worked on now, the bottleneck is not the
 > agents' output but waiting for tests; the owner wants everything besides model input/output at its theoretical minimum.
 > This doc measures first, then proposes changes. **Partly built: section 7 marks each step done as it lands (steps
-> 0, 1, 2.1–2.3 and 2.5 by 11-01, step 4 on 11-02); the rest is design.** Owner's rule for building it:
+> 0, 1, 2.1, 2.2 and 2.5 by 11-01, 2.4's container module and 2.6's rules, step 4 on 11-02); the rest is design.** Of 2.3,
+> the runner in merge-branch, the hooks and the nightly tests are built; `session.report` v2, lease-handover v2 and
+> re-running a failing nightly test are not (11-13 check). Owner's rule for building it:
 > **the final architecture first, no workarounds.**
 >
 > History: r2 split the changes into **A. agent-hub itself**, **B. the platform's test system** and **C. each

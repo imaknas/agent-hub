@@ -1,6 +1,8 @@
 # brunna and herdr
 
-Status: design, 11-03. Phase 1 built 11-03 (glance, the mod); its real run in herdr's app is open.
+Status (11-13): phase 1 built 11-03 (glance, the mod), run in herdr's app (the preview is from it) and published with
+the `herdr-mod` topic. Left: the compatibility check in the Linux container (rules block, a letter reaching the
+session; only the macOS hook was checked). Phase 2 only on demand.
 
 ## Why
 

@@ -1,7 +1,7 @@
 # A project's own confined agent calls, per-job model tiers, declared secrets kept from confined runs
 
 > **Status**: design, fourth draft (11-09). Built: steps 1 to 4 (A4, A2's run-time check 11-10; B, C, D and A 11-11).
-> Step 5 (telling the project that asked) is the last.
+> Step 5 (telling the project that asked) done 11-11: all five steps are built.
 > - A as built: judgment point `project-agent` declares `tool_servers: none` instead of a runtime flag: the run loads
 >   none of the environment's tool servers (Claude Code: `--strict-mcp-config`, added by the adapter) and a rule naming
 >   one is refused when it starts, a neutral key the adapter reads (a sealed run with the platform's own server, the

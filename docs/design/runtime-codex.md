@@ -1,6 +1,9 @@
 # The Codex runtime adapter (`bin/runtime_codex.py`)
 
-Status: design, 11-08. Not built. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
+Status (11-13): step 0 (fail closed) built 11-08; steps 1–4 not built (`bin/runtime_codex.py` doesn't exist). Step 1
+follows `runtime-versions.md` steps 1–4 (it is that doc's step 5). The Codex preset now leaves `runtime.default` at
+`none`, not `command` as "Where it stands" below says.
+Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
 
 ## Where it stands (read 11-08)

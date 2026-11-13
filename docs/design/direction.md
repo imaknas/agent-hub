@@ -174,6 +174,8 @@ Built: steps 0–2 and step 4, the waiting report. Left:
 
 ## Design docs whose status line was behind the code (11-13)
 
+All twelve were corrected the same day; the list stays as a record of how far behind they had fallen.
+
 - **`newcomer-path.md`:** says "nothing implemented"; B0–B8 are built.
 - **`new-user.md`:** says "design only"; steps 0–7 are built.
 - **`rename-brunna.md`:** says "nothing built yet"; v0.6.0, v0.6.1 and v0.7.0 shipped it. Its open question to the

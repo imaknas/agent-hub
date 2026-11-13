@@ -231,8 +231,12 @@ any CLI agent; one owner side built in, and if you want a personal assistant on 
 any implementation of Principal Handoff); for integrating interactive sessions and conversation statistics only Claude
 Code has a complete adapter today, and leasing needs Claude Code + Muninn."
 
-Postponed: leasing over ACP, the platform sandbox wrapping agents, post-commit push, an `agenthub agent` launcher,
-conversation-log parsers for other tools.
+Postponed: leasing over ACP, the platform sandbox wrapping agents, post-commit push, an `agenthub agent` launcher
+(`brunna session <project> --agent` in `runtime-codex.md` D2; not the later `brunna agent`, a project's declared agent
+call), conversation-log parsers for other tools (since built: `bin/sessions_codex.py`, 11-03).
+
+Status (11-13): steps 1–6 built; step 7 (the bus as a platform service) not started; sandboxed projects already write
+only their outbox (`bus-sender.md`).
 
 ## Steps (nothing changes on the owner's machine at any step)
 

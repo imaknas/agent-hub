@@ -1,5 +1,12 @@
 # Runtime abstraction: every layer of the platform is an interface, Claude Code is just one implementation
 
+> **Status (11-13)**: steps 1, 2, 3, 5 and 6 built. Since the 10-25 note below: `templates/CLAUDE.md` is renamed
+> (`templates/agent-instructions.md`), layer 5 moved to `bin/sessions.py` (sessions from every agent, not a runtime
+> port), the lease runner no longer unsets the token, and `classify_exit` uses `is_login_error`. Still open: step 4 (the
+> long-running session port; the lease runner still builds Claude's flags), judgment points declared neutrally
+> (`platform_tools`), the job renames (`claude-login`, `update-claude`), `lease-resume` on the login port, and the
+> runtime-boundary ratchet at zero.
+
 > **Progress** (10-25): steps 1 (skeleton), 2 (layer 5, conversation logs), 3 (layer 1, "run once"), 5 (layer 3 events
 > `hub-event`, layer 4 rule files `hub-runtime`) and 6 (layer 6 login, interface `auth`) are done; all 24 projects
 > switched to the new hooks. **Not done yet**: layer 1's long-running session (scheduled after the other session's
