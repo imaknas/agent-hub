@@ -181,8 +181,14 @@ class CleanError(unittest.TestCase):
         self.assertEqual(self.m.clean_error(SHIFTED_B), f"exit 1: {TAIL}")
 
     def test_json_before_the_message_is_dropped(self):
-        self.assertEqual(self.m.clean_error('exit 1: lt":"OAuth error: expired","type":"result"}'),
+        self.assertEqual(self.m.clean_error('exit 1: lt":"OAuth error: expired","type":"resu'),
                          "exit 1: OAuth error: expired")
+        self.assertEqual(self.m.clean_error('exit 1: "OAuth error: expired","ty'), "exit 1: OAuth error: expired")
+
+    def test_a_whole_json_error_keeps_its_message(self):
+        err = ('exit 1: API Error: 401 {"type":"error","error":{"type":"authentication_error",'
+               '"message":"OAuth token has expired"}}')
+        self.assertEqual(self.m.clean_error(err), err)
 
     def test_plain_errors_are_left_alone(self):
         for err in ("Login expired · Please run /login", "401 unauthorized", "timeout talking to api"):
@@ -199,13 +205,12 @@ class ConnectorJobs(unittest.TestCase):
         self.m = load("check_login_jobs_t", ROOT / "bin" / "check-claude-login.py")
         self.tmp = pathlib.Path(tempfile.mkdtemp())
 
-    def jobs(self, projects, modules=None, index=True):
+    def jobs(self, projects, modules=None, index=True, text=None):
         idx = self.tmp / "index.json"
         if index:
-            idx.write_text("{}")
+            idx.write_text(text if text is not None else json.dumps({"projects": projects}))
         import registry
         with mock.patch.object(self.m.hubconf, "REGISTRY_INDEX", idx), \
-                mock.patch.object(self.m.hubconf, "projects", return_value=projects), \
                 mock.patch.object(registry, "load_modules", return_value=(modules or {}, {})):
             return self.m.connector_jobs()
 
@@ -221,6 +226,10 @@ class ConnectorJobs(unittest.TestCase):
 
     def test_no_index_is_not_known(self):
         self.assertIsNone(self.jobs({}, index=False))
+
+    def test_an_unreadable_index_is_not_known_either(self):
+        for text in ("{not json", "{}", '{"projects": 3}'):
+            self.assertIsNone(self.jobs({}, text=text), text)
 
 
 if __name__ == "__main__":

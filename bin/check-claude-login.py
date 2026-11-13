@@ -52,10 +52,11 @@ def connector_jobs() -> list[str] | None:
     """The jobs that use the subscription login (`connectors: true`), as <project>/<job>, from every project's registry
     entry and the enabled modules. None = can't tell (the registry index has not been produced yet: projects() then
     knows no jobs at all)."""
-    if not hubconf.REGISTRY_INDEX.exists():
+    try:   # not hubconf.projects(): without a readable index it falls back to entries with no jobs at all
+        docs = dict(json.loads(hubconf.REGISTRY_INDEX.read_text())["projects"])
+    except (OSError, ValueError, KeyError, TypeError):
         return None
     import registry
-    docs = dict(hubconf.projects())
     docs.update(registry.load_modules()[0])
     return sorted(f"{name}/{job}" for name, doc in docs.items() if isinstance(doc, dict)
                   for job in registry.connector_jobs(doc))
@@ -70,13 +71,15 @@ def used_by(mode: str, jobs: list[str] | None = None) -> str | None:
 
 
 def clean_error(err: str) -> str:
-    """The error as a person reads it: the runtime's "exit N: <tail of its output>" can start mid-word or on a stray
-    colon and end in a piece of JSON, depending on where a fixed-length tail happened to fall."""
+    """The error as a person reads it: the runtime's "exit N: <tail of its output>" can start on a stray colon or a cut
+    JSON key and end in a cut piece of JSON, depending on where a fixed-length tail happened to fall. Only those cut
+    ends are trimmed (a whole JSON object in the middle stays as it is); telling one problem from another is the ids'
+    job, not this."""
     err = re.sub(r"^(exit -?\d+):[\s:]*", r"\1: ", err.strip())
-    err = re.split(r'"\s*[,}]\s*"', err)[0]          # the JSON after the message ("…jobs","type":"resu)
-    head, _sep, msg = err.partition(": ")
-    msg = re.split(r'"\s*:\s*"', msg)[-1].lstrip('"')   # and the JSON before it (…"result":"OAuth error: …)
-    return " ".join(f"{head}: {msg}".split() if _sep else err.split()).rstrip('",}{ ')[:200]
+    err = re.sub(r'^(exit -?\d+: )"?[^"\s]*"\s*:\s*"', r"\1", err)        # lt":"OAuth error… → OAuth error…
+    err = re.sub(r'^(exit -?\d+: )"', r"\1", err)
+    err = re.sub(r'"\s*,\s*"[^"]*(?:"\s*:\s*"?[^"]*)?$', "", err)         # …jobs","type":"resu → …jobs
+    return " ".join(err.split())[:200]
 
 
 def missing_means(mode: str) -> str:
@@ -138,13 +141,13 @@ def main() -> int:
         if c.present and c.since and c.max_age:
             age = now - c.since
             if age > c.max_age:
-                problem(f"{c.name}:old", _("{label} is {days} {days:day|days} old (expires after {lifetime}); soon: {renew}",
+                problem(f"{c.path}:old", _("{label} is {days} {days:day|days} old (expires after {lifetime}); soon: {renew}",
                                            label=c.label, days=age.days, lifetime=c.lifetime, renew=c.renew))
         if c.present and c.expires:
             left = c.expires - now
             print(_("{name}: refresh valid for {days} more {days:day|days}", name=c.name, days=left.days))
             if c.warn_before and left < c.warn_before:
-                problem(f"{c.name}:expiring", _("{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}",
+                problem(f"{c.path}:expiring", _("{label} ({used_by}): the login expires within {days} {days:day|days} — {renew}",
                                                 label=c.label, used_by=c.used_by, days=max(left.days, 0), renew=c.renew))
         elif c.present and c.note:
             print(c.note)
