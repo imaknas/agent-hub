@@ -12,6 +12,6 @@ $ <HUB>/bin/registry.py check
     commits can only be conventional (absent = commit titles are not checked)
     gate can only be strict or detect (the default)
     privacy.reflection can only be include / stats_only / exclude
-✓ brunna: 15 jobs, 3 services
+✓ brunna: 16 jobs, 3 services
 ✓ ok-proj: 0 jobs, 0 services
 --- stderr
