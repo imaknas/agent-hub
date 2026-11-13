@@ -279,8 +279,11 @@
  "brunna user-settings --install --runtime {runtime}, then a new session": "brunna user-settings --install --runtime {runtime},然後開新的 session",
  "open {project}'s sessions with {yes}": "{project} 的 session 請用 {yes} 開",
  "the platform starts no AI agent (runtime.default: none): mailbox dispatch is off, so a letter nobody picks up waits for a session's hook or for you; sessions of {names} are served by their hooks": "平台不啟動任何 AI agent(runtime.default: none):信箱派送是關的,沒人接的信會等 session 的 hook 或等你;{names} 的 session 由它們的 hook 服務",
- "✗ {runtime}: nothing written: {error}": "✗ {runtime}:什麼都沒寫:{error}",
  "{runtime}: {feature}: off (has no {missing})": "{runtime}:{feature}:關掉(沒有{missing})",
  "{runtime}: {feature}: available ({note})": "{runtime}:{feature}:可以用({note})",
- "{runtime}: {feature}: available": "{runtime}:{feature}:可以用"
+ "{runtime}: {feature}: available": "{runtime}:{feature}:可以用",
+ "{runtime}: your shell's {var} puts its login in {paths}, which the platform's own jobs don't see (their environment has no {var}): sandboxes they set up deny the default place, not this one": "{runtime}:你的 shell 的 {var} 把它的登入放在 {paths},平台自己的工作看不到(它們的環境沒有 {var}):它們設定的沙箱擋的是預設位置,不是這裡",
+ "add it to {settings} credentials.dirs (a folder) or credentials.files (a file)": "把它加進 {settings} 的 credentials.dirs(資料夾)或 credentials.files(檔案)",
+ "✗ {runtime}: not installed: {error}": "✗ {runtime}:沒裝成:{error}",
+ "{runtime}: the platform's entries in your settings can't be checked ({error})": "{runtime}:你的設定裡平台的項目檢查不了({error})"
 }

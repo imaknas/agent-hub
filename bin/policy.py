@@ -70,8 +70,9 @@ CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOO
              "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
 # credential locations every sandbox is denied whatever {settings} says (docs/design/capabilities.md, 11-08 A1 point 2);
 # a runtime's own login is declared by its adapter (runtime_ports.credential_paths)
-# (~/.codex stays here whichever runtimes are installed: it holds every project's Codex conversations too; the Codex
-# adapter's credential_paths adds a $CODEX_HOME elsewhere; docs/design/runtime-codex.md r2)
+# (~/.codex stays here whichever runtimes are installed: it holds every project's Codex conversations too. The Codex
+# adapter's credential_paths adds $CODEX_HOME only where the process computing the policy has it set, and the scheduler's
+# environment doesn't: a home moved elsewhere needs {settings} credentials.dirs, which doctor says (credential_override))
 CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
                "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
 # what the user's shell and git run outside any sandbox (11-08 A1 point 3)

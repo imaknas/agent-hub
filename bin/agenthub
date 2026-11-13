@@ -1353,42 +1353,81 @@ def doctor_user_settings(add, installed) -> None:
     import runtime_ports
     for name in installed:
         mod = runtime_ports._module(name)
-        fn = getattr(mod, "user_refresh", None)
+        try:   # one runtime's trouble is said, and the next one is still checked
+            doctor_user_settings_of(add, name, mod)
+        except Exception as e:
+            add("warn", _("{runtime}: the platform's entries in your settings can't be checked ({error})", runtime=name,
+                          error=f"{type(e).__name__}: {e}"))
+
+
+def doctor_user_settings_of(add, name, mod) -> None:
+    fn = getattr(mod, "user_refresh", None)
+    try:
+        behind = fn(False) if fn else []
+    except OSError:
+        behind = []
+    for what in behind:
+        add("warn", _("{what} are from an earlier version of brunna: sessions there may not get what this one "
+                      "added (such as being woken for a letter after a day idle)", what=what),
+            _("brunna upgrade brings them up to date, or brunna user-settings --update on its own"))
+    missing = getattr(mod, "user_missing", None)
+    try:
+        why = missing() if callable(missing) and not behind else None
+    except OSError:
+        why = None
+    if why:
+        add("warn", _("{runtime}: {why}", runtime=name, why=why),
+            _("brunna user-settings --install --runtime {runtime} (a setting for your user: only you run it)",
+              runtime=name))
+    unrecorded = getattr(mod, "unrecorded", None)
+    try:
+        ids = unrecorded() if callable(unrecorded) else []
+    except OSError:
+        ids = []
+    if ids:
+        add("warn", _("{runtime}: {n} {n:session|sessions} of the last hour ran without the platform's hooks (not "
+                      "installed, or skipped by the tool as untrusted or changed): no letters, notes reminders or "
+                      "rules reached {n:it|them}", runtime=name, n=len(ids)),
+            _("brunna user-settings --install --runtime {runtime}, then a new session", runtime=name))
+
+
+def doctor_credential_homes(add, names) -> None:
+    """A coding agent whose login this shell moved away from its default place (the runtime's credential_override: its home
+    in a variable the scheduler's environment doesn't have): the platform's jobs compute every sandbox's denies without it,
+    so the place has to be in {settings} credentials.dirs / credentials.files (docs/design/runtime-codex.md, Step 2)."""
+    import policy
+    import runtime_ports
+
+    def real(x):
+        return pathlib.Path(os.path.expanduser(str(x))).resolve()
+
+    dirs = [real(d) for d in [*(hubconf.get("credentials.dirs") or []), *policy.CREDENTIALS["dirs"]]]
+    files = {real(f) for f in [*(hubconf.get("credentials.files") or []), *policy.CREDENTIALS["files"]]}
+    for name in names:
+        fn = getattr(runtime_ports._module(name), "credential_override", None)
         try:
-            behind = fn(False) if fn else []
-        except OSError:
-            behind = []
-        for what in behind:
-            add("warn", _("{what} are from an earlier version of brunna: sessions there may not get what this one "
-                          "added (such as being woken for a letter after a day idle)", what=what),
-                _("brunna upgrade brings them up to date, or brunna user-settings --update on its own"))
-        missing = getattr(mod, "user_missing", None)
-        try:
-            why = missing() if callable(missing) and not behind else None
-        except OSError:
-            why = None
-        if why:
-            add("warn", _("{runtime}: {why}", runtime=name, why=why),
-                _("brunna user-settings --install --runtime {runtime} (a setting for your user: only you run it)",
-                  runtime=name))
-        unrecorded = getattr(mod, "unrecorded", None)
-        try:
-            ids = unrecorded() if callable(unrecorded) else []
-        except OSError:
-            ids = []
-        if ids:
-            add("warn", _("{runtime}: {n} {n:session|sessions} of the last hour ran without the platform's hooks (not "
-                          "installed, or skipped by the tool as untrusted or changed): no letters, notes reminders or "
-                          "rules reached {n:it|them}", runtime=name, n=len(ids)),
-                _("brunna user-settings --install --runtime {runtime}, then a new session", runtime=name))
+            got = fn(os.environ) if callable(fn) else None
+        except Exception:
+            got = None
+        if not got:
+            continue
+        var, want_dirs, want_files = got
+        left = [d for d in want_dirs if not any(real(d).is_relative_to(x) for x in dirs)] + \
+            [f for f in want_files if real(f) not in files and not any(real(f).is_relative_to(x) for x in dirs)]
+        if left:
+            add("warn", _("{runtime}: your shell's {var} puts its login in {paths}, which the platform's own jobs don't see "
+                          "(their environment has no {var}): sandboxes they set up deny the default place, not this one",
+                          runtime=name, var=var, paths=", ".join(left)),
+                _("add it to {settings} credentials.dirs (a folder) or credentials.files (a file)"))
 
 
 def doctor_confined(add, installed) -> None:
     """Per sandboxed project, which agents' sessions there are confined and which get nothing from the platform's hooks
-    (runtime_ports.sessions_confined; hub-event refuses the others there; docs/design/runtime-codex.md r2)."""
+    (runtime_ports.sessions_confined; hub-event refuses the others there; docs/design/runtime-codex.md r2). Nothing when
+    every one is: the control rows say the rest."""
     import runtime_ports
     names = [n for n in installed if n != "none"]
-    if len(names) < 2:
+    if all(runtime_ports.sessions_confined(n) for n in names):
         return
     yes = [n for n in names if runtime_ports.sessions_confined(n)]
     no = [n for n in names if n not in yes]
@@ -1529,6 +1568,7 @@ def cmd_doctor(argv: list[str]) -> int:
     doctor_propose(add)
     doctor_memory_branches(add)
     doctor_user_settings(add, installed)
+    doctor_credential_homes(add, [n for n in dict.fromkeys([rname, *installed]) if n != "none"])
     doctor_throwaway_runtimes(add, rname)
     hub_cfg = {"runtime": hubconf.get("runtime") or {}, "llm": hubconf.get("llm") or {},
                "mailbox": hubconf.get("mailbox") or {}}
@@ -2046,8 +2086,8 @@ def user_install(name: str) -> int:
         return 0
     try:
         lines = fn(True)
-    except Exception as e:   # a file it won't edit (a link, a shape it doesn't know): nothing was written
-        print(_("✗ {runtime}: nothing written: {error}", runtime=name, error=e), file=sys.stderr)
+    except Exception as e:   # a file it won't edit (a link, a shape it doesn't know): the error says what landed
+        print(_("✗ {runtime}: not installed: {error}", runtime=name, error=e), file=sys.stderr)
         return 1
     for line in lines:
         print(_("✓ {what} installed", what=line))
@@ -2082,6 +2122,11 @@ def cmd_user_settings(argv: list[str]) -> int:
         except OSError as e:
             print(_("✗ {runtime}: could not update the platform's entries in your settings ({error})", runtime=name,
                     error=e.strerror or type(e).__name__), file=sys.stderr)
+            rc = 1
+            continue
+        except Exception as e:   # one runtime's trouble: said, and the next runtime is still brought current
+            print(_("✗ {runtime}: could not update the platform's entries in your settings ({error})", runtime=name,
+                    error=f"{type(e).__name__}: {e}"), file=sys.stderr)
             rc = 1
             continue
         for line in lines:

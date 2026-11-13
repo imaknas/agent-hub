@@ -190,6 +190,19 @@ def credential_paths() -> dict:
     return {"dirs": [], "files": list(dict.fromkeys([str(_home() / ".credentials.json"), str(_token_file())]))}
 
 
+def credential_override(env) -> tuple[str, list[str], list[str]] | None:
+    """(variable, dirs, files) when env moves Claude Code's home away from ~/.claude: the platform's jobs (the scheduler's
+    environment has no such variable) deny ~/.claude's credential file, not this one, unless {settings} credentials.files
+    names it (doctor says so)."""
+    v = _config_dir_var(env)
+    if not v:
+        return None
+    home = os.path.realpath(os.path.expanduser(v))
+    if home == os.path.realpath(pathlib.Path.home() / ".claude"):
+        return None
+    return "CLAUDE_CONFIG_DIR", [], [str(pathlib.Path(home) / ".credentials.json")]
+
+
 # What it loads settings, hooks and tools from for every session of the user, anywhere: never written by a sandboxed
 # project's file tools (its Bash has no allowWrite there), or the user's next session would run it outside any sandbox.
 # (name under its home, tree); and the user config file. Reading them stays allowed (skills' files, plans).
