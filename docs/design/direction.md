@@ -32,6 +32,7 @@ that day; they are listed at the end.
 | 11-06 | A letter goes first to a session that already has the context | `mailbox-session-first.md` |
 | 11-08 | The platform runs its own checked copy of each coding agent; the tool's own auto-update stays on | `runtime-versions.md` DV1–DV5 |
 | 11-09 | A project's code asks the platform for model calls and confined agent calls; it never calls a provider itself | `project-agent-calls.md` |
+| 11-13 | Every platform run of Claude uses the headless token; the subscription login is only for registry jobs with `connectors: true`, and the hourly login check looks at it only while one exists | `known-issues.md` "Three credentials", `bin/check-claude-login.py` header |
 
 **Order of the coding-agent adapters** (decided across 10-29, 11-01 and 11-08; no other doc has it whole):
 

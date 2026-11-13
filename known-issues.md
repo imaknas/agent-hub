@@ -179,13 +179,15 @@
   through gh/HTTPS, run `gh auth refresh -s workflow`; git push over an SSH key is not affected.
 - **Repos whose origin is HTTPS**: git takes HTTPS credentials from the keychain by default, and under SSH gives
   `could not read Username`. Run `gh auth setup-git` once, and github.com HTTPS uses the token gh stores in a file.
-- **Three credentials, each of which can break**: the keychain (schedules under launchd, the assistant, leases),
+- **Three credentials, each of which can break**: the keychain (the subscription login, under launchd: only registry
+  jobs with `connectors: true` use it; the assistant and leases use the headless token),
   `~/.claude/.credentials.json` (used under SSH when the keychain cannot be read; the refresh token lasts about 28 days
   and is extended when used), `~/.claude/headless-oauth-token` (`claude setup-token`, one year; with
   `CLAUDE_CODE_OAUTH_TOKEN` set, claude.ai connectors don't load). The platform's `claude -p` always uses the headless
   token by default (handled in one place in `llm.py`; callers must not set it themselves); only jobs with
   `connectors: true` in the registry use the subscription login. The claude module runs `claude-login` hourly to check
-  all three and alerts when one breaks.
+  them and alerts when one breaks; the keychain login only while some job declares `connectors: true` (with none it
+  says it was not checked). One problem is one alert: a changed error text or count is not sent again as new.
 - **Another pitfall**: when a launchd job ends, it kills the processes in the same process group, and `nohup ... &`
   does not prevent it; to keep running in the background takes a double fork + setsid (what `run-agent-job.sh` does).
 
