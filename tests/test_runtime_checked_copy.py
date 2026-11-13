@@ -238,6 +238,17 @@ class RunEnvironment(unittest.TestCase):
         self.assertNotIn(str(runtime_claude._store() / "stub"), env["PATH"].split(":"))
         self.assertEqual(env["DISABLE_AUTOUPDATER"], "1")
 
+    def test_the_agents_listing_gets_the_stub_with_no_token(self):
+        """`claude agents --json` needs no login: it runs on the user's folder with the refusing `security` first."""
+        seen = pathlib.Path(tempfile.mkdtemp()).resolve() / "path"
+        self.addCleanup(__import__("shutil").rmtree, seen.parent, True)
+        exe = store_fixture.stand_in(self, body=f'#!/bin/sh\necho "$PATH" > "{seen}"\necho "[]"\n')
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}):
+            os.environ.pop(TOKEN, None)
+            os.environ.pop("CLAUDE_CONFIG_DIR", None)
+            self.assertEqual(runtime_claude.session_statuses(["a"]), {"a": "unknown"})
+        self.assertEqual(seen.read_text().strip().split(":")[:2], [str(runtime_claude._store() / "stub"), str(exe.parent)])
+
     def test_nothing_it_starts_finds_the_users_claude_by_name(self):
         user = pathlib.Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(__import__("shutil").rmtree, user, True)

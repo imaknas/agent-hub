@@ -552,10 +552,11 @@ def session_statuses(sids) -> dict:
     from types import SimpleNamespace
     import runtime_ports
     try:
-        # the user's sessions, listed from the user's folder: the shared one, whatever row a run would get
+        # the user's sessions, listed from the user's folder (the shared one, whatever row a run would get); it needs no
+        # login, so it never reads the Keychain either
         exe, e = _run_copy()
         r = subprocess.run([exe, "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
-                           stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None), own=False, entry=e))
+                           stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None), own=False, entry=e, stub=True))
         rows = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError, runtime_ports.Unsupported):
         rows = None   # no checked copy to list them with is a listing that failed too: routed, never woken
@@ -796,7 +797,7 @@ def run_kind(task, own: bool | None = None) -> str:
     return "own" if own else "shared"
 
 
-def _env(task, own: bool | None = None, entry=None) -> dict:
+def _env(task, own: bool | None = None, entry=None, stub: bool | None = None) -> dict:
     """claude's environment variables. No git of its own in the folder (above). The checked copy it runs is the one on
     PATH, first (nothing a run starts finds the user's claude by name), its updater pinned off (pin_env), the config dir
     and the refusing `security` by run_kind. nvm's default-version bin after it: claude itself is called by its full
@@ -804,7 +805,7 @@ def _env(task, own: bool | None = None, entry=None) -> dict:
     nvm and Homebrew's node is gone too (2026-10-24), so the librarian printed node: command not found every time.
     In a conformance check (check_binary) the check's world already set the config dir, the stub and the pin
     (conformance_claude.enter): only the binary's folder goes first. entry: the copy the run resolved (_run_copy), else
-    resolved here. Raises NoCheckedCopy with no checked copy, and ValueError when a token run's refusing `security` or
+    resolved here; stub: the refusing `security` whatever the row (a call that needs no login). Raises NoCheckedCopy with no checked copy, and ValueError when a token run's refusing `security` or
     the platform's config dir can't be there."""
     import runtime_ports
     env = {**(os.environ if task.env is None else task.env), **NO_FOLDER_GIT}
@@ -821,7 +822,7 @@ def _env(task, own: bool | None = None, entry=None) -> dict:
             env["CLAUDE_CONFIG_DIR"] = str(_platform_dir(platform_config_dir()))
         elif env.get("CLAUDE_CONFIG_DIR") and _config_dir_var(env) is None:
             del env["CLAUDE_CONFIG_DIR"]   # the platform's dir never carries over into a run on the user's folder
-        if kind != "subscription":
+        if stub or (stub is None and kind != "subscription"):
             head.append(str(_stub_dir()))
         head.append(str(e.exe.parent))
     try:
