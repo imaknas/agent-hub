@@ -285,6 +285,23 @@ Built as r2 says, measured first on codex-cli 0.169.0 (below, "Measured 11-14").
   detached end sync, doctor's confined row); `tests/test_runtime_contracts.py` runs the contract on Codex (a fixture's
   `EVENTS_MAPPED` and `USER_LEVEL_HOOKS` decide the parts that differ); fixtures in `tests/fixtures/codex/`.
 
+Departures and known limits:
+- The handler command is the bare `<hub>/bin/py <hub>/bin/hub-event …`, without Claude's `[ -x … ] && … || true` guard: a hub
+  that moved or was removed makes Codex show the hook as failed, which is the visible failure wanted; `--update` rewrites it.
+- The install doesn't re-check the hash against Codex at run time (that needs a model-less Codex run or `hooks/list`): a
+  release that changes the canonical form shows as doctor's "sessions of the last hour ran without the platform's hooks".
+- A letter named in a SessionStart notice counts as told and is held by that session (up to 60 minutes, or until the
+  session isn't live) even if the session can't run `brunna inbox` (no MCP server registered); a notice letter counts as
+  delivered. `rules_note()` tells a Codex session to run `brunna inbox` itself when it waits for a reply, since nothing
+  shows it letters mid-session.
+- A Codex session in a linked worktree gets the rules (from the main checkout's memory, `project_git.scope_of`), but no
+  `.agent-memory` link beside it: that link is made by Claude Code's user-level worktree hooks (`worktree-memory.sh`). Its
+  notes go to the main checkout's `.agent-memory` by path until Codex gets a worktree hook of its own.
+- After a session's start, a hook of a shared-process runtime only touches its record (`runtime_ports.touch_record`): no
+  process lookup per prompt or tool call. A second SessionStart keeps the project its own record names.
+- `context_size` reads 0.165's `token_count` shape; 0.169 wrote none without a model call. It matters only for a fork, which
+  a Codex session never gets.
+
 What waits on the owner: **his yes** for `brunna user-settings --install --runtime codex` (writes `~/.codex/hooks.json` and
 the trust in `~/.codex/config.toml`) and `runtime.installed: [claude, codex]` in brunna.json; and **his login** for what needs
 a model call, measured on 0.169 by nobody yet (scratch homes only, no login used): whether UserPromptSubmit's and PostToolUse's
