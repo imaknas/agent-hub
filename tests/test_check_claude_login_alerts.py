@@ -168,17 +168,31 @@ class Check(unittest.TestCase):
 
     def test_with_no_checked_copy_no_request_is_made_and_nothing_is_resolved(self):
         """An empty store (a fresh install, a restore): the request can't be made, which is no login failure and no
-        recovery either; the files and their dates are still checked (doctor and the status page say there is no copy)."""
+        recovery either: what the last requests found stands, with its ids, and the files and their dates are still
+        checked (doctor and the status page say there is no copy)."""
         self.answers[None] = "Login expired · Please run /login"
         self.run_check()
         self.assertEqual(len(self.sent), 1)
         store_fixture.empty(self)
         self.asked.clear()
         code, out = self.run_check()
-        self.assertEqual((code, self.asked, len(self.sent)), (0, [], 1), "nothing asked, the open alert left as it is")
+        self.assertEqual((code, self.asked, len(self.sent)), (1, [], 1), "nothing asked, the open alert left as it is")
         (self.home / ".claude" / "headless-oauth-token").unlink()
         code, _out = self.run_check()
-        self.assertEqual(code, 1, "a missing token is still a problem")
+        self.assertEqual((code, len(self.sent)), (1, 2), "a missing token is a new problem")
+        self.assertIn("Login expired", self.sent[-1], "the open login problem is still in it")
+
+    def test_with_no_checked_copy_the_streak_is_kept(self):
+        self.answers["token"] = "timeout talking to api"
+        for _ in range(2):
+            self.run_check()
+        before = self.m.STREAK.read_text()
+        store_fixture.empty(self)
+        self.run_check()
+        self.assertEqual(self.m.STREAK.read_text(), before)
+        store_fixture.stand_in(self)
+        self.run_check()
+        self.assertEqual(len(self.sent), 1, "the third failure in a row, counted across the run that asked nothing")
 
     def test_when_the_last_connector_job_goes_the_open_alert_is_resolved(self):
         self.answers[None] = "Login expired · Please run /login"

@@ -158,21 +158,34 @@ def main() -> int:
         elif c.present and c.note:
             print(c.note)
 
-    try:
-        streak = json.loads(STREAK.read_text())
-    except (OSError, ValueError):
-        streak = {}
-    streak = {k: streak.get(k, 0) + 1 for k in soft}
-    STREAK.write_text(json.dumps(streak))
-    for k, err in soft.items():
-        print(_("{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}", mode=k, n=streak[k],
-                err=clean_error(err)))
-        if streak[k] >= SOFT_LIMIT:
-            problem(f"{k}:failing", _("claude requests failed {n} times in a row ({mode}): {err}", n=streak[k], mode=k,
-                                      err=clean_error(err)))
+    # what the last requests found ({id: text}), beside the streak: with no request made it stands as it was, so an open
+    # alert keeps its ids and the streak its counts
+    requested = STREAK.with_name("claude-login-requests.json")
+    if no_copy:
+        try:
+            carried = json.loads(requested.read_text())
+        except (OSError, ValueError):
+            carried = {}
+        for pid, text in (carried.items() if isinstance(carried, dict) else ()):
+            if isinstance(pid, str) and isinstance(text, str) and pid not in ids:
+                problem(pid, text)
+    else:
+        try:
+            streak = json.loads(STREAK.read_text())
+        except (OSError, ValueError):
+            streak = {}
+        streak = {k: streak.get(k, 0) + 1 for k in soft}
+        STREAK.write_text(json.dumps(streak))
+        for k, err in soft.items():
+            print(_("{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}", mode=k,
+                    n=streak[k], err=clean_error(err)))
+            if streak[k] >= SOFT_LIMIT:
+                problem(f"{k}:failing", _("claude requests failed {n} times in a row ({mode}): {err}", n=streak[k], mode=k,
+                                          err=clean_error(err)))
+        requested.write_text(json.dumps({pid: text for pid, text in zip(ids, hard)
+                                         if pid.endswith((":login", ":failing"))}, ensure_ascii=False))
 
-    if hard or not no_copy:   # with no request made, a login problem already alerted is not over
-        alert.once("claude-login", hard, _("The claude login check is back to normal"), ids=ids)
+    alert.once("claude-login", hard, _("The claude login check is back to normal"), ids=ids)
     for x in hard:
         print(f"⚠️ {x}")
     return 1 if hard else 0
