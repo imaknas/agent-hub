@@ -475,6 +475,107 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    as today plus a deny for every other entry present under `.claude/` except `worktrees`, and the control check's per-version
    canary. The sandbox-parity tests
    are updated to match.
+   **Implementation plans for steps 4 and 3 (11-14), reviewed blind twice (r1: four blocking, r2: one, r3 below): step 4 is built before step 3.**
+
+   Order changed: **step 4 before step 3** (r1 review S7: step 3's gate fires only on a failed safety check, and the safety
+   checks it needs, control and confine-sandbox, are built in step 4).
+
+   ## Step 4: control (section 7, V-M9), built first
+
+   1. **Services (macOS Seatbelt): the one rule is added, nothing removed.** `seatbelt.py`'s service profile keeps
+      `protect_denies` (the CONTROL names at any depth, root `.mcp.json`, nested `.claude/`) and adds the V-M9 rule
+      `(deny file-write* (require-all (subpath "<ws>/<tool folder>") (require-not (subpath "<ws>/<tool folder>/worktrees"))))`,
+      the workspace path resolved as `protect_denies` does. The folder names (`.claude`, `worktrees`) come from the adapter's
+      control port (a new `control_root()` → (folder, exempt names)), never written in seatbelt.py/policy.py
+      (test_runtime_boundary). The parity test gains a case with `protect` on (r1 NIT: it turns it off today).
+      project-git-job runs under this profile: a fast-forward touching a tracked `.claude/<other>` file now fails; said by
+      doctor and in the job's error.
+   2. **Sessions (Claude's settings): the fixed lists, plus every present entry, in the workspace and in each worktree.**
+      `CONTROL` gains `.claude/launch.json` (Desktop runs its commands); `USER_CONTROL` / the user-level denies gain
+      `~/.claude/remote/ccd-cli/` (Desktop's executables, run at every Desktop start). Each entry present under the
+      workspace's `.claude/` and under each `session_folders()` worktree's `.claude/` (except `worktrees` and `.cc-writes`)
+      gets a `denyWrite` and an `Edit` deny. A name with a glob character (`*?[]{}!`) is not rendered as a rule (it would
+      widen into every sibling, V-M9): it is denied through the sandbox's `denyWrite` path only and named by doctor. The
+      present-entry denies also stop the agent's own writes there (`launch.json`, `agent-memory/`): doctor says which.
+      Linux: Landlock enforces none of `protect` (landlock.py:30-33); doctor says so, not "keeps the enumerated paths".
+   3. **The control and confine-sandbox checks** (conformance_claude, safety): the world gets a sandboxed throwaway project
+      registered in its own registry (`enforce: {sandbox: true}`); its session settings are rendered by the real
+      policy → settings path into the project. The session runs with `--permission-mode bypassPermissions` (V-M9: denies
+      hold there; the sensitive-file ask doesn't, so it can't stand in for the rules) and Bash and Edit allowed, asked to write
+      each canary. Canaries: each CONTROL path that exists as a write target (`.claude/settings.json`, `.claude/settings.local.json`,
+      `.claude/hooks/x`, `.mcp.json`, `.claude/launch.json`; never `CLAUDE.md`, which no rule covers) and, for confine-sandbox,
+      another project's folder, the world's secrets dir and the project's `.git/config`. Each canary has its own positive
+      control: the same session with that rule left out of the rendered settings writes it. A canary counts only with
+      evidence the write was attempted (the stream's `tool_use` for it, or its denial in `permission_denials`), never from the
+      file's absence alone; no attempt is `error`. The new `.claude/<probe>` through Edit and through Bash `sh -c` is recorded
+      as the version's residual (information).
+   Tests: the rule rendered beside `protect_denies` (and on macOS a real `sandbox-exec` probe: a write under `.claude/` denied,
+   a write of a CONTROL name under `.claude/worktrees/x/` still denied, an ordinary file under `.claude/worktrees/x/` allowed);
+   present entries rendered for the workspace and a worktree; a glob-named entry not rendered as a rule; the checks against a
+   stand-in claude that honours or ignores the rendered settings (pass and fail), and one with no attempt (error).
+
+   ## Step 3: the user's sessions, checked when first seen, said by version (sections 5, 6), built second
+
+   1. **The version at session start (V-M4)**, `runtime_claude.session_version(pid)`, from the executable's real path, never
+      running it: Desktop's `~/.claude/remote/ccd-cli/<version>-<hash>` (a file; parsed `^(\d+\.\d+\.\d+)-([0-9a-f]+)$`, the hash
+      recorded too), a store copy `<runtimes>/claude/<version>/…`, nvm's `…/lib/node_modules/@anthropic-ai/claude-code/`
+      `package.json` only when the executable resolves under nvm's prefix (a `claude` in a project's own `node_modules` is
+      `unreadable`, never trusted). Anything else `unreadable`. `record_session` carries `version` on every write (start,
+      a /clear takeover, the project backfill); a record missing it is read from the pid when next used, not counted as
+      unreadable. A closed session's version comes from its transcript (`Turn.version`). The `unusable=` log line gets
+      `version=`.
+   2. **The check job** `brunna/session-versions` (every tick, background): versions from **live session records first**
+      (the transcripts' versions only feed `brunna runtimes`: a sandboxed session can write `~/.claude/projects` in bypass,
+      r1 S5); each version without a session result: checked against npm's published list (`published()`, a new distribution
+      function), installed exactly into the store unpromoted, at most 3 installs a day per runtime, its **session-side
+      checks** run (`Check.side = "session"`: lifecycle, instructions, sessions, confine-sandbox, control, session-status,
+      session-summary, wake, and a new **`sessions-fork`**: a transcript written by that version, forked by `current`, reads
+      back), recorded as `<results>/<runtime>/<version>.session.json`. Not published / not installable → `not-installable`,
+      retried weekly. Session-version copies are kept only while a session of that version was seen in the last 7 days and
+      at most 5 per runtime (a Desktop build is ~320 MB), and never one a check holds.
+   3. **The narrow gate**, read at one place, `runtime_ports.Sessions.gated(sid)` (sandboxed project + its version's
+      recorded session result has a safety `fail`), used by every path that starts work: hub-event's `handle()` and `worktree`
+      (always-run: `session_record`, `mail_end`, memory sync, `guard`, `wake_address_drop`; off: `mail` (and with it presence,
+      said), `wake_address`, `nudge`), hubbus's `candidates()`, `Tick.can_wake` (the notice and holder wakes), `active_sessions`
+      and the conversation wait (a gated session is not waited for), and `can_resume` (no fork or resume of it). The session is
+      told once at start ("this Claude Code version failed the platform's sandbox check: the platform delivers no letters to
+      this session and wakes it for none"), the owner gets an alert per runtime, version and check. Pending, unreadable,
+      not-installable, not-checkable: as today. Unsandboxed: never gated, a doctor row and an alert.
+   4. **Session-side calls on matching versions (section 5).** Listing: `current` lists every live session as today; a
+      session whose version's `session-status` session check **failed** is `unlisted` (pending versions keep today's listing,
+      r1 S1). One `agents --json` per tick still (it lists all sessions), under a deadline passed down from the tick's budget
+      (r1 S2). Forks of a session run with `current` when the session's version passed `sessions-fork` (the pair route), else
+      are refused like a missing port (the letter falls to triage); a version still pending keeps today's fork (as today).
+      `lease-resume`: the lease record gains the session's version; it resumes with `current` when that pair passed, else is
+      refused with the reason (section 5).
+   5. **Said by version**: `brunna runtimes` and doctor per version seen in 7 days (passed, pending, unreadable,
+      not-installable, failed: which check; Desktop builds by hash); unusable hook payloads of an event letters depend on, three
+      times for a version, a doctor row and an alert keyed by event and reason.
+   Tests: each layout's version from fixture paths (Desktop's file name with hash, the store, nvm's prefix, a project's
+   node_modules refused), the record keeping the version through all three writes, the job's live-first order, budget and
+   not-installable path, the gate at each choke point (handlers, candidates, can_wake, active_sessions, can_resume) and its
+   absence for pending and unsandboxed, the listing rule, a fork refused on a failed pair and kept on pending.
+
+   ## r3 (11-14), after the re-review of r2 (B1–B3 resolved; B4's last piece and the should-fix items here)
+
+   - Step 4, checks: the `.git/config` canary is dropped (no session rule denies a project's own `.git`, which sessions need
+     to commit). confine-sandbox's canaries are only what a rendered rule denies: another project's folder and the world's
+     secrets directory. **Every positive control goes through Edit** (bypass leaves Edit open; Claude's own sandbox keeps Bash
+     off `.claude/settings*.json` and off unlisted folders whatever the rules say), so a control that can't land is a real
+     `error`, not the model's choice of tool.
+   - Step 4, sessions: `.claude/launch.json` is added as a tree entry (like `settings.json`), so sessions get its Edit deny.
+     A glob-named present entry is **not rendered at all** (the sandbox reads paths as regexes too and drops what it can't
+     take, V-M9); doctor names it.
+   - Step 3, versions: the hook-recorded version is kept past the session's end in `<secrets>/sessions/<sid>.version`
+     (written by `session_record`, not removed by `wake_address_drop`, pruned after 30 days); a closed session's version is
+     read from it, never from the transcript (which a sandboxed session can write in bypass). No `.version` = pending.
+   - Step 3, gate: the outbox import ignores `told` and `ack` from a gated session (`own_session`, hubbus), so a gated session
+     can't hold a letter away from healthy ones through the CLI.
+   - Step 3, retention: `runtime_store.prune` learns the session-version copies (`installed.json` kind `session`, last seen
+     recorded by the check job) and keeps them while a session of that version was seen in 7 days, at most 5 per runtime;
+     promoted copies keep today's rule.
+   - Design text to update with step 3: section 5's fork rule becomes "with `current` when the pair passed `sessions-fork`,
+     pending as today, otherwise refused".
 5. **Codex Step 1** builds on all of it: `conformance_codex.CHECKS` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
 

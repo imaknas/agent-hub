@@ -54,9 +54,10 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
 
 ### 1. Coding-agent runtimes (the critical path)
 
-1. **`runtime-versions.md` steps 1–4.** Step 1 in progress (11-13): unusable hook payloads logged, readers count skips per
-   version, `unlisted` done; the conformance runner and Claude's checks next (its Steps list the order). Steps 2–4 not
-   built:
+1. **`runtime-versions.md` steps 1–4.** Steps 1 and 2 built and merged (11-14): the conformance runner and Claude's
+   checks, the store of checked copies and `brunna/update-runtimes`, and platform runs on the store's copy (this
+   machine: 2.1.323). Next: step 4 (control) then step 3 (session versions), plans reviewed in the design. Their
+   original outline:
    1. The distribution port, conformance checks per port, the results store, `brunna runtimes`.
    2. The store and `update-runtimes` (promotion, hold-back, rollback); this retires `update-claude`.
    3. Each session's agent version recorded and gated.
