@@ -1,8 +1,8 @@
 # The Codex runtime adapter (`bin/runtime_codex.py`)
 
-Status (11-13): step 0 (fail closed) built 11-08; steps 1–4 not built (`bin/runtime_codex.py` doesn't exist). Step 1
-follows `runtime-versions.md` steps 1–4 (it is that doc's step 5). The Codex preset now leaves `runtime.default` at
-`none`, not `command` as "Where it stands" below says.
+Status (11-14): step 0 (fail closed) built 11-08; **Step 2 built 11-14** (`bin/runtime_codex.py`, lifecycle + sessions;
+"Step 2: progress (11-14)" below); steps 1, 3, 4 not built. Step 1 follows `runtime-versions.md` steps 1–4 (it is that
+doc's step 5). The Codex preset now leaves `runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
 
@@ -229,6 +229,70 @@ fork`; wake off (D4) until M11.
   `MIN_VERSION` at least 0.167. Step 3: forking a user's thread needs the user's `~/.codex` rollout (hooks.json loads there,
   M5), `can_resume` stays the default runtime's, section 5's session-side rule applies.
 
+### Step 2: progress (11-14)
+
+Built as r2 says, measured first on codex-cli 0.169.0 (below, "Measured 11-14"). What each piece became:
+
+- `bin/runtime_codex.py`, registered as `codex`. Ports: `lifecycle` (`parse_event`, `unusable`, `inject` always in the JSON
+  form, `deny` empty, `install_lifecycle` / `remove_lifecycle` per-project no-ops returning False) and `sessions` (`alive`,
+  `live_sessions` = the hooks' records, `context_size` from the rollout's last `token_count`, `current_session` from
+  `CODEX_THREAD_ID`). Every other port absent; `unsupported()` gives doctor the reason for `instructions`, `wake`, `agent`,
+  `completion`. Declarations the neutral code reads (documented in `runtime_ports`' header): `EVENTS_MAPPED` (no
+  `open_session_attempt`; Stop isn't mapped), `TELLS_ON = ("session_start",)`, `LETTERS_AS_NOTICE`, `RULES_AT_START`,
+  `PLATFORM_RUNS_FIRE_HOOKS`, `SESSION_STALE_S = 2 h`, `END_BUDGET_S = 3`, `USER_LEVEL_HOOKS`. `RULES_FILE_NAMES =
+  ("AGENTS.md", "AGENTS.override.md")` (a memory branch holds neither).
+- Records: `runtime_ports.record_session(stale_s=)` for a shared process: keyed by Codex's session id, no record drops another
+  of the same pid or lends it its project, a hook of the same process touches the record, and `running_records` (so
+  `open_sessions`, `recorded_sessions`, dispatch's `opened`) counts it only while its last hook is younger than `stale_s`. The
+  record's process is the nearest Codex ancestor of the hook (`session_pid`); `codex exec` is headless and gets none.
+- `current_session` with Claude and Codex installed: the ancestor walk (`session_process` claims `codex`, `@openai/codex`, the
+  vendor binary): a Codex process is nearer than any Claude session that started it, so a Claude id the daemon inherited
+  doesn't win. Whether `ps` works inside Codex's tool sandbox (the walk needs it) is unmeasured: no model call.
+- `hub-event`: `handle()` / `worktree()` return at once under `HUB_LLM_POINT` for a runtime with `PLATFORM_RUNS_FIRE_HOOKS`
+  (Claude's behaviour unchanged, leases untouched); the `mail` handler asks `hubbus.mail_text(show=)`: `"none"` at events not
+  in `TELLS_ON` (presence recorded, nothing told or held), `"notice"` for `LETTERS_AS_NOTICE` (`hubbus.letters_notice`: ids and
+  senders as a wake's notice, the `brunna inbox --project` pointer, never a letter's text; told and held as any SessionStart
+  telling); a new `rules` handler (MEMORY_ONLY, after `local_setup`) gives a `RULES_AT_START` runtime the managed block's text
+  plus `rules_note()` (use the brunna MCP server's tools where Codex's sandbox can't write the mailbox), the listed rules read
+  from the memory checkout a linked worktree shares (`prompts.listed_rules`, now also what `sync-local-setup.sh` uses);
+  `memory_sync` at a session's end is detached for a runtime with `END_BUDGET_S`; `CAGED_NEEDS` is
+  `runtime_ports.CONFINED_SESSION_PORTS`, so a sandboxed project's Codex session gets nothing (fail closed).
+- Dispatch: a Codex session is **neither routed to nor forked** (candidates need `can_wake`; a fork needs the default
+  runtime's `can_resume`), and since its hooks tell nothing after its start, dispatch doesn't wait for one using the project
+  either (`Sessions.tells_later`, `hubbus.active_sessions`): a letter reaches it at its next SessionStart or through `brunna
+  inbox`, else triage on Claude. An ack by a Codex session that is no longer live (2 h without a hook) frees the letter as
+  any closed session's does. A Codex-only instance (`runtime.default: none`, `runtime.installed: [codex]`) has no dispatch;
+  doctor says so and lists Codex's features.
+- `runtime.installed: [claude, codex]` passes config check (a registered name). `~/.codex` stays in `policy.CREDENTIALS`;
+  `credential_paths()` adds `$CODEX_HOME`.
+- Doctor: Codex's column in the feature table (the rules row says they arrive by the session-start hook); per sandboxed
+  project, whose sessions are confined (`doctor_confined`); "the platform's Codex hooks aren't installed / some aren't
+  trusted" (`user_missing`); "N sessions of the last hour ran without the platform's hooks" (`unrecorded`: a rollout of today
+  or yesterday changed within the hour, not `codex exec`'s, with no record). `hooks/list` waits for M11's framing.
+- The user-level hooks: `brunna user-settings --install --runtime <name>` (the adapter's `user_install`), `--update` through
+  `user_refresh` (only where the owner installed them, so upgrade adds nothing), `user_cleanup` for uninstall. `hooks.json`:
+  the platform's handlers rewritten in place, a missing one appended as its own group after the user's, so no hook of the
+  user's moves (keys are positional); a link or a shape Codex wouldn't read is refused. Handlers: `<hub>/bin/py
+  <hub>/bin/hub-event --runtime codex <event>`, `additionalContextLimit: 0` on the three context events (the rules are about
+  16 KB), `timeout: 3` on SessionEnd, matcher `Bash` on PostToolUse. Trust: `trust_entries` hashes each platform handler read
+  back from the file at its position (never a user's handler, never Codex's report); `set_trust` edits config.toml by lines
+  (a `[hooks.state."<key>"]` table's `trusted_hash` replaced or added, a missing table appended), checks with `tomllib` that the
+  result differs from the input only by those values, and refuses a key set inline or dotted. **Nothing in the platform runs
+  the install** (a test greps `bin/`); it wasn't run against the real `~/.codex`.
+- Tests: `tests/test_runtime_codex.py` (r2's list: payloads, inject, the hooks file and trust in a scratch home, a definition
+  that isn't the platform's gets no trust, the TOML writer, handle() under `HUB_LLM_POINT`, two sessions on one pid, the 2 h
+  cutoff and the freed ack, both ids present, config check, dispatch, the sandboxed refusal, the rules from a worktree, the
+  detached end sync, doctor's confined row); `tests/test_runtime_contracts.py` runs the contract on Codex (a fixture's
+  `EVENTS_MAPPED` and `USER_LEVEL_HOOKS` decide the parts that differ); fixtures in `tests/fixtures/codex/`.
+
+What waits on the owner: **his yes** for `brunna user-settings --install --runtime codex` (writes `~/.codex/hooks.json` and
+the trust in `~/.codex/config.toml`) and `runtime.installed: [claude, codex]` in brunna.json; and **his login** for what needs
+a model call, measured on 0.169 by nobody yet (scratch homes only, no login used): whether UserPromptSubmit's and PostToolUse's
+additionalContext is read by the model (until then letters are told only at SessionStart; the commit nudge on PostToolUse is
+best-effort), whether PostToolUse fires for code mode's `exec` → `exec_command` and with what `tool_input`, SessionStart's
+`source` after a compaction and on resume (so whether the rules come back after compaction), `CODEX_THREAD_ID` in a tool shell
+(0.169's source sets it), and whether `ps` runs inside Codex's tool sandbox.
+
 ## Found by the second blind review (11-08), taken into the steps
 
 - **Step 1 ships completion and tool-free points only.** Codex has no file-only tools: the shell is how it reads, and nothing yet
@@ -406,6 +470,35 @@ platform's own schemas.
   `tools.exec_command`, the denied ones returned exit 1 with "Operation not permitted", the allowed ones ran, no denied text appeared
   in the output or the rollout, and `.git/config` was unchanged. A relative glob (`**/*.env`) stops the run at load with "must be
   absolute", before anything runs.
+### Measured 11-14 (codex-cli 0.169.0, for Step 2)
+
+0.169.0 from npm into a scratch npm prefix, scratch `CODEX_HOME`s only, no login (the model call fails with 401 after the
+hooks around it ran); `~/.codex` not read. Source read at tag `rust-v0.169.0` (`codex-rs/hooks`, `codex-rs/config`).
+
+- **Hooks without a login, under `codex exec`** (stdin closed; with it open exec waits for "additional input"): SessionStart
+  (`source: "startup"`), UserPromptSubmit (`turn_id`, `prompt`) and SessionEnd (`reason: "other"`) fired; Stop didn't (no turn
+  completed); PostToolUse and PreCompact need a model call. Payloads in `tests/fixtures/codex/` (paths replaced). Every input
+  has `session_id`, `transcript_path`, `cwd`, `hook_event_name`; SessionStart and UserPromptSubmit add `model` and
+  `permission_mode`. From the source: PostToolUse for exec_command and the shell tools has `tool_name: "Bash"` and
+  `tool_input: {"command": …}`; PreCompact has `trigger`.
+- **The hook's process and environment**: its parent was the native `codex` binary (Codex runs the command with `$SHELL -lc`,
+  which execs it); the environment was the caller's: `CODEX_HOME`, `HUB_LLM_POINT` when set, and the Claude session's
+  `CLAUDE_CODE_SESSION_ID` that started it; no `CODEX_THREAD_ID` (the source injects it into tool shells only).
+- **Trust, measured**: key `"<hooks.json's real path>:<event in snake_case>:<group>:<handler>"` (a key naming a linked
+  `CODEX_HOME` by its link didn't count; by its target it did); hash `sha256:` + hex sha256 of the compact, key-sorted JSON of
+  `{event_name, matcher?, hooks: [{type, command, timeout, async, statusMessage?, additionalContextLimit?}]}` with the timeout
+  default filled in (600 s; SessionEnd 1 s, at most 3). With it the hooks fired; with no entry, or one hex digit changed, none
+  fired and nothing was said. A matcher (`startup` on SessionStart) is part of the hash and fired. `user_install` itself,
+  run against a scratch home with a stand-in hub and a user's own config.toml (comments, another hook's state) and hooks.json
+  (a Stop hook), fired SessionStart, UserPromptSubmit and SessionEnd through the stand-in, kept the user's text byte for byte
+  ahead of its tables, and a second run changed nothing.
+- **additionalContext**: the JSON form on SessionStart and UserPromptSubmit each landed in the thread as a `developer`-role
+  message (`content_item_kinds: hooks.additional_context`) before the request; whether the model acts on it on 0.169 needs a
+  login. Over 2,500 tokens it is cut to a preview with "Full hook output saved to: <temp file>" unless the handler sets
+  `additionalContextLimit: 0` (then whole; measured).
+- **M5 changed**: on 0.169 `--ignore-user-config` loads no user-level `hooks.json` either, trusted or not (0.165 fired them).
+  The `HUB_LLM_POINT` guard in hub-event stays all the same: it costs nothing and doesn't rest on one version's flag.
+
 - **M1 again on 0.167.0: shell off is no longer tool-free.** Every model in the catalog has `tool_mode: code_mode_only`, which
   `features.*` can't change; its `exec` tool (a JS host with no `fs` import, no `require`, no `fetch`) calls the other tools. With
   `features.shell_tool=false` only, `exec` still reached `apply_patch`, goal tools, the ChatGPT apps connectors (`mcp__codex_apps__*`),
