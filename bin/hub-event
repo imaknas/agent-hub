@@ -258,13 +258,16 @@ def session_record(ev, ws):
     fn = getattr(_RT, "session_pid", None)
     if not callable(fn) or platform_run(os.environ) or not _project_of_folder(ev.cwd):
         return None
+    stale = getattr(_RT, "SESSION_STALE_S", None)
+    if stale and ev.event != "session_start" and runtime_ports.touch_record(ev.session, _RT_NAME):
+        return None   # a shared process's session on record: its hook only says it is still there
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
     version = getattr(_RT, "session_version", None)
     if pid:
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
                                      wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
                                      project_of=_project_of_folder, version=version if callable(version) else None,
-                                     stale_s=getattr(_RT, "SESSION_STALE_S", None))
+                                     stale_s=stale)
     return None
 
 

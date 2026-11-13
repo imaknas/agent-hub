@@ -119,7 +119,8 @@ def rules_note() -> str:
     """What a Codex session gets after the platform's rules: its sandbox and the mailbox."""
     return _("In Codex: if a `brunna` command (send, inbox, done, ack) fails because this session's sandbox can't write the "
              "mailbox, use the same tools of the brunna MCP server instead; if this session has no such server, tell the "
-             "user (brunna mcp config prints what to register).")
+             "user (brunna mcp config prints what to register). Letters are shown to a Codex session only when it starts: "
+             "when you wait for a reply, or before you finish a task, run `brunna inbox` yourself.")
 
 
 # ---------- lifecycle ----------
@@ -552,6 +553,9 @@ def user_refresh(apply: bool) -> list[str]:
     if not installed_hooks():
         return []
     try:
+        if not apply:   # what is behind is the hooks themselves; trust alone missing is user_missing's to say
+            plan = _plan()
+            return user_install(False) if plan[1] != plan[0] else []
         return user_install(apply)
     except Refused:
         return []

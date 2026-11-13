@@ -1130,8 +1130,11 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     start = process_start(pid)
     if not start:
         return False
-    same = [] if stale_s else [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
-                               if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
+    if stale_s:   # a shared process: only this session's own record lends the project
+        same = [(f, old)] if old and old["pid"] == pid and old["start"] == start else []
+    else:
+        same = [(other, rec) for other in f.parent.glob(f"*.{SESSION_RECORD}")
+                if (rec := _read_record(other)) and rec["pid"] == pid and rec["start"] == start]
     # its own record's first: a /clear's new id takes the project of the record it replaces
     same.sort(key=lambda x: x[0] != f)
     project = next((_project_named(rec) for _other, rec in same if _project_named(rec)), None) \
@@ -1144,6 +1147,21 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     for other, _rec in same:
         if other != f:
             other.unlink(missing_ok=True)
+    return True
+
+
+def touch_record(session: str, runtime: str) -> bool:
+    """A hook after a shared-process session's start (its runtime's SESSION_STALE_S): its record, when there is one of this
+    runtime with stale_s, only touched, so the hook looks up no process. Whether there was one."""
+    import hubconf
+    f = hubconf.session_file(session, SESSION_RECORD)
+    rec = _read_record(f) if f else None
+    if not rec or rec["runtime"] != runtime or not rec.get("stale_s"):
+        return False
+    try:
+        os.utime(f)
+    except OSError:
+        return False
     return True
 
 

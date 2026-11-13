@@ -1387,9 +1387,9 @@ def open_questions(c, project=None) -> list[dict]:
             and still_open(q["id"])]
 
 
-def questions_note(c, project) -> str | None:
+def questions_note(c, project, texts: bool = True) -> str | None:
     """At session start: this project's questions to the owner that are still open. One settled here must be closed
-    with --question, so the assistant knows."""
+    with --question, so the assistant knows. texts=False (a notice, mail_text show="notice"): their ids and dates only."""
     qs = open_questions(c, project)
     if not qs:
         return None
@@ -1398,7 +1398,8 @@ def questions_note(c, project) -> str | None:
                '`brunna send --to {alias} --type done --question <id> --text "how it was resolved"` (`--type drop` '
                "when no longer needed). Leave the ones still to ask.",
                owner=OWNER, n=len(qs), assistant=ASSISTANT, alias=OWNER_ALIAS)]
-    lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')} {q['text'][:120]}{assumed(q)}" for q in qs[-5:]]
+    lines += [f"- [{q['id']}] {q['ts'][5:16].replace('T', ' ')}" + (f" {q['text'][:120]}{assumed(q)}" if texts else "")
+              for q in qs[-5:]]
     return "\n".join(lines)
 
 
@@ -1556,7 +1557,7 @@ def mail_text(event: str, session, cwd, runtime: str | None = None, show: str = 
         tell(c, new, session, "session-start", live)
         c.execute("COMMIT")
         hook_view(c, project, live)
-        note = questions_note(c, project)
+        note = questions_note(c, project, texts=show != "notice")
         if rows and show == "notice":
             return "\n".join([letters_notice(project, new, old)] + ([note] if note else []))
         if rows:

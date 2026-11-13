@@ -169,11 +169,14 @@ class UserHooks(Home):
         self.assertEqual(list(self.home.iterdir()), [])
         self.assertIsNotNone(runtime_codex.user_missing())
 
-    def test_missing_trust_is_said(self):
+    def test_missing_trust_is_said_as_such_and_update_brings_it_back(self):
         runtime_codex.user_install(True)
         self.assertIsNone(runtime_codex.user_missing())
         (self.home / "config.toml").write_text("")
         self.assertIsNotNone(runtime_codex.user_missing())
+        self.assertEqual(runtime_codex.user_refresh(False), [], "the hooks aren't from an earlier version")
+        self.assertTrue(runtime_codex.user_refresh(True))
+        self.assertIsNone(runtime_codex.user_missing())
 
     def test_links_and_unknown_shapes_are_refused_unwritten(self):
         real = self.tmp / "real.json"
@@ -374,6 +377,18 @@ class ThroughTheHook(ti.Bus):
         self.assertEqual(self.delivered(), [f"m1:delivered:codex:{SID}"])
         self.assertEqual(self.presence(), [(f"codex:{SID}", "proj")])
 
+    def test_the_notice_names_open_questions_without_their_text(self):
+        q = {"id": "q1", "ts": "2026-11-14T05:00:00+08:00", "text": "QUESTION TEXT", "assumed": None}
+        self.hb.open_questions = lambda c, project=None: [q]
+        self.hb.assumed = lambda q: ""
+        self.send("m1")
+        with ti.hub_json(installed=["claude", "codex"]):
+            ctx = json.loads(self.he.handle("session_start", self.hook("session_start.json"), name="codex"))
+        text = ctx["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("[q1]", text)
+        self.assertNotIn("QUESTION TEXT", text)
+        self.assertIn("QUESTION TEXT", self.hb.questions_note(self.c, "proj"), "other runtimes get it as before")
+
     def test_its_other_hooks_record_presence_and_tell_nothing(self):
         self.send("m1")
         with ti.hub_json(installed=["claude", "codex"]):
@@ -487,6 +502,25 @@ class Handlers(unittest.TestCase):
             recs = [json.loads(p.read_text()) for p in (self.tmp / "secrets" / "sessions").glob("*.live")]
         self.assertEqual(len(recs), 2)
         self.assertEqual({r["stale_s"] for r in recs}, {runtime_codex.SESSION_STALE_S})
+
+    def test_after_its_start_a_hook_only_touches_the_record_and_a_new_start_keeps_its_project(self):
+        looked = []
+
+        def pid(env):
+            looked.append(1)
+            return os.getpid()
+        with mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets"), \
+                mock.patch.object(runtime_codex, "session_pid", pid), \
+                mock.patch.object(runtime_codex, "person_session", lambda p, env: True):
+            self.he._project_of_folder = lambda cwd: {"/w": "proj", "/elsewhere": "other"}.get(cwd)
+            self.he.session_record(runtime_ports.HubEvent("session_start", f"codex:{SID}", "/w"), None)
+            f = hubconf.session_file(f"codex:{SID}", runtime_ports.SESSION_RECORD)
+            os.utime(f, (1, 1))
+            self.he.session_record(runtime_ports.HubEvent("prompt", f"codex:{SID}", "/w"), None)
+            self.assertEqual(len(looked), 1, "no process looked up after the start")
+            self.assertGreater(f.stat().st_mtime, 1)
+            self.he.session_record(runtime_ports.HubEvent("session_start", f"codex:{SID}", "/elsewhere"), None)
+            self.assertEqual(json.loads(f.read_text())["project"], "proj")
 
 
 class Config(unittest.TestCase):
