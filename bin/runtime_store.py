@@ -229,6 +229,47 @@ def hold(runtime: str, inheritable: bool = False):
         os.close(fd)
 
 
+_HELD: dict[str, tuple[str, int]] = {}   # runtime → (the held version folder's real path, its read-only descriptor)
+
+
+def held(runtime: str) -> tuple[Entry | None, str | None]:
+    """The current entry for this process's runs: (entry, None) once it is held and verified; (entry, why) when it
+    changed after promotion; (None, None) when there is no current. One shared flock per runtime per process, on the
+    version in use: kept while that version stays current (many runs of a long-lived process share it), released when
+    current moves on. Locked before verify, so the folder verified is one prune can no longer remove."""
+    e = current(runtime)
+    if e is None:
+        release(runtime)
+        return None, None
+    key = os.path.realpath(e.folder)
+    have = _HELD.get(runtime)
+    if not have or have[0] != key:
+        fd = os.open(e.folder / ".lock", os.O_RDONLY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH)
+        except OSError:
+            os.close(fd)
+            raise
+        release(runtime)
+        _HELD[runtime] = (key, fd)
+    return e, verify(e)
+
+
+def release(runtime: str) -> None:
+    """Let go of this process's hold on the runtime's version (held)."""
+    have = _HELD.pop(runtime, None)
+    if have:
+        os.close(have[1])
+
+
+def inheritable(runtime: str) -> None:
+    """The process is about to exec the tool: the hold (held) passes to it, so the version folder stays while that
+    process runs (a lease's session, a resume in a terminal)."""
+    have = _HELD.get(runtime)
+    if have:
+        os.set_inheritable(have[1], True)
+
+
 def verify(e: Entry) -> str | None:
     """None when the executable is still what promotion recorded; else why not."""
     p = e.promoted
