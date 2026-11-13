@@ -293,7 +293,13 @@ entry present except `worktrees` plus a deny on new top-level entries.
 **V-M9 settled it (11-09)** (measurements below):
 - **Services (Seatbelt): one rule.** `(deny file-write* (require-all (subpath "<ws>/.claude") (require-not (subpath
   "<ws>/.claude/worktrees"))))`. It denies new entries, writes, removals and renames under `.claude/`, and renaming `.claude`
-  itself, while writes inside `worktrees/` go through. It is added beside the enumerated control paths in the service profile (step 4: nothing removed).
+  itself, while writes inside `worktrees/` go through. It is added beside the enumerated control paths in the service
+  profile (step 4: nothing removed), with the same rule one level down for each worktree's own `.claude/` (but its
+  `worktrees/`).
+  - What it costs: a tracked file under `.claude/` (but the worktrees) is changed only outside the project's sandbox.
+    merge-branch refuses, before anything moves, a merge of a sandboxed project whose branch, or whose base since the
+    branch left it, changes one, and names it (a fast-forward used to stop halfway and leave the main checkout dirty);
+    project-git-job's copy-back fails on one. Doctor says so.
   - Landlock (Linux) enforces none of it: it can only allow, and the project's own folder is writable, so neither the
     enumerated paths (`protect`) nor this rule hold there (landlock.py, "Can't enforce"); doctor says so.
 - **Sessions (Claude's rules): not expressible as one rule.**
@@ -522,7 +528,7 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    - **The services rule's cost:** project-git-job's write ops (copy-back) now refuse a tracked `.claude/<other>` file.
      project-git-job says so on a PermissionError, and doctor (`doctor_control`) says it too. There is no fast-forward op
      in project-git-job; merge-branch's fast-forward runs in the session, where the present-entry denies stop it the same
-     way.
+     way, so merge-branch refuses such a merge before anything moves (`policy.protected_changes`, review below).
    - **Sessions:** `present_controls` and `control_notes` are in runtime_claude; the doctor rows come from the adapter.
    - **Present entries:** an entry's rules name its folder (as the workspace names it, and resolved) and its own name,
      never what a linked entry points to. The platform's rendered `settings.local.json` is not counted as a present entry: it is a control name already,
@@ -541,8 +547,34 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
        throwaway copy, and a run that didn't try is asked once more.
    - **The real run on 2.1.323 (11-14, from the worktree, `--report`):** confine-sandbox and control pass. The residual
      is a new `.claude/<name>`, which is written through Edit (bypass) and through Bash (`sh -c`), as V-M9 found.
-   - **Not covered yet:** confine-sandbox and control try each canary through the file tools only, so they hold the
-     permission rules, not Claude's OS sandbox under Bash. A guarded `sh -c` attempt per canary is the next addition.
+   - **Blind review of the build (11-14): six should-fix items, all taken.**
+     - A worktree's own name goes into the rules too, so it is held to `RULE_NAME` as an entry's is; a worktree whose
+       name fails has its entries unrendered and named by doctor.
+     - A guarded canary written through the file tools counts as refused only from a file tool's permission denial
+       naming it: a Write over an existing file it hadn't read fails without any rule, which read as a refusal. Through
+       Bash: its call naming the canary, the file then unwritten. Anything else is asked again, then an error. The
+       prompt asks for a Read first.
+     - control now tests what this step adds: an entry (`agent-memory/`) is put in the tool folder before the settings
+       are rendered, and a canary inside it is written through Write and through Bash (`sh -c`, which Claude's own
+       sandbox must refuse by `denyWrite`), each with its positive control. And the user's tool folder:
+       `settings.json` and `remote/ccd-cli/<x>` in the world's config dir.
+     - merge-branch refuses a merge that would change a tracked tool-folder file, before anything moves (section 7).
+     - Seatbelt holds each worktree's own `.claude/` as well (taken: nothing sandboxed writes there; Desktop and the
+       platform make and fill worktrees outside the sandbox, and propose's worktree is elsewhere).
+     - Smaller: the tool's own `scheduled_tasks.lock`, `scheduled_tasks.json` and `routines/` are left alone like
+       `.cc-writes`; `.claude/output-styles` joins `CONTROL`; doctor says a linked entry's target stays writable from
+       Bash, and a tool folder that is a link or can't be listed; project-git-job's refusal no longer blames the control
+       rule.
+     - Still open: confine-sandbox tries its canaries through the file tools only (a guarded `sh -c` per canary there is
+       the next addition).
+     - **The real rerun on 2.1.323 after these (11-14, `--report`):**
+       - control passes, its new canaries included (the seeded entry through Write and Bash, the user's tool folder).
+         The residual is as before.
+       - confine-sandbox: an error, "no refused attempt at the platform's secrets" (twice). The likely cause is the
+         new Read-first prompt: the Read is refused there by the Read deny, and the model then stops without trying the
+         Write. Not confirmed, since no run output is kept.
+       - The prompt now says to Write whatever the Read said. That fix has not been run for real yet; the next full run
+         checks it.
 
    ## Step 3: the user's sessions, checked when first seen, said by version (sections 5, 6), built second
 
