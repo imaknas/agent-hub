@@ -207,7 +207,8 @@ class RunEnvironment(unittest.TestCase):
         self.assertTrue(runtime_claude.platform_config_dir().is_dir())
         stub = runtime_claude._store() / "stub"
         self.assertEqual(self.head(env), [str(stub), str(self.exe.parent)])
-        self.assertEqual((env["DISABLE_AUTOUPDATER"], env["npm_config_prefix"]), ("1", str(self.folder)))
+        self.assertEqual((env["DISABLE_AUTOUPDATER"], env["npm_config_prefix"]),
+                         ("1", str(self.folder.parent / runtime_claude.NPM_SINK)), "never the copy's own folder")
         self.assertEqual(env[TOKEN], "t")
         self.assertEqual((stub / "security").read_text(), runtime_claude.SECURITY_STUB)
         self.assertEqual(subprocess.run([str(stub / "security"), "find-generic-password"]).returncode, 44)

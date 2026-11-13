@@ -72,8 +72,8 @@ and say why") applied over time.
 Getting, installing and pinning a tool is tool syntax, so it lives in the adapter as a new port, `distribution`:
 `latest()` (the newest version the vendor publishes), `install(version, folder)` (the exact version from the vendor's source, its
 integrity checked as the vendor publishes it: npm's `dist.integrity`), `version(binary)`, `pin_env()` / `pin_config()` (what turns
-the tool's own updater off for a run of this copy: Claude `DISABLE_AUTOUPDATER=1` plus `npm_config_prefix` at the copy's own folder,
-since its updater writes npm's global prefix, not the running copy; Codex `check_for_update_on_startup`, `features.daemon_auto_start`
+the tool's own updater off for a run of this copy: Claude `DISABLE_AUTOUPDATER=1` plus `npm_config_prefix` at a sink folder of
+the store's own beside the copies (`<store>/claude/.npm-sink`), since its updater writes npm's global prefix, not the running copy; Codex `check_for_update_on_startup`, `features.daemon_auto_start`
 and `features.in_app_updates` off in the platform home; V-M5), and `MIN_VERSION`. The neutral job and runner only call these. A runtime without the port (ACP, a
 command template) keeps today's behaviour and doctor says it is unversioned.
 
@@ -430,6 +430,8 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      check, so a first install's checks run with an empty store; a dry run (`llm.py --dry-run`, the folder-git probe's
      bare run) describes with no copy and starts nothing.
    - Each run resolves the copy once (`_run_copy`) for its binary, environment and recorded version.
+   - `pin_env`'s `npm_config_prefix` is a sink beside the copies (`<store>/claude/.npm-sink`), never the copy's folder
+     (V-M5 below); `lease-resume` runs its Python isolated and enters the lease's folder only when it execs the tool.
    - Mailbox dispatch loads its gate with `platform_runs=False` and, with no copy, routes and holds letters but starts
      no fork or triage (each letter's one chance isn't spent on a refusal); the rest of the split gate is step 3.
    - `check-claude-login` makes no request with no copy (no login failure, no recovery); the files and dates are still
@@ -578,9 +580,11 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
     - **The updater installs into npm's global prefix, not into the running copy's folder.** It honoured `npm_config_prefix`.
       Without that, a store copy run with nvm's npm on PATH would rewrite nvm's global packages.
     - So `pin_env()` for Claude is `DISABLE_AUTOUPDATER=1` (`DISABLE_UPDATES` and
-      `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` also turn it off, untested) **and** `npm_config_prefix` set to the store copy's
-      own folder, so even an updater that ignores the flag can only write into that copy. The digest check then catches the
-      change.
+      `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` also turn it off, untested) **and** `npm_config_prefix` set to a sink folder
+      of the store's own (`<store>/claude/.npm-sink`), so even an updater that ignores the flag writes nowhere that runs.
+      Not the copy's own folder, as first written: every tool and hook a run starts inherits the prefix, so an unsandboxed
+      run's `npm install -g` would write into the copy, of which `verify` checks only the executable (merge B's review,
+      11-14).
     - The flag matters for V-M6's interactive checks and leases, not for `-p`.
   - **Codex 0.167.0:** `codex exec` runs the app-server in process.
     - It wrote no `version.json`, made no update request, started no daemon, and left `packages/` absent.

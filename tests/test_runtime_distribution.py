@@ -83,8 +83,9 @@ class Distribution(unittest.TestCase):
             runtime_claude.install("latest", self.tmp / "x")
 
     def test_pin_env(self):
-        self.assertEqual(runtime_claude.pin_env("/store/2.1.400"),
-                         {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": "/store/2.1.400"})
+        self.assertEqual(runtime_claude.pin_env("/store/claude/2.1.400"),
+                         {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": "/store/claude/.npm-sink"},
+                         "a sink beside the copies, never the copy's own folder")
 
 
 class BinarySeam(unittest.TestCase):

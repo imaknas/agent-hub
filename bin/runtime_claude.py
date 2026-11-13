@@ -2398,10 +2398,15 @@ def version_of(exe, env: dict | None = None) -> str | None:
 # The conformance checks of a Claude Code binary are bin/conformance_claude.py's (runtime-versions.md section 2).
 
 
+NPM_SINK = ".npm-sink"
+
+
 def pin_env(folder) -> dict:
-    """What keeps a run of this copy from updating itself (V-M5): the updater off, and npm's global prefix at the copy's
-    own folder, so an updater that ignored the flag could write only into this copy, where the digest check sees it."""
-    return {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": str(folder)}
+    """What keeps a run of this copy from updating itself (V-M5): the updater off, and npm's global prefix at a sink of
+    the store's own beside the copies (<store>/claude/.npm-sink), so an updater that ignored the flag writes nowhere
+    that runs. Never the copy's folder: every tool and hook a run starts inherits the prefix, so an unsandboxed run's
+    `npm install -g` would write into the copy, of which verify checks only the executable."""
+    return {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": str(pathlib.Path(folder).parent / NPM_SINK)}
 
 
 def completion_command(req, exe: str | None = None) -> list:
