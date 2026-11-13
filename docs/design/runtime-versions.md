@@ -329,6 +329,23 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
 1. **Distribution port + conformance runner + Claude's checks** (the folder-git probe and the completion check ported in; the
    rest added), the results store, `brunna runtimes`, the coverage test. `hub-event` logs unusable payloads; readers count skips and
    read the version; `unlisted` added (section 5; `unknown` keeps its meaning). No change to which binary runs yet.
+   **Progress (11-13), in this order, one commit each:**
+   - Done: `hub-event` logs `unusable=<reason> runtime=<name>`, through an optional lifecycle function `unusable(event, raw)`
+     rather than a change to `parse_event`'s contract. The version joins the line in step 3, which reads it.
+   - Done: `Turn.version` and the session-record contract's optional `version`; `records(file, tally)` counts lines and
+     skips per version; `sessions.skipped(since)`. The "skips more than 5%" row goes in `brunna runtimes`, not doctor (it reads
+     a week of transcripts).
+   - Done: `unlisted`, routed to but never woken, and said once in the dispatch log while it lasts.
+   - Next: the runner, the results store, the coverage test and `brunna runtimes`, against the fake runtime. Each check
+     runs in a subprocess whose environment points state, config, data, secrets, bus, home and the tool's config dir at a
+     throwaway world, and the first check proves the live bus and session records are untouched. The binary to check is
+     chosen only by the runner, never from a run's environment. From a linked worktree the runner doesn't write the live
+     results.
+   - Then: the folder-git probe and the completion check move into the runner, and `update-claude.py` calls them (one copy).
+   - Then: the model-free and cheap checks. Last: the pty-driven ones (session_status, session_summary, wake). A check
+     that can't have a positive control yet is a named `not-checkable` entry.
+   - Before merging: a cold review of the code, `bin/linux-test` on the new modules, one real run against the current
+     binary recorded here.
 2. **The store + `update-runtimes`** for Claude: promotion, hold-back, the digest check, the updater pinned, no PATH fallback (with
    the ports split so protections stay), first install, rollback, `MIN_VERSION`; `update-claude` retired by `legacy_name`; callers of
    `hubconf.tool("claude")` move to `binary()`; DV3's platform config dir for the runs it covers, with `PROJECTS`, `transcript()`,
