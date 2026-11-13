@@ -145,6 +145,47 @@ class FromAWorktreeNothingLiveIsRebuilt(unittest.TestCase):
             scheduler.main()
         self.assertIn("linked worktree", str(e.exception.code))
 
+    def test_the_appliers_write_nothing_from_here(self):
+        """11-13: `render-project-settings.py --help` from a worktree wrote four sandboxed projects' settings with the
+        worktree's paths. From here they refuse to write, report-only runs still work, and an argument they don't know
+        (--help included) never runs them anywhere."""
+        import appliers
+        import contextlib
+        import io
+        from unittest import mock
+        for key, look in (("agent-settings", "--report"), ("services", "--dry-run")):
+            m = appliers.load(key)
+            ran = []
+
+            def refresh(*a, **k):
+                ran.append(1)
+                raise RuntimeError("ran")
+
+            def main(*argv):
+                err, out = io.StringIO(), io.StringIO()
+                with mock.patch.object(sys, "argv", ["x", *argv]), mock.patch.object(m.registry, "refresh", refresh), \
+                        mock.patch.object(m.hubconf, "service_manager", lambda: "launchd"), \
+                        contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                    try:
+                        return m.main(), err.getvalue(), out.getvalue()
+                    except RuntimeError:
+                        return "ran", err.getvalue(), out.getvalue()
+            with self.subTest(applier=key):
+                code, err, _ = main()
+                self.assertEqual((code, ran), (1, []))
+                self.assertIn("linked worktree", err)
+                self.assertEqual(main("--only", "x")[0], 1)
+                self.assertEqual(main(look)[0], "ran")              # report-only: allowed
+                ran.clear()
+                code, _, out = main("--help")
+                self.assertEqual((code, ran), (0, []))
+                self.assertIn(f"[{look}]", out)                    # the usage, in whichever language
+                for bad in (["--nope"], ["--only"], [look, "extra"]):
+                    self.assertEqual(main(*bad)[0], 2, bad)
+                with mock.patch.object(m.hubconf, "worktree_lookup", lambda: False):
+                    self.assertEqual(main("--nope")[0], 2)          # from the main checkout too
+                self.assertEqual(ran, [])
+
 
 class RunTestsRoot(Base):
     def test_root_is_the_tree_under_test(self):

@@ -299,7 +299,9 @@ class Golden(unittest.TestCase):
         out = []
 
         def main(label, *argv):
-            with mock.patch.object(sys, "argv", ["render-services.py", *argv]):
+            # the temp hub is the live one here, wherever the tests run from (a linked worktree refuses)
+            with mock.patch.object(sys, "argv", ["render-services.py", *argv]), \
+                    mock.patch.object(hubconf, "worktree_lookup", lambda: False):
                 out.append((label, call(m.main)))
         with mock.patch.object(m, "launchctl", launchctl), mock.patch.object(m.registry, "refresh", lambda: index), \
                 mock.patch.object(alert, "once", lambda *a: alerts.append(a)), mock.patch("time.sleep"):
@@ -367,7 +369,8 @@ class Golden(unittest.TestCase):
         out = []
 
         def main(label, *argv):
-            with mock.patch.object(sys, "argv", ["render-project-settings.py", *argv]):
+            with mock.patch.object(sys, "argv", ["render-project-settings.py", *argv]), \
+                    mock.patch.object(m.hubconf, "worktree_lookup", lambda: False):
                 out.append((label, call(m.main)))
 
         def plan(label):

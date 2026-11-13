@@ -468,10 +468,29 @@ def worktree(folder: str) -> int:
     return 0
 
 
+def usage() -> str:
+    return _("usage: render-project-settings.py [--report] [--only <project>]\n"
+             "       render-project-settings.py --worktree <folder>")
+
+
 def main() -> int:
-    if sys.argv[1:2] == ["--worktree"] and len(sys.argv) == 3:
-        return worktree(sys.argv[2])
-    report = "--report" in sys.argv
+    argv = sys.argv[1:]
+    if argv in (["-h"], ["--help"]):
+        print(usage())
+        return 0
+    wt = len(argv) == 2 and argv[0] == "--worktree"
+    if not wt and not hubconf.known_args(argv, {"--report"}, {"--only"}):
+        print(usage(), file=sys.stderr)
+        return 2
+    if hubconf.worktree_lookup() and "--report" not in argv:
+        # it would write every sandboxed project's settings with this copy's paths (11-13)
+        print(_("render-project-settings: {root} is a linked worktree of the hub; it writes projects' settings only "
+                "from the main checkout ({main}); --report works here", root=hubconf.ROOT, main=hubconf.MAIN),
+              file=sys.stderr)
+        return 1
+    if wt:
+        return worktree(argv[1])
+    report = "--report" in argv
     only = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
     index = registry.refresh()
     bad = 0

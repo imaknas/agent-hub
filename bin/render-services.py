@@ -378,7 +378,23 @@ def uninstall(apply: bool) -> list[str]:
     return labels
 
 
+def usage() -> str:
+    return _("usage: render-services.py [--dry-run] [--only <label>]")
+
+
 def main() -> int:
+    argv = sys.argv[1:]
+    if argv in (["-h"], ["--help"]):
+        print(usage())
+        return 0
+    if not hubconf.known_args(argv, {"--dry-run"}, {"--only"}):
+        print(usage(), file=sys.stderr)
+        return 2
+    if hubconf.worktree_lookup() and "--dry-run" not in argv:
+        # units written from here would run the services from this copy
+        print(_("render-services: {root} is a linked worktree of the hub; it changes services only from the main "
+                "checkout ({main}); --dry-run works here", root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
+        return 1
     if hubconf.service_manager() is None:
         print(_("services: {reason}", reason=hubconf.no_service_manager()))
         return 0

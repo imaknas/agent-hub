@@ -406,6 +406,21 @@ def worktree_lookup() -> bool:
     return MAIN != ROOT and not names.env("STATE")
 
 
+def known_args(argv: list[str], flags: set[str], valued: set[str] = frozenset()) -> bool:
+    """Whether argv holds only these flags and these options with their value: a script that writes live state checks
+    this first, so an argument it doesn't know (--help included) never runs it (11-13: `render-project-settings.py --help`
+    from a worktree wrote four projects' settings)."""
+    i = 0
+    while i < len(argv):
+        if argv[i] in flags:
+            i += 1
+        elif argv[i] in valued and i + 1 < len(argv):
+            i += 2
+        else:
+            return False
+    return True
+
+
 # What sandboxed code reads of the platform's run state (the platform CLI inside a project's session, service or job:
 # policy.py read), apart from .state, which every sandbox is denied whole (docs/design/capabilities.md 11-08, A1). Written
 # only by the platform; nothing private ever goes here. In the hub root beside .state (the main checkout's, as .state is);
