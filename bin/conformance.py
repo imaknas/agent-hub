@@ -126,6 +126,21 @@ def checks(runtime: str) -> list[Check]:
     return list(getattr(mod, "CHECKS", None) or []) if mod else []
 
 
+def code_digest(runtime: str) -> str:
+    """A digest of the platform's code a safety check's verdict rests on: the checks themselves, the neutral policy, the
+    runtime's adapter that renders it into the tool's settings, and the applier that writes them. A session version's
+    safety checks run again when it changes (bin/session_versions.py), so a verdict isn't kept past a fix to either side."""
+    here = pathlib.Path(__file__).resolve().parent
+    h = hashlib.sha256()
+    for name in (f"conformance_{runtime}.py", "policy.py", runtime_ports.RUNTIMES.get(runtime, runtime) + ".py",
+                 "render-project-settings.py"):
+        try:
+            h.update(name.encode() + b"\0" + (here / name).read_bytes() + b"\0")
+        except OSError:
+            h.update(name.encode() + b"\0-\0")
+    return h.hexdigest()
+
+
 def session_checks(runtime: str) -> list[str]:
     """The checks run on a version seen in the user's sessions (Check.side "session", docs/design/runtime-versions.md
     section 6)."""

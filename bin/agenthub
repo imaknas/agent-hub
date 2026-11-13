@@ -1662,8 +1662,8 @@ def doctor_store(add, name: str) -> None:
         add("info", _("the runtime {runtime}: {version} held back since {since} (brunna runtimes shows why)", runtime=name,
                       version=held["version"], since=held.get("since") or "?"))
     import session_versions   # the versions the user's sessions run (runtime-versions.md section 6)
-    for level, text in session_versions.doctor_rows(name):
-        add(level, text, _("brunna runtimes shows each version the sessions ran and its checks"))
+    for level, text, fix in session_versions.doctor_rows(name):
+        add(level, text, fix)
 
 
 def doctor_wake_misses(add) -> None:

@@ -647,7 +647,7 @@ class Job(Instance):
         self.run_job()
         self.assertIn((f"session-version-claude-{OLD}", ["control"]), self.alerts)
         self.assertEqual([r["state"] for r in session_versions.summary("claude")], ["failed"])
-        self.assertEqual([lvl for lvl, _t in session_versions.doctor_rows("claude")], ["warn"])
+        self.assertEqual([row[0] for row in session_versions.doctor_rows("claude")], ["warn"])
         self.live.clear()
         st = session_versions.load("claude")
         st["seen"][OLD]["last"] = "2000-01-01T00:00:00+00:00"
@@ -658,17 +658,16 @@ class Job(Instance):
 
     def test_a_pair_checked_against_another_copy_reruns_the_fork_alone_and_an_error_daily(self):
         self.live_session("S1", OLD)
-        self.result(current="2.1.399", control=("safety", "pass"), sessions_fork=("function", "pass"))
+        self.full_result(current="2.1.399")
         self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), [runtime_ports.FORK_CHECK])
         self.run_job()
         self.assertEqual([o for _v, o, _p in self.runs], [(runtime_ports.FORK_CHECK,)])
         doc = runtime_ports.session_result("claude", OLD)
-        self.assertEqual((doc["current"], sorted(doc["checks"])), (NEW, ["control", "sessions-fork"]))
-        self.result(current=NEW, control=("safety", "error"))
+        self.assertEqual((doc["current"], sorted(doc["checks"])), (NEW, sorted(conformance.session_checks("claude"))))
+        doc["checks"]["control"]["state"] = "error"
+        self.full_result(checks=doc["checks"], retried="2000-01-01")
         self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), ["control"])
-        doc = json.loads(runtime_ports.session_result_file("claude", OLD).read_text())
-        doc["retried"] = session_versions._today()
-        runtime_ports.session_result_file("claude", OLD).write_text(json.dumps(doc))
+        self.full_result(checks=doc["checks"])
         self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW), "once a day")
 
     def test_unusable_payloads_three_times_alert_by_event_and_reason(self):
@@ -696,6 +695,72 @@ class Job(Instance):
         self.run_job()
         self.assertIn(("session-unusable-claude-prompt-not_json", []), self.alerts, "older than 7 days: resolved")
 
+    def full_result(self, **override):
+        """Every session-side check recorded as passed against today's code and current, retried today."""
+        every = conformance.session_checks("claude")
+        kinds = {c.name: c.kind for c in conformance.checks("claude")}
+        doc = {"runtime": "claude", "version": OLD, "current": NEW, "code": conformance.code_digest("claude"),
+               "retried": session_versions._today(), "at": "x",
+               "checks": {n: {"port": "p", "kind": kinds[n], "state": "pass", "reason": ""} for n in every}}
+        doc.update(override)
+        f = runtime_ports.session_result_file("claude", OLD)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(doc))
+        return doc
+
+    def test_a_check_added_since_runs_and_one_checkable_now_runs_once_a_day(self):
+        doc = self.full_result()
+        self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW))
+        del doc["checks"]["sessions-fork"]
+        self.full_result(checks=doc["checks"])
+        self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), ["sessions-fork"])
+        doc = self.full_result()
+        doc["checks"]["wake"]["state"] = "not-checkable"
+        self.full_result(checks=doc["checks"], retried="2000-01-01")
+        self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW), "still no way to run it")
+        built = [c._replace(run=lambda w: None) if c.name == "wake" else c for c in conformance.checks("claude")]
+        with mock.patch.object(conformance, "checks", lambda runtime: built):
+            self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), ["wake"])
+
+    def test_a_change_to_what_the_safety_checks_rest_on_runs_them_again(self):
+        self.full_result(code="older")
+        safety = sorted(c.name for c in conformance.checks("claude")
+                        if c.side == "session" and c.kind == "safety")
+        self.assertEqual(sorted(session_versions.what_to_run("claude", OLD, NEW)), safety)
+        self.live_session("S1", OLD)
+        runtime_store.install("claude", OLD, self.dist, kind=runtime_store.SESSION)
+        self.run_job()
+        self.assertEqual(runtime_ports.session_result("claude", OLD)["code"], conformance.code_digest("claude"))
+
+    def test_a_recorded_fail_runs_again_only_when_asked(self):
+        doc = self.full_result()
+        doc["checks"]["control"]["state"] = "fail"
+        self.full_result(checks=doc["checks"])
+        self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW))
+        import runtimes
+        with mock.patch.object(hubconf, "worktree_lookup", lambda: None):
+            self.assertEqual(runtimes.main(["recheck", "claude", OLD]), 0)
+            self.assertEqual(runtimes.main(["recheck", "claude", "2.1.299"]), 1)
+        self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), conformance.session_checks("claude"))
+        self.assertEqual(runtime_ports.failed_checks(
+            runtime_ports.session_result("claude", OLD), "safety"), ["control"], "it gates until it has run again")
+        self.live_session("S1", OLD)
+        runtime_store.install("claude", OLD, self.dist, kind=runtime_store.SESSION)
+        self.run_job()
+        doc = runtime_ports.session_result("claude", OLD)
+        self.assertNotIn("recheck", doc)
+        self.assertEqual(runtime_ports.failed_checks(doc), [])
+        with mock.patch.object(hubconf, "worktree_lookup", lambda: True):
+            self.assertEqual(runtimes.main(["recheck", "claude", OLD]), 1)
+
+    def test_a_copy_that_says_another_version_is_not_recorded(self):
+        self.live_session("S1", OLD)
+        real = self.fake_run
+        with mock.patch.object(conformance, "run", lambda *a, **k: {**real(*a, **k), "version": "2.1.299"}):
+            lines = self.run_job()
+        self.assertIsNone(runtime_ports.session_result("claude", OLD))
+        self.assertTrue(any("2.1.299" in line for line in lines))
+
     def test_from_a_linked_worktree_it_refuses(self):
         with mock.patch.object(hubconf, "worktree_lookup", lambda: True):
             self.assertEqual(session_versions.main([]), 1)
@@ -713,7 +778,7 @@ class Job(Instance):
                          {OLD: "pending", runtime_ports.UNREADABLE: "unreadable", "2.1.301": "failed"})
         self.assertEqual(rows[OLD]["builds"], ["ab12"])
         self.assertEqual(rows["2.1.301"]["checks"], ["sessions-fork"])
-        self.assertEqual({lvl for lvl, _t in session_versions.doctor_rows("claude")}, {"info"}, "no safety failure")
+        self.assertEqual({row[0] for row in session_versions.doctor_rows("claude")}, {"info"}, "no safety failure")
 
 
 class StorePrune(unittest.TestCase):
@@ -727,6 +792,12 @@ class StorePrune(unittest.TestCase):
         runtime_store.install("claude", version, store_fixture.Dist("#!/bin/sh\n"), kind=runtime_store.SESSION)
         when = (datetime.datetime.now().astimezone() - datetime.timedelta(days=days_ago)).isoformat(timespec="seconds")
         self.assertTrue(runtime_store.seen("claude", version, when))
+
+    def test_an_install_is_seen_in_the_same_turn(self):
+        now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        runtime_store.install("claude", OLD, store_fixture.Dist("#!/bin/sh\n"), kind=runtime_store.SESSION, seen=now)
+        self.assertEqual(runtime_store.installed("claude", OLD)["seen"], now)
+        self.assertEqual(runtime_store.prune("claude"), [])
 
     def test_seen_lately_kept_five_at_most_held_never_removed(self):
         for i in range(7):

@@ -124,11 +124,12 @@ def installed(runtime: str, version: str) -> dict | None:
     return got if isinstance(got, dict) else None
 
 
-def install(runtime: str, version: str, dist, kind: str | None = None) -> pathlib.Path:
+def install(runtime: str, version: str, dist, kind: str | None = None, seen: str | None = None) -> pathlib.Path:
     """Install a version with dist.install (the runtime's distribution port) into a staging folder, then rename it in.
     The executable it returns, under the version folder. A version already in place is kept (an unpromoted folder with
     no executable, left by a crash, is replaced). kind: SESSION for a copy of a version seen in the user's sessions (its
-    own retention, prune). Raises RuntimeError."""
+    own retention, prune), seen: when a session of it was last seen, written in the same turn of the writer's lock (a
+    prune between an install and a later seen() would take the fresh copy). Raises RuntimeError."""
     if not VERSION.match(version or ""):
         raise RuntimeError(_("not a version: {version!r}", version=version))
     with writer(runtime) as d:
@@ -139,6 +140,8 @@ def install(runtime: str, version: str, dist, kind: str | None = None) -> pathli
             except (OSError, ValueError):
                 done = None
             if done and isinstance(done.get("exe"), str) and (final / done["exe"]).is_file():
+                if seen and done.get("kind") == SESSION and str(done.get("seen") or "") < seen:
+                    _fsync_write(final / "installed.json", json.dumps({**done, "seen": seen}) + "\n")
                 return final / done["exe"]
             shutil.rmtree(final)   # a folder no install finished
         staging = d / f".staging-{secrets.token_hex(4)}"
@@ -147,7 +150,8 @@ def install(runtime: str, version: str, dist, kind: str | None = None) -> pathli
             rel = exe.relative_to(staging)
             (staging / ".lock").touch(mode=0o600)
             (staging / "installed.json").write_text(json.dumps({"version": version, "exe": str(rel),
-                                                                **({"kind": kind} if kind else {})}) + "\n")
+                                                                **({"kind": kind} if kind else {}),
+                                                                **({"seen": seen} if kind and seen else {})}) + "\n")
             staging.rename(final)
             return final / rel
         finally:

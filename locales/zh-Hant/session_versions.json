@@ -13,7 +13,6 @@
  "{runtime} {version}: waits for tomorrow's installs ({n} a day)": "{runtime} {version}:等明天的安裝額度(一天 {n} 次)",
  "the vendor doesn't publish it": "原廠沒有發布這個版本",
  "{runtime} {version}: not installable ({why}); tried again in {days} days": "{runtime} {version}:裝不起來({why});{days} 天後再試",
- "{runtime} {version}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to its sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions": "你的 session 在跑的 {runtime} {version} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這個版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session",
  "{runtime}: removed {versions}": "{runtime}:已移除 {versions}",
  ": its sessions in sandboxed projects get no letters or wakes from the platform": ":沙箱專案裡這個版本的 session 不會收到平台送的信,也不會被喚醒",
  "session_versions: {root} is a linked worktree of the hub; the store and the results are changed only from the main checkout ({main})": "session_versions:{root} 是 hub 的連結 worktree;store 和檢查結果只從主 checkout({main})改",
@@ -22,5 +21,10 @@
  "{runtime} {version}: the checks could not run: {error}": "{runtime} {version}:檢查跑不起來:{error}",
  "{runtime}: session_versions broke: {error}": "{runtime}:session_versions 壞了:{error}",
  "{runtime}: the published versions can't be told: {error}": "{runtime}:查不到已發布的版本:{error}",
- " ({builds} {builds:build|builds}: {list})": "({builds} 個建置:{list})"
+ " ({builds} {builds:build|builds}: {list})": "({builds} 個建置:{list})",
+ "brunna runtimes shows each version the sessions ran and its checks": "brunna runtimes 會列出 session 跑過的每個版本和它的檢查結果",
+ "{runtime} {version}: its copy went before it was checked; the next run checks it": "{runtime} {version}:檢查前它的副本就被移走了;下一次執行再檢查",
+ "the copy of {version} says it is {got}": "{version} 的副本說自己是 {got}",
+ "{runtime} {version}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to its sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions; if the check was wrong, `brunna runtimes recheck {runtime} {version}` runs it again": "你的 session 在跑的 {runtime} {version} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這個版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session;如果是檢查判錯,`brunna runtimes recheck {runtime} {version}` 會重跑",
+ "update the tool and open new sessions; if a check was wrong: brunna runtimes recheck {runtime} {version}": "更新工具並開新的 session;如果是檢查判錯:brunna runtimes recheck {runtime} {version}"
 }

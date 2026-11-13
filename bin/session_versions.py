@@ -230,14 +230,32 @@ def what_to_run(runtime: str, version: str, current: str | None) -> list[str] | 
     import conformance
     doc = runtime_ports.session_result(runtime, version)
     every = conformance.session_checks(runtime)
-    if not doc:
+    if not doc or doc.get("recheck"):   # none yet, or the owner asked (brunna runtimes recheck)
         return every
-    todo = []
+    by = {c.name: c for c in conformance.checks(runtime)}
+    have = doc.get("checks") or {}
+    todo = [n for n in every if not isinstance(have.get(n), dict)]   # a check added since
     if doc.get("current") != current and runtime_ports.FORK_CHECK in every:
         todo.append(runtime_ports.FORK_CHECK)
-    if doc.get("retried") != _today():
-        todo += [n for n, c in (doc.get("checks") or {}).items() if c.get("state") == "error" and n in every]
+    if doc.get("code") != conformance.code_digest(runtime):   # what the safety checks rest on changed: run them again
+        todo += [n for n in every if by[n].kind == "safety"]
+    if doc.get("retried") != _today():   # once a day: an error, and a check that can run now and couldn't then
+        todo += [n for n in every if isinstance(have.get(n), dict) and (
+            have[n].get("state") == "error" or (have[n].get("state") == "not-checkable" and by[n].run is not None))]
     return list(dict.fromkeys(todo)) or None
+
+
+def request_recheck(runtime: str, version: str) -> bool:
+    """Ask for every session-side check of this version to run again at the job's next run (a recorded fail is never run
+    again on its own). The result stays, and gates, until then. Whether there was a result to mark."""
+    f = runtime_ports.session_result_file(runtime, version)
+    doc = runtime_ports.session_result(runtime, version)
+    if f is None or doc is None:
+        return False
+    tmp = f.with_name(f".{f.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps({**doc, "recheck": True}, ensure_ascii=False, indent=1) + "\n")
+    tmp.replace(f)
+    return True
 
 
 def check_version(runtime: str, mod, version: str, st: dict, published: list[str] | None) -> str:
@@ -262,9 +280,8 @@ def check_version(runtime: str, mod, version: str, st: dict, published: list[str
         why = None if version in published else _("the vendor doesn't publish it")
         if why is None:
             _count_install(st)
-            try:
-                runtime_store.install(runtime, version, mod, kind=runtime_store.SESSION)
-                runtime_store.seen(runtime, version, _iso(_now()))
+            try:   # seen with it, in the same writer's turn: a prune between the two would take the fresh copy
+                runtime_store.install(runtime, version, mod, kind=runtime_store.SESSION, seen=_iso(_now()))
             except RuntimeError as e:
                 why = str(e)
         if why is not None:
@@ -272,13 +289,24 @@ def check_version(runtime: str, mod, version: str, st: dict, published: list[str
             return _("{runtime} {version}: not installable ({why}); tried again in {days} days", runtime=runtime,
                      version=version, why=why, days=RETRY_DAYS)
     (st.get("not_installable") or {}).pop(version, None)
-    exe = runtime_store.root(runtime) / version / runtime_store.installed(runtime, version)["exe"]
-    with runtime_store.hold_version(runtime, version):
-        doc = conformance.run(runtime, str(exe), todo, pair=str(cur.exe) if cur else None)
+    try:
+        exe = runtime_store.root(runtime) / version / runtime_store.installed(runtime, version)["exe"]
+        with runtime_store.hold_version(runtime, version):
+            doc = conformance.run(runtime, str(exe), todo, pair=str(cur.exe) if cur else None)
+    except (OSError, TypeError, KeyError):   # the copy went (a prune between the look and the hold): the next run
+        return _("{runtime} {version}: its copy went before it was checked; the next run checks it", runtime=runtime,
+                 version=version)
+    if doc.get("version") != version:
+        raise RuntimeError(_("the copy of {version} says it is {got}", version=version, got=doc.get("version") or "-"))
+    every = conformance.session_checks(runtime)
     old = runtime_ports.session_result(runtime, version)
-    if old and set(todo) != set(conformance.session_checks(runtime)):   # a part run: merged into what is there
+    if old and set(todo) != set(every):   # a part run: merged into what is there
         doc = {**old, "checks": {**(old.get("checks") or {}), **doc["checks"]}, "at": doc["at"],
                "binary": doc["binary"], "digest": doc["digest"]}
+    if {c.name for c in conformance.checks(runtime) if c.name in every and c.kind == "safety"} <= set(todo):
+        doc["code"] = conformance.code_digest(runtime)   # the safety checks ran on what the platform's code is now
+    if set(todo) == set(every):
+        doc.pop("recheck", None)
     doc["retried"] = _today()
     conformance.record_session(doc, cur.version if cur else None)
     alert_failed(runtime, version, doc)
@@ -294,7 +322,8 @@ def alert_failed(runtime: str, version: str, doc: dict | None) -> None:
     alert.once(f"session-version-{runtime}-{version}",
                [_("{runtime} {version}, which your sessions run, failed the platform's {check} check: {reason}. The "
                   "platform delivers no letters to its sessions in sandboxed projects and wakes them for none; in other "
-                  "projects nothing is held back. Update the tool and open new sessions",
+                  "projects nothing is held back. Update the tool and open new sessions; if the check was wrong, "
+                  "`brunna runtimes recheck {runtime} {version}` runs it again",
                   runtime=runtime, version=version, check=n, reason=checks[n].get("reason") or "-") for n in failed],
                _("{runtime} {version}: no failed check now", runtime=runtime, version=version), ids=failed)
 
@@ -399,19 +428,24 @@ def describe(runtime: str, row: dict) -> str:
     return _("{head}: pending (checked by brunna/session-versions)", head=head)
 
 
-def doctor_rows(runtime: str) -> list[tuple[str, str]]:
-    """(level, text) for doctor: a failed safety check is a warning (its sandboxed projects' sessions get no letters or
-    wakes; others hold nothing back), anything else not passed is said."""
+def doctor_rows(runtime: str) -> list[tuple[str, str, str]]:
+    """(level, text, how to fix) for doctor: a failed safety check is a warning (its sandboxed projects' sessions get no
+    letters or wakes; others hold nothing back), anything else not passed is said."""
     out = []
     for row in summary(runtime):
         if row["state"] == "passed":
             continue
         level = "warn" if row["state"] == "failed" and row.get("safety") else "info"
         text = describe(runtime, row)
-        if row["state"] == "failed" and row.get("safety"):
-            text += _(": its sessions in sandboxed projects get no letters or wakes from the platform")
-        out.append((level, text))
-    out += [("warn", line) for line in unusable_rows(runtime)]
+        fix = _("brunna runtimes shows each version the sessions ran and its checks")
+        if row["state"] == "failed":
+            if row.get("safety"):
+                text += _(": its sessions in sandboxed projects get no letters or wakes from the platform")
+            fix = _("update the tool and open new sessions; if a check was wrong: brunna runtimes recheck {runtime} "
+                    "{version}", runtime=runtime, version=row["version"])
+        out.append((level, text, fix))
+    out += [("warn", line, _("brunna runtimes shows each version the sessions ran and its checks"))
+            for line in unusable_rows(runtime)]
     return out
 
 

@@ -12,6 +12,10 @@
   runtimes.py install <runtime>   a checked copy in the store: the first install, or a newer version checked and
                                   promoted (bin/update-runtimes.py for this runtime)
   runtimes.py rollback <runtime>  the previous copy back, after its safety checks pass again
+  runtimes.py recheck <runtime> <version>
+                                  every session-side check of a version the user's sessions ran, run again by the next
+                                  brunna/session-versions (a recorded fail is otherwise never run again); its result,
+                                  and the gate it sets, stay until then
 
 A runtime without the distribution port is unversioned and says so. Reads only; `check` writes the results store,
 `install` and `rollback` the store (only from the main checkout).
@@ -35,7 +39,7 @@ DAYS = 7
 
 def usage() -> str:
     return _("usage: brunna runtimes [check <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report] | "
-             "install <runtime> | rollback <runtime>]")
+             "install <runtime> | rollback <runtime> | recheck <runtime> <version>]")
 
 
 def in_use() -> list[str]:
@@ -124,12 +128,30 @@ def rollback(runtime: str) -> int:
     return 0
 
 
+def recheck(runtime: str, version: str) -> int:
+    import hubconf
+    import session_versions
+    if hubconf.worktree_lookup():
+        print(_("runtimes: {root} is a linked worktree of the hub; the results are changed only from the main checkout "
+                "({main})", root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
+        return 1
+    if runtime not in runtime_ports.RUNTIMES or not session_versions.request_recheck(runtime, version):
+        print(_("{runtime} {version}: no session-side result to check again (a version seen in your sessions is checked "
+                "by brunna/session-versions on its own)", runtime=runtime, version=version), file=sys.stderr)
+        return 1
+    print(_("{runtime} {version}: its session-side checks run again at the next brunna/session-versions (within 15 "
+            "minutes); until then its result stays", runtime=runtime, version=version))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if argv in (["-h"], ["--help"]):
         print(usage())
         return 0
     if argv[:1] == ["check"]:
         return conformance.main(["run", *argv[1:]])
+    if argv[:1] == ["recheck"] and len(argv) == 3:
+        return recheck(argv[1], argv[2])
     if argv[:1] in (["install"], ["rollback"]) and len(argv) == 2:
         import hubconf
         import subprocess
