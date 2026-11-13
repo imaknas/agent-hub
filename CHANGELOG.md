@@ -3,6 +3,93 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.16.0 (2026-11-13)
+
+### New
+
+- **confine:** A confined run's own rules are checked when it starts (rule_check port)
+- **confine:** Declare which confined runs get the mail tools
+- **mailbox:** The platform's MCP server serves a confined run's mail
+- **confine:** Attach the platform's MCP server to a run that gets the mail tools
+- **confine:** Confined runs have no shell for mail; the handlers' prompts name the tools (**breaking:** a confined agent job's run no longer gets Bash unless one of its allow:
+rules names it, and it sends mail only through the platform's tools when its registry entry
+declares mail: true.)
+- **confine:** A run whose prompt anyone can write is held to the sandboxed list
+- **confine:** A job's model tier behind a billing gate; declared secrets kept from confined runs
+- **services:** Services and scheduled commands find brunna by name
+- **registry:** A project declares its own confined agent calls (agents:, agents_per_day)
+- **llm:** Judgment point project-agent and llm.py agent, a project's declared agent call
+- **cap-runner:** Agent calls, in their own pool, with daily minutes; hub-run --agent
+- **cli:** Brunna agent for project sessions, services and jobs
+- **alert:** Alert.once can tell problems apart by stable ids, not their wording
+- **hooks:** Hub-event logs an input that gave no event as unusable, with its reason and runtime
+- **sessions:** Each entry says which tool version wrote it, and the readers count per version what they skip
+- **mailbox:** A session whose listing failed is unlisted, routed to but never woken
+- **runtime:** A distribution port, and the binary a run starts chosen in process only
+- **runtime:** A conformance runner, its results store, and brunna runtimes
+- **runtime:** Claude Code's conformance checks, and the step 1 review's fixes
+- **runtime:** The store of checked copies and update-runtimes, which keeps it; update-claude retired
+- **runtime:** One hold per process on the version in use, and a stand-in store for tests
+- **runtime:** Platform runs start the store's checked copy, never one on PATH
+- **lease:** Lease-resume resumes with the platform's checked copy
+- **sandbox:** The tool's folder is one rule for services, its present entries denied to sessions
+- **conformance:** The control and confine-sandbox checks
+- **conformance:** Session-side checks, a sessions-fork check, and session copies in the store
+- **sessions:** Each session's version recorded, checked when first seen, and the per-version gate
+- **conformance:** --pair names the copy a session-side check pairs the binary with
+- **runtime-claude:** The native installer's copy is read as a version too
+- **runtime-codex:** The Codex adapter's lifecycle and sessions ports
+- **hub-event:** Serve a Codex session through its hooks
+- **agenthub:** User-settings --install --runtime, and doctor's rows for Codex
+
+### Fixed
+
+- **confine:** A project's registry text can't widen an unattended agent run
+- **confine:** Check every step of a linked rule, and keep legacy_name the owner's
+- **confine:** A confined run starts only in the project's own folders, and no two jobs share a state folder
+- **runtime:** An agent run's prompt goes on stdin, never as an argument
+- **registry:** Every agent job names its project, and a sandboxed project's runs only confined
+- **registry:** A sandboxed project's agent job without allow: is listed, not a config error
+- **confine:** Each confined run gets its own folder, and no confined run writes a .git
+- **confine:** An untrusted run in a worktree keeps its notes writable
+- **confine:** Deny the long-s spellings of the names an untrusted run may not write
+- **merge-branch:** Refuse a project's memory branch; a dry run moves no ref
+- **merge-branch:** A dry run's rebase moves no other branch under update-refs
+- **reflect:** A day and the week run from 06:00
+- **services:** Cap-runner's wait read from its own state; path-started services get the folder at start
+- **cap-runner:** Agent minutes held whatever id a project reuses; a job ends cleanly however its folder fares
+- **services:** The settings and services appliers write nothing from a linked worktree, and run on no argument they don't know
+- **claude-login:** Check the subscription login only while a job declares connectors: true, one alert per problem
+- **claude-login:** Trim only the cut ends of an error, and an unreadable registry index is not "no connector jobs"
+- **mailbox:** Dispatch says while sessions are unlisted, and the hook parser keeps the message function
+- **runtime:** The lifecycle check's hooks start in the world, and a version with no folder git is not-checkable
+- **runtime:** The store's and update-runtimes' zh-Hant catalogs
+- **runtime:** Merge A's review: a rollback holds, what is promoted is what was checked, nothing stalls in silence
+- **runtime:** One copy per run, a first install's checks, and what a missing copy isn't
+- **lease:** Lease-resume imports nothing from the lease's folder
+- **mailbox:** Mailbox-route is off with no checked copy of its runtime
+- **runtime:** A completion's tools are refused unless read, and cleared only by a clean run
+- **runtime:** The agents listing runs with the refusing security stub
+- **check-claude-login:** With no request made, what the last requests found stands
+- **runtime:** The updater's npm prefix is a sink beside the copies, not the copy
+- **conformance:** A control leaves out folder-entry and Read denies too; the rendered settings file isn't a present entry
+- **conformance:** A canary run that didn't try is asked once more
+- **sandbox:** A present entry's name goes into a rule only from an allowlist, under both spellings of its folder
+- **sandbox:** Worktree names held to the rule allowlist, worktrees' own tool folders locked, merge-branch refuses before moving
+- **conformance:** A refusal only from the run's own word; canaries for a present entry and the user's tool folder
+- **conformance:** A canary's Write is asked for whatever its Read said
+- **sessions:** Unusable hook lines counted with hub-event's own timestamps, and a version that can't be read never gates
+- **hubbus:** A gated session's ack or told from its outbox is read past by the id it names, presence or not
+- **hub-event:** The gate reads the version on the session's process record, not files that can change under it
+- **sessions:** Session-side checks run again when added, checkable at last, or when the code they rest on changes; brunna runtimes recheck
+- **leases:** A lease's own resume checks its pair, its recorded version moves only when that pair holds, and every lease by another version is checked
+- **mcp:** No letters-open notice for a gated session
+- **runtime-codex:** A hook after the start only touches its record, and notices carry no question text
+- **runtime-codex:** A hooks writer that refuses what it can't edit safely, and fewer false alarms
+- **hubbus:** A session told only at its start holds a letter ten minutes
+- **agenthub:** Doctor goes on past one runtime's failure, and says more about Codex
+- **prompts:** Only rule names are read from RULES
+
 ## v0.15.0 (2026-11-09)
 
 ### New
