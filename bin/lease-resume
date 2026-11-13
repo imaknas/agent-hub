@@ -2,7 +2,7 @@
 # Channel lease L3: resume a leased session in the terminal (the command the assistant gives when "resume in
 # terminal" is pressed).
 #   lease-resume <session id>
-# The runner has already stopped its own process; this cds into that project and rejoins the same conversation with
+# The runner has already stopped its own process; this rejoins the same conversation, in that project's folder, with
 # the platform's checked copy of the tool, never one found on PATH by name (the runtime's resume_exec: its updater off,
 # the store's hold on that version passed on to it; the headless token, with the refusing `security`, only when the
 # copy isn't logged in itself: under SSH it can't read the keychain, and the cost is that claude.ai connectors don't
@@ -12,13 +12,15 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/hubpaths.sh"
 id="${1:?$(hub_msg "usage: lease-resume <session id>")}"
 HUB="$(cd "$(dirname "$0")/.." && pwd)"
-cwd=$("$HUB/bin/py" -c "
+# Python isolated (-I; -B writes nothing beside the platform's files): with -c it would put the folder it starts in
+# first on its import path, and the lease's folder is the project's to write (a json.py there would run as you, outside
+# any sandbox). Everything is chosen before the folder is entered; only the exec'd tool starts there.
+cwd=$("$HUB/bin/py" -I -B -c "
 import json, sys
-d = json.load(open('$HUB/.state/lease-runner/leases.json'))
+d = json.load(open(sys.argv[3]))
 l = d.get(sys.argv[1]) or sys.exit(sys.argv[2])
-print(l['cwd'])" "$id" "$(hub_msg "no such lease: {id}" id="$id")")
-cd "$cwd"
-exec "$HUB/bin/py" -c '
+print(l['cwd'])" "$id" "$(hub_msg "no such lease: {id}" id="$id")" "$HUB/.state/lease-runner/leases.json")
+exec "$HUB/bin/py" -I -B -c '
 import os, sys
 sys.path.insert(0, sys.argv[1])
 import runtime_ports
@@ -30,5 +32,6 @@ try:
     argv, env = resume(sys.argv[2])
 except (runtime_ports.Unsupported, ValueError) as e:
     sys.exit(str(e))
+os.chdir(sys.argv[4])
 os.execve(argv[0], argv, env)
-' "$HUB/bin" "$id" "$(hub_msg "the platform's coding agent can't resume a session in a terminal")"
+' "$HUB/bin" "$id" "$(hub_msg "the platform's coding agent can't resume a session in a terminal")" "$cwd"

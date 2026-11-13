@@ -332,6 +332,35 @@ class TerminalResume(unittest.TestCase):
         self.assertEqual(env["PATH"].split(":")[:2], [str(runtime_claude._store() / "stub"), str(exe.parent)])
         self.assertNotIn("CLAUDE_CONFIG_DIR", env)
 
+    def test_the_script_imports_nothing_from_the_leases_folder(self):
+        """bin/lease-resume chooses the binary and its environment before it enters the lease's folder, which the
+        project writes: a module there named like the standard library's, or like the platform's, is never imported;
+        only the exec'd tool starts there."""
+        tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        hub, ws, marker, out = tmp / "hub", tmp / "ws", tmp / "imported", tmp / "out"
+        (hub / ".state" / "lease-runner").mkdir(parents=True)
+        (hub / "bin").symlink_to(BIN)
+        (hub / ".state" / "lease-runner" / "leases.json").write_text(json.dumps({SID: {"cwd": str(ws)}}))
+        ws.mkdir()
+        for name in ("json", "fcntl", "runtime_ports", "hashlib", "encodings"):
+            (ws / f"{name}.py").write_text(f"open({str(marker)!r}, 'a').write({name!r} + '\\n')\n")
+        import names
+        env = names.env_set({**os.environ, "HOME": str(self.home)}, "STATE", str(tmp / "state"))
+        names.env_set(env, "PYTHON", sys.executable)
+        run = lambda: subprocess.run([str(hub / "bin" / "lease-resume"), SID], cwd=ws, env=env, capture_output=True,  # noqa: E731
+                                     text=True, timeout=60, stdin=subprocess.DEVNULL)
+        r = run()   # an empty store: it says why and starts nothing
+        self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(marker.exists(), marker.read_text() if marker.exists() else "")
+        store_fixture.promote_into(tmp / "state" / "runtimes", body=(
+            "#!/bin/sh\n[ \"$1\" = auth ] && { echo '{\"loggedIn\": true}'; exit 0; }\n"
+            f"pwd > '{out}'\necho \"$@\" >> '{out}'\n"))
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(marker.exists(), marker.read_text() if marker.exists() else "")
+        self.assertEqual(out.read_text().split("\n")[:2], [str(ws), f"--resume {SID}"], "the tool starts in the folder")
+
     def test_no_copy_or_no_session_id(self):
         store_fixture.empty(self)
         with self.assertRaises(runtime_ports.NoCheckedCopy):
