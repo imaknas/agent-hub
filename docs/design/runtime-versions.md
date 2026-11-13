@@ -683,7 +683,21 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    - **Not built or still dormant:** `session-status`, `session-summary` and `wake` are still `not-checkable` (V-M6's pty
      driver isn't a check yet), so the listing rule has nothing to read until they are; `lifecycle-deny` and
      `lifecycle-context` too. On a candidate for promotion (no `current` paired), `sessions-fork` forks with the candidate
-     itself. `run-agent-job.sh`'s resume hint still names `claude`.
+     itself. `run-agent-job.sh`'s resume hint still names `claude`. A recorded `fail` is never run again by the job (only
+     errors and stale pairs are): one flaky safety fail keeps that version's sandboxed sessions gated until its
+     `.session.json` is removed by hand, and nothing says how yet. The unusable count reads the last 4 MB of
+     `hub-event.log`, which may be less than 7 days. After a promotion, `lease-resume` refuses a lease run by the previous
+     copy until the job has checked that version's session side against the new `current`. `bin/linux-test` not run
+     (`process_path`'s `/proc` branch is untested).
+   - **The real run (11-14, from the worktree, `--report`):** 2.1.321, the build the user's Desktop sessions run here, was
+     installed into a scratch prefix (the state variable pointed away, so the live store and its npm cache were untouched;
+     the ccd-cli file itself was never run) and checked paired with the store's `current`, 2.1.323: instructions-reach,
+     sessions-read, sessions-fork, confine-sandbox and control pass, control's residual as on 2.1.323 (a new
+     `.claude/<name>` through Edit and through Bash `sh -c`). confine-sandbox passes again with the Read-then-Write prompt
+     (step 4's open item). lifecycle-events was left out: from a worktree its hooks run the main checkout's `hub-event`,
+     which logs into the live log. sessions-fork on 2.1.323 paired with itself (the promotion case) passes too.
+   - Hook timestamps: `hub-event.log` writes local times with no zone; the job reads them as local (a test writes its
+     lines through hub-event's own logging, so the format can't drift from what the count reads).
 5. **Codex Step 1** builds on all of it: `conformance_codex.CHECKS` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
 
