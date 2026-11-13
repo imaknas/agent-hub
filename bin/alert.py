@@ -14,8 +14,12 @@ Standard library + the system's curl only (no Homebrew). The scheduler watchdog 
 does not import this (it must still be able to send when the scheduler and the platform code are both broken).
 
   alert.send(text) -> bool
-  alert.once(key, problems, ok_text) -> None   new problems are sent at once; unresolved ones are repeated every 24
-                                               hours; one recovery message when resolved
+  alert.once(key, problems, ok_text, ids=None) -> None
+                                               new problems are sent at once; unresolved ones are repeated every 24
+                                               hours; one recovery message when resolved. A problem is told apart by
+                                               its wording, or by its ids[i] when given (one stable name per problem, so
+                                               a text that carries a changing detail, an error's tail or a count, is
+                                               still the same problem and is not sent again as new)
   alert.probe() -> bool                         whether the token still works (GET /users/@me, no message sent;
                                                check-secrets calls it daily)
 
@@ -37,7 +41,7 @@ import i18n
 
 _ = i18n.domain(__file__)
 
-SENT = hubconf.STATE / "alerts-sent.json"      # key -> {"problems": [...], "at": when last sent}
+SENT = hubconf.STATE / "alerts-sent.json"      # key -> {"problems": [...], "ids": [...] when given, "at": when last sent}
 FAILED = hubconf.STATE / "alerts-failed.json"  # key -> {"at": …, "text": first line of the one not sent}
 REMIND = datetime.timedelta(hours=24)
 API = "https://discord.com/api/v10"
@@ -199,14 +203,20 @@ def failures() -> dict:
     return _load(FAILED) if configured() else {}
 
 
-def once(key: str, problems: list[str], ok_text: str) -> None:
+def once(key: str, problems: list[str], ok_text: str, ids: list[str] | None = None) -> None:
+    if ids is not None and len(ids) != len(problems):
+        raise ValueError(f"alert.once({key!r}): {len(ids)} ids for {len(problems)} problems")
     now = datetime.datetime.now()
     sent = _load(SENT)
     last = sent.get(key)
     if isinstance(last, list):  # old format: only the list of problems
         last = {"problems": last, "at": None}
-    last_problems = (last or {}).get("problems", [])
-    if sorted(problems) == sorted(last_problems):
+    # what the problems are: their ids when the caller names them, else their wording (a record from before ids
+    # compares by wording once, then carries them)
+    ident = sorted(ids) if ids is not None else sorted(problems)
+    last_ident = sorted((last or {}).get("ids") if ids is not None and "ids" in (last or {})
+                        else (last or {}).get("problems", []))
+    if ident == last_ident:
         if not problems:
             clear_failure(key)  # the earlier one was not sent and the problem has fixed itself: nothing to resend
             return
@@ -222,7 +232,8 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
     # a retry is the same notice, to a channel that can tell (`at`): its time stays with the failure until it has gone out
     wanted = sorted(problems)
     unsent = _load(FAILED).get(key, {}).get("notice") or {}
-    notice_at = unsent["at"] if unsent.get("problems") == wanted else now.astimezone().isoformat(timespec="seconds")
+    notice_at = unsent["at"] if unsent.get("ids", unsent.get("problems")) == ident \
+        else now.astimezone().isoformat(timespec="seconds")
     notice = {"key": key, "at": notice_at, "state": "open" if problems else "resolved"}
     if problems:
         more = len(problems) - 1
@@ -232,8 +243,8 @@ def once(key: str, problems: list[str], ok_text: str) -> None:
     else:
         notice["text"] = ok_text
     if send(text, notice):
-        sent[key] = {"problems": wanted, "at": now.isoformat(timespec="seconds")}
+        sent[key] = {"problems": wanted, **({"ids": ident} if ids is not None else {}), "at": now.isoformat(timespec="seconds")}
         _save(SENT, sent)
         clear_failure(key)
     else:
-        record_failure(key, text, {"problems": wanted, "at": notice_at})
+        record_failure(key, text, {"problems": wanted, **({"ids": ident} if ids is not None else {}), "at": notice_at})
