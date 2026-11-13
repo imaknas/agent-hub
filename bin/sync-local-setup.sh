@@ -93,15 +93,11 @@ import names
 import prompts
 
 path, rules_file = Path(sys.argv[2]), Path(sys.argv[3])
-listed = rules_file.read_text().split() if rules_file.exists() else []
-# rules decided by the registry (not via RULES): commits: conventional → the merge gate checks titles, so the rules
-# file must carry the explanation
+# the RULES list plus the rules decided by the registry (prompts.listed_rules)
 here = Path.cwd().resolve()
 proj = next((d for n, d in hubconf.projects().items()
              if (ws := hubconf.workspace(n)) and ws.resolve() == here), {})
-if proj.get("commits") == "conventional" and "conventional-commits" not in listed:
-    listed.append("conventional-commits")
-body, absent = prompts.agent_rules(listed)   # the template minus its title, the listed rules, filled
+body, absent = prompts.agent_rules(prompts.listed_rules(rules_file, proj))   # the template minus its title, the listed rules, filled
 for name in absent:
     print(f"{name}\t{hubconf.ROOT / 'templates' / 'rules' / f'{name}.md'}")
 old = path.read_text() if path.exists() else ""

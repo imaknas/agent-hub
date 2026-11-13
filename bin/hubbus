@@ -1481,10 +1481,14 @@ def mcp_presence(project: str, session: str, cwd, client, via: str) -> None:
         c.close()
 
 
-def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | None:
+def mail_text(event: str, session, cwd, runtime: str | None = None, show: str = "full") -> str | None:
     """The platform's logic: record presence, deliver the letters this session should get, return the text to put
     into the context (None if there's none). event is session-start / prompt / post-tool. Runtime-independent: session
-    is in the platform's ids (runtime_ports.qualify), runtime the name of the runtime whose hook called (presence)."""
+    is in the platform's ids (runtime_ports.qualify), runtime the name of the runtime whose hook called (presence).
+    show: how the hook shows letters, from its runtime's declarations (runtime_ports, hub-event's mail): "full" their
+    text; "notice" (context that outranks the user) only which letters and how to read them (letters_notice), never a
+    letter's text; "none" (an event where what a hook shows isn't known to reach the model) nothing at all: presence is
+    recorded, and nothing is told or held."""
     # no session = no real session is running (onboard/rename also run sync-local-setup.sh with --quiet):
     # do nothing, or letters would be recorded as delivered without any session seeing them
     if not session or not DB.exists():
@@ -1512,6 +1516,12 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
     if not project:
         return None
     c = db(timeout=HOOK_TIMEOUT_S)
+    if show == "none":
+        if not os.environ.get("HUBBUS_LEASE"):
+            c.execute("BEGIN IMMEDIATE")
+            record_presence(c, session, project, cwd, runtime)
+            c.execute("COMMIT")
+        return None
     live = Live(me=session, c=c)
     # Everything is judged here, before the write lock (other sessions' hooks give up after HOOK_TIMEOUT_S): the letters,
     # the process table if a letter's state turns on it, a fork's result. Under the lock only what this hook would tell
@@ -1547,6 +1557,8 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
         c.execute("COMMIT")
         hook_view(c, project, live)
         note = questions_note(c, project)
+        if rows and show == "notice":
+            return "\n".join([letters_notice(project, new, old)] + ([note] if note else []))
         if rows:
             parts = [header(len(rows), project), *(fmt(r) for r in new)]
             if old:
@@ -1564,6 +1576,8 @@ def mail_text(event: str, session, cwd, runtime: str | None = None) -> str | Non
         hook_view(c, project, live)
     if handled:
         rows = rows + handled
+    if rows and show == "notice":
+        return letters_notice(project, rows)
     if rows:
         return "\n".join([header(len(rows), project),
                            *(fmt(r) + ("\n  " + _("(While you were idle the platform handled this letter in a background "
@@ -2159,14 +2173,21 @@ def mcp_sessions(c, proj) -> list:
 
 def active_sessions(c, proj, live, mcp=None, rt=None) -> list[str]:
     """Sessions using this project now: one the runtime reports live with a hook within CONVERSATION_WAIT_MIN, and
-    the MCP sessions (mcp_sessions; mcp: already computed). Never a gated session (gated: rt's say): a letter doesn't
-    wait for one."""
+    the MCP sessions (mcp_sessions; mcp: already computed). Never a gated session (gated: rt's say), nor one whose hooks
+    show letters only at its start (tells_later): a letter doesn't wait for one."""
     cutoff = iso(now() - datetime.timedelta(minutes=CONVERSATION_WAIT_MIN))
     mine = own_names(proj)
     return [r["session"] for r in c.execute(f"SELECT session FROM presence WHERE project IN ({','.join('?' * len(mine))})"
                                             " AND seen >= ? AND session NOT LIKE 'mcp:%'", (*mine, cutoff))
-            if r["session"] in live and not gated(rt, r["session"])] \
+            if r["session"] in live and not gated(rt, r["session"]) and tells_later(rt, r["session"])] \
         + [r["session"] for r in (mcp_sessions(c, proj) if mcp is None else mcp)]
+
+
+def tells_later(rt, sid) -> bool:
+    """Whether this session's hooks show letters after its start (runtime_ports.Sessions.tells_later): a letter waits for
+    a session using the project only if its next hook could show it. A runtime object without the question shows them."""
+    fn = getattr(rt, "tells_later", None)
+    return bool(fn(sid)) if callable(fn) else True
 
 
 def gated(rt, sid) -> bool:
@@ -2615,6 +2636,18 @@ def wake_notice(proj: str, rows: list) -> str:
              n=len(rows), project=proj, owner=OWNER,
              senders=_(" from {who}", who=_(", ").join(senders)) if senders else "",
              ids=f" ({_(', ').join(ids[:NOTICE_IDS])}{_(', …') if len(ids) > NOTICE_IDS else ''})" if ids else "")
+
+
+def letters_notice(proj: str, rows: list, old=()) -> str:
+    """What a hook shows a session whose injected context outranks the user (its runtime's LETTERS_AS_NOTICE, runtime_ports):
+    which letters, by sender and id, and how to read them, as a wake's notice is (wake_notice); never a letter's text. The
+    open letters delivered before are named by id."""
+    parts = [wake_notice(proj, rows)] if rows else []
+    ids = [r["id"] for r in old if EVENT_ID.match(r["id"]) and len(r["id"]) <= NOTICE_ID_MAX]
+    if ids:
+        parts.append(_("Open letters for {project} delivered before: {ids}. `brunna inbox --project {project}` lists them.",
+                       project=proj, ids=_(", ").join(ids[:NOTICE_IDS]) + (_(", …") if len(ids) > NOTICE_IDS else "")))
+    return "\n".join(parts)
 
 
 def wake(c, rt, proj: str, sid: str, rows: list) -> bool:

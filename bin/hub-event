@@ -119,9 +119,15 @@ def hub_pull(ev, ws):
 
 
 def memory_sync(ev, ws):
+    """The notes committed and pushed. At a session's end under a runtime that kills its end hook within seconds (its
+    END_BUDGET_S), started on its own and left to finish: killed halfway, git would leave its lock behind."""
     if _memory(ws):
-        subprocess.run([str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")], cwd=_memdir(ws),
-                       capture_output=True, timeout=120)
+        cmd = [str(BIN / "with-lock.sh"), str(BIN / "git-sync-memory.sh")]
+        if ev.event == "session_end" and getattr(_RT, "END_BUDGET_S", None):
+            subprocess.Popen(cmd, cwd=_memdir(ws), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+            return
+        subprocess.run(cmd, cwd=_memdir(ws), capture_output=True, timeout=120)
 
 
 def moved_notice(ws):
@@ -142,6 +148,21 @@ def local_setup(ev, ws):
         return r.stdout.strip() or None
 
 
+def rules(ev, ws):
+    """The platform's rules for a runtime with no rules file (its RULES_AT_START; docs/design/runtime-codex.md, Step 2): what
+    sync-local-setup writes into the managed block of the others' rules file, as session-start context, with the
+    runtime's own lines after it (rules_note). The rules the project lists are read from its memory checkout, which a
+    linked worktree shares."""
+    if not getattr(_RT, "RULES_AT_START", False) or not _memory(ws):
+        return None
+    import prompts
+    project = _project_of_folder(ev.cwd)
+    doc = (hubconf.projects().get(project) or {}) if project else {}
+    body, _absent = prompts.agent_rules(prompts.listed_rules(_memdir(ws) / "RULES", doc))
+    extra = getattr(_RT, "rules_note", None)
+    return body + ("\n\n" + extra() if callable(extra) else "")
+
+
 def nudge(ev, ws):
     if _memory(ws):
         mn = _load("memory_nudge", BIN / "memory-nudge.py")
@@ -159,8 +180,14 @@ def _hubbus():
 
 
 def mail(ev, ws):
+    """The session's letters (hubbus.mail_text). A runtime that declares where a hook's text is measured to reach the model
+    (TELLS_ON) gets presence only at its other events, and one whose injected context outranks the user
+    (LETTERS_AS_NOTICE) a notice of ids, never a letter's text (runtime_ports' declarations)."""
     kind = {"session_start": "session-start", "prompt": "prompt", "tool_used": "post-tool"}[ev.event]
-    return _hubbus().mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME)
+    tells = getattr(_RT, "TELLS_ON", None)
+    show = "none" if tells is not None and ev.event not in tells else \
+        "notice" if getattr(_RT, "LETTERS_AS_NOTICE", False) else "full"
+    return _hubbus().mail_text(kind, ev.session, ev.cwd, runtime=_RT_NAME, **({} if show == "full" else {"show": show}))
 
 
 def mail_end(ev, ws):
@@ -236,7 +263,8 @@ def session_record(ev, ws):
     if pid:
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
                                      wanted=(lambda p: person(p, os.environ)) if callable(person) else None,
-                                     project_of=_project_of_folder, version=version if callable(version) else None)
+                                     project_of=_project_of_folder, version=version if callable(version) else None,
+                                     stale_s=getattr(_RT, "SESSION_STALE_S", None))
     return None
 
 
@@ -358,7 +386,7 @@ def wait(name: str | None, raw: str) -> int:
 # which handlers run for each event, in order; for the "deny" kind the return value is the reason to block
 HANDLERS = {
     # session_record before mail: a session told a letter is on record by then, or the tick in between could judge it closed
-    "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup),
+    "session_start": [("hub_pull", hub_pull), ("memory_pull", memory_pull), ("local_setup", local_setup), ("rules", rules),
                       ("nudge", nudge), ("session_record", session_record), ("mail", mail), ("wake_address", wake_address)],
     "session_end": [("mail_end", mail_end), ("wake_address_drop", wake_address_drop), ("memory_sync", memory_sync)],
     "pre_compact": [("memory_sync", memory_sync)],
@@ -378,7 +406,7 @@ AS_PROJECT = {"memory_pull", "local_setup", "nudge"}
 # the project, or as the user where project_git.user_git_ok says so. The default is no.
 NOT_IN_FOLDER = {"session_record", "mail", "mail_end", "wake_address", "wake_address_drop", "guard"}
 # What runs only in the project's memory checkout (project_git.memory_dir), so it can go on where its folder is only a worktree
-MEMORY_ONLY = {"memory_pull", "memory_sync"}
+MEMORY_ONLY = {"memory_pull", "memory_sync", "rules"}
 
 
 def _read_stdin() -> str:
@@ -421,7 +449,7 @@ def _no_event(rt, name: str, event: str, raw: str) -> None:
         _log(event, None, [], [], f"unusable={reason} runtime={name} version={version}")
 
 
-CAGED_NEEDS = {"control", "confine"}
+CAGED_NEEDS = set(runtime_ports.CONFINED_SESSION_PORTS)
 # The per-version gate (gate; docs/design/runtime-versions.md section 6): the handlers that start work in a session, off for
 # a sandboxed project's session whose version failed a safety check. mail goes with presence (a gated session isn't
 # counted as using the project). Everything else runs as for any session: its record and its end, memory sync, the
@@ -435,6 +463,8 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     global _RT, _RT_NAME
     _RT_NAME = name = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = rt or runtime_ports.load(name, ports=("lifecycle",))
+    if getattr(rt, "PLATFORM_RUNS_FIRE_HOOKS", False) and os.environ.get("HUB_LLM_POINT"):
+        return ""   # the platform's own run of a runtime whose runs load the user's hooks: nothing (r2, Step 2)
     ev = rt.parse_event(event, raw) if event in HANDLERS else None
     if ev is None:
         _no_event(rt, name, event, raw)
@@ -522,6 +552,8 @@ def worktree(what: str, raw: str, name: str | None = None) -> int:
         return 0
     _RT_NAME = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = runtime_ports.load(_RT_NAME, ports=("lifecycle",))
+    if getattr(rt, "PLATFORM_RUNS_FIRE_HOOKS", False) and os.environ.get("HUB_LLM_POINT"):
+        return 0
     ev = rt.parse_event(WORKTREE_EVENTS[what], raw)
     if ev is None:
         _no_event(rt, _RT_NAME, WORKTREE_EVENTS[what], raw)

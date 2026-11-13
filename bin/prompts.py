@@ -78,6 +78,16 @@ def render(name: str, **kw) -> str:
         raise KeyError(f"prompt {name}: {e.args[0]}") from None
 
 
+def listed_rules(rules_file: pathlib.Path, project: dict | None) -> list[str]:
+    """The optional rules a project's agents get: the names its memory branch's RULES lists (one per word), and the ones
+    its registry entry decides (commits: conventional: the merge gate checks titles, so the rules carry the
+    explanation). What sync-local-setup.sh writes into a rules file, and hub-event into a session's start context."""
+    listed = rules_file.read_text().split() if rules_file.exists() else []
+    if (project or {}).get("commits") == "conventional" and "conventional-commits" not in listed:
+        listed.append("conventional-commits")
+    return listed
+
+
 def agent_rules(rules: list[str], *, read: Callable[[str], str | None] | None = None,
                 lang: str | None = None) -> tuple[str, list[str]]:
     """The platform's rules for a project's agents, what sync-local-setup.sh puts between the rules file's

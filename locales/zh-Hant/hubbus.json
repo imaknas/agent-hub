@@ -230,5 +230,6 @@
  "hubbus: {id!r} is not a valid letter id": "hubbus:{id!r} 不是合法的信件 id",
  "hubbus: a confined run closes only letters ({id} is not one)": "hubbus:受限執行只能結掉信({id} 不是信)",
  "what sessions are doing can't be read (the agent's session listing failed): requests and questions are routed but wake no session until it works again": "讀不到各 session 在做什麼(agent 的 session 清單失敗):request 和 question 照樣分派,但在恢復之前不叫醒任何 session",
- "mailbox dispatch routes letters to sessions but starts no agent run: {e}": "信箱分派照樣把信交給 session,但不啟動任何 agent 執行:{e}"
+ "mailbox dispatch routes letters to sessions but starts no agent run: {e}": "信箱分派照樣把信交給 session,但不啟動任何 agent 執行:{e}",
+ "Open letters for {project} delivered before: {ids}. `brunna inbox --project {project}` lists them.": "之前送過、還沒處理完的 {project} 信件:{ids}。`brunna inbox --project {project}` 會列出它們。"
 }
