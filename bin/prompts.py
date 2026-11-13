@@ -32,10 +32,14 @@ from typing import Callable
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
+import i18n  # noqa: E402
 import todo_tokens  # noqa: E402
+
+_ = i18n.domain(__file__)
 
 DIR = hubconf.ROOT / "templates" / "prompts"
 PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
+RULE_NAME = re.compile(r"[a-z0-9-]+")   # a rule in templates/rules/<name>.md
 LANGUAGE_NAMES = {"zh-Hant": "Traditional Chinese (zh-Hant)", "en": "English"}
 # the to-do block's token set per content language (bin/todo_tokens.py); key_marker's {owner} and {key} are filled
 # per use
@@ -81,8 +85,15 @@ def render(name: str, **kw) -> str:
 def listed_rules(rules_file: pathlib.Path, project: dict | None) -> list[str]:
     """The optional rules a project's agents get: the names its memory branch's RULES lists (one per word), and the ones
     its registry entry decides (commits: conventional: the merge gate checks titles, so the rules carry the
-    explanation). What sync-local-setup.sh writes into a rules file, and hub-event into a session's start context."""
-    listed = rules_file.read_text().split() if rules_file.exists() else []
+    explanation). What sync-local-setup.sh writes into a rules file, and hub-event into a session's start context. A name
+    that isn't one (RULE_NAME: lowercase letters, digits, dashes) is left out and said on stderr: it would name a path."""
+    listed = []
+    for name in (rules_file.read_text().split() if rules_file.exists() else []):
+        if RULE_NAME.fullmatch(name):
+            listed.append(name)
+        else:
+            print(_("{file} lists {name!r}, which isn't a rule's name; left out", file=rules_file, name=name[:80]),
+                  file=sys.stderr)
     if (project or {}).get("commits") == "conventional" and "conventional-commits" not in listed:
         listed.append("conventional-commits")
     return listed
