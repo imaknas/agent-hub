@@ -252,6 +252,39 @@ class Doctor(unittest.TestCase):
         self.assertEqual(row[0], "info")
         self.assertIn("acp", row[1])
 
+    # ---------- the control rows (docs/design/runtime-versions.md section 7) ----------
+
+    def control_rows(self, adapter, no_sandbox=None):
+        import isolation
+        import policy
+        import runtime_claude
+        ws = self.tmp / "ws"
+        folder, _writable = runtime_claude.control_root()
+        (ws / folder / "agent-memory").mkdir(parents=True)
+        (ws / folder / "odd[1]").write_text("x")
+        rows = []
+        with mock.patch.object(hubconf, "projects", lambda: {"boxed": {"name": "boxed", "enforce": {"sandbox": True},
+                                                                       "paths": {"workspace": str(ws)}},
+                                                             "open": {"name": "open", "paths": {"workspace": str(ws)}}}), \
+                mock.patch.object(isolation, "adapter", lambda: (adapter, None)), \
+                mock.patch.object(policy, "protect_roots", lambda: [{"name": folder, "writable": ["worktrees"]}]):
+            self.ah.doctor_control(lambda level, what, fix="": rows.append((level, what)), no_sandbox, ["claude", "fake"])
+        return rows
+
+    def test_macos_says_what_the_services_rule_stops_and_each_projects_entries(self):
+        # the services rule, then the sandboxed project's present entries and its name no rule holds (once, not for
+        # the unsandboxed project, nor for a runtime without the notes)
+        self.assertEqual([lv for lv, _w in self.control_rows("seatbelt")], ["info", "info", "warn"])
+
+    def test_linux_says_landlock_enforces_none_of_it(self):
+        rows = self.control_rows("landlock")
+        self.assertEqual([lv for lv, _w in rows], ["info", "info", "warn"])
+        shutil.rmtree(self.tmp / "ws")
+        self.assertNotEqual(rows[0][1], self.control_rows("seatbelt")[0][1], "each system says its own")
+
+    def test_no_sandbox_here_leaves_only_the_sessions_rows(self):
+        self.assertEqual([lv for lv, _w in self.control_rows("seatbelt", no_sandbox="none here")], ["info", "warn"])
+
     # ---------- the isolation row ----------
 
     def isolation_row(self, rows):

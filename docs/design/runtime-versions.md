@@ -105,7 +105,7 @@ The checks (Claude's now, Codex's from runtime-codex.md):
 | completion | one completion per schema in `contracts/llm/` returns schema-valid output; the run has no tools (Claude: a positive-control run with tools shows the signal V-M7 names, the `--tools ""` run doesn't; Codex: the tool list equals the pinned one) | function + safety |
 | agent | a run's result fields parse (`result`, `is_error`, usage, `permission_denials`); `MODELS` aliases resolve | function |
 | confine | the sandbox denies the canaries the policy denies: read, write, `.git`, links, rename, a new file; folder git off (`NO_FOLDER_GIT`, today's probe) | safety |
-| control | a canary write at each enumerated control path (`CONTROL`, `USER_CONTROL`, in a throwaway project and home), through the real policy → settings translation, is denied; positive control: the same write with that rule left out succeeds. (The one-rule form, section 7, replaces it in step 4.) | safety |
+| control | a canary write at each enumerated control path (`CONTROL`, `USER_CONTROL`, in a throwaway project and home), through the real policy → settings translation, is denied; positive control: the same write with that rule left out succeeds. The sessions' rules are what it holds; the new name no rule lists is recorded as the version's residual (section 7, step 4). | safety |
 | lifecycle | each installed event fires with the fields `parse_event` reads; additionalContext reaches the model; a PreToolUse deny stops the tool | function (deny: safety) |
 | instructions | a marker in the rules file the adapter writes (`CLAUDE.local.md`) reaches the model | function |
 | sessions | the run's transcript / rollout parses with no skipped lines and its version read | function |
@@ -293,7 +293,7 @@ entry present except `worktrees` plus a deny on new top-level entries.
 **V-M9 settled it (11-09)** (measurements below):
 - **Services (Seatbelt): one rule.** `(deny file-write* (require-all (subpath "<ws>/.claude") (require-not (subpath
   "<ws>/.claude/worktrees"))))`. It denies new entries, writes, removals and renames under `.claude/`, and renaming `.claude`
-  itself, while writes inside `worktrees/` go through. This replaces the enumerated control paths in the service profile.
+  itself, while writes inside `worktrees/` go through. It is added beside the enumerated control paths in the service profile (step 4: nothing removed).
   - Landlock (Linux) enforces none of it: it can only allow, and the project's own folder is writable, so neither the
     enumerated paths (`protect`) nor this rule hold there (landlock.py, "Can't enforce"); doctor says so.
 - **Sessions (Claude's rules): not expressible as one rule.**
@@ -524,9 +524,12 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      in project-git-job; merge-branch's fast-forward runs in the session, where the present-entry denies stop it the same
      way.
    - **Sessions:** `present_controls` and `control_notes` are in runtime_claude; the doctor rows come from the adapter.
-   - **Present entries:** an entry's rules name its resolved folder and its own name, never what a linked entry points
-     to. The platform's rendered `settings.local.json` is not counted as a present entry: it is a control name already,
-     and counting it changed what was rendered on every apply (test_appliers). Backslash joins the glob characters.
+   - **Present entries:** an entry's rules name its folder (as the workspace names it, and resolved) and its own name,
+     never what a linked entry points to. The platform's rendered `settings.local.json` is not counted as a present entry: it is a control name already,
+     and counting it changed what was rendered on every apply (test_appliers).
+     A name is rendered only when it is made of `[A-Za-z0-9._@+-]` (`RULE_NAME`, an allowlist rather than the glob set: the
+     project chooses the name, and a parenthesis, space or line break would go into the rule too); any other name is
+     left out and named by doctor.
    - **Doctor on Linux:** says that Landlock enforces none of it.
    - **The checks:** `control` and `confine_sandbox` are in conformance_claude. The world now points the instance
      directory into itself as well. The hub's pointer had named the live instance, which holds the world (private_tmp is
@@ -538,6 +541,8 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
        throwaway copy, and a run that didn't try is asked once more.
    - **The real run on 2.1.323 (11-14, from the worktree, `--report`):** confine-sandbox and control pass. The residual
      is a new `.claude/<name>`, which is written through Edit (bypass) and through Bash (`sh -c`), as V-M9 found.
+   - **Not covered yet:** confine-sandbox and control try each canary through the file tools only, so they hold the
+     permission rules, not Claude's OS sandbox under Bash. A guarded `sh -c` attempt per canary is the next addition.
 
    ## Step 3: the user's sessions, checked when first seen, said by version (sections 5, 6), built second
 

@@ -357,13 +357,28 @@ class Protected(Tree):
         self.assertFalse([e for e in dw if "worktrees/w" in e and not e.startswith(f"{wt}/{f}/")], dw)
         self.assertFalse([e for e in dw if e.endswith((".cc-writes", f"/{f}/worktrees"))], dw)
 
-    def test_a_glob_named_entry_is_not_rendered_at_all(self):
+    def test_a_name_no_rule_can_hold_is_not_rendered_at_all(self):
+        """A glob character, a parenthesis, a space: the project chooses the name, so it never goes into a rule."""
+        for n in ("a)b", "with space"):
+            (self.ws / self.folder / n).write_text("x")
         sandbox, deny, _allow = runtime_claude.settings(self.pol())
-        self.assertFalse([r for r in [*deny, *sandbox["filesystem"]["denyWrite"]] if "odd" in r])
+        rules = [*deny, *sandbox["filesystem"]["denyWrite"]]
+        self.assertFalse([r for r in rules if "odd" in r or "a)b" in r or "with space" in r], rules)
         _paths, left = runtime_claude.present_controls(self.ws)
-        self.assertEqual(left, [f"{self.folder}/odd[1]"])
+        self.assertEqual(sorted(left), sorted(f"{self.folder}/{n}" for n in ("odd[1]", "a)b", "with space")))
         levels = [lv for lv, _t in runtime_claude.control_notes(self.ws)]
         self.assertEqual(levels, ["info", "warn"])
+
+    def test_a_workspace_behind_a_link_is_denied_under_both_spellings(self):
+        link = self.tmp / "ws-link"
+        link.symlink_to(self.ws)
+        self.docs["proj"]["paths"]["workspace"] = str(link)
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        for base in (link, self.ws):
+            p = f"{base}/{self.folder}/agent-memory/x.md"
+            self.assertTrue(rule_hits(deny, "Edit", p, self.home), p)
+            self.assertIn(f"{base}/{self.folder}/agent-memory", sandbox["filesystem"]["denyWrite"])
+        self.assertTrue(rule_hits(deny, "Edit", f"{link}/{self.folder}/settings.json", self.home), "the control names")
 
     def test_a_linked_entry_is_named_not_its_target(self):
         target = self.tmp / "elsewhere"

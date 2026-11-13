@@ -721,8 +721,10 @@ CHECKS = [
     Check("completion-schemas", "completion", "function", completion_schemas, timeout_s=3000),
     Check("completion-no-tools", "completion", "safety", completion_no_tools),
     Check("confine-folder-git", "confine", "safety", confine_folder_git, timeout_s=900),
-    Check("confine-sandbox", "confine", "safety", confine_sandbox, timeout_s=1500),
-    Check("control", "control", "safety", control, timeout_s=3600),
+    # each run up to RUN_S, asked twice when it didn't try: confine-sandbox 2 canaries x (guarded + control),
+    # control 5 canaries x 2 + the residual's 2
+    Check("confine-sandbox", "confine", "safety", confine_sandbox, timeout_s=2 * 2 * 2 * RUN_S + 120),
+    Check("control", "control", "safety", control, timeout_s=(5 * 2 + 2) * 2 * RUN_S + 120),
     Check("lifecycle-events", "lifecycle", "function", lifecycle_events),
     Check("lifecycle-deny", "lifecycle", "safety", None,
           "a PreToolUse deny stops the tool: the one tool the platform denies (opening a session elsewhere) exists "

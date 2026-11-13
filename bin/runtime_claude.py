@@ -1833,22 +1833,24 @@ def control_root() -> tuple[str, tuple[str, ...]]:
 
 # what the tool makes in its folder itself whenever its sandbox is on (V-M9): never denied
 TOOL_FOLDER_OWN = (".cc-writes",)
-# a rule's path is a glob to both engines (node-ignore for rules, regexes for the sandbox): a name holding one of these
-# would widen into its siblings or be dropped, so it is never written as a rule (doctor names it)
-GLOB_CHARS = frozenset("*?[]{}!\\")
+# A rule's path is a glob to both engines (node-ignore for rules, regexes for the sandbox), inside a rule's parentheses,
+# and an entry's name is the project's to choose: only a name of these characters is written into a rule. Anything else
+# (a glob character, which would widen into its siblings or be dropped (V-M9), a parenthesis, a space, a line break) is
+# never rendered, and doctor names it
+RULE_NAME = re.compile(r"[A-Za-z0-9._@+-]+")
 
 
 def present_controls(workspace) -> tuple[list[pathlib.Path], list[str]]:
     """(each entry present in the tool folder of the workspace and of each worktree, but the writable ones and the tool's
-    own, as its resolved folder + its name; the names left out for a glob character, relative to the workspace). Read
-    without following a link: a linked tool folder is not listed, an entry that is a link is named, not its target."""
+    own, as its folder (as the workspace names it) + its name; the names no rule can hold (RULE_NAME), relative to the
+    workspace). Read without following a link: a linked tool folder is not listed, an entry that is a link is named, not
+    its target."""
     ws = pathlib.Path(workspace)
     paths, unrendered = [], []
     for folder in session_folders(ws):
         base = folder / TOOL_FOLDER
         if base.is_symlink() or not base.is_dir():
             continue
-        real = pathlib.Path(os.path.realpath(base))
         try:
             with os.scandir(base) as it:
                 names = sorted(e.name for e in it)
@@ -1859,16 +1861,16 @@ def present_controls(workspace) -> tuple[list[pathlib.Path], list[str]]:
             # would change what is rendered (a plan never empty after apply)
             if n in TOOL_FOLDER_WRITABLE or n in TOOL_FOLDER_OWN or n == settings_path(folder).name:
                 continue
-            if GLOB_CHARS & set(n):
-                unrendered.append(str((base / n).relative_to(ws)))
+            if RULE_NAME.fullmatch(n):
+                paths.append(base / n)
             else:
-                paths.append(real / n)
+                unrendered.append(str((base / n).relative_to(ws)))
     return paths, unrendered
 
 
 def _entry_spellings(p: pathlib.Path) -> list[str]:
-    """A present entry under each spelling of its folder (present_controls gives the resolved one; the folder as the
-    workspace names it too), never what the entry itself links to."""
+    """A present entry under each spelling of its folder (as the workspace names it, and resolved), never what the entry
+    itself links to."""
     return list(dict.fromkeys(f"{f}/{p.name}" for f in _spellings(p.parent)))
 
 
@@ -1888,9 +1890,10 @@ def control_notes(workspace) -> list[tuple[str, str]]:
                               "denied, so the agent's or the app's own writes there fail too)",
                               folder=TOOL_FOLDER, project=workspace, names=", ".join(shown))))
     if unrendered:
-        out.append(("warn", _("{folder} in {project}: {n} {n:entry has|entries have} a glob character in the name ({names}), "
-                              "so no rule can name {n:it|them} and its sessions can write {n:it|them}; rename {n:it|them}",
-                              folder=TOOL_FOLDER, project=workspace, names=", ".join(unrendered), n=len(unrendered))))
+        out.append(("warn", _("{folder} in {project}: {n} {n:entry has|entries have} a name no rule can hold ({names}: "
+                              "a glob character, a space, a parenthesis…), so no rule names {n:it|them} and its sessions "
+                              "can write {n:it|them}; rename {n:it|them}", folder=TOOL_FOLDER, project=workspace,
+                              names=", ".join(ascii(u) for u in unrendered), n=len(unrendered))))
     return out
 
 
