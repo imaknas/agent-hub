@@ -52,8 +52,9 @@ class Check(unittest.TestCase):
         self.m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.m)
         self.m.STREAK = self.home / "streak.json"
+        self.m.connector_jobs = lambda: ["proj/job"]   # one job uses the subscription login (its gate: the other test file)
         self.alerts = []
-        self.m.alert.once = lambda key, problems, ok: self.alerts.append((key, list(problems), ok))
+        self.m.alert.once = lambda key, problems, ok, ids=None: self.alerts.append((key, list(problems), ok))
         self.answers = {None: None, "token": None}   # LLM_AUTH → ask's result (None = success)
         self.asked = []
 
@@ -94,7 +95,7 @@ class Check(unittest.TestCase):
         code, _, hard = self.run_check()
         self.assertEqual(code, 1)
         self.assertEqual(hard, [ui("{label} ({used_by}) does not work: {err} — {renew}", label=SUB_LABEL,
-                                   used_by=ui("used by the connector jobs and the assistant"),
+                                   used_by=ui("used by the jobs with connectors: true: {jobs}", jobs="proj/job"),
                                    err="Login expired · Please run /login",
                                    renew=rt("log in on the hub machine (`claude` → /login)"))])
 

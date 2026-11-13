@@ -8,7 +8,8 @@ type: module
 description: "Claude Code login check, updates, headless token expiry reminders"
 jobs:
 # do claude's three logins (launchd subscription login, headless token, the .credentials.json used over SSH) still work;
-# alerts when broken/about to expire
+# alerts when broken/about to expire. The subscription login is checked only while a registry job declares
+# connectors: true (nothing else the platform runs uses it)
 - name: claude-login
   legacy_name: agent-hub/claude-login
   every: 1h

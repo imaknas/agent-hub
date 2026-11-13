@@ -1,5 +1,6 @@
 {
- "used by the connector jobs and the assistant": "connector job、{assistant} 用的",
+ "used by the jobs with connectors: true: {jobs}": "connectors: true 的 job 用的:{jobs}",
+ "used by the jobs with connectors: true": "connectors: true 的 job 用的",
  "used by all scheduled jobs and leases": "所有排程跟租借用的",
  "all scheduled jobs and leases will fail": "所有排程跟租借都會失敗",
  "every call with this login will fail": "這種登入的呼叫都會失敗",
@@ -14,5 +15,7 @@
  "{mode}: request failed (does not look like a login problem; {n} {n:time|times} in a row): {err}": "{mode}:請求失敗(不像登入問題,連續第 {n} 次):{err}",
  "claude requests failed {n} times in a row ({mode}): {err}": "claude 請求連續 {n} 次失敗({mode}):{err}",
  "The claude login check is back to normal": "claude 登入檢查恢復正常",
- "not checked: the runtime {runtime} runs only in the platform's throwaway worktree; its login shows in its runs (a lost login fails them as a login error)": "沒有檢查:執行環境 {runtime} 只在平台的拋棄式 worktree 裡跑;它的登入狀態看它自己的執行(登入失效時會以登入錯誤失敗)"
+ "not checked: the runtime {runtime} runs only in the platform's throwaway worktree; its login shows in its runs (a lost login fails them as a login error)": "沒有檢查:執行環境 {runtime} 只在平台的拋棄式 worktree 裡跑;它的登入狀態看它自己的執行(登入失效時會以登入錯誤失敗)",
+ "{name}: not checked: no registry job declares connectors: true, and everything else the platform runs uses the headless token": "{name}:沒有檢查:登錄裡沒有 job 宣告 connectors: true,平台跑的其他東西都用 headless token",
+ "{name}: the registry index has not been produced yet, so which jobs declare connectors: true is not known; checked in case one does": "{name}:登錄索引還沒產生,不知道哪些 job 宣告了 connectors: true;以防萬一照樣檢查"
 }
