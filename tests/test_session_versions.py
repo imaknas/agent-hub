@@ -461,6 +461,31 @@ class HookGate(Instance):
         self.assertIn("nudge:gated", self.m.LOG.read_text())
 
 
+class McpNotice(Instance):
+    """The MCP server points a gated session at no letter: no "N letters open" after its tools' results."""
+
+    def setUp(self):
+        super().setUp()
+        import mcp_server
+        self.ms = mcp_server
+        mcp_server._GATED.clear()
+        self.addCleanup(mcp_server._GATED.clear)
+        for patch in (mock.patch.object(mcp_server, "unread", lambda project: 2),
+                      mock.patch.object(runtime_ports, "current_session", lambda env=None: "S1"),
+                      mock.patch.dict(os.environ)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        os.environ.pop("HUB_LLM_POINT", None)
+        self.version_file("S1", project="box")
+
+    def test_said_to_a_session_that_isnt_gated(self):
+        self.assertTrue(self.ms.notice("box", "send"))
+
+    def test_not_to_a_gated_one(self):
+        self.result(control=("safety", "fail"))
+        self.assertEqual(self.ms.notice("box", "send"), "")
+
+
 class GatingRuntime(tmw.WakingRuntime):
     """tests.test_mailbox_wake's runtime with the gate: the sessions in `gates` failed a safety check."""
 

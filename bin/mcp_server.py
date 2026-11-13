@@ -285,10 +285,29 @@ class Presence:
             log(_("cannot record presence: {e!r}", e=e))
 
 
+_GATED: list = []   # [(when asked, the answer)]: whether this server's session is gated, asked at most once a minute
+
+
+def gated_here() -> bool:
+    """Whether the session this server runs in is gated (runtime_ports.gated; docs/design/runtime-versions.md section
+    6): a sandboxed project's session whose tool version failed a safety check, which the platform steers to no letter."""
+    if _GATED and time.monotonic() - _GATED[0][0] < 60:
+        return _GATED[0][1]
+    try:
+        import runtime_ports
+        sid = runtime_ports.current_session()
+        got = bool(sid) and bool(runtime_ports.gated(sid))
+    except Exception:
+        got = False
+    _GATED[:] = [(time.monotonic(), got)]
+    return got
+
+
 def notice(project: str | None, name: str) -> str:
     """Appended to an agenthub tool's result: how many letters are open, so a session told only through MCP knows
-    the platform is holding them for it (inbox shows them itself). A sandboxed project's count is from its view."""
-    if not project or name == "inbox" or os.environ.get("HUB_LLM_POINT"):
+    the platform is holding them for it (inbox shows them itself). A sandboxed project's count is from its view. A gated
+    session isn't pointed at them: they wait for another session."""
+    if not project or name == "inbox" or os.environ.get("HUB_LLM_POINT") or gated_here():
         return ""
     try:
         n = unread(project)
@@ -307,6 +326,9 @@ def instructions(project: str | None, why: str) -> str:
     try:
         n = unread(project)
         line = _("📬 {n} {n:letter is|letters are} still open; look with inbox first.", n=n) if n else _("📭 No open letters now.")
+        if gated_here():
+            line = _("This session's tool version failed the platform's sandbox check: the platform steers no letter to "
+                     "it, and the project's letters wait for another session.")
     except Exception as e:
         line = _("(cannot read the mailbox: {e})", e=e)
     return prompts.fill(text, project=project, unread=line, take_timeout=hb.TAKE_TIMEOUT_MIN)

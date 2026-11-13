@@ -55,5 +55,6 @@
  "this run has no tool {name}": "這次執行沒有 {name} 這個工具",
  "cannot tell which project {folder} is: {e}": "看不出 {folder} 是哪個專案:{e}",
  "{folder} is not {project}'s folder; this run's mail is refused": "{folder} 不是 {project} 的資料夾;這次執行的信件功能被拒絕",
- "usage: {cli} mcp [config | --run <file>]": "用法:{cli} mcp [config | --run <檔案>]"
+ "usage: {cli} mcp [config | --run <file>]": "用法:{cli} mcp [config | --run <檔案>]",
+ "This session's tool version failed the platform's sandbox check: the platform steers no letter to it, and the project's letters wait for another session.": "這個 session 的工具版本沒通過平台的沙箱檢查:平台不會把任何信導向它,這個專案的信會等別的 session。"
 }
