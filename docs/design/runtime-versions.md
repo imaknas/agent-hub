@@ -224,11 +224,13 @@ Calls the platform makes about the user's sessions run the user's version's beha
 - Each adapter call is classed platform-side (a run of its own) or session-side: Claude's `agents --json` (status), `--resume
   --fork-session` of a user's transcript, `lease-resume` and `run-agent-job.sh`'s resume of a platform session in a terminal; Codex's
   `queue`, the daemon's status calls, the linked login.
-- A session-side call runs with **the store's copy of the session's own version** (installed from the vendor when first seen,
-  section 6), or with `current` only when the pair (`current`, that version) passed the session-side checks (a transcript written by
-  that version forked by `current`; a session of that version listed by `current`). Otherwise it is refused, as a missing port is.
-  A fork is a platform run, so the copy that runs it must also have passed the safety checks and the agent check, not only the
-  session-side set.
+- A fork or resume of a user's session runs with `current` when the pair (`current`, the session's version) passed
+  `sessions-fork` (a session written by that version, forked by `current`, reads back); while that pair isn't checked yet
+  (no result, one against another copy, an error) it runs as today; otherwise it is refused, as a missing port is. A fork is a
+  platform run, so the copy that runs it has passed the safety checks and the agent check too (it is `current`). A listing of
+  the user's sessions runs with `current`; a session whose version failed `session-status` is `unlisted`. (The first draft
+  ran a session-side call with the store's copy of the session's own version; step 3's plan replaced it with the pair rule,
+  r1 S1.)
 - **A listing that failed is not `unknown`.** `unknown` keeps its meaning (the runtime has no status port, the session isn't in
   the listing, the tick's 10 s budget ran out; hubbus:2555, :2606-2616) and keeps counting as idle where it does today
   (hubbus:2964, :3008). A new state, `unlisted`, is a listing that errored or a session whose version no checked copy can list: the
@@ -243,8 +245,9 @@ Calls the platform makes about the user's sessions run the user's version's beha
   hook reads it from the session process's executable: its path (Desktop's `ccd-cli/<version>/`, the daemon's
   `releases/<version>-<arch>/`) or the package metadata beside it (nvm's `package.json`), read as files, never run (V-M4). A version
   that can't be read (no `CLAUDE_PID`, runtime_claude.py:80-82; an unknown layout) is recorded as `unreadable`, which counts as
-  pending. It goes into the session's record, which `hub-event` writes in the platform's own state; the readers also return the
-  version per session from the transcript.
+  pending. It goes into the session's record, which `hub-event` writes in the platform's own state, and into
+  `<session>.version` beside it, kept 30 days past the session's end: a closed session's version is read from there, never
+  from its transcript (r3). The transcript readers' versions feed only `brunna runtimes`' skip counts.
 - **Check it then.** A platform job polls the session records each scheduler tick (15 minutes; event jobs trigger only on bus events,
   which any unsandboxed project could write) and takes each version with no result: it validates it against the vendor's published
   list, installs **that exact version from the vendor** into the store (never runs the binary in the user's folders, which a
@@ -638,6 +641,49 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      promoted copies keep today's rule.
    - Design text to update with step 3: section 5's fork rule becomes "with `current` when the pair passed `sessions-fork`,
      pending as today, otherwise refused".
+
+   **Step 3 progress (11-14): built on its branch, not merged.**
+   - **The version at a session's start:** `runtime_ports.process_path(pid)` (libproc's `proc_pidpath`, `/proc/<pid>/exe`)
+     and `runtime_claude.session_version(pid)` → `version_at(path)`: Desktop's `ccd-cli/<version>-<build>` file under the
+     user's Claude folder, a store copy's version folder, nvm's `package.json` under `<nvm>/versions/node/*/lib/node_modules/`
+     (its `name` must be the package); anything else, a project's own `node_modules` included, `unreadable`. Nothing is run.
+     `record_session(..., version=)` writes `version` (and `build`) on every write, backfills an older record at its next
+     hook (then costs nothing), and writes `<session>.version` (runtime, version, build, project). `hubconf.KEPT_SUFFIXES`
+     keeps it out of `session_files` (the session's end); hubbus's prune takes it 30 days after it was last written. The
+     `unusable=` line carries `version=`.
+   - **The job** is `bin/session_versions.py` (`brunna/session-versions`, every 15 minutes, background; refuses from a
+     linked worktree). Cheap work first: what is seen (live records, then `.version` files of 7 days, then the leases'
+     versions, below), last-seen on each session copy, the unusable counts and the alerts; then each version without a
+     result: `published()` (npm's list) asked once a run and only when something must be installed, a vendor that can't be
+     asked marks nothing, not published → `not-installable` for 7 days; installed as a session copy (`installed.json` kind
+     `session`), at most 3 installs a day; `conformance.run(..., only=session_checks, pair=current)` under
+     `runtime_store.hold_version`; recorded with `conformance.record_session` as `<version>.session.json` (with `current`),
+     one version at a time. `conformance.recorded()` skips those files, so promotion never reads one.
+   - **Results that age:** a result paired with another copy than `current` has `sessions-fork` alone run again (merged into
+     it); checks that ended in `error` are run again once a day. An `error` never gates, lists or refuses (pending).
+   - **The gate** is `runtime_ports.gated(session, rec)` (and `Sessions.gated`, cached per instance): the version's result
+     has a safety `fail` and the project's sessions are sandboxed by `enforce.sandbox` (`policy.mail_outbox`), found by a name it had
+     before too (`former_names`); a registry that can't be read then gates (fail closed only on a recorded failure).
+     hub-event asks it with the hook's own process's version (at a start the record on file is still the last process's)
+     and skips `GATED_OFF` (`mail`, `wake_address`, `nudge`), logged as `<name>:gated`; the notice goes into the start's
+     context. In hubbus: `Tick.gated`/`can_wake`, `candidates`, `active_sessions(rt=)`, the conversation wait, `can_resume`,
+     and `take` reads past `told`/`ack` from a gated session.
+   - **Session-side calls:** `session_statuses(sids, deadline=)` gets what is left of the tick's 10 s (none left: `unlisted`
+     without running); a session whose version failed `session-status` is `unlisted`. `Sessions.can_resume` also needs
+     `fork_refusal()` to be None (`pair_state`: same, pass, fail, pending). A lease records the version of the copy that
+     last ran it (`run_version()`, the store's current at its process start); `lease-resume` passes it to `resume_exec`,
+     which refuses unless the pair is `same` or `pass`. So that such a pair gets checked, the job counts the leases'
+     versions of the last 7 days as seen (not in the plan; without it a lease run before a promotion could never be
+     resumed in a terminal again).
+   - **Said:** `brunna runtimes` lists each version seen in 7 days (passed, pending with the checks in error, unreadable,
+     not-installable and why, failed and which checks, Desktop's builds) and the unusable rows; doctor has a warning per
+     version with a failed safety check and info rows for the rest. Alerts: one per version keyed by its failed safety
+     checks, ended once the version isn't seen; one per event and reason for unusable payloads (three or more from one
+     version in 7 days, `session_start`, `prompt`, `tool_used`).
+   - **Not built or still dormant:** `session-status`, `session-summary` and `wake` are still `not-checkable` (V-M6's pty
+     driver isn't a check yet), so the listing rule has nothing to read until they are; `lifecycle-deny` and
+     `lifecycle-context` too. On a candidate for promotion (no `current` paired), `sessions-fork` forks with the candidate
+     itself. `run-agent-job.sh`'s resume hint still names `claude`.
 5. **Codex Step 1** builds on all of it: `conformance_codex.CHECKS` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
 
