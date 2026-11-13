@@ -808,7 +808,7 @@ class Job(Instance):
         self.full_result(checks=doc["checks"])
         self.assertIsNone(session_versions.what_to_run("claude", OLD, NEW))
         import runtimes
-        with mock.patch.object(hubconf, "worktree_lookup", lambda: None):
+        with mock.patch.object(hubconf, "worktree_lookup", lambda: None), mock.patch("sys.stdout", new=__import__("io").StringIO()), mock.patch("sys.stderr", new=__import__("io").StringIO()):
             self.assertEqual(runtimes.main(["recheck", "claude", OLD]), 0)
             self.assertEqual(runtimes.main(["recheck", "claude", "2.1.299"]), 1)
         self.assertEqual(session_versions.what_to_run("claude", OLD, NEW), conformance.session_checks("claude"))
