@@ -244,9 +244,13 @@ Built as r2 says, measured first on codex-cli 0.169.0 (below, "Measured 11-14").
 - Records: `runtime_ports.record_session(stale_s=)` for a shared process: keyed by Codex's session id, no record drops another
   of the same pid or lends it its project, a hook of the same process touches the record, and `running_records` (so
   `open_sessions`, `recorded_sessions`, dispatch's `opened`) counts it only while its last hook is younger than `stale_s`. The
-  record's process is the nearest Codex ancestor of the hook (`session_pid`); `codex exec` is headless and gets none.
-- `current_session` with Claude and Codex installed: the ancestor walk (`session_process` claims `codex`, `@openai/codex`, the
-  vendor binary): a Codex process is nearer than any Claude session that started it, so a Claude id the daemon inherited
+  record's process is the nearest Codex ancestor of the hook (`session_pid`); `codex exec` is headless and gets none:
+  `person_session` reads `session_meta.originator` (`codex_exec`) from the rollout the hook input's `transcript_path` names,
+  and only when that can't be read the command line (`codex [options] exec|e`, an option's value skipped). A session that
+  ends on record leaves `<session>.ended` (`runtime_ports.mark_ended`, kept past the end like `.version`,
+  `hubconf.KEPT_SUFFIXES`), for doctor's unrecorded check.
+- `current_session` with Claude and Codex installed: the ancestor walk (`session_process` claims a process whose executable,
+  argv[0], is `codex`, never one that only names it in an argument): a Codex process is nearer than any Claude session that started it, so a Claude id the daemon inherited
   doesn't win. Whether `ps` works inside Codex's tool sandbox (the walk needs it) is unmeasured: no model call.
 - `hub-event`: `handle()` / `worktree()` return at once under `HUB_LLM_POINT` for a runtime with `PLATFORM_RUNS_FIRE_HOOKS`
   (Claude's behaviour unchanged, leases untouched); the `mail` handler asks `hubbus.mail_text(show=)`: `"none"` at events not
@@ -258,9 +262,14 @@ Built as r2 says, measured first on codex-cli 0.169.0 (below, "Measured 11-14").
   `memory_sync` at a session's end is detached for a runtime with `END_BUDGET_S`; `CAGED_NEEDS` is
   `runtime_ports.CONFINED_SESSION_PORTS`, so a sandboxed project's Codex session gets nothing (fail closed).
 - Dispatch: a Codex session is **neither routed to nor forked** (candidates need `can_wake`; a fork needs the default
-  runtime's `can_resume`), and since its hooks tell nothing after its start, dispatch doesn't wait for one using the project
-  either (`Sessions.tells_later`, `hubbus.active_sessions`): a letter reaches it at its next SessionStart or through `brunna
-  inbox`, else triage on Claude. An ack by a Codex session that is no longer live (2 h without a hook) frees the letter as
+  runtime's `can_resume`), and since its hooks tell nothing after its start, a letter doesn't wait for it as for a session
+  using the project (`runtime_ports.tells_later`, `hubbus.active_sessions`): a letter reaches it at its next SessionStart or
+  through `brunna inbox`, else a wakeable session, else triage on Claude. **One wait is deliberate**: a reply addressed to a
+  live Codex session (`to_session`) waits `CONVERSATION_WAIT_MIN` (5 minutes) for it as for any session (dispatch's `asked`),
+  since the rules tell a Codex session to run `brunna inbox` itself while it waits for a reply. A Codex session told at its
+  start holds a request only `NOTICE_HOLD_MIN` (10 minutes, hubbus) from the telling, not `TAKE_TIMEOUT_MIN` (60): it saw a
+  notice, not the letter, and a wakeable Claude session in the project would otherwise wait an hour; its `brunna ack` takes
+  the letter as anyone's does. An ack by a Codex session that is no longer live (2 h without a hook) frees the letter as
   any closed session's does. A Codex-only instance (`runtime.default: none`, `runtime.installed: [codex]`) has no dispatch;
   doctor says so and lists Codex's features.
 - `runtime.installed: [claude, codex]` passes config check (a registered name). `~/.codex` stays in `policy.CREDENTIALS`;
@@ -268,17 +277,29 @@ Built as r2 says, measured first on codex-cli 0.169.0 (below, "Measured 11-14").
 - Doctor: Codex's column in the feature table (the rules row says they arrive by the session-start hook); per sandboxed
   project, whose sessions are confined (`doctor_confined`); "the platform's Codex hooks aren't installed / some aren't
   trusted" (`user_missing`); "N sessions of the last hour ran without the platform's hooks" (`unrecorded`: a rollout of today
-  or yesterday changed within the hour, not `codex exec`'s, with no record). `hooks/list` waits for M11's framing.
+  or yesterday changed within the hour, not `codex exec`'s, its `cwd` in an onboarded project that isn't sandboxed (the
+  hooks record no other), with no record, version or end mark); one runtime's failure in these is said and the next is still
+  checked; a shell whose `CODEX_HOME` (or Claude Code's `CLAUDE_CONFIG_DIR`) moves the login away from the place the policy
+  denies, not named in `credentials.dirs` / `credentials.files` (`credential_override`, `doctor_credential_homes`). The
+  per-project confined row shows whenever some installed agent isn't confined, a Codex-only instance included.
+  `hooks/list` waits for M11's framing.
 - The user-level hooks: `brunna user-settings --install --runtime <name>` (the adapter's `user_install`), `--update` through
   `user_refresh` (only where the owner installed them, so upgrade adds nothing), `user_cleanup` for uninstall. `hooks.json`:
   the platform's handlers rewritten in place, a missing one appended as its own group after the user's, so no hook of the
   user's moves (keys are positional); a link or a shape Codex wouldn't read is refused. Handlers: `<hub>/bin/py
   <hub>/bin/hub-event --runtime codex <event>`, `additionalContextLimit: 0` on the three context events (the rules are about
   16 KB), `timeout: 3` on SessionEnd, matcher `Bash` on PostToolUse. Trust: `trust_entries` hashes each platform handler read
-  back from the file at its position (never a user's handler, never Codex's report); `set_trust` edits config.toml by lines
-  (a `[hooks.state."<key>"]` table's `trusted_hash` replaced or added, a missing table appended), checks with `tomllib` that the
-  result differs from the input only by those values, and refuses a key set inline or dotted. **Nothing in the platform runs
-  the install** (a test greps `bin/`); it wasn't run against the real `~/.codex`.
+  back from the file at its position (never a user's handler, never Codex's report); a group holding the platform's handler
+  and one of the user's is refused (its matcher is theirs too). `set_trust` edits config.toml by lines (a
+  `[hooks.state."<key>"]` table's `trusted_hash` replaced or added, a missing table appended, in the file's own line ends;
+  a header's key read by `tomllib`, escapes included), checks that the parsed result equals the parsed input with only those
+  values set (compared as TOML values: datetimes kept, a NaN equal to itself), and refuses a key set inline or dotted;
+  anything unforeseen there or in reading the files is `Refused`, never a traceback. Both files are read and written with
+  their line ends as they are (CRLF stays), the temp file is synced before it replaces the original, and each is written
+  only if it still holds what the plan read; when hooks.json landed and config.toml didn't, the error says so (the hooks
+  are there untrusted, and doctor says it). Rule names read from RULES must be `[a-z0-9-]+` (`prompts.listed_rules`; others
+  are left out and said on stderr). **Nothing in the platform runs the install** (a test greps `bin/`); it wasn't run
+  against the real `~/.codex`.
 - Tests: `tests/test_runtime_codex.py` (r2's list: payloads, inject, the hooks file and trust in a scratch home, a definition
   that isn't the platform's gets no trust, the TOML writer, handle() under `HUB_LLM_POINT`, two sessions on one pid, the 2 h
   cutoff and the freed ack, both ids present, config check, dispatch, the sandboxed refusal, the rules from a worktree, the
@@ -290,9 +311,9 @@ Departures and known limits:
   that moved or was removed makes Codex show the hook as failed, which is the visible failure wanted; `--update` rewrites it.
 - The install doesn't re-check the hash against Codex at run time (that needs a model-less Codex run or `hooks/list`): a
   release that changes the canonical form shows as doctor's "sessions of the last hour ran without the platform's hooks".
-- A letter named in a SessionStart notice counts as told and is held by that session (up to 60 minutes, or until the
-  session isn't live) even if the session can't run `brunna inbox` (no MCP server registered); a notice letter counts as
-  delivered. `rules_note()` tells a Codex session to run `brunna inbox` itself when it waits for a reply, since nothing
+- A letter named in a SessionStart notice counts as told and is held by that session (10 minutes, `NOTICE_HOLD_MIN`, or
+  until the session isn't live), even if the session can't run `brunna inbox` (no MCP server registered); a notice letter
+  counts as delivered. `rules_note()` tells a Codex session to run `brunna inbox` itself when it waits for a reply, since nothing
   shows it letters mid-session.
 - A Codex session in a linked worktree gets the rules (from the main checkout's memory, `project_git.scope_of`), but no
   `.agent-memory` link beside it: that link is made by Claude Code's user-level worktree hooks (`worktree-memory.sh`). Its
@@ -301,6 +322,9 @@ Departures and known limits:
   process lookup per prompt or tool call. A second SessionStart keeps the project its own record names.
 - `context_size` reads 0.165's `token_count` shape; 0.169 wrote none without a model call. It matters only for a fork, which
   a Codex session never gets.
+- `$CODEX_HOME` reaches the policy only where the process computing it has the variable; the scheduler's environment
+  doesn't. No setting was added for it: doctor says when the shell's points elsewhere, and `credentials.dirs` is the fix.
+- An executable path with a space in it isn't recognised as Codex (`session_process` reads argv[0] up to the first space).
 
 What waits on the owner: **his yes** for `brunna user-settings --install --runtime codex` (writes `~/.codex/hooks.json` and
 the trust in `~/.codex/config.toml`) and `runtime.installed: [claude, codex]` in brunna.json; and **his login** for what needs
@@ -505,7 +529,9 @@ hooks around it ran); `~/.codex` not read. Source read at tag `rust-v0.169.0` (`
   `CODEX_HOME` by its link didn't count; by its target it did); hash `sha256:` + hex sha256 of the compact, key-sorted JSON of
   `{event_name, matcher?, hooks: [{type, command, timeout, async, statusMessage?, additionalContextLimit?}]}` with the timeout
   default filled in (600 s; SessionEnd 1 s, at most 3). With it the hooks fired; with no entry, or one hex digit changed, none
-  fired and nothing was said. A matcher (`startup` on SessionStart) is part of the hash and fired. `user_install` itself,
+  fired and nothing was said. A matcher (`startup` on SessionStart) is part of the hash and fired. Pinned in `tests/test_runtime_codex.py`
+  (`TrustHash`): two handlers printing a marker, one with `additionalContextLimit: 0`, one with matcher `startup`, trusted with
+  `sha256:dc10fd98…6184e62` and `sha256:d6efab4b…4a019c212`; both markers landed in the thread. `user_install` itself,
   run against a scratch home with a stand-in hub and a user's own config.toml (comments, another hook's state) and hooks.json
   (a Stop hook), fired SessionStart, UserPromptSubmit and SessionEnd through the stand-in, kept the user's text byte for byte
   ahead of its tables, and a second run changed nothing.
