@@ -745,24 +745,32 @@ class SessionStatus(unittest.TestCase):
         self.listing(self.row("busy", "other"))
         self.assertEqual(self.rc.session_status(self.SID), "unknown")
 
+    # A listing that failed is "unlisted", not "unknown": unknown counts as idle and would wake a session that may be busy
+    # (runtime-versions.md section 5). A session the listing doesn't name stays unknown (above).
     def test_a_failure_exit(self):
         self.cli(f"echo '{json.dumps([self.row('busy')])}'\nexit 3\n")
-        self.assertEqual(self.rc.session_status(self.SID), "unknown")
+        self.assertEqual(self.rc.session_status(self.SID), "unlisted")
 
     def test_output_that_isnt_a_listing(self):
-        for body in ("echo not json\n", "echo '{\"a\": 1}'\n", "echo '[1, null]'\n", "printf '\\377\\376'\n"):
+        for body in ("echo not json\n", "echo '{\"a\": 1}'\n", "printf '\\377\\376'\n"):
             self.cli(body)
-            self.assertEqual(self.rc.session_status(self.SID), "unknown", body)
+            self.assertEqual(self.rc.session_status(self.SID), "unlisted", body)
+        self.cli("echo '[1, null]'\n")
+        self.assertEqual(self.rc.session_status(self.SID), "unknown", "a list, with no row for the session")
 
     def test_no_such_executable(self):
-        self.assertEqual(self.rc.session_status(self.SID), "unknown")
+        self.assertEqual(self.rc.session_status(self.SID), "unlisted")
 
     def test_a_timeout(self):
         self.cli("exec sleep 30\n")
         with mock.patch.object(self.rc, "AGENTS_TIMEOUT_S", 0.2):
             t = time.time()
-            self.assertEqual(self.rc.session_status(self.SID), "unknown")
+            self.assertEqual(self.rc.session_status(self.SID), "unlisted")
         self.assertLess(time.time() - t, 5)
+
+    def test_many_from_a_failed_listing(self):
+        self.cli("exit 1\n")
+        self.assertEqual(self.rc.session_statuses(["a", "b"]), {"a": "unlisted", "b": "unlisted"})
 
     def test_the_timeout_is_short(self):
         self.assertLessEqual(self.rc.AGENTS_TIMEOUT_S, 5)

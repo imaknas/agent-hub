@@ -2643,7 +2643,9 @@ def wake(c, rt, proj: str, sid: str, rows: list) -> bool:
     return ok if attempted else None
 
 
-STATUS_TICK_S = 10   # what a tick spends at most asking what sessions are doing; past it each is "unknown" (idle)
+STATUS_TICK_S = 10   # what a tick spends at most asking what sessions are doing; past it each is "unknown" (idle).
+# A look that failed is "unlisted" instead: the letter is routed (its hook shows it at the next turn) but the session isn't
+# woken, since only idle and unknown are (runtime-versions.md section 5)
 
 
 class Tick:

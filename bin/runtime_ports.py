@@ -102,8 +102,11 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          hook as before
     can_wake(sid) -> bool                                whether a wake would be handed over now, without asking for one
   session_status (optional; docs/design/mailbox-session-first.md): what a session is doing, for routing a letter
-    session_status(sid) -> str                           one of SESSION_STATUSES. Cheap, and it fails safe: anything it
-                                                         can't read or find is "unknown", which counts as idle
+    session_status(sid) -> str                           one of SESSION_STATUSES. Cheap, and it fails safe: a session it
+                                                         can't find is "unknown", which counts as idle; a look that
+                                                         failed (an error, a listing a new version changed) is
+                                                         "unlisted": a letter is routed to it but it isn't woken
+                                                         (docs/design/runtime-versions.md section 5)
     session_statuses(sids) -> {sid: str}                 optional: the same for many sessions in one look, for a runtime
                                                          whose look returns them all anyway (a tick asks it once)
   session_summary (optional; same design, "The last reply"): how a session's last reply ended
@@ -381,7 +384,7 @@ PORTS = {
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary")
 # session_status's answers: running a turn; idle; a dialog is open, for a person; can't tell (counts as idle)
-SESSION_STATUSES = ("busy", "idle", "waiting", "unknown")
+SESSION_STATUSES = ("busy", "idle", "waiting", "unknown", "unlisted")
 # Why a session can't be woken (Sessions.wake_gap): its runtime has no wake port; nothing is armed to wake it (no turn has
 # ended since it opened, or it waited out its time); what was armed stopped without leaving
 WAKE_GAPS = ("no_port", "not_armed", "stopped")

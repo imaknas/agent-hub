@@ -525,22 +525,27 @@ def wake_gap(sid: str, now=None) -> str | None:
 
 
 def session_status(sid: str) -> str:
-    """From the CLI's listing of active sessions. Only with --json: bare, the command is the agent view. Anything that goes
-    wrong, or a session it doesn't list, is unknown (runtime_ports.SESSION_STATUSES)."""
+    """From the CLI's listing of active sessions. Only with --json: bare, the command is the agent view. A session the
+    listing doesn't name, or names with a status it doesn't know, is unknown; a listing that failed is unlisted
+    (runtime_ports.SESSION_STATUSES)."""
     return session_statuses([sid])[sid]
 
 
 def session_statuses(sids) -> dict:
-    """session_status for many sessions from one listing: the listing has them all, and each call starts a process."""
+    """session_status for many sessions from one listing: the listing has them all, and each call starts a process. A
+    listing that errors, times out or isn't a JSON list (a version that changed it) makes every session unlisted, not
+    unknown: unknown counts as idle and would wake sessions that may be busy (runtime-versions.md section 5)."""
     from types import SimpleNamespace
-    out = {s: "unknown" for s in sids}
     try:
         r = subprocess.run([_exe(), "agents", "--json"], capture_output=True, text=True, timeout=AGENTS_TIMEOUT_S,
                            stdin=subprocess.DEVNULL, env=_env(SimpleNamespace(env=None)))
         rows = json.loads(r.stdout) if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError, ValueError):
-        return out
-    for row in rows if isinstance(rows, list) else ():
+        rows = None
+    if not isinstance(rows, list):
+        return {s: "unlisted" for s in sids}
+    out = {s: "unknown" for s in sids}
+    for row in rows:
         if isinstance(row, dict) and row.get("sessionId") in out:
             status = row.get("status")
             out[row["sessionId"]] = status if status in ("busy", "idle", "waiting") else "unknown"

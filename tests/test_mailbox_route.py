@@ -1299,6 +1299,17 @@ class StatusOncePerTick(Harness):
         self.assertEqual(got, {"a": "busy", "b": "waiting", "c": "unknown"})
         self.assertEqual(calls.read_text().count("x"), 1)
 
+    def test_a_session_whose_listing_failed_is_routed_to_but_not_woken(self):
+        """unlisted (runtime-versions.md section 5): the letter goes to the session, whose hook shows it at its next
+        turn; no wake, since the session may be busy."""
+        self.rt = ListingRuntime()
+        self.open("S1")
+        self.rt.statuses["S1"] = "unlisted"
+        self.send("m1", "proj", "request", src="third")
+        self.dispatch()
+        self.assertFalse(self.woken())
+        self.assertEqual([s for s, _by in self.by("m1")], ["S1"], "the letter is routed")
+
     def test_a_runtime_that_cant_list_is_left_out_of_the_routers_answer(self):
         import runtime_fake
         import runtime_ports
