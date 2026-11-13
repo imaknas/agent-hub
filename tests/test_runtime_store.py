@@ -200,6 +200,51 @@ class UpdateRuntimes(Temp):
             self.m.raise_user_copy("claude", self.dist)
             self.assertEqual(put, want, have)
 
+    def test_a_rollback_holds_until_a_newer_version(self):
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: self.doc()):
+            self.m.first_or_new("claude", self.dist, first=False)
+            self.latest = "2.1.401"
+            self.m.first_or_new("claude", self.dist, first=False)
+            store.rollback("claude")
+            self.assertEqual(store.rolled_back_from("claude"), "2.1.401")
+            self.assertEqual(self.m.first_or_new("claude", self.dist, first=False)[:2], (True, False),
+                             "the version left isn't promoted again the next night")
+            self.assertEqual(store.current("claude").version, "2.1.400")
+            self.latest = "2.1.402"
+            self.assertEqual(self.m.first_or_new("claude", self.dist, first=False)[:2], (True, True))
+        self.assertIsNone(store.rolled_back_from("claude"), "a promotion ends it")
+
+    def test_what_is_promoted_is_what_was_checked(self):
+        store.install("claude", "2.1.400", self.dist)
+        with self.assertRaises(RuntimeError):
+            store.promote("claude", "2.1.400", expect="0" * 64)
+        self.assertIsNone(store.current("claude"))
+        doc = {**self.doc(), "digest": "0" * 64}
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: doc):
+            had, promoted, _said = self.m.first_or_new("claude", self.dist, first=False)
+        self.assertEqual((had, promoted), (False, False))
+
+    def test_held_back_clears_when_nothing_newer_is_left(self):
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: self.doc()):
+            self.m.first_or_new("claude", self.dist, first=False)
+        self.latest = "2.1.401"
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: self.doc("fail")):
+            self.m.first_or_new("claude", self.dist, first=False)
+        self.assertTrue(json.loads((self.tmp / "held.json").read_text()).get("claude"))
+        self.latest = "2.1.400"   # the newer one withdrawn
+        self.m.first_or_new("claude", self.dist, first=False)
+        self.assertFalse(json.loads((self.tmp / "held.json").read_text()).get("claude"))
+        self.assertIn(("runtime-held-claude", []), self.alerts)
+
+    def test_no_user_copy_is_left_alone(self):
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: self.doc()):
+            self.m.first_or_new("claude", self.dist, first=False)
+        put = []
+        self.dist.user_copy = lambda: None
+        self.dist.install_global = lambda v: put.append(v)
+        self.assertEqual(self.m.raise_user_copy("claude", self.dist), "")
+        self.assertEqual(put, [])
+
     def test_refusals(self):
         with mock.patch.object(self.m.hubconf, "worktree_lookup", lambda: True):
             self.assertEqual(self.m.main([]), 1)

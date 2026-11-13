@@ -2101,8 +2101,10 @@ def install_global(version: str) -> None:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version or ""):
         raise RuntimeError(_("not a version: {version!r}", version=version))
     try:
+        env = {k: v for k, v in _npm_env().items() if k != TOKEN_VAR and k not in METERED_VARS
+               and not k.startswith(("ANTHROPIC_", "CLAUDE_CODE_"))}
         r = subprocess.run([_npm(), "install", "-g", f"{PACKAGE}@{version}", "--no-audit", "--no-fund"],
-                           capture_output=True, text=True, timeout=900, env=_npm_env(), stdin=subprocess.DEVNULL)
+                           capture_output=True, text=True, timeout=900, env=env, stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e
     if r.returncode != 0:
@@ -2141,8 +2143,13 @@ def install(version: str, folder) -> pathlib.Path:
         raise RuntimeError(_("not a version: {version!r}", version=version))
     folder.mkdir(parents=True, exist_ok=True)
     try:
+        # the package's own install script (the native binary's link) is the candidate's code: it runs with a home of
+        # its own and no login of any kind in its environment (runtime-versions.md section 3a)
+        env = {k: v for k, v in _npm_env().items() if k != TOKEN_VAR and k not in METERED_VARS
+               and not k.startswith(("ANTHROPIC_", "CLAUDE_CODE_"))}
+        env["HOME"] = str(folder)
         r = subprocess.run([_npm(), "install", "--prefix", str(folder), f"{PACKAGE}@{version}", "--no-audit", "--no-fund",
-                            "--save-exact"], capture_output=True, text=True, timeout=900, env=_npm_env(),
+                            "--save-exact"], capture_output=True, text=True, timeout=900, env=env,
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e

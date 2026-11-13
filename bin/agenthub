@@ -1374,6 +1374,8 @@ def cmd_doctor(argv: list[str]) -> int:
         if name != "none" and runtime_ports.unversioned(name):
             add("info", _("the runtime {runtime} is unversioned: the platform can't install or check a fixed version of it, "
                           "so its runs use whichever copy is on PATH", runtime=name))
+        elif name != "none" and "distribution" in runtime_ports.capabilities(name):
+            doctor_store(add, name)
     for name in dict.fromkeys([rname, *installed]):
         if runtime_ports.folder_git_unknown(name):
             add("info", _("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any "
@@ -1544,6 +1546,25 @@ def doctor_propose(add) -> None:
                       "you in a folder the project can write can be sent elsewhere by it. Their letters stay open for their sessions, "
                       "and each start that was refused shows on the status page", projects=", ".join(off)),
             _("until the agent process itself runs under the sandbox, sessions handle those letters"))
+
+
+def doctor_store(add, name: str) -> None:
+    """The runtime's checked copy in the store (docs/design/runtime-versions.md section 3): the version, none yet, or one
+    held back. Until platform runs move to the store they still start the copy on PATH, so these are information."""
+    import runtime_store
+    cur = runtime_store.current(name)
+    try:
+        held = json.loads((hubconf.STATE / "runtime-held.json").read_text()).get(name) or {}
+    except (OSError, ValueError, AttributeError):
+        held = {}
+    if cur is None:
+        add("info", _("the runtime {runtime} has no checked copy in the store yet (brunna runtimes install {runtime}); "
+                      "the nightly brunna/update-runtimes makes one", runtime=name))
+    else:
+        add("ok", _("the runtime {runtime}: checked copy {version} in the store", runtime=name, version=cur.version))
+    if held.get("version"):
+        add("info", _("the runtime {runtime}: {version} held back since {since} (brunna runtimes shows why)", runtime=name,
+                      version=held["version"], since=held.get("since") or "?"))
 
 
 def doctor_wake_misses(add) -> None:

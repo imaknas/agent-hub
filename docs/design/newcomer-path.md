@@ -70,7 +70,9 @@ From then on the user just talks to their agent.
   - A newcomer who logs into Claude and picks "the coding agent's own login" still gets every nightly judgment call
     failing until the token file exists.
 - **claude must come from nvm's npm.** `hubconf.nvm_bin()`, known-issues.md, and the nightly `update-claude` that keeps
-  that copy current all assume it. A second copy, e.g. from Anthropic's native installer, drifts.
+  that copy current all assume it. A second copy, e.g. from Anthropic's native installer, drifts. (11-14: `update-claude`
+  is replaced by `brunna/update-runtimes`, which keeps a checked copy in the platform's store and raises nvm's copy to
+  it; runtime-versions.md.)
 - **Codex works today only through `runtime_command`** with a command template. That gives agent runs and judgment
   calls, but no hooks, sessions or credentials.
 - **The desktop apps:**

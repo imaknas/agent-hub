@@ -8,5 +8,6 @@
  "its executable's size or time": "它的執行檔大小或時間",
  "its executable's content": "它的執行檔內容",
  "{version} isn't installed in the store": "{version} 沒有裝在 store 裡",
- "its executable is gone": "它的執行檔不見了"
+ "its executable is gone": "它的執行檔不見了",
+ "{version} changed while it was checked: not promoted": "{version} 在檢查期間被改過:不採用"
 }

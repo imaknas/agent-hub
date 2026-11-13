@@ -24,5 +24,13 @@
  "{runtime} {version} could not be installed: {error}": "{runtime} {version} 裝不起來:{error}",
  "no checked copy": "沒有檢查過的那份",
  "your own {runtime} could not be raised to {version}: {error}": "你自己的 {runtime} 沒辦法更新到 {version}:{error}",
- "{runtime}: removed {versions}": "{runtime}:移除了 {versions}"
+ "{runtime}: removed {versions}": "{runtime}:移除了 {versions}",
+ "{runtime}: back to normal ({what})": "{runtime}:恢復正常({what})",
+ "platform runs already use {version}: it is your own copy, which they start until they move to the store": "平台的執行已經在用 {version}:那是你自己的那份,在它們改用 store 之前都是跑它",
+ "{runtime}: not a runtime the platform uses with a distribution port": "{runtime}:不是平台在用、又有 distribution port 的 runtime",
+ "{what}: now checked by brunna/update-runtimes": "{what}:現在改由 brunna/update-runtimes 檢查",
+ "{runtime}: the newest version can't be told, so none is checked: {error}": "{runtime}:查不到最新版本,所以沒有版本被檢查:{error}",
+ "{runtime} {version}: the checks could not run, so it isn't promoted: {error}": "{runtime} {version}:檢查跑不了,所以不採用:{error}",
+ "{runtime} {version}: not promoted: {error}": "{runtime} {version}:沒採用:{error}",
+ "{runtime}: update-runtimes broke: {error}": "{runtime}:update-runtimes 壞了:{error}"
 }

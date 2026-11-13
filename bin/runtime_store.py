@@ -159,9 +159,10 @@ def digest(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
-def promote(runtime: str, version: str, result_file: str | None = None) -> Entry:
-    """Record what this version's executable is now (size, mtime, real path, sha256), then make it current, the old
-    current becoming previous. Raises RuntimeError."""
+def promote(runtime: str, version: str, result_file: str | None = None, expect: str | None = None) -> Entry:
+    """Record what this version's executable is now (size, mtime, inode, real path, sha256), then make it current, the
+    old current becoming previous. expect: the sha256 the checks ran on; anything else is refused (the checks ran the
+    candidate's own code for minutes). Raises RuntimeError."""
     with writer(runtime) as d:
         folder = d / version
         try:
@@ -173,15 +174,28 @@ def promote(runtime: str, version: str, result_file: str | None = None) -> Entry
         if not real.is_file() or folder.resolve() not in real.parents:
             raise RuntimeError(_("{version}'s executable isn't a file inside its folder", version=version))
         st = real.stat()
+        sha = digest(real)
+        if expect is not None and sha != expect:
+            raise RuntimeError(_("{version} changed while it was checked: not promoted", version=version))
         record = {"version": version, "exe": done["exe"], "real": str(real.relative_to(folder.resolve())),
-                  "size": st.st_size, "mtime": st.st_mtime, "sha256": digest(real), "result": result_file,
+                  "size": st.st_size, "mtime": st.st_mtime, "ino": st.st_ino, "sha256": sha, "result": result_file,
                   "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
         _fsync_write(folder / PROMOTED, json.dumps(record, indent=1) + "\n")
         was = _linked(runtime, "current")
         if was and was != version:
             _relink(d, "previous", was)
         _relink(d, "current", version)
+        (d / ".rolled-back").unlink(missing_ok=True)   # a promotion ends a rollback's hold on the version it left
     return current(runtime)
+
+
+def rolled_back_from(runtime: str) -> str | None:
+    """The version a rollback left, which update-runtimes doesn't install again until a newer one is published."""
+    try:
+        v = (root(runtime) / ".rolled-back").read_text().strip()
+    except OSError:
+        return None
+    return v if VERSION.match(v) else None
 
 
 def rollback(runtime: str) -> Entry:
@@ -193,6 +207,7 @@ def rollback(runtime: str) -> Entry:
         _relink(d, "current", was)
         if now:
             _relink(d, "previous", now)
+            _fsync_write(d / ".rolled-back", now + "\n")
     return current(runtime)
 
 
@@ -225,7 +240,7 @@ def verify(e: Entry) -> str | None:
         return changed.format(what=_("its executable is gone"))
     if str(real) != str(e.folder.resolve() / p.get("real", "")):
         return changed.format(what=_("its executable points elsewhere"))
-    if st.st_size != p.get("size") or st.st_mtime != p.get("mtime"):
+    if st.st_size != p.get("size") or st.st_mtime != p.get("mtime") or st.st_ino != p.get("ino", st.st_ino):
         return changed.format(what=_("its executable's size or time"))
     stamp = e.folder / ".verified"
     today = datetime.date.today().isoformat()
@@ -248,9 +263,9 @@ def prune(runtime: str, keep_days: int = KEEP_DAYS, now: float | None = None) ->
     holds. The versions removed."""
     import time
     now = time.time() if now is None else now
-    keep = {_linked(runtime, n) for n in LINKS}
     gone = []
     with writer(runtime) as d:
+        keep = {_linked(runtime, n) for n in LINKS}   # read under the lock: a promotion can't move them meanwhile
         for v in versions(runtime):
             folder = d / v
             if v in keep or now - folder.stat().st_mtime < keep_days * 86400:
@@ -273,4 +288,7 @@ def prune(runtime: str, keep_days: int = KEEP_DAYS, now: float | None = None) ->
         for st in d.glob(".staging-*"):
             if now - st.stat().st_mtime > 86400:
                 shutil.rmtree(st, ignore_errors=True)
+        for left in (*d.glob(".current-*"), *d.glob(".previous-*"), *d.glob("*/.promoted.json-*")):
+            if now - left.lstat().st_mtime > 86400:   # a writer that crashed between writing and renaming
+                left.unlink(missing_ok=True)
     return gone

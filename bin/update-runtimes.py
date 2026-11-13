@@ -101,6 +101,12 @@ def promotable(doc: dict, mod) -> str | None:
     return None
 
 
+def _quiet(runtime: str, *keys: str) -> None:
+    """The alerts of a state that has passed are resolved (each is a no-op when it isn't open)."""
+    for key in keys:
+        alert.once(f"runtime-{key}-{runtime}", [], _("{runtime}: back to normal ({what})", runtime=runtime, what=key))
+
+
 def first_or_new(runtime: str, mod, first: bool) -> tuple[bool, bool, str]:
     """(whether the runtime ends with a checked copy, whether a version was just promoted, what happened)."""
     cur = runtime_store.current(runtime)
@@ -109,35 +115,61 @@ def first_or_new(runtime: str, mod, first: bool) -> tuple[bool, bool, str]:
     try:
         latest = mod.latest()
     except RuntimeError as e:
+        alert.once(f"runtime-latest-{runtime}", [_("{runtime}: the newest version can't be told, so none is checked: "
+                                                   "{error}", runtime=runtime, error=e)],
+                   _("{runtime}: back to normal ({what})", runtime=runtime, what="latest"), ids=["latest"])
         return cur is not None, False, _("{runtime}: the newest version can't be told: {error}", runtime=runtime, error=e)
-    if cur and not newer(latest, cur.version):
+    _quiet(runtime, "latest")
+    held = _held(runtime)
+    skip = runtime_store.rolled_back_from(runtime)
+    if cur and (not newer(latest, cur.version) or (skip and not newer(latest, skip))):
+        # nothing newer than what runs (or than the version rolled back from): whatever was held back has passed
+        if held:
+            _set_held(runtime, None)
+        _quiet(runtime, "held", "install", "checks")
         return True, False, ""
     try:
         exe = runtime_store.install(runtime, latest, mod)
     except RuntimeError as e:
         alert.once(f"runtime-install-{runtime}", [_("{runtime} {version} could not be installed: {error}", runtime=runtime,
                                                     version=latest, error=e)],
-                   _("{runtime}: installing works again", runtime=runtime), ids=[f"install:{e}"])
+                   _("{runtime}: installing works again", runtime=runtime), ids=["install"])
         return cur is not None, False, _("{runtime} {version}: not installed: {error}", runtime=runtime, version=latest, error=e)
-    alert.once(f"runtime-install-{runtime}", [], _("{runtime}: installing works again", runtime=runtime))
+    _quiet(runtime, "install")
     try:
         doc = conformance.run(runtime, str(exe))
     except RuntimeError as e:
+        alert.once(f"runtime-checks-{runtime}", [_("{runtime} {version}: the checks could not run, so it isn't promoted: "
+                                                   "{error}", runtime=runtime, version=latest, error=e)],
+                   _("{runtime}: back to normal ({what})", runtime=runtime, what="checks"), ids=["checks"])
         return cur is not None, False, _("{runtime} {version}: the checks could not run: {error}", runtime=runtime,
-                                  version=latest, error=e)
+                                         version=latest, error=e)
+    _quiet(runtime, "checks")
     result = conformance.record(doc)
     why = promotable(doc, mod)
     if why is None:
-        runtime_store.promote(runtime, latest, str(result))
+        try:   # what is promoted is what was checked: the same digest, or nothing
+            runtime_store.promote(runtime, latest, str(result), expect=doc.get("digest"))
+        except RuntimeError as e:
+            alert.once(f"runtime-checks-{runtime}", [str(e)], _("{runtime}: back to normal ({what})", runtime=runtime,
+                                                                 what="checks"), ids=["promote"])
+            return cur is not None, False, _("{runtime} {version}: not promoted: {error}", runtime=runtime,
+                                             version=latest, error=e)
         _set_held(runtime, None)
         alert.once(f"runtime-held-{runtime}", [], _("{runtime} {version} passed its checks and runs the platform's work",
                                                     runtime=runtime, version=latest))
         return True, True, _("{runtime}: {old} → {new}, checked and promoted", runtime=runtime,
-                       old=cur.version if cur else _("none"), new=latest)
-    held = _held(runtime)
-    since = held.get("since") or datetime.date.today().isoformat()
+                             old=cur.version if cur else _("none"), new=latest)
+    since = held.get("since") if held.get("version") else None
+    since = since or datetime.date.today().isoformat()
     _set_held(runtime, {"version": latest, "since": since})
     lines, ids = _problems(doc)
+    find = getattr(mod, "user_copy", None)
+    mine = find() if callable(find) else None
+    if mine and mod.version_of(mine) == latest:   # until platform runs move to the store, they run the user's copy
+        lines.append(_("platform runs already use {version}: it is your own copy, which they start until they move to "
+                       "the store", version=latest))
+        ids.append("runs-it")
     days = (datetime.date.today() - datetime.date.fromisoformat(since)).days
     if days >= ESCALATE_DAYS:
         lines.append(_("{runtime} has been held back at {version} since {since}", runtime=runtime,
@@ -146,7 +178,7 @@ def first_or_new(runtime: str, mod, first: bool) -> tuple[bool, bool, str]:
     alert.once(f"runtime-held-{runtime}", lines or [why], _("{runtime}: no version is held back now", runtime=runtime),
                ids=ids or [f"held:{why}"])
     return cur is not None, False, _("{runtime} {version}: held back ({why}); {current} stays", runtime=runtime, version=latest,
-                              why=why, current=cur.version if cur else _("no checked copy"))
+                                     why=why, current=cur.version if cur else _("no checked copy"))
 
 
 def daily(runtime: str) -> str:
@@ -172,7 +204,9 @@ def raise_user_copy(runtime: str, mod) -> str:
     if cur is None or not callable(find) or not callable(put):
         return ""
     exe = find()
-    have = mod.version_of(exe) if exe else None
+    if exe is None:   # no copy of the user's (no nvm, or none installed): not the platform's to make
+        return ""
+    have = mod.version_of(exe)
     if have and not newer(cur.version, have):
         return ""
     try:
@@ -199,21 +233,36 @@ def main(argv: list[str]) -> int:
         return 1
     first = "--first" in argv
     only = argv[argv.index("--runtime") + 1] if "--runtime" in argv else None
-    ok = True
-    for runtime in in_use():
+    if not first:   # update-claude's alerts, retired with it (11-14): resolved once if one was left open
+        for key in ("claude-version", "claude-restricted", "claude-git-filter"):
+            alert.once(key, [], _("{what}: now checked by brunna/update-runtimes", what=key))
+    ok, used = True, in_use()
+    if only and only not in used:
+        print(_("{runtime}: not a runtime the platform uses with a distribution port", runtime=only), file=sys.stderr)
+        return 1
+    for runtime in used:
         if only and runtime != only:
             continue
         mod = runtime_ports._module(runtime)
-        had, promoted, said = first_or_new(runtime, mod, first)
-        ok = ok and had
-        for line in (said, "" if first or promoted or not had else daily(runtime),
-                     "" if first else raise_user_copy(runtime, mod)):
-            if line:
-                print(line)
-        if not first:
-            gone = runtime_store.prune(runtime)
-            if gone:
-                print(_("{runtime}: removed {versions}", runtime=runtime, versions=", ".join(gone)))
+        try:
+            had, promoted, said = first_or_new(runtime, mod, first)
+            ok = ok and had
+            for line in (said, "" if first or promoted or not had else daily(runtime),
+                         "" if first else raise_user_copy(runtime, mod)):
+                if line:
+                    print(line)
+            if not first:
+                gone = runtime_store.prune(runtime)
+                if gone:
+                    print(_("{runtime}: removed {versions}", runtime=runtime, versions=", ".join(gone)))
+        except Exception as e:   # one runtime's breakage never stops the others; said, and alerted
+            ok = False
+            alert.once(f"runtime-job-{runtime}", [_("{runtime}: update-runtimes broke: {error}", runtime=runtime,
+                                                    error=type(e).__name__)],
+                       _("{runtime}: back to normal ({what})", runtime=runtime, what="job"), ids=[type(e).__name__])
+            print(_("{runtime}: update-runtimes broke: {error}", runtime=runtime, error=repr(e)), file=sys.stderr)
+        else:
+            alert.once(f"runtime-job-{runtime}", [], _("{runtime}: back to normal ({what})", runtime=runtime, what="job"))
     return 0 if ok else 1
 
 
