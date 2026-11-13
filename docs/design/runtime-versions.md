@@ -696,6 +696,29 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      `.claude/<name>` through Edit and through Bash `sh -c`). confine-sandbox passes again with the Read-then-Write prompt
      (step 4's open item). lifecycle-events was left out: from a worktree its hooks run the main checkout's `hub-event`,
      which logs into the live log. sessions-fork on 2.1.323 paired with itself (the promotion case) passes too.
+   - **Blind review of the build (11-14): one blocking, six should-fix, all taken.**
+     - B1: a gated session never records presence (its mail is off), so `own_session` dropped its id, and its `ack`
+       went in with no session, holding the letter for good. `take` now asks the gate of the id as the outbox file
+       names it (`gated` reads the session's own record, written outside the sandbox).
+     - The hook's gate reads the version on the session's process record when the record names this process. What an
+       installed copy's files say can change under a running session (nvm's `package.json` after an update). When the
+       record and the files disagree and either has a failure on record, the record counts only if its start time
+       matches (one process lookup, only then).
+     - A result now records `code`, a digest of `conformance_<runtime>.py`, `policy.py`, the runtime adapter and
+       `render-project-settings.py`. When it changes, the version's safety checks run again. A check missing from a
+       result runs; one recorded as not-checkable runs once a day once it has a `run` (V-M6's checks, when built). A
+       recorded fail is otherwise kept. `brunna runtimes recheck <runtime> <version>` marks the result, which stays and
+       gates until the job has run every check again; the alert and doctor's row name it.
+     - Leases: every lease written by a version other than `current` is counted as seen, however long it has been idle.
+       The lease runner's own resume refuses a failed pair and keeps the older version while the pair is unchecked. A
+       lease re-opened by id keeps its version.
+     - An install writes `seen` in the same turn of the writer's lock. A copy pruned before its hold is said and left
+       for the next run. A copy that says another version than its folder isn't recorded.
+     - The MCP server's "N letters open" notice, and its instructions' line, aren't given to a gated session.
+     - What a gated session's user still does on purpose is not gated: `brunna done` and `brunna pass` (and `send`)
+       are their own acts and go through as before. Only what would make the session hold a letter (`ack`, an inbox
+       read's `told`) is read past.
+     - Nit: the native installer's layout (`~/.local/share/claude/versions/<version>`) is read as a version too.
    - Hook timestamps: `hub-event.log` writes local times with no zone; the job reads them as local (a test writes its
      lines through hub-event's own logging, so the format can't drift from what the count reads).
 5. **Codex Step 1** builds on all of it: `conformance_codex.CHECKS` (M1, M8, M9's cases), its store and platform home, section 3a's
