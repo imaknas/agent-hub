@@ -415,7 +415,7 @@ class HookGate(Instance):
         self.assertEqual(self.ran, ["session_record"])
         self.ran.clear()
         self.hook("session_end")
-        self.assertEqual(sorted(self.ran), ["mail_end", "memory_sync", "wake_address_drop"])
+        self.assertEqual(sorted(self.ran), ["end_mark", "mail_end", "memory_sync", "wake_address_drop"])
 
     def test_pending_and_unsandboxed_run_as_before(self):
         for case in ("pending", "open"):
