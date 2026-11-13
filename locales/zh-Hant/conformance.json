@@ -1,0 +1,14 @@
+{
+ "usage: conformance.py run <runtime> [--binary <exe>] [--only <check>]... [--report]": "用法:conformance.py run <runtime> [--binary <執行檔>] [--only <檢查>]... [--report]",
+ "{runtime} {version}: {verdict} ({binary}, checked {at})": "{runtime} {version}:{verdict}({binary},{at} 檢查)",
+ "not isolated: {places} outside the throwaway world": "沒有隔離好:{places} 在一次性環境之外",
+ "the runtime {runtime} has no distribution port: it is unversioned, nothing to check": "runtime {runtime} 沒有 distribution port:沒有版本管理,沒有東西可以檢查",
+ "{exe} does not say its version": "{exe} 說不出自己的版本",
+ "no such check: {names}": "沒有這個檢查:{names}",
+ "conformance: {root} is a linked worktree of the hub; results are recorded only from the main checkout ({main}); --report works here": "conformance:{root} 是 hub 的 linked worktree;結果只從主 checkout({main})記錄;這裡可以用 --report",
+ "recorded: {file}": "已記錄:{file}",
+ "no answer in {s} s": "{s} 秒內沒有回答",
+ "the check answered no state": "檢查沒有回報狀態",
+ "the check's process ended without an answer (exit {code})": "檢查的程序結束了,沒有回答(exit {code})",
+ "the check broke: {error}": "檢查本身壞了:{error}"
+}

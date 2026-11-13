@@ -2147,6 +2147,17 @@ def version_of(exe) -> str | None:
     return m.group(1) if r.returncode == 0 and m else None
 
 
+from runtime_ports import Check  # noqa: E402
+
+# The conformance checks of a Claude Code binary (bin/conformance.py; runtime-versions.md section 2). Every port has an
+# entry (tests/test_conformance_cover.py); the ones still being written in step 1 say so as not-checkable.
+_PENDING = "not written yet (runtime-versions.md step 1)"
+CONFORMANCE = [Check(port, port, "safety" if port in ("confine", "control", "rule_check") else "function", None, _PENDING)
+               for port in ("agent", "lifecycle", "instructions", "control", "sessions", "stream", "auth", "completion",
+                            "confine", "tool_servers", "rule_check", "run_server", "wake", "session_status",
+                            "session_summary", "distribution")]
+
+
 def pin_env(folder) -> dict:
     """What keeps a run of this copy from updating itself (V-M5): the updater off, and npm's global prefix at the copy's
     own folder, so an updater that ignored the flag could write only into this copy, where the digest check sees it."""

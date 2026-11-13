@@ -396,6 +396,28 @@ PORTS = {
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
+# ---------- conformance (docs/design/runtime-versions.md section 2) ----------
+# An adapter with the distribution port declares CONFORMANCE: [Check], one or more per port it implements, which
+# bin/conformance.py runs against a binary in a throwaway world (tests/test_conformance_cover.py: no port goes unaccounted).
+
+class Outcome(NamedTuple):
+    state: str          # one of CHECK_STATES
+    reason: str = ""    # why, in a few words: never the tool's output or a file's contents
+
+
+class Check(NamedTuple):
+    name: str           # unique within the runtime
+    port: str           # the port it guards (a PORTS key)
+    kind: str           # "safety" (it holds a confinement property; counts at once) or "function" (run once more on a fail)
+    run: object = None  # callable(world) -> Outcome; None: not-checkable
+    measurement: str = ""   # not-checkable: the measurement that would make it checkable
+    timeout_s: int = 600
+
+
+CHECK_STATES = ("pass", "fail", "error", "not-checkable")
+CHECK_KINDS = ("safety", "function")
+
+
 # session_status's answers: running a turn; idle; a dialog is open, for a person; can't tell (counts as idle)
 SESSION_STATUSES = ("busy", "idle", "waiting", "unknown", "unlisted")
 # Why a session can't be woken (Sessions.wake_gap): its runtime has no wake port; nothing is armed to wake it (no turn has

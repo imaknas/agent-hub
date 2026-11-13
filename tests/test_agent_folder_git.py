@@ -912,7 +912,7 @@ class SystemTempIsNoPlaceForIt(unittest.TestCase):
     hubconf.private_tmp; these are the uses left, each with its reason in docs/design/mailbox-session-first.md. A new one has to say why.
     A hint, not a proof: it reads lines, so a call split over lines or a path built elsewhere goes unseen."""
     LEFT = {"bin/gen-index-roster.sh", "bin/config-check", "bin/run-tests", "bin/test-runner.py", "bin/sync-local-setup.sh", "bin/runtime_acp.py", "bin/seatbelt.py", "bin/landlock.py",
-            "bin/cap-runner.py", "bin/linux-test", "bin/lint"}
+            "bin/cap-runner.py", "bin/linux-test", "bin/lint", "bin/conformance.py"}
     USE = __import__("re").compile(r"tempfile[.](?:mkdtemp|TemporaryDirectory|NamedTemporaryFile|mkstemp|gettempdir|TemporaryFile)[(]"
                                    r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders|TMPDIR")
     MOVED = __import__("re").compile(r"dir=(?:hubconf[.])?(?:private_tmp[(][)]|STATE\b)")   # both denied to every sandbox

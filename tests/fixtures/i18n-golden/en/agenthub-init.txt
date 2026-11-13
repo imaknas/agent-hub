@@ -2,7 +2,7 @@ $ agenthub init --dry-run --yes --no-launchd    # old layout
 [exit 0]
 --- stdout
 ✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
-(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/state/logs
 (dry-run) create folder <TMP>/home/git-origin
 --no-launchd: not installing the scheduler, not applying services
 --- stderr
@@ -11,7 +11,7 @@ $ agenthub init --dry-run --yes    # instance, launchd
 [exit 0]
 --- stdout
 ✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then run brunna config apply)
-(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/state/logs
 (dry-run) create folder <TMP>/home/git-origin
 (dry-run) local.brunna-scheduler: install
 (dry-run) local.brunna-scheduler-watchdog: install
@@ -23,7 +23,7 @@ $ agenthub init --dry-run --yes    # instance, systemd
 [exit 0]
 --- stdout
 ✓ <TMP>/config/hub.json already exists; leaving it alone (to change it, edit it, then run brunna config apply)
-(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/state/logs
 (dry-run) create folder <TMP>/home/git-origin
 (dry-run) local.brunna-scheduler: install (systemd)
 (dry-run) local.brunna-scheduler-watchdog: install (systemd)
@@ -36,7 +36,7 @@ $ agenthub init --dry-run --yes    # no service manager
 [exit 0]
 --- stdout
 ✓ <TMP>/config/hub.json already exists (the old layout); leaving it alone
-(dry-run) create folder <TMP>/fakehub/.logs
+(dry-run) create folder <TMP>/state/logs
 (dry-run) create folder <TMP>/home/git-origin
 ⚠️ HOME (<TMP>/home) is not this account's home directory: the platform leaves the account's background services alone (installing one from here would replace the account's real one); to run the nightly flow, schedule `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py` yourself every 15 minutes (for example the crontab line `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
@@ -54,7 +54,7 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 [exit 0]
 --- stdout
 ✓ brunna's folder: <TMP>/inst (you: Sam; on: reflect, backup)
-create folder <TMP>/fakehub/.logs
+create folder <TMP>/state/logs
 create folder <TMP>/ws2
 create folder <TMP>/home/git-origin
 create folder <TMP>/home/.memory-copies

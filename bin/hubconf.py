@@ -396,7 +396,9 @@ def tool(name: str) -> str:
 
 # tests use another
 STATE = pathlib.Path(names.env("STATE")) if names.env("STATE") else MAIN / ".state"
-LOGS = MAIN / ".logs"
+# The logs beside the state they belong to: the hub's own, or a throwaway state's (a conformance check's world, a test's),
+# so a run pointed at another state writes no line into the live logs (docs/design/runtime-versions.md section 2)
+LOGS = MAIN / ".logs" if STATE == MAIN / ".state" else STATE / "logs"
 
 
 def worktree_lookup() -> bool:

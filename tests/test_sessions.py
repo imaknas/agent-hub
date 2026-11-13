@@ -403,13 +403,17 @@ class VersionsAndSkips(Temp):
         f = self.tmp / "x.jsonl"
         a = {**pin.human(pin.at(1, 9), "S", "g1", pin.ALPHA), "version": "2.1.300"}
         b = {**pin.human(pin.at(1, 10), "S", "g2", pin.ALPHA), "version": "2.1.301"}
-        f.write_text("".join(x + "\n" for x in (json.dumps(a), "not json", json.dumps({"type": "brand-new", "version":
-                     "2.1.301"}), json.dumps(b), "", json.dumps({**b, "uuid": "g3", "timestamp": 5}))))
+        opening = json.dumps({"type": "custom-title", "title": "t"})   # metadata before any version: the first one's
+        f.write_text("".join(x + "\n" for x in (opening, json.dumps(a), "not json", json.dumps({"type": "brand-new", "version":
+                     "2.1.301"}), json.dumps(b), "", json.dumps({**b, "uuid": "g3", "timestamp": 5}),
+                     json.dumps({"type": "api-request", "version": "2.1.301"}))))
         tally = {}
         got = list(sessions_claude.records(f, tally))
         self.assertEqual([(t.id, t.version) for t in got], [("g1", "2.1.300"), ("g2", "2.1.301")])
-        self.assertEqual(tally, {"2.1.300": [2, 1], "2.1.301": [3, 2]},
-                         "a line that isn't JSON counts under the last version seen; an empty line isn't counted")
+        self.assertEqual(tally, {"2.1.300": [3, 1], "2.1.301": [4, 2]},
+                         "a line that isn't JSON counts under the last version seen, the opening metadata under the "
+                         "first; a type it passes over on purpose isn't skipped, a type it doesn't know is; an empty "
+                         "line isn't counted")
         self.assertEqual([t.id for t in sessions_claude.records(f)], ["g1", "g2"], "the tally is optional")
 
     def test_codex_version_from_the_session_meta(self):

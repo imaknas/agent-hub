@@ -119,6 +119,13 @@ def _parse_ts(ts: str) -> datetime.datetime:
 
 
 _KNOWN = {"user", "assistant", "system", "summary", "attachment", "progress", "queue-operation", "file-history-snapshot"}
+# Entries Claude Code writes beside the turns, which carry none (request records, titles, modes, links, ledgers): read and
+# passed over on purpose, not skipped. A type in neither set counts as skipped, so a version that adds or renames one is
+# seen in `brunna runtimes` (seen in a week of transcripts, 2.1.295 to 2.1.322, 11-13)
+_IGNORED = {"api-request-blob", "api-request", "api-request-shape", "last-prompt", "atis-latch", "custom-title",
+            "agent-name", "bridge-session", "mode", "frame-link", "pr-link", "worktree-state", "relocated",
+            "session-owner", "file-history-delta", "cost-state", "artifact-autoreact-ledger", "tools-used",
+            "artifact-comment-monitor"}
 
 
 def _turn(o: dict, fallback_sid: str) -> Turn | None:
@@ -141,10 +148,17 @@ def _turn(o: dict, fallback_sid: str) -> Turn | None:
 
 def records(file: pathlib.Path, tally: dict | None = None):
     """The file's entries as Turns; tally (optional) counts the lines per Claude Code version and those skipped
-    (sessions.tally_line). Each entry names the version that wrote it; a line that doesn't is counted under the last
-    version seen in the file."""
+    (sessions.tally_line). Each turn names the version that wrote it; a line that doesn't is counted under the last
+    version seen in the file, or under the first one when none is seen yet (the metadata a file opens with)."""
     parsed = recognised = 0
     version = ""
+    early: list[bool] = []   # whether each line before the first version was skipped
+
+    def count(skipped: bool) -> None:
+        if version:
+            tally_line(tally, version, skipped)
+        else:
+            early.append(skipped)
     with file.open(errors="replace") as fh:
         for line in fh:
             if not line.strip():
@@ -152,23 +166,34 @@ def records(file: pathlib.Path, tally: dict | None = None):
             try:
                 o = json.loads(line)
             except ValueError:
-                tally_line(tally, version, True)
+                count(True)
                 continue
             parsed += 1
             if isinstance(o, dict) and isinstance(o.get("version"), str) and o["version"]:
+                if not version:
+                    version = o["version"]
+                    for skipped in early:
+                        tally_line(tally, version, skipped)
+                    early.clear()
                 version = o["version"]
-            if not isinstance(o, dict) or not isinstance(o.get("type"), str) or o["type"] not in _KNOWN:
-                tally_line(tally, version, True)
+            kind = o.get("type") if isinstance(o, dict) else None
+            if isinstance(kind, str) and kind in _IGNORED:
+                count(False)
+                continue
+            if not isinstance(kind, str) or kind not in _KNOWN:
+                count(True)
                 continue
             recognised += 1
             try:
                 t = _turn(o, file.stem)
             except (TypeError, ValueError, AttributeError):
-                tally_line(tally, version, True)
+                count(True)
                 continue   # one malformed entry (a field of the wrong shape) is skipped, not the whole run
-            tally_line(tally, version, False)
+            count(False)
             if t:
                 yield t._replace(version=version)
+    for skipped in early:   # a file with no version anywhere
+        tally_line(tally, "", skipped)
     if parsed >= 5 and recognised == 0:
         raise SessionFormatError(_("{file}: {n} {n:record|records}, none in a known format (did Claude Code change "
                                    "its transcript format?)", file=file, n=parsed))

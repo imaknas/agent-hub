@@ -2,7 +2,7 @@ $ agenthub init --dry-run --yes --no-launchd    # old layout
 [exit 0]
 --- stdout
 ✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
-(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/state/logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
 --no-launchd:不裝排程器、不套用服務
 --- stderr
@@ -11,7 +11,7 @@ $ agenthub init --dry-run --yes    # instance, launchd
 [exit 0]
 --- stdout
 ✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
-(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/state/logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
 (dry-run) local.brunna-scheduler:安裝
 (dry-run) local.brunna-scheduler-watchdog:安裝
@@ -23,7 +23,7 @@ $ agenthub init --dry-run --yes    # instance, systemd
 [exit 0]
 --- stdout
 ✓ 已經有 <TMP>/config/hub.json,不動它(要改就直接編輯,再 hub config apply)
-(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/state/logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
 (dry-run) local.brunna-scheduler:安裝(systemd)
 (dry-run) local.brunna-scheduler-watchdog:安裝(systemd)
@@ -36,7 +36,7 @@ $ agenthub init --dry-run --yes    # no service manager
 [exit 0]
 --- stdout
 ✓ 已經有 <TMP>/config/hub.json(舊的擺法),不動它
-(dry-run) 建資料夾 <TMP>/fakehub/.logs
+(dry-run) 建資料夾 <TMP>/state/logs
 (dry-run) 建資料夾 <TMP>/home/git-origin
 ⚠️ HOME(<TMP>/home)不是這個帳號的家目錄:平台不碰這個帳號的背景服務(從這裡安裝,會換掉帳號裡真正在跑的那一個);要跑夜間流程就自己每 15 分鐘排程 `<TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`(例如 crontab 加一行 `*/15 * * * * <TMP>/fakehub/bin/py <TMP>/fakehub/bin/scheduler.py`)
 
@@ -54,7 +54,7 @@ $ agenthub init --home <TMP>/inst --owner Sam --timezone UTC --workspace <TMP>/w
 [exit 0]
 --- stdout
 ✓ brunna 的資料夾:<TMP>/inst(你:Sam;打開的功能:reflect, backup)
-建資料夾 <TMP>/fakehub/.logs
+建資料夾 <TMP>/state/logs
 建資料夾 <TMP>/ws2
 建資料夾 <TMP>/home/git-origin
 建資料夾 <TMP>/home/.memory-copies

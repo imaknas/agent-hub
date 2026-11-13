@@ -201,6 +201,7 @@ $ agenthub doctor    # two coding agents
 ✓ claude: the platform's rules go into CLAUDE.local.md
 · acp: no rules file; its sessions get the platform's rules from the MCP server's instructions (brunna mcp) or their session-start hook
 · the runtime acp has no way to tell whether a session is busy, idle or waiting on a dialog or way to read how a session's last reply ended: routing a letter takes its sessions as idle, and reads nothing they said
+· the runtime acp is unversioned: the platform can't install or check a fixed version of it, so its runs use whichever copy is on PATH
 · the runtime acp runs in a project's folder, and whether it runs git of its own there, outside any sandbox, isn't known: a sandboxed project's repo config could then run as you
 ✓ agent login (headless token): present
 ! agent login (~/.claude/.credentials.json): missing

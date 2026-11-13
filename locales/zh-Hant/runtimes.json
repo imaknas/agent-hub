@@ -1,0 +1,14 @@
+{
+ "usage: brunna runtimes [check <runtime> [--binary <exe>] [--only <check>]... [--report]]": "用法:brunna runtimes [check <runtime> [--binary <執行檔>] [--only <檢查>]... [--report]]",
+ "{runtime}: platform runs start {binary} ({version})": "{runtime}:平台的執行用 {binary}({version})",
+ "versions the sessions of the last {days} days ran:": "最近 {days} 天 session 用過的版本:",
+ "  {source} {version}: {files} {files:file|files}, {skipped} of {lines} lines skipped": "  {source} {version}:{files} 個檔案,{lines} 行裡跳過 {skipped} 行",
+ "{runtime}: unversioned (no way to install or check a fixed version)": "{runtime}:沒有版本管理(沒辦法安裝或檢查固定版本)",
+ "  no version checked yet (brunna runtimes check {runtime})": "  還沒有檢查過任何版本(brunna runtimes check {runtime})",
+ "  {version}: {verdict}, checked {at} ({counts})": "  {version}:{verdict},{at} 檢查({counts})",
+ "no session files written in the last {days} days": "最近 {days} 天沒有寫入任何 session 檔案",
+ "the sessions' versions couldn't be read: {error}": "讀不到 session 的版本:{error}",
+ "version not readable": "讀不到版本",
+ "(version not written)": "(沒寫版本)",
+ " ⚠️ more than 5%: the weekly statistics may undercount this version": " ⚠️ 超過 5%:每週統計可能少算這個版本"
+}

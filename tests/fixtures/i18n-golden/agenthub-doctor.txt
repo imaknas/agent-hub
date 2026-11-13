@@ -201,6 +201,7 @@ $ agenthub doctor    # two coding agents
 ✓ claude:平台規則寫進 CLAUDE.local.md
 · acp:沒有規則檔;它的 session 從 MCP server 的 instructions(brunna mcp)或 session 開始的 hook 拿到平台規則
 · 執行環境 acp 沒有判斷 session 在忙、閒置或卡在對話框的方法、讀取 session 最後回覆結尾的方法:分派信件時把它的 session 當作閒置,也不讀它們說過的話
+· runtime acp 沒有版本管理:平台沒辦法安裝或檢查它的固定版本,所以它的執行用的是 PATH 上找到的那一份
 · 執行環境 acp 在專案資料夾裡跑,但不確定它會不會在沙箱外自己跑 git:這樣的話,沙箱專案的 repo 設定可能以你的身分執行
 ✓ agent 登入(headless token):有
 ! agent 登入(~/.claude/.credentials.json):沒有

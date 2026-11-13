@@ -56,6 +56,8 @@ projects:
   brunna status [project]  = bin/overview.sh
   brunna glance [--json]   what needs you and whether the platform is healthy, in one look (bin/glance.py;
                           for status bars: the herdr mod in integrations/herdr/, iTerm2, menu-bar scripts)
+  brunna runtimes [check <runtime>]   the coding agents' versions: what platform runs start, each version's
+                          conformance checks, the versions sessions ran (bin/runtimes.py)
   brunna first-look <project>   a newly connected project's first STATE.md now, from its README and history
                         (bin/first-look.py; brunna connect runs it)
   brunna state history <project> | restore <project> <date|commit> [--apply]
@@ -1940,6 +1942,7 @@ COMMANDS = {
     "first-look": passthrough("first-look.py"),
     "state": passthrough("state.py"),
     "glance": passthrough("glance.py"),
+    "runtimes": passthrough("runtimes.py"),
     "uninstall": passthrough("uninstall.py"),
     "jobs": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "list", *argv]).returncode,
     "run": lambda argv: subprocess.run([*hubconf.launch(BIN / "schedulectl"), "run", *argv]).returncode,

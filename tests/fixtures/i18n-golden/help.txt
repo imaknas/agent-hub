@@ -50,6 +50,8 @@ config:
   brunna status [專案]     = bin/overview.sh
   brunna glance [--json]   一眼看到要你處理的事、平台是否正常(bin/glance.py;給狀態列用:integrations/herdr/ 的 herdr
                           mod、iTerm2、選單列腳本)
+  brunna runtimes [check <runtime>]   coding agent 的版本:平台執行用的是哪一份、每個版本的 conformance
+                          檢查結果、session 用過的版本(bin/runtimes.py)
   brunna first-look <專案>   幫剛接上的專案馬上寫第一份 STATE.md,依它的 README 和歷史
                         (bin/first-look.py;brunna connect 會跑)
   brunna state history <專案> | restore <專案> <日期|commit> [--apply]
