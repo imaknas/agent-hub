@@ -313,9 +313,12 @@ def session_address_file(session: str) -> pathlib.Path | None:
 
 # A session's files there: <session>.json (an address a runtime keeps), <session>.waiter (the runtime's process waiting
 # to wake it), <session>.wake-<nonce> (a wake request for it), <session>.live (the process its hooks saw it run in:
-# runtime_ports.record_session), <session>.last (the end of its last reply, a runtime's session_summary). Dot files are a
-# writer's or a claimer's in passing.
-_SUFFIXES = r"(?:json|waiter|live|last|wake-[A-Za-z0-9_]{1,64})"
+# runtime_ports.record_session), <session>.last (the end of its last reply, a runtime's session_summary), <session>.version
+# (the version of the tool the session runs, as its hooks read it: kept past the session's end, KEPT_SUFFIXES, for the
+# per-version gate on a closed session; docs/design/runtime-versions.md section 6). Dot files are a writer's or a claimer's
+# in passing.
+_SUFFIXES = r"(?:json|waiter|live|last|version|wake-[A-Za-z0-9_]{1,64})"
+KEPT_SUFFIXES = ("version",)   # outlive the session: its end leaves them (session_files), a prune takes them when old
 _SESSION_SUFFIX = re.compile(rf"^{_SUFFIXES}$")
 _SESSION_OF = re.compile(rf"^(?P<session>[A-Za-z0-9][A-Za-z0-9._:-]{{0,199}})\.{_SUFFIXES}$")
 
@@ -334,11 +337,12 @@ def session_of_file(name: str) -> str | None:
 
 def session_files(session: str) -> list[pathlib.Path]:
     """Every file of this session there (its address, waiter, wake requests, process record, last reply): what its end
-    removes."""
+    removes. Not what is kept past the end (KEPT_SUFFIXES)."""
     d = session_addresses_dir()
+    kept = tuple(f".{k}" for k in KEPT_SUFFIXES)
     try:
         with os.scandir(d) as it:
-            return [d / e.name for e in it if session_of_file(e.name) == session]
+            return [d / e.name for e in it if session_of_file(e.name) == session and not e.name.endswith(kept)]
     except OSError:
         return []
 

@@ -65,9 +65,10 @@ def enter(world) -> None:
                        "PATH": f"{pathlib.Path(world.root) / 'bin'}:{os.environ.get('PATH', '')}"})
 
 
-def _claude(args, *, cwd, stdin="", timeout=300, env=None) -> subprocess.CompletedProcess:
-    return subprocess.run([rc.binary(), *args], input=stdin, cwd=cwd, capture_output=True, text=True, timeout=timeout,
-                          env=rc._env(type("T", (), {"env": dict(os.environ if env is None else env)})()))
+def _claude(args, *, cwd, stdin="", timeout=300, env=None, exe=None) -> subprocess.CompletedProcess:
+    """A run of the binary under check (exe: another one, in the same world: the copy a check pairs it with)."""
+    return subprocess.run([exe or rc.binary(), *args], input=stdin, cwd=cwd, capture_output=True, text=True,
+                          timeout=timeout, env=rc._env(type("T", (), {"env": dict(os.environ if env is None else env)})()))
 
 
 def _result(r) -> dict | None:
@@ -394,6 +395,32 @@ def sessions_read(world) -> Outcome:
     versions = sorted(v for v in tally if v)
     return Outcome("pass") if versions == [want] else Outcome("fail", _("the transcript says version {got}, not {want}",
                                                                          got=", ".join(versions) or "-", want=want))
+
+
+def sessions_fork(world) -> Outcome:
+    """A session written by this version, forked by the platform's current copy (world.pair, the runner's choice; the
+    version itself when there is none, as on a candidate for promotion), reads back: the fork answers from the first
+    session's context, under an id of its own (docs/design/runtime-versions.md section 5, a mailbox fork of a user's
+    session). The word is random, so the fork can only say it if it read the transcript."""
+    word = "HERON-" + os.urandom(3).hex().upper()
+    flags = ["--tools", "", "--model", FAST, "--output-format", "json", "--strict-mcp-config"]
+    r = _claude(["-p", *flags], cwd=world.project, stdin=f"Remember the code word {word}. " + ASK)
+    got = _result(r)
+    if (no := _unanswered(r, got)):
+        return no
+    sid = got.get("session_id")
+    if not sid:
+        return Outcome("fail", _("the first run named no session"))
+    pair = getattr(world, "pair", None) or rc.binary()
+    r = _claude(["-p", "--resume", sid, "--fork-session", *flags], cwd=world.project, exe=pair,
+                stdin="What was the code word I asked you to remember? Reply with only the code word.")
+    forked = _result(r)
+    if forked is None or forked.get("is_error"):   # the version that wrote it answered: the fork is what failed
+        return Outcome("fail", _("the fork didn't run: {why}", why=_fail_reason(r, forked)))
+    if forked.get("session_id") == sid:
+        return Outcome("fail", _("the fork kept the session's own id"))
+    return Outcome("pass") if word in str(forked.get("result", "")) else \
+        Outcome("fail", _("the fork didn't read the session it was forked from"))
 
 
 def stream_exchange(world) -> Outcome:
@@ -733,16 +760,19 @@ CHECKS = [
     Check("confine-folder-git", "confine", "safety", confine_folder_git, timeout_s=900),
     # each run up to RUN_S, asked twice when it shows nothing: confine-sandbox 2 canaries x (guarded + control),
     # control 9 canaries x 2 + the residual's 2
-    Check("confine-sandbox", "confine", "safety", confine_sandbox, timeout_s=2 * 2 * 2 * RUN_S + 120),
-    Check("control", "control", "safety", control, timeout_s=(9 * 2 + 2) * 2 * RUN_S + 120),
-    Check("lifecycle-events", "lifecycle", "function", lifecycle_events),
+    Check("confine-sandbox", "confine", "safety", confine_sandbox, timeout_s=2 * 2 * 2 * RUN_S + 120, side="session"),
+    Check("control", "control", "safety", control, timeout_s=(9 * 2 + 2) * 2 * RUN_S + 120, side="session"),
+    Check("lifecycle-events", "lifecycle", "function", lifecycle_events, side="session"),
     Check("lifecycle-deny", "lifecycle", "safety", None,
           "a PreToolUse deny stops the tool: the one tool the platform denies (opening a session elsewhere) exists "
-          "only in the desktop app, so it needs V-M6's interactive throwaway session with that tool"),
+          "only in the desktop app, so it needs V-M6's interactive throwaway session with that tool", side="session"),
     Check("lifecycle-context", "lifecycle", "function", None,
-          "additionalContext from a hook reaches the model: needs a letter in the world's bus for the hook to inject"),
-    Check("instructions-reach", "instructions", "function", instructions_reach),
-    Check("sessions-read", "sessions", "function", sessions_read),
+          "additionalContext from a hook reaches the model: needs a letter in the world's bus for the hook to inject",
+          side="session"),
+    Check("instructions-reach", "instructions", "function", instructions_reach, side="session"),
+    Check("sessions-read", "sessions", "function", sessions_read, side="session"),
+    # a session of this version forked by the platform's current copy (a mailbox fork); on a candidate, by itself
+    Check("sessions-fork", "sessions", "function", sessions_fork, side="session"),
     Check("stream-exchange", "stream", "function", stream_exchange),
     Check("tool-servers-listed", "tool_servers", "function", tool_servers_listed),
     Check("auth-login-error", "auth", "function", auth_login_error),
@@ -751,7 +781,7 @@ CHECKS = [
           "each rule form the platform writes, probed against the tool's own parser"),
     Check("run-server", "run_server", "function", None,
           "a run with the platform's mail server attached lists its tools in the init event"),
-    Check("session-status", "session_status", "function", None, V_M6),
-    Check("session-summary", "session_summary", "function", None, V_M6),
-    Check("wake", "wake", "function", None, V_M6),
+    Check("session-status", "session_status", "function", None, V_M6, side="session"),
+    Check("session-summary", "session_summary", "function", None, V_M6, side="session"),
+    Check("wake", "wake", "function", None, V_M6, side="session"),
 ]

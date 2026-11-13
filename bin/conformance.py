@@ -6,7 +6,8 @@ tool still does what each of the platform's ports rests on.
         run the runtime's checks (conformance_<runtime>.CHECKS) against exe (default: the one platform runs start now) and
         record the result; --report prints it and records nothing (the only form a linked worktree of the hub allows:
         a pass recorded from half-edited code would drive a promotion)
-  conformance.py child <runtime> <check> <world> [<exe>]      internal: one check, in its throwaway world
+  conformance.py child <runtime> <check> <world> [<exe> [<pair>]]   internal: one check, in its throwaway world (pair:
+        the platform's current copy, for a check of a session's version that pairs the two, world.pair)
 
 Neutral: the checks are the adapters' (bin/conformance_<runtime>.py: CHECKS, a list of runtime_ports.Check); only runtimes with the
 distribution port have versions to check. How every check runs:
@@ -20,7 +21,10 @@ distribution port have versions to check. How every check runs:
 - results keep pass / fail / error / not-checkable and a short reason, never the tool's output.
 
 Results: <state>/runtime-conformance/<runtime>/<version>.json: {runtime, version, binary, digest (sha256), at, checks:
-{name: {port, kind, state, reason, tries}}}. Nothing reads them to change which binary runs yet (step 2 does).
+{name: {port, kind, state, reason, tries}}}: what promotion reads (bin/update-runtimes.py). A version seen in the user's
+sessions has its session-side checks (Check.side "session") recorded beside it as <version>.session.json, with the
+version of the platform's copy it was paired with (current), by bin/session-versions.py (record_session; read by
+runtime_ports.gated and fork_refusal). Neither overwrites the other.
 """
 from __future__ import annotations
 
@@ -59,6 +63,7 @@ class World:
     root. The child's environment points the platform at it (env()); the adapter's checks point the tool at tool/."""
 
     PARTS = ("project", "home", "tool", "config", "state", "data", "secrets", "bus", "tmp", "instance")
+    pair = None   # the platform's current copy, for a check that pairs a session's version with it (the runner's choice)
 
     def __init__(self, root: pathlib.Path):
         self.root = pathlib.Path(root)
@@ -120,6 +125,12 @@ def checks(runtime: str) -> list[Check]:
     return list(getattr(mod, "CHECKS", None) or []) if mod else []
 
 
+def session_checks(runtime: str) -> list[str]:
+    """The checks run on a version seen in the user's sessions (Check.side "session", docs/design/runtime-versions.md
+    section 6)."""
+    return [c.name for c in checks(runtime) if c.side == "session"]
+
+
 def digest(exe) -> str:
     h = hashlib.sha256()
     with open(os.path.realpath(exe), "rb") as f:
@@ -132,7 +143,7 @@ def _short(reason) -> str:
     return " ".join(str(reason or "").split())[:REASON_MAX]
 
 
-def run_one(runtime: str, check: Check, exe: str | None, top: pathlib.Path) -> Outcome:
+def run_one(runtime: str, check: Check, exe: str | None, top: pathlib.Path, pair: str | None = None) -> Outcome:
     """One try of one check in a fresh world of its own, in its own process."""
     if check.run is None:
         return Outcome("not-checkable", _short(check.measurement))
@@ -146,7 +157,7 @@ def run_one(runtime: str, check: Check, exe: str | None, top: pathlib.Path) -> O
                 raise RuntimeError(_("the check's world could not be prepared: {error}", error=type(e).__name__)) from e
         # its own process group, so a timeout ends the tool's processes too, not only the child
         p = subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve()), "child", runtime, check.name,
-                              str(world.root), exe or ""], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                              str(world.root), exe or "", *([pair] if pair else [])], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                              env=world.env(), stdin=subprocess.DEVNULL, start_new_session=True)
         try:
             out, _err = p.communicate(timeout=check.timeout_s)
@@ -176,8 +187,10 @@ def _kill_group(p) -> None:
         pass
 
 
-def run(runtime: str, exe: str | None = None, only: list[str] | None = None) -> dict:
-    """Every check (or only these) of runtime against exe; the result document (not written)."""
+def run(runtime: str, exe: str | None = None, only: list[str] | None = None, pair: str | None = None) -> dict:
+    """Every check (or only these) of runtime against exe; the result document (not written). pair: the platform's
+    current copy, which a check of a session's version pairs it with (sessions-fork); with none such a check pairs the
+    binary with itself."""
     mod = runtime_ports._module(runtime)
     if "distribution" not in runtime_ports.capabilities(runtime):
         raise RuntimeError(_("the runtime {runtime} has no distribution port: it is unversioned, nothing to check",
@@ -197,9 +210,9 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None) -> 
         out = {"runtime": runtime, "version": version, "binary": str(resolved), "digest": digest(resolved),
                "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "checks": {}}
         for c in todo:
-            tries, got = 1, run_one(runtime, c, str(resolved), top)
+            tries, got = 1, run_one(runtime, c, str(resolved), top, *([pair] if pair else []))
             if got.state == "fail" and c.kind == "function":
-                tries, got = 2, run_one(runtime, c, str(resolved), top)
+                tries, got = 2, run_one(runtime, c, str(resolved), top, *([pair] if pair else []))
             out["checks"][c.name] = {"port": c.port, "kind": c.kind, "state": got.state, "reason": got.reason,
                                      "tries": tries}
         return out
@@ -221,10 +234,25 @@ def record(doc: dict) -> pathlib.Path:
     return f
 
 
+def record_session(doc: dict, current: str | None) -> pathlib.Path:
+    """Write a session version's result (its session-side checks), with the version of the platform's copy it was
+    paired with: <version>.session.json, beside and never over the full result promotion reads."""
+    f = runtime_ports.session_result_file(doc["runtime"], doc["version"])
+    if f is None:
+        raise RuntimeError(_("not a version: {version!r}", version=doc.get("version")))
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps({**doc, "side": "session", "current": current}, ensure_ascii=False, indent=1) + "\n")
+    tmp.replace(f)
+    return f
+
+
 def recorded(runtime: str) -> list[dict]:
-    """Every recorded result of this runtime, newest check first."""
+    """Every recorded result of this runtime (a full one: not a session version's), newest check first."""
     out = []
     for f in sorted((RESULTS / runtime).glob("*.json")) if (RESULTS / runtime).is_dir() else []:
+        if f.name.endswith(".session.json"):
+            continue
         try:
             out.append(json.loads(f.read_text()))
         except (OSError, ValueError):
@@ -246,11 +274,12 @@ def verdict(doc: dict) -> str:
 
 # ---------- the child ----------
 
-def child(runtime: str, name: str, root: str, exe: str) -> int:
+def child(runtime: str, name: str, root: str, exe: str, pair: str = "") -> int:
     def say(o: Outcome) -> int:
         print(json.dumps({"state": o.state, "reason": _short(o.reason)}))
         return 0
     world = World(pathlib.Path(root))
+    world.pair = pair or None
     if (why := world.isolated()):
         return say(Outcome("error", why))
     mod = runtime_ports._module(runtime)
@@ -289,8 +318,8 @@ def show(doc: dict) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if argv[:1] == ["child"] and len(argv) in (4, 5):
-        return child(argv[1], argv[2], argv[3], argv[4] if len(argv) == 5 else "")
+    if argv[:1] == ["child"] and len(argv) in (4, 5, 6):
+        return child(argv[1], argv[2], argv[3], argv[4] if len(argv) >= 5 else "", argv[5] if len(argv) == 6 else "")
     if argv in (["-h"], ["--help"]):
         print(usage())
         return 0

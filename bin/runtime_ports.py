@@ -399,7 +399,11 @@ PORTS = {
 }
 # Beside the distribution port, a runtime that runs a store's checked copy (bin/runtime_store.py) has checked_copy() →
 # (the copy, None) or (None, why there is none): load() refuses the ports that start platform runs while it says why
-# (NoCheckedCopy, below), and no_checked_copy() tells doctor, the status page and llm_ready.
+# (NoCheckedCopy, below), and no_checked_copy() tells doctor, the status page and llm_ready. Optional beside it too, for
+# the user's sessions' versions (docs/design/runtime-versions.md section 6): published() → every version the vendor
+# publishes (raises RuntimeError when it can't be told), and session_version(pid) → (version, build) of the tool a
+# session's process runs, read from its executable's files and never by running it (version UNREADABLE when its layout
+# isn't one the adapter knows; build: the vendor's build id when the layout names one, else None).
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
@@ -420,10 +424,15 @@ class Check(NamedTuple):
     run: object = None  # callable(world) -> Outcome; None: not-checkable
     measurement: str = ""   # not-checkable: the measurement that would make it checkable
     timeout_s: int = 600
+    # "session": also run on a version seen in the user's sessions (docs/design/runtime-versions.md section 6, the
+    # session-side set, which the per-version gate and the session-side calls read); "platform": only on a copy for the
+    # platform's own runs. Every check runs on a candidate for promotion
+    side: str = "platform"
 
 
 CHECK_STATES = ("pass", "fail", "error", "not-checkable")
 CHECK_KINDS = ("safety", "function")
+CHECK_SIDES = ("platform", "session")
 
 
 # session_status's answers: running a turn; idle; a dialog is open, for a person; can't tell (counts as idle)
@@ -768,7 +777,7 @@ class Sessions:
     agent port, can be resumed (can_resume); the others are handled as delegations."""
 
     def __init__(self, names=None):
-        self.mods = {}
+        self.mods, self._gated = {}, {}
         for n in names or installed():
             try:
                 self.mods[n] = load(n, ports=("sessions",))
@@ -795,10 +804,21 @@ class Sessions:
         m, native = self._mod(sid)
         return m.context_size(native) if m else None
 
+    def gated(self, sid) -> list[str]:
+        """The safety checks this session's version failed, its project's sessions sandboxed (gated above): every path
+        that starts work in a session asks here (docs/design/runtime-versions.md section 6). Asked once per session per
+        instance (a dispatch tick makes one)."""
+        if sid not in self._gated:
+            self._gated[sid] = gated(sid) if sid and not str(sid).startswith("mcp:") else []
+        return self._gated[sid]
+
     def can_resume(self, sid) -> bool:
+        """Whether a background copy of this session can be started: its runtime runs it, the session isn't gated, and
+        a fork of its version by the platform's copy isn't refused (fork_refusal; section 5)."""
         name, _native = runtime_of(sid)
         return name == default_name() and name in self.mods and "agent" in capabilities(name) \
-            and callable(getattr(self.mods[name], "resume_args", None))
+            and callable(getattr(self.mods[name], "resume_args", None)) and not self.gated(sid) \
+            and fork_refusal(sid) is None
 
     def resume_args(self, sid) -> list[str]:
         if not self.can_resume(sid):
@@ -837,16 +857,19 @@ class Sessions:
         status = fn(native) if callable(fn) else "unknown"
         return status if status in SESSION_STATUSES else "unknown"
 
-    def session_statuses(self, sids) -> dict:
+    def session_statuses(self, sids, deadline: float | None = None) -> dict:
         """session_status for the sessions whose runtime answers for many in one look (session_statuses), one look per
-        runtime; the others are left out, for the caller to ask one at a time if it will."""
+        runtime; the others are left out, for the caller to ask one at a time if it will. deadline: the time.monotonic()
+        the looks end by (the caller's budget), passed to a runtime that takes one."""
+        import inspect
         out, groups = {}, {}
         for sid in sids:
             m, native = self._mod(sid)
             if m is not None and callable(getattr(m, "session_statuses", None)):
                 groups.setdefault(id(m), (m, {}))[1][native] = sid
         for m, names in groups.values():
-            got = m.session_statuses(list(names))
+            takes = deadline is not None and "deadline" in inspect.signature(m.session_statuses).parameters
+            got = m.session_statuses(list(names), **({"deadline": deadline} if takes else {}))
             for native, sid in names.items():
                 status = got.get(native) if isinstance(got, dict) else None
                 out[sid] = status if status in SESSION_STATUSES else "unknown"
@@ -968,6 +991,8 @@ def process_start(pid: int) -> str | None:
 
 SESSION_RECORD = "live"
 SESSION_SUMMARY = "last"   # <session>.last: a runtime's, read through its session_summary
+SESSION_VERSION = "version"   # <session>.version: the tool's version its hooks read, kept past its end (record_session)
+UNREADABLE = "unreadable"     # a version the runtime's session_version couldn't read: pending, never gated
 # What stays while the session's process runs, whatever its age: its last reply, and a waiter's record, whose stale heartbeat
 # is the only word of why that session can't be woken (Sessions.wake_gap)
 WITH_RECORD = (SESSION_SUMMARY, "waiter")
@@ -1006,13 +1031,40 @@ def _folder_project(rec, project_of) -> str | None:
     return project_of(folder) if callable(project_of) and isinstance(folder, str) else None
 
 
-def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project_of=None) -> bool:
+def _version_fields(version, pid) -> dict:
+    """{version, build?} from the runtime's session_version(pid) (version: a callable, or None for none), {} when there is
+    no such reader. What it can't read is UNREADABLE, never left out: a record with no version is one written before it was
+    read, which is read again at the next hook."""
+    if not callable(version):
+        return {}
+    try:
+        got = version(pid)
+    except Exception:
+        got = None
+    v, build = got if isinstance(got, tuple) and len(got) == 2 else (None, None)
+    v = v if isinstance(v, str) and v else UNREADABLE
+    return {"version": v, **({"build": build} if isinstance(build, str) and build else {})}
+
+
+def _write_version(session: str, rec: dict) -> None:
+    """<session>.version: the version its process record names, kept past the session's end (hubconf.KEPT_SUFFIXES) for
+    the per-version gate on a closed session (a fork or resume of it). Never written from a transcript, which a sandboxed
+    session can write (docs/design/runtime-versions.md, r3)."""
+    import hubconf
+    f = hubconf.session_file(session, SESSION_VERSION)
+    if f and rec.get("version"):
+        _write_record(f, {k: rec[k] for k in ("runtime", "version", "build", "project") if rec.get(k)})
+
+
+def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool = True, wanted=None, project_of=None,
+                   version=None) -> bool:
     """Record that this session (a platform id) runs in process pid. refresh=False (the hooks after a session's start)
     leaves a record naming the same process as it is, so a tool call costs no process lookup, except that one with no
-    project gets it. A record naming another process that still runs stays. wanted(pid): asked only when it would write a
-    new record (the runtime's person_session: a headless run gets none). project_of(folder): which project a folder is in; a
-    process already on record keeps the one it has, or takes it from its record's folder, never this hook's. Whether it
-    wrote."""
+    project or no version gets them. A record naming another process that still runs stays. wanted(pid): asked only when it
+    would write a new record (the runtime's person_session: a headless run gets none). project_of(folder): which project a
+    folder is in; a process already on record keeps the one it has, or takes it from its record's folder, never this hook's.
+    version(pid): the runtime's session_version, read on every write (start, a /clear's takeover, a backfill) and kept in
+    <session>.version too. Whether it wrote."""
     import hubconf
     f = hubconf.session_file(session, SESSION_RECORD)
     if not f or not isinstance(pid, int) or pid <= 1:
@@ -1024,9 +1076,12 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
                 return False
         elif not refresh:
             project = None if _project_named(old) else _folder_project(old, project_of)
-            if project:
-                _write_record(f, {**old, "project": project})
-            return bool(project)
+            fields = {} if old.get("version") else _version_fields(version, pid)
+            if project or fields:
+                rec = {**old, **({"project": project} if project else {}), **fields}
+                _write_record(f, rec)
+                _write_version(session, rec)
+            return bool(project or fields)
     if wanted is not None and not wanted(pid):
         return False
     start = process_start(pid)
@@ -1039,11 +1094,158 @@ def record_session(session: str, runtime: str, pid, cwd: str, *, refresh: bool =
     project = next((_project_named(rec) for _other, rec in same if _project_named(rec)), None) \
         or (_folder_project(same[0][1], project_of) if same else None) \
         or (project_of(cwd) if callable(project_of) else None)
-    _write_record(f, {"runtime": runtime, "pid": pid, "start": start, "cwd": cwd, **({"project": project} if project else {})})
+    rec = {"runtime": runtime, "pid": pid, "start": start, "cwd": cwd, **({"project": project} if project else {}),
+           **_version_fields(version, pid)}
+    _write_record(f, rec)
+    _write_version(session, rec)
     for other, _rec in same:
         if other != f:
             other.unlink(missing_ok=True)
     return True
+
+
+def process_path(pid) -> str | None:
+    """The real path of the executable process pid runs (Linux: /proc/<pid>/exe; macOS: libproc's proc_pidpath), links
+    resolved; None when it can't be read. Reads, never runs anything (docs/design/runtime-versions.md V-M4)."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    try:
+        if os.path.exists("/proc/self/exe"):
+            return os.path.realpath(os.readlink(f"/proc/{pid}/exe"))
+        import ctypes
+        import ctypes.util
+        lib = ctypes.CDLL(ctypes.util.find_library("proc") or "/usr/lib/libproc.dylib", use_errno=True)
+        buf = ctypes.create_string_buffer(4096)
+        n = lib.proc_pidpath(ctypes.c_int(pid), buf, ctypes.c_uint32(4096))
+        return os.path.realpath(os.fsdecode(buf.value)) if n > 0 else None
+    except (OSError, AttributeError, ValueError, TypeError):
+        return None
+
+
+# ---------- the user's sessions' versions (docs/design/runtime-versions.md sections 5 and 6) ----------
+# A session's version is what its hooks read from its process (record_session, through the runtime's session_version):
+# its process record while it runs, <session>.version once it has closed, never its transcript. Each version is checked
+# when first seen (bin/session-versions.py, the session-side checks: Check.side "session"), its result kept in
+# <state>/runtime-conformance/<runtime>/<version>.session.json. Two rules read it here, at one place each:
+# - gated(session): a sandboxed project's session whose version failed a safety check: the platform starts no work in it
+#   (no letter shown, no wake, no route, no fork or resume of it). Anything else (no result yet, unreadable, not
+#   installable, not checkable, an error, an unsandboxed project) is as before: never gated.
+# - fork_refusal(session): a fork or resume of it with the platform's current copy is refused when that pair failed
+#   sessions-fork; a pair not checked yet is as before.
+
+_VERSION = __import__("re").compile(r"^\d+\.\d+\.\d+$")
+FORK_CHECK = "sessions-fork"
+STATUS_CHECK = "session-status"
+
+
+def _json_file(path) -> dict | None:
+    import json
+    try:
+        got = json.loads(path.read_text()) if path else None
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def session_version(session: str, rec: dict | None = None) -> dict | None:
+    """{runtime, version, build?, project?} of this session: its process record's (rec, else the one on file), else what its
+    hooks left in <session>.version; None when neither says (pending)."""
+    import hubconf
+    for got in (rec, _json_file(hubconf.session_file(session, SESSION_RECORD)),
+                _json_file(hubconf.session_file(session, SESSION_VERSION))):
+        if isinstance(got, dict) and isinstance(got.get("version"), str) and isinstance(got.get("runtime"), str):
+            return {k: got[k] for k in ("runtime", "version", "build", "project") if isinstance(got.get(k), str)}
+    return None
+
+
+def checkable_version(version) -> bool:
+    """A version string that names a version (not UNREADABLE, nothing a file name could abuse)."""
+    return isinstance(version, str) and bool(_VERSION.match(version))
+
+
+def session_result_file(runtime: str, version: str):
+    """Where the session-side checks of this runtime's version are recorded (bin/session-versions.py); None for a name
+    that isn't one."""
+    import hubconf
+    if runtime not in RUNTIMES or not checkable_version(version):
+        return None
+    return hubconf.STATE / "runtime-conformance" / runtime / f"{version}.session.json"
+
+
+def session_result(runtime: str, version: str) -> dict | None:
+    return _json_file(session_result_file(runtime, version))
+
+
+def failed_checks(doc: dict | None, kind: str | None = None) -> list[str]:
+    """The checks of a result that failed (of this kind only, when given): a fail, never an error or not-checkable."""
+    return sorted(n for n, c in ((doc or {}).get("checks") or {}).items()
+                  if isinstance(c, dict) and c.get("state") == "fail" and (kind is None or c.get("kind") == kind))
+
+
+def check_state(runtime: str, version: str, check: str) -> str | None:
+    """The state one session-side check of this version ended in; None when it hasn't been checked."""
+    c = ((session_result(runtime, version) or {}).get("checks") or {}).get(check)
+    return c.get("state") if isinstance(c, dict) else None
+
+
+def _sessions_sandboxed(project) -> bool:
+    """Whether this project's sessions are sandboxed (policy.mail_outbox: enforce.sandbox), by its name now or one it had."""
+    import hubconf
+    import policy
+    docs = hubconf.projects()
+    doc = docs.get(project) if isinstance(project, str) else None
+    if doc is None and isinstance(project, str):
+        doc = next((d for n, d in docs.items() if project in hubconf.former_names(n)), None)
+    return policy.mail_outbox(doc)
+
+
+def gated(session: str, rec: dict | None = None) -> list[str]:
+    """The safety checks this session's version failed, when its project's sessions are sandboxed: the platform starts no
+    work in it. [] when not gated. A registry that can't be read then gates it (a recorded failure, and nothing to say the
+    project isn't sandboxed)."""
+    v = session_version(session, rec)
+    if not v or not checkable_version(v.get("version")):
+        return []
+    failed = failed_checks(session_result(v["runtime"], v["version"]), "safety")
+    if not failed:
+        return []
+    try:
+        return failed if _sessions_sandboxed(v.get("project")) else []
+    except Exception:
+        return failed
+
+
+def pair_state(runtime: str, version: str) -> tuple[str, str | None, str]:
+    """How a session written by this version fares when the platform's current copy forks or resumes it (section 5):
+    (state, current's version, the check's reason). state: "same" (the version is current's own), "pass" or "fail" (its
+    sessions-fork check against that very copy), "pending" (no result, one against another copy, an error, no current)."""
+    try:
+        import runtime_store
+        cur = runtime_store.current(runtime)
+    except Exception:
+        cur = None
+    if cur is None:
+        return "pending", None, ""
+    if cur.version == version:
+        return "same", cur.version, ""
+    doc = session_result(runtime, version) or {}
+    c = (doc.get("checks") or {}).get(FORK_CHECK) or {}
+    state = c.get("state") if doc.get("current") == cur.version and c.get("state") in ("pass", "fail") else "pending"
+    return state, cur.version, str(c.get("reason") or "")
+
+
+def fork_refusal(session: str) -> str | None:
+    """Why a fork or resume of this session with the platform's current copy is refused: its version's sessions-fork
+    check, run against that very copy, failed. None when it passed, the session runs that copy's own version, or the pair
+    isn't checked yet (as before, docs/design/runtime-versions.md section 5)."""
+    v = session_version(session)
+    if not v or not checkable_version(v.get("version")):
+        return None
+    state, current, reason = pair_state(v["runtime"], v["version"])
+    if state != "fail":
+        return None
+    return _("this session's {runtime} version {version} can't be forked by the platform's copy {current}: {reason}",
+             runtime=v["runtime"], version=v["version"], current=current or "-", reason=reason or FORK_CHECK)
 
 
 def running_records(paths, strict: bool = False) -> dict:

@@ -48,5 +48,9 @@
  "{path}'s rules can't be left out": "{path} 的規則拿不掉",
  "tests nothing: {path} wasn't written with its rules left out": "什麼都沒測到:拿掉 {path} 的規則後也沒寫進去",
  "refused": "被擋下",
- "not tried": "沒有試"
+ "not tried": "沒有試",
+ "the first run named no session": "第一次執行沒有給出 session",
+ "the fork didn't run: {why}": "分支沒跑起來:{why}",
+ "the fork kept the session's own id": "分支沿用了原 session 的 id",
+ "the fork didn't read the session it was forked from": "分支沒讀到它分出來的那個 session"
 }

@@ -9,6 +9,11 @@ getting and installing is its adapter's distribution port).
     .writer               writers (install, promote, rollback, remove) hold it exclusively, one at a time
     .staging-<random>/    an install in progress: renamed into <version>/ only once it is complete
 
+A copy installed for a version seen in the user's sessions (bin/session-versions.py) is never promoted by that: its
+installed.json says kind "session" and when a session of that version was last seen; it is kept while one was seen in
+SESSION_DAYS days, at most SESSION_MAX of them per runtime (a Desktop build is about 320 MB), and never while a check
+holds it (hold_version). A copy that is promoted keeps the promoted copies' rule.
+
 Readers: hold(runtime) resolves `current` once and keeps a shared flock on its .lock for the run, so the folder isn't
 removed under it (the descriptor is read-only and, when asked, inheritable, so a process that execs keeps it);
 verify(entry) compares the executable with what promotion recorded (size, mtime and real path every run, the full
@@ -39,6 +44,9 @@ VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 LINKS = ("current", "previous")
 PROMOTED = "promoted.json"
 KEEP_DAYS = 14
+SESSION = "session"     # installed.json kind of a copy installed for a version seen in the user's sessions
+SESSION_DAYS = 7
+SESSION_MAX = 5
 
 
 class Entry(NamedTuple):
@@ -107,10 +115,20 @@ def versions(runtime: str) -> list[str]:
     return sorted(p.name for p in d.iterdir() if p.is_dir() and VERSION.match(p.name)) if d.is_dir() else []
 
 
-def install(runtime: str, version: str, dist) -> pathlib.Path:
+def installed(runtime: str, version: str) -> dict | None:
+    """A version folder's installed.json (what install wrote, with kind and seen for a session copy), or None."""
+    try:
+        got = json.loads((root(runtime) / version / "installed.json").read_text()) if VERSION.match(version or "") else None
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) else None
+
+
+def install(runtime: str, version: str, dist, kind: str | None = None) -> pathlib.Path:
     """Install a version with dist.install (the runtime's distribution port) into a staging folder, then rename it in.
     The executable it returns, under the version folder. A version already in place is kept (an unpromoted folder with
-    no executable, left by a crash, is replaced). Raises RuntimeError."""
+    no executable, left by a crash, is replaced). kind: SESSION for a copy of a version seen in the user's sessions (its
+    own retention, prune). Raises RuntimeError."""
     if not VERSION.match(version or ""):
         raise RuntimeError(_("not a version: {version!r}", version=version))
     with writer(runtime) as d:
@@ -128,11 +146,35 @@ def install(runtime: str, version: str, dist) -> pathlib.Path:
             exe = pathlib.Path(dist.install(version, staging))
             rel = exe.relative_to(staging)
             (staging / ".lock").touch(mode=0o600)
-            (staging / "installed.json").write_text(json.dumps({"version": version, "exe": str(rel)}) + "\n")
+            (staging / "installed.json").write_text(json.dumps({"version": version, "exe": str(rel),
+                                                                **({"kind": kind} if kind else {})}) + "\n")
             staging.rename(final)
             return final / rel
         finally:
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def seen(runtime: str, version: str, when: str) -> bool:
+    """A session copy's last sighting of a session of its version (an ISO time; never moved back). Whether it is a
+    session copy in the store."""
+    with writer(runtime) as d:
+        doc = installed(runtime, version)
+        if not doc or doc.get("kind") != SESSION:
+            return False
+        if str(doc.get("seen") or "") < when:
+            _fsync_write(d / version / "installed.json", json.dumps({**doc, "seen": when}) + "\n")
+        return True
+
+
+@contextlib.contextmanager
+def hold_version(runtime: str, version: str):
+    """One version's folder held against removal while a check runs it (a shared flock on its .lock, as a run's)."""
+    fd = os.open(root(runtime) / version / ".lock", os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH)
+        yield
+    finally:
+        os.close(fd)
 
 
 def _relink(d: pathlib.Path, name: str, version: str) -> None:
@@ -299,17 +341,33 @@ def verify(e: Entry) -> str | None:
     return None
 
 
+def _session_keep(runtime: str, d: pathlib.Path, now: float) -> tuple[set, set]:
+    """(the session copies, those of them kept): seen within SESSION_DAYS days, the SESSION_MAX most recently seen. A
+    promoted one isn't a session copy any more."""
+    def when(doc) -> float:
+        try:
+            return datetime.datetime.fromisoformat(str(doc.get("seen"))).timestamp()
+        except (TypeError, ValueError):
+            return 0.0
+    copies = {v: when(doc) for v in versions(runtime)
+              if (doc := installed(runtime, v)) and doc.get("kind") == SESSION and not (d / v / PROMOTED).exists()}
+    recent = sorted((v for v, t in copies.items() if now - t < SESSION_DAYS * 86400), key=lambda v: copies[v], reverse=True)
+    return set(copies), set(recent[:SESSION_MAX])
+
+
 def prune(runtime: str, keep_days: int = KEEP_DAYS, now: float | None = None) -> list[str]:
-    """Remove version folders other than current and previous whose mtime is older than keep_days and that no run
-    holds. The versions removed."""
+    """Remove version folders other than current and previous that no run holds: a promoted (or plain) copy whose mtime
+    is older than keep_days; a session copy no session of its version was seen with in SESSION_DAYS days, or past the
+    SESSION_MAX most recently seen. The versions removed."""
     import time
     now = time.time() if now is None else now
     gone = []
     with writer(runtime) as d:
         keep = {_linked(runtime, n) for n in LINKS}   # read under the lock: a promotion can't move them meanwhile
+        sessions, kept = _session_keep(runtime, d, now)
         for v in versions(runtime):
             folder = d / v
-            if v in keep or now - folder.stat().st_mtime < keep_days * 86400:
+            if v in keep or v in kept or (v not in sessions and now - folder.stat().st_mtime < keep_days * 86400):
                 continue
             try:
                 fd = os.open(folder / ".lock", os.O_RDONLY)
