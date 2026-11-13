@@ -67,6 +67,9 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
 
 ## Look here first, don't guess
 
+- **Where brunna is going and what is left**: `docs/design/direction.md` (the decisions that span the design docs, every
+  plan's phases and what each lacks). When a step lands, a plan changes or the owner decides a direction, update it in
+  the same change: a direction agreed only in a conversation is lost with it
 - **Where the user's things live**: `hubconf.config_dir()` (brunna.json, registry, schedule.yaml…), `data_dir()` (digest,
   todo, review-log, reflect…), `secrets_dir()`; shell uses `bin/hubpaths.sh`. `<hub>/.hub-home` points to the
   instance directory (default `~/.brunna`: config is a local git repo, data, secrets); the hub root holds nothing of
