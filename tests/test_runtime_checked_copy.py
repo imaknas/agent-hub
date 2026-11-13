@@ -300,7 +300,7 @@ class UsersFolder(unittest.TestCase):
                 self.assertEqual(runtime_claude._home(), home)
                 self.assertEqual(runtime_claude._user_config_file(), pathlib.Path.home() / ".claude.json")
                 self.assertEqual(runtime_claude.credential_paths()["files"][0], str(home / ".credentials.json"))
-                self.assertTrue(all(p.parent == home or p == pathlib.Path.home() / ".claude.json"
+                self.assertTrue(all(home in p.parents or p == pathlib.Path.home() / ".claude.json"
                                     for p, _tree in runtime_claude.user_control()))
 
     def test_a_users_own_config_dir_still_counts(self):

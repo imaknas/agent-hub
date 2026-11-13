@@ -71,9 +71,9 @@ class Policy(Base):
 class SeatbeltLock(Base):
     """A sandboxed project's service or job (bin/sandboxed-run on macOS) can't write them."""
 
-    def run_in(self, script):
+    def run_in(self, script, roots=()):
         pol = {"workspace": self.ws, "write": [], "other_projects": [], "deny_read": [], "credentials": [],
-               "credential_files": [], "protect": PROTECT}
+               "credential_files": [], "protect": PROTECT, "protect_roots": list(roots)}
         prof = seatbelt.service_profile(pol, [self.ws])
         return subprocess.run([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", script], capture_output=True,
                               text=True, cwd=self.ws)
@@ -94,6 +94,30 @@ echo ok > {w}/work.py && echo worktree-code-written
                                             "rename-blocked", "nested-blocked", "code-written",
                                             "worktree-code-written"], r.stderr)
         self.assertFalse((self.ws / ".claude" / "settings.local.json").exists())
+
+    def test_the_tool_folder_is_one_rule_but_its_worktrees(self):
+        """V-M9: nothing new or changed under the tool's folder (a name no list knows included), its worktrees
+        written, a control name inside a worktree still not."""
+        folder, writable = runtime_claude.control_root()
+        roots = [{"name": folder, "writable": list(writable)}]
+        w = self.ws / folder / "worktrees" / "w"
+        (self.ws / folder / "kept").write_text("x")
+        probe = f"""
+echo x > {folder}/new-name 2>/dev/null || echo new-blocked
+echo y >> {folder}/kept 2>/dev/null || echo change-blocked
+rm {folder}/kept 2>/dev/null || echo remove-blocked
+mkdir {folder}/newdir 2>/dev/null || echo mkdir-blocked
+echo x > {w}/{folder}/settings.json 2>/dev/null || echo worktree-control-blocked
+echo ok > {w}/work.py && echo worktree-written
+mkdir -p {w}/sub && echo ok > {w}/sub/a && echo worktree-dir-written
+"""
+        r = self.run_in(probe, roots)
+        self.assertEqual(r.stdout.split(), ["new-blocked", "change-blocked", "remove-blocked", "mkdir-blocked",
+                                            "worktree-control-blocked", "worktree-written", "worktree-dir-written"],
+                         r.stderr)
+        self.assertFalse((self.ws / folder / "new-name").exists())
+        # the positive control: without the rule a name no list knows is written
+        self.assertIn("new-written", self.run_in(f"echo x > {folder}/other && echo new-written").stdout)
 
 
 class PlatformWritesTheSettings(Base):

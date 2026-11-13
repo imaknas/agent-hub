@@ -88,6 +88,10 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          worktrees): each gets the platform's settings
     foreign_controls(workspace) -> list[str]             what in the folder would make its sessions run something the
                                                          platform didn't put there (committed hooks, tool servers)
+    control_root() -> (folder, writable names) (optional) the tool's own folder in the project and the entries in it
+                                                         that stay writable (its worktrees): a sandboxed project's
+                                                         services and jobs create or change nothing else in it (one
+                                                         rule, docs/design/runtime-versions.md section 7)
   sessions (part of layer 1):
     alive(sid) -> bool, live_sessions() -> set[str] (raises SessionsUnknown when the lookup fails: never an empty set for
     "couldn't look"), context_size(sid) -> int | None (how many tokens resuming would

@@ -22,6 +22,9 @@ policy(name, doc, index) → {
   protect:            what its sessions load settings, hooks and tools from ([{name, tree}] matched at any depth under
                       the workspace; the runtime's control port): written by nothing of the project's, only by the
                       platform. Empty (and doctor says so) when the runtime can't name them
+  protect_roots:      each runtime's own folder in the project with the entries in it that stay writable
+                      ([{name, writable}], the control port's control_root): its services and jobs create or change
+                      nothing else there (the macOS profile; sessions keep protect plus each entry present)
   other_projects:     other projects' workspace/runtime, and every memory repo that isn't its own: other projects'
                       bare repos and memory copies, the mirrors, anything else under git_origin / memory_copies (no
                       reading or writing; Path)
@@ -183,6 +186,24 @@ def protect() -> list[dict]:
         except runtime_ports.Unsupported:
             continue
         out += [x for x in ({"name": n, "tree": bool(t)} for n, t in rt.control_paths()) if x not in out]
+    return out
+
+
+def protect_roots() -> list[dict]:
+    """Each installed runtime's own folder in a project, with the entries in it that stay writable ([{name, writable}];
+    the control port's optional control_root): nothing of the project's services or jobs creates or changes anything
+    else under it (docs/design/runtime-versions.md section 7, V-M9)."""
+    import runtime_ports
+    out = []
+    for name in dict.fromkeys([runtime_ports.default_name(), *runtime_ports.installed()]):
+        try:
+            rt = runtime_ports.load(name, ports=("control",))
+        except runtime_ports.Unsupported:
+            continue
+        fn = getattr(rt, "control_root", None)
+        got = fn() if callable(fn) else None
+        if got and (x := {"name": got[0], "writable": list(got[1])}) not in out:
+            out.append(x)
     return out
 
 
@@ -365,6 +386,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
                  + list(doc.get("allow_write") or []),
         "env": cache_env(d["workspace"]),
         "protect": protect(),
+        "protect_roots": protect_roots(),
         "other_projects": others + others_memory(name, doc, index),
         "deny_write": _uniq([hubconf.ROOT, hubconf.p("git_origin"), copies, *instance_dirs(),
                              *([hubconf.BUS_DIR] if outbox else []), *platform_python(),

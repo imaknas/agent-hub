@@ -266,5 +266,7 @@
  "The platform's own copy of {runtime} is installed and checked with its login for unattended runs, and that isn't there yet ({label}). Later: brunna runtimes install {runtime}": "平台自己那份 {runtime} 要用無人值守執行的登入來安裝和檢查,這個登入還沒有({label})。之後:brunna runtimes install {runtime}",
  "⚠️ no checked copy of {runtime} yet; brunna doctor says why. Later: brunna runtimes install {runtime}": "⚠️ 還沒有檢查過的 {runtime};原因看 brunna doctor。之後:brunna runtimes install {runtime}",
  "the runtime {runtime} starts no platform run: {reason}": "runtime {runtime} 不啟動任何平台執行:{reason}",
- "brunna runtimes install {runtime} (it downloads the tool and runs its checks, for some minutes)": "brunna runtimes install {runtime}(會下載工具再跑檢查,要幾分鐘)"
+ "brunna runtimes install {runtime} (it downloads the tool and runs its checks, for some minutes)": "brunna runtimes install {runtime}(會下載工具再跑檢查,要幾分鐘)",
+ "sandboxed projects' own services and jobs, and the platform's git work done as them, create or change nothing in {folders} but the worktrees: a tracked file there that a fast-forward or a proposal's copy-back done as the project would change can't be written (nor by its sessions, once it is there): only a change made outside the project's sandbox writes it": "沙盒專案自己的服務和工作,以及平台以專案身分做的 git 工作,在 {folders} 裡除了 worktrees 什麼都不能新增或修改:那裡被追蹤的檔案,以專案身分做的 fast-forward 或提案的 copy-back 要改它都寫不進去(檔案在那裡之後,它的 session 也寫不了):只有在專案沙盒之外做的修改寫得進去",
+ "on Linux, Landlock enforces none of what sandboxed projects' sessions load settings, hooks and tools from: their own services and jobs can write those files (the platform removes hooks it didn't write from the settings it renders)": "在 Linux 上,Landlock 完全擋不住沙盒專案的 session 載入設定、hook 和工具的那些檔案:專案自己的服務和工作寫得到它們(平台會從它產生的設定裡移除不是它寫的 hook)"
 }

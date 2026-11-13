@@ -1361,6 +1361,34 @@ def doctor_user_settings(add, installed) -> None:
                 _("brunna upgrade brings them up to date, or brunna user-settings --update on its own"))
 
 
+def doctor_control(add, why_no_sandbox, installed) -> None:
+    """What keeps sandboxed projects off what their sessions load settings, hooks and tools from
+    (docs/design/runtime-versions.md section 7): the macOS profile's one rule over the coding agent's folder and what it
+    stops, Linux's none, and each project's present entries (the adapter's control_notes)."""
+    import isolation
+    import policy
+    import runtime_ports
+    folders = [r["name"] for r in policy.protect_roots()]
+    adapter = None if why_no_sandbox else isolation.adapter()[0]
+    if adapter == "seatbelt" and folders:
+        add("info", _("sandboxed projects' own services and jobs, and the platform's git work done as them, create or "
+                      "change nothing in {folders} but the worktrees: a tracked file there that a fast-forward or a "
+                      "proposal's copy-back done as the project would change can't be written (nor by its sessions, once "
+                      "it is there): only a change made outside the project's sandbox writes it",
+                      folders=", ".join(folders)))
+    elif adapter == "landlock":
+        add("info", _("on Linux, Landlock enforces none of what sandboxed projects' sessions load settings, hooks and tools "
+                      "from: their own services and jobs can write those files (the platform removes hooks it didn't "
+                      "write from the settings it renders)"))
+    sandboxed = [(n, hubconf.path((d.get("paths") or {}).get("workspace"))) for n, d in sorted(hubconf.projects().items())
+                 if (d.get("enforce") or {}).get("sandbox") is True]
+    for name in installed:
+        fn = getattr(runtime_ports._module(name), "control_notes", None)
+        for _project, ws in sandboxed if callable(fn) else ():
+            for level, text in fn(ws) if ws and ws.is_dir() else ():
+                add(level, text)
+
+
 def cmd_doctor(argv: list[str]) -> int:
     results: list[tuple[str, str, str]] = []   # (ok|info|warn|bad, what, how to fix)
 
@@ -1537,6 +1565,7 @@ def cmd_doctor(argv: list[str]) -> int:
     if any((d.get("enforce") or {}).get("sandbox") is True for d in hubconf.projects().values()):
         add("info", _("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
                       "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement"))
+        doctor_control(add, why, installed)
     hb = hubconf.STATE / "scheduler-heartbeat"
     if hb.exists():
         age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(hb.stat().st_mtime)).total_seconds() / 60

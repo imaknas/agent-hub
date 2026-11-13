@@ -27,7 +27,8 @@ What it enforces:
            can create sockets without socket()); no_new_privs (setuid/setgid programs such as crontab gain nothing);
            ptrace and /proc/<pid>/environ of processes outside the sandbox are refused by Landlock itself (measured);
            signals to other processes and abstract unix sockets are scoped only with ABI ≥ 6 (kernel 6.12)
-Can't enforce (the adapter's limits): policy.protect (what the project's sessions load settings and hooks from, inside
+Can't enforce (the adapter's limits): policy.protect and protect_roots (what the project's sessions load settings and
+hooks from, and the runtime's own folder in the project, inside
 its own writable folder: Landlock can only allow, and a write right on a folder covers everything under it, so it
 doesn't declare runtime-files-locked; there the platform's renderer removes hooks it didn't write), the listening address (a service may bind 0.0.0.0:<its port>; macOS accepts
 only localhost), UDP binds, the network allowlist (policy.network), signals to the owner's other processes below ABI 6.

@@ -194,7 +194,9 @@ def credential_paths() -> dict:
 # (name under its home, tree); and the user config file. Reading them stays allowed (skills' files, plans).
 USER_CONTROL = (("settings.json", False), ("settings.local.json", False), ("CLAUDE.md", False), ("hooks", True),
                 ("commands", True), ("agents", True), ("plugins", True), ("output-styles", True), ("rules", True),
-                ("skills", True))
+                ("skills", True),
+                # Desktop's executables, run at every start of the app (runtime-versions.md step 4)
+                ("remote/ccd-cli", True))
 # The Keychain isn't a file, so the OS sandbox can't block it (tested 10-25: Bash inside the sandbox could look up
 # Claude's login credentials). These rules are only reinforcement: another way of writing it (sh -c, python) gets around
 # them (doctor's sandbox row says so)
@@ -229,6 +231,10 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     ws = pol.get("workspace")
     deny += [r for c in pol.get("protect") or [] if c["tree"] and ws
              for r in (f"Edit(/{ws}/**/{c['name']})", f"Edit(/{ws}/**/{c['name']}/**)")]
+    # and every other entry present in its tool folder, the workspace's and each worktree's (V-M9: the folder can't be
+    # one rule for sessions), for the file tools and Bash both
+    present = present_controls(ws)[0] if ws else []
+    deny += [r for p in present for r in _entry_edit(p)]
     # docs/design/capabilities.md 11-08, A1: what its services are denied, its sessions are too (points 5 and 6)
     state = _spelled(pol.get("platform_state") or [])
     cred_dirs = _spelled(_not_home(pol.get("credentials") or []))
@@ -248,6 +254,8 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
         "allowUnsandboxedCommands": False,
         "filesystem": {
             "allowWrite": list(pol["write"]),
+            **({"denyWrite": list(dict.fromkeys(_tilde(x) for p in present for x in _entry_spellings(p)))}
+               if present else {}),
             # not the workspace root: git dies when a folder above its -C can't be stat'ed, and these settings have no
             # stat-only allow (other_projects names each project instead)
             "denyRead": list(dict.fromkeys([_tilde(p) for p in pol["other_projects"]] + [_tilde(p) for p in secret]
@@ -1804,12 +1812,84 @@ RULES_FILE_NAMES = ("CLAUDE.md", "CLAUDE.local.md")   # at any depth: a nested o
 CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settings.local.json", True),
            (".claude/hooks", True), (".claude/skills", True), (".claude/agents", True), (".claude/commands", True),
            # every .md under it is loaded like CLAUDE.md (code.claude.com/docs/en/memory.md)
-           (".claude/rules", True), (".mcp.json", True))
-WORKTREES = ".claude/worktrees"
+           (".claude/rules", True), (".mcp.json", True),
+           # Desktop runs the commands it names (runtime-versions.md step 4)
+           (".claude/launch.json", True))
+# The tool's folder in a project and what in it the platform names writable: the worktrees Desktop's sessions work in
+# (runtime_ports' control_root; V-M9)
+TOOL_FOLDER, TOOL_FOLDER_WRITABLE = ".claude", ("worktrees",)
+WORKTREES = f"{TOOL_FOLDER}/worktrees"
 
 
 def control_paths() -> list[tuple[str, bool]]:
     return list(CONTROL)
+
+
+def control_root() -> tuple[str, tuple[str, ...]]:
+    """(the tool's folder in a project, the entries in it that stay writable): a sandboxed project's services and jobs
+    create or change nothing else under it (one rule, docs/design/runtime-versions.md section 7)."""
+    return TOOL_FOLDER, TOOL_FOLDER_WRITABLE
+
+
+# what the tool makes in its folder itself whenever its sandbox is on (V-M9): never denied
+TOOL_FOLDER_OWN = (".cc-writes",)
+# a rule's path is a glob to both engines (node-ignore for rules, regexes for the sandbox): a name holding one of these
+# would widen into its siblings or be dropped, so it is never written as a rule (doctor names it)
+GLOB_CHARS = frozenset("*?[]{}!\\")
+
+
+def present_controls(workspace) -> tuple[list[pathlib.Path], list[str]]:
+    """(each entry present in the tool folder of the workspace and of each worktree, but the writable ones and the tool's
+    own, as its resolved folder + its name; the names left out for a glob character, relative to the workspace). Read
+    without following a link: a linked tool folder is not listed, an entry that is a link is named, not its target."""
+    ws = pathlib.Path(workspace)
+    paths, unrendered = [], []
+    for folder in session_folders(ws):
+        base = folder / TOOL_FOLDER
+        if base.is_symlink() or not base.is_dir():
+            continue
+        real = pathlib.Path(os.path.realpath(base))
+        try:
+            with os.scandir(base) as it:
+                names = sorted(e.name for e in it)
+        except OSError:
+            continue
+        for n in names:
+            if n in TOOL_FOLDER_WRITABLE or n in TOOL_FOLDER_OWN:
+                continue
+            if GLOB_CHARS & set(n):
+                unrendered.append(str((base / n).relative_to(ws)))
+            else:
+                paths.append(real / n)
+    return paths, unrendered
+
+
+def _entry_spellings(p: pathlib.Path) -> list[str]:
+    """A present entry under each spelling of its folder (present_controls gives the resolved one; the folder as the
+    workspace names it too), never what the entry itself links to."""
+    return list(dict.fromkeys(f"{f}/{p.name}" for f in _spellings(p.parent)))
+
+
+def _entry_edit(p: pathlib.Path) -> list[str]:
+    return [r for s in _entry_spellings(p) for r in (f"Edit({_rule_path(s)})", f"Edit({_rule_path(s)}/**)")]
+
+
+def control_notes(workspace) -> list[tuple[str, str]]:
+    """doctor's rows on a sandboxed project's tool folder, (level, text): which entries its sessions can no longer write
+    (each present entry is denied, so the agent's own writes there fail too), and which no rule names."""
+    paths, unrendered = present_controls(workspace)
+    own = {"settings.json", "settings.local.json"}   # the platform's and the tool's own settings, not its tools' writes
+    shown = sorted({p.name for p in paths} - own)
+    out = []
+    if shown:
+        out.append(("info", _("{folder} in {project}: its sessions can't write {names} (each entry present there is "
+                              "denied, so the agent's or the app's own writes there fail too)",
+                              folder=TOOL_FOLDER, project=workspace, names=", ".join(shown))))
+    if unrendered:
+        out.append(("warn", _("{folder} in {project}: {n} {n:entry has|entries have} a glob character in the name ({names}), "
+                              "so no rule can name {n:it|them} and its sessions can write {n:it|them}; rename {n:it|them}",
+                              folder=TOOL_FOLDER, project=workspace, names=", ".join(unrendered), n=len(unrendered))))
+    return out
 
 
 def session_folders(workspace) -> list[pathlib.Path]:

@@ -491,4 +491,12 @@ if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in OPS:
         sys.stderr.write(f"usage: project-git-job.py {{{'|'.join(OPS)}}} …\n")
         sys.exit(2)
-    sys.exit(OPS[sys.argv[1]](*sys.argv[2:]))
+    try:
+        sys.exit(OPS[sys.argv[1]](*sys.argv[2:]))
+    except PermissionError as e:
+        # run as the project, under its sandbox: on macOS nothing in its coding agent's folder but the worktrees is
+        # written (docs/design/runtime-versions.md section 7), so a fast-forward or copy-back of a file there stops here
+        sys.stderr.write(f"{sys.argv[1]}: the project's sandbox refused writing {e.filename}: what its sessions load "
+                         "settings and hooks from, and its coding agent's folder but the worktrees, are written only "
+                         "outside its sandbox\n")
+        sys.exit(1)

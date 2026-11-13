@@ -309,6 +309,76 @@ class UserControl(Tree):
         self.assertEqual(len(deny), len(set(deny)))
 
 
+@unittest.skipIf(yaml is None, "needs PyYAML")
+class Protected(Tree):
+    """With the runtime's control paths on (the cases above turn them off): services get protect_denies and, beside it,
+    the one rule over the tool's folder (V-M9); sessions the control names and each entry present in the tool folder of
+    the workspace and of each worktree (docs/design/runtime-versions.md section 7)."""
+
+    def setUp(self):
+        super().setUp()
+        p = mock.patch.object(policy, "protect",
+                              lambda: [{"name": n, "tree": t} for n, t in runtime_claude.control_paths()])
+        p.start()
+        self.addCleanup(p.stop)
+        self.folder, self.writable = runtime_claude.control_root()
+        self.ws = self.tmp / "ws" / "proj"
+        self.wt = self.ws / self.folder / "worktrees" / "w"
+        for d in (self.ws / self.folder / "agent-memory", self.wt / self.folder / "agent-memory",
+                  self.ws / self.folder / ".cc-writes"):
+            d.mkdir(parents=True)
+        (self.ws / self.folder / "launch.json").write_text("{}")
+        (self.ws / self.folder / "odd[1]").write_text("x")
+
+    def test_services_get_the_rule_beside_protect_denies(self):
+        pol = self.pol()
+        self.assertEqual(pol["protect_roots"], [{"name": self.folder, "writable": list(self.writable)}])
+        lines = seatbelt.service_profile(pol, [self.ws]).splitlines()
+        top = self.ws.resolve() / self.folder
+        rule = (f'(deny file-write* (require-all (subpath "{top}") '
+                + " ".join(f'(require-not (subpath "{top / w}"))' for w in self.writable) + "))")
+        self.assertIn(rule, lines)
+        protect = next(i for i, x in enumerate(lines) if x.startswith("(deny file-write* (regex"))
+        allow = next(i for i, x in enumerate(lines) if x.startswith("(allow file-write*"))
+        self.assertLess(allow, protect, "the denies come after the allow (later rules win)")
+        self.assertLess(allow, lines.index(rule))
+
+    def test_sessions_deny_every_present_entry_in_the_workspace_and_a_worktree(self):
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        ws, wt, f = str(self.ws), str(self.wt), self.folder
+        for p in (f"{ws}/{f}/launch.json", f"{ws}/{f}/agent-memory/x.md", f"{wt}/{f}/agent-memory/x.md",
+                  f"{ws}/{f}/settings.json", f"{wt}/{f}/settings.local.json", f"{ws}/.mcp.json"):
+            self.assertTrue(rule_hits(deny, "Edit", p, self.home), p)
+        for p in (f"{wt}/work.py", f"{ws}/{f}/.cc-writes/x", f"{ws}/code.py"):
+            self.assertFalse(rule_hits(deny, "Edit", p, self.home), p)
+        dw = sandbox["filesystem"]["denyWrite"]
+        for p in (f"{ws}/{f}/launch.json", f"{ws}/{f}/agent-memory", f"{wt}/{f}/agent-memory"):
+            self.assertIn(p, dw)
+        self.assertFalse([e for e in dw if "worktrees/w" in e and not e.startswith(f"{wt}/{f}/")], dw)
+        self.assertFalse([e for e in dw if e.endswith((".cc-writes", f"/{f}/worktrees"))], dw)
+
+    def test_a_glob_named_entry_is_not_rendered_at_all(self):
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        self.assertFalse([r for r in [*deny, *sandbox["filesystem"]["denyWrite"]] if "odd" in r])
+        _paths, left = runtime_claude.present_controls(self.ws)
+        self.assertEqual(left, [f"{self.folder}/odd[1]"])
+        levels = [lv for lv, _t in runtime_claude.control_notes(self.ws)]
+        self.assertEqual(levels, ["info", "warn"])
+
+    def test_a_linked_entry_is_named_not_its_target(self):
+        target = self.tmp / "elsewhere"
+        target.mkdir()
+        (self.ws / self.folder / "linked").symlink_to(target)
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        self.assertTrue(rule_hits(deny, "Edit", f"{self.ws}/{self.folder}/linked/x", self.home))
+        self.assertFalse(rule_hits(deny, "Edit", f"{target}/x", self.home))
+
+    def test_the_users_desktop_executables_are_never_edited(self):
+        deny = runtime_claude.settings(self.pol())[1]
+        self.assertTrue(rule_hits(deny, "Edit", str(self.home / ".claude" / "remote" / "ccd-cli" / "2.1.400-ab"),
+                                  self.home))
+
+
 class MovedOnce(unittest.TestCase):
     """What sandboxed code reads left .state for hubconf.shared() (11-08): moved once, only by the main checkout's own
     code in its own state, never read in both places, and never silently: the renames record can't be rebuilt."""

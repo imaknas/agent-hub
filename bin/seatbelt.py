@@ -132,6 +132,23 @@ def protect_denies(pol: dict) -> list[str]:
             "(deny file-write* " + " ".join(f"(regex {p})" for p in pats) + ")"]
 
 
+def root_denies(pol: dict) -> list[str]:
+    """The runtime's own folder in the workspace (policy protect_roots): nothing created, changed, removed or renamed
+    under it but in the entries it names writable (its worktrees), nor the folder itself moved (V-M9, measured 11-09:
+    docs/design/runtime-versions.md section 7). Beside protect_denies, which still covers the control names at any
+    depth, those inside the writable entries included."""
+    ws = pol.get("workspace")
+    if not ws or not pol.get("protect_roots"):
+        return []
+    base = pathlib.Path(ws).resolve()
+    out = ["; the runtime's own folder in the project: nothing in it written but what it names writable"]
+    for r in pol["protect_roots"]:
+        top = base / r["name"]
+        keep = " ".join(f"(require-not (subpath {q(top / w)}))" for w in r.get("writable") or [])
+        out.append(f"(deny file-write* (require-all (subpath {q(top)}){' ' + keep if keep else ''}))")
+    return out
+
+
 def ancestors(paths) -> list[str]:
     """The folders above each path, as literals: what a process must be able to stat to resolve the path to a folder
     it may use (realpath, `git -C`), when one of them is in a denied tree (the workspace root, the platform state).
@@ -158,6 +175,7 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[pat
         "(allow file-write* " + " ".join([*own, *[f"(subpath {q(t)})" for t in TMP],
                                           *[f"(literal {q(d)})" for d in DEVICES]]) + ")",
         *protect_denies(pol),
+        *root_denies(pol),
         "; reads: other projects, services, platform state, credentials, Keychain files; its own folders allowed again",
         "(deny file-read* " + " ".join(read_denies(pol)) + ")",
         "(allow file-read* " + " ".join(own + [f"(subpath {q(r)})" for r in readable]) + ")",
