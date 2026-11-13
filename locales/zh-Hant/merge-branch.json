@@ -34,5 +34,6 @@
  "merge-branch: --branch names {branch}, but this folder has {here} checked out; the gate rebases and tests what is checked out here, so run it in {branch}'s own worktree; nothing was merged": "merge-branch:--branch 指定的是 {branch},但這個資料夾 checkout 的是 {here};合併閘門 rebase 跟測試的是這裡 checkout 的東西,所以要在 {branch} 自己的 worktree 裡跑;什麼都沒合併",
  "this folder is the project's memory worktree ({path})": "這個資料夾是專案的記憶 worktree({path})",
  "merge-branch: {why}. A project's memory branch never goes into its main (memory notes live only on {mem}, in the .agent-memory worktree); nothing was merged": "merge-branch:{why}。專案的記憶分支絕不能進到它的 main(記憶筆記只放在 {mem},在 .agent-memory worktree 裡);什麼都沒合併",
- "can't make a temporary worktree to try the rebase in: {output}": "沒辦法開暫時的 worktree 來試 rebase:{output}"
+ "can't make a temporary worktree to try the rebase in: {output}": "沒辦法開暫時的 worktree 來試 rebase:{output}",
+ "this merge would change files in the coding agent's folder, which the project's sandbox can't write: {files}; nothing was moved. Make that change outside the sandbox (in the main checkout, by hand), or drop it from the branch": "這次合併會改到 coding agent 資料夾裡的檔案,專案的沙盒寫不了:{files};什麼都沒動。請在沙盒之外(在主 checkout 手動)做這個修改,或把它從分支拿掉"
 }

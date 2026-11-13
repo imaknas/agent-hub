@@ -136,16 +136,25 @@ def root_denies(pol: dict) -> list[str]:
     """The runtime's own folder in the workspace (policy protect_roots): nothing created, changed, removed or renamed
     under it but in the entries it names writable (its worktrees), nor the folder itself moved (V-M9, measured 11-09:
     docs/design/runtime-versions.md section 7). Beside protect_denies, which still covers the control names at any
-    depth, those inside the writable entries included."""
+    depth, those inside the writable entries included. A writable entry holds checkouts (worktrees), each with a tool
+    folder of its own: that one is held the same way, one level down (not a worktree's own worktrees)."""
+    import re
     ws = pol.get("workspace")
     if not ws or not pol.get("protect_roots"):
         return []
     base = pathlib.Path(ws).resolve()
-    out = ["; the runtime's own folder in the project: nothing in it written but what it names writable"]
+    out = ["; the runtime's own folder in the project, and in each of its worktrees: nothing in it written but what it "
+           "names writable"]
     for r in pol["protect_roots"]:
         top = base / r["name"]
-        keep = " ".join(f"(require-not (subpath {q(top / w)}))" for w in r.get("writable") or [])
+        writable = r.get("writable") or []
+        keep = " ".join(f"(require-not (subpath {q(top / w)}))" for w in writable)
         out.append(f"(deny file-write* (require-all (subpath {q(top)}){' ' + keep if keep else ''}))")
+        name = re.escape(r["name"])
+        for w in writable:
+            inner = f"{re.escape(str(top / w))}/[^/]+/{name}"
+            keep = " ".join(f'(require-not (regex #"^{inner}/{re.escape(x)}(/|$)"))' for x in writable)
+            out.append(f'(deny file-write* (require-all (regex #"^{inner}(/|$)"){" " + keep if keep else ""}))')
     return out
 
 

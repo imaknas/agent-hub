@@ -1372,9 +1372,9 @@ def doctor_control(add, why_no_sandbox, installed) -> None:
     adapter = None if why_no_sandbox else isolation.adapter()[0]
     if adapter == "seatbelt" and folders:
         add("info", _("sandboxed projects' own services and jobs, and the platform's git work done as them, create or "
-                      "change nothing in {folders} but the worktrees: a tracked file there that a fast-forward or a "
-                      "proposal's copy-back done as the project would change can't be written (nor by its sessions, once "
-                      "it is there): only a change made outside the project's sandbox writes it",
+                      "change nothing in {folders} but the worktrees (nor in a worktree's own): a tracked file there is "
+                      "changed only outside the project's sandbox. A proposal's copy-back done as the project fails on "
+                      "one, and merge-branch refuses a merge that would change one, before anything moves",
                       folders=", ".join(folders)))
     elif adapter == "landlock":
         add("info", _("on Linux, Landlock enforces none of what sandboxed projects' sessions load settings, hooks and tools "

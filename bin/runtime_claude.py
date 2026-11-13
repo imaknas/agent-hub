@@ -53,6 +53,7 @@ import os
 import pathlib
 import re
 import subprocess
+from typing import NamedTuple
 
 import i18n
 
@@ -233,7 +234,7 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
              for r in (f"Edit(/{ws}/**/{c['name']})", f"Edit(/{ws}/**/{c['name']}/**)")]
     # and every other entry present in its tool folder, the workspace's and each worktree's (V-M9: the folder can't be
     # one rule for sessions), for the file tools and Bash both
-    present = present_controls(ws)[0] if ws else []
+    present = present_controls(ws).paths if ws else []
     deny += [r for p in present for r in _entry_edit(p)]
     # docs/design/capabilities.md 11-08, A1: what its services are denied, its sessions are too (points 5 and 6)
     state = _spelled(pol.get("platform_state") or [])
@@ -1814,7 +1815,7 @@ CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settin
            # every .md under it is loaded like CLAUDE.md (code.claude.com/docs/en/memory.md)
            (".claude/rules", True), (".mcp.json", True),
            # Desktop runs the commands it names (runtime-versions.md step 4)
-           (".claude/launch.json", True))
+           (".claude/launch.json", True), (".claude/output-styles", True))
 # The tool's folder in a project and what in it the platform names writable: the worktrees Desktop's sessions work in
 # (runtime_ports' control_root; V-M9)
 TOOL_FOLDER, TOOL_FOLDER_WRITABLE = ".claude", ("worktrees",)
@@ -1831,41 +1832,55 @@ def control_root() -> tuple[str, tuple[str, ...]]:
     return TOOL_FOLDER, TOOL_FOLDER_WRITABLE
 
 
-# what the tool makes in its folder itself whenever its sandbox is on (V-M9): never denied
-TOOL_FOLDER_OWN = (".cc-writes",)
+# What the tool makes in its folder itself, never denied: .cc-writes whenever its sandbox is on (V-M9); its scheduled
+# tasks and routines
+TOOL_FOLDER_OWN = (".cc-writes", "scheduled_tasks.lock", "scheduled_tasks.json", "routines")
 # A rule's path is a glob to both engines (node-ignore for rules, regexes for the sandbox), inside a rule's parentheses,
-# and an entry's name is the project's to choose: only a name of these characters is written into a rule. Anything else
-# (a glob character, which would widen into its siblings or be dropped (V-M9), a parenthesis, a space, a line break) is
-# never rendered, and doctor names it
+# and an entry's name (and a worktree's) is the project's to choose: only a name of these characters is written into a
+# rule. Anything else (a glob character, which would widen into its siblings or be dropped (V-M9), a parenthesis, a
+# space, a line break) is never rendered, and doctor names it
 RULE_NAME = re.compile(r"[A-Za-z0-9._@+-]+")
 
 
-def present_controls(workspace) -> tuple[list[pathlib.Path], list[str]]:
-    """(each entry present in the tool folder of the workspace and of each worktree, but the writable ones and the tool's
-    own, as its folder (as the workspace names it) + its name; the names no rule can hold (RULE_NAME), relative to the
-    workspace). Read without following a link: a linked tool folder is not listed, an entry that is a link is named, not
-    its target."""
+class Present(NamedTuple):
+    paths: list          # each entry denied: its folder (as the workspace names it) + its name
+    unrendered: list     # what no rule can hold (relative to the workspace): never written into a rule
+    unlisted: list       # tool folders that are links or can't be listed: nothing in them denied by name
+    linked: list         # denied entries that are links: their targets stay writable from Bash
+
+
+def present_controls(workspace) -> Present:
+    """Each entry present in the tool folder of the workspace and of each worktree, but the writable ones and the tool's
+    own. Read without following a link: a linked tool folder is not listed, an entry that is a link is named, not its
+    target. A worktree whose own name no rule can hold has its entries unrendered."""
     ws = pathlib.Path(workspace)
-    paths, unrendered = [], []
+    out = Present([], [], [], [])
     for folder in session_folders(ws):
         base = folder / TOOL_FOLDER
-        if base.is_symlink() or not base.is_dir():
+        if base.is_symlink():
+            out.unlisted.append(str(base.relative_to(ws)))
+            continue
+        if not base.is_dir():
             continue
         try:
             with os.scandir(base) as it:
                 names = sorted(e.name for e in it)
         except OSError:
+            out.unlisted.append(str(base.relative_to(ws)))
             continue
+        held = folder == ws or bool(RULE_NAME.fullmatch(folder.name))
         for n in names:
             # the settings file the platform renders is a control name already: as a present entry its own writing
             # would change what is rendered (a plan never empty after apply)
             if n in TOOL_FOLDER_WRITABLE or n in TOOL_FOLDER_OWN or n == settings_path(folder).name:
                 continue
-            if RULE_NAME.fullmatch(n):
-                paths.append(base / n)
+            if held and RULE_NAME.fullmatch(n):
+                out.paths.append(base / n)
+                if (base / n).is_symlink():
+                    out.linked.append(str((base / n).relative_to(ws)))
             else:
-                unrendered.append(str((base / n).relative_to(ws)))
-    return paths, unrendered
+                out.unrendered.append(str((base / n).relative_to(ws)))
+    return out
 
 
 def _entry_spellings(p: pathlib.Path) -> list[str]:
@@ -1880,20 +1895,31 @@ def _entry_edit(p: pathlib.Path) -> list[str]:
 
 def control_notes(workspace) -> list[tuple[str, str]]:
     """doctor's rows on a sandboxed project's tool folder, (level, text): which entries its sessions can no longer write
-    (each present entry is denied, so the agent's own writes there fail too), and which no rule names."""
-    paths, unrendered = present_controls(workspace)
+    (each present entry is denied, so the agent's own writes there fail too), and what no rule names."""
+    got = present_controls(workspace)
     own = {"settings.json"}   # the tool's own settings, not what its tools write
-    shown = sorted({p.name for p in paths} - own)
+    shown = sorted({p.name for p in got.paths} - own)
     out = []
     if shown:
         out.append(("info", _("{folder} in {project}: its sessions can't write {names} (each entry present there is "
                               "denied, so the agent's or the app's own writes there fail too)",
                               folder=TOOL_FOLDER, project=workspace, names=", ".join(shown))))
-    if unrendered:
+    if got.unrendered:
+        n = len(got.unrendered)
         out.append(("warn", _("{folder} in {project}: {n} {n:entry has|entries have} a name no rule can hold ({names}: "
                               "a glob character, a space, a parenthesis…), so no rule names {n:it|them} and its sessions "
                               "can write {n:it|them}; rename {n:it|them}", folder=TOOL_FOLDER, project=workspace,
-                              names=", ".join(ascii(u) for u in unrendered), n=len(unrendered))))
+                              names=", ".join(ascii(u) for u in got.unrendered), n=n)))
+    if got.unlisted:
+        n = len(got.unlisted)
+        out.append(("warn", _("{project}: {n} tool {n:folder|folders} can't be listed ({names}: a link, or unreadable), "
+                              "so nothing in {n:it|them} is denied by name: its sessions can write {n:it|them}",
+                              project=workspace, names=", ".join(ascii(u) for u in got.unlisted), n=n)))
+    if got.linked:
+        n = len(got.linked)
+        out.append(("warn", _("{project}: {n} denied {n:entry is a link|entries are links} ({names}): the rules name the "
+                              "link, so what it points to stays writable from its sessions' Bash", project=workspace,
+                              names=", ".join(ascii(u) for u in got.linked), n=n)))
     return out
 
 

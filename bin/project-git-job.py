@@ -494,9 +494,8 @@ if __name__ == "__main__":
     try:
         sys.exit(OPS[sys.argv[1]](*sys.argv[2:]))
     except PermissionError as e:
-        # run as the project, under its sandbox: on macOS nothing in its coding agent's folder but the worktrees is
-        # written (docs/design/runtime-versions.md section 7), so a fast-forward or copy-back of a file there stops here
-        sys.stderr.write(f"{sys.argv[1]}: the project's sandbox refused writing {e.filename}: what its sessions load "
-                         "settings and hooks from, and its coding agent's folder but the worktrees, are written only "
-                         "outside its sandbox\n")
+        # a write this job's own code makes (copy-back, a removal), run as the project under its sandbox: refused there
+        # (git's own refusals come back as its exit code and stderr, not here)
+        sys.stderr.write(f"{sys.argv[1]}: writing {e.filename} was refused ({e.strerror}); this job runs as the project, "
+                         "under its sandbox\n")
         sys.exit(1)

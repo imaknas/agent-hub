@@ -364,10 +364,38 @@ class Protected(Tree):
         sandbox, deny, _allow = runtime_claude.settings(self.pol())
         rules = [*deny, *sandbox["filesystem"]["denyWrite"]]
         self.assertFalse([r for r in rules if "odd" in r or "a)b" in r or "with space" in r], rules)
-        _paths, left = runtime_claude.present_controls(self.ws)
+        left = runtime_claude.present_controls(self.ws).unrendered
         self.assertEqual(sorted(left), sorted(f"{self.folder}/{n}" for n in ("odd[1]", "a)b", "with space")))
         levels = [lv for lv, _t in runtime_claude.control_notes(self.ws)]
         self.assertEqual(levels, ["info", "warn"])
+
+    def test_a_worktree_whose_name_no_rule_can_hold_has_its_entries_unrendered(self):
+        for name in ("*", "a) b", "[x]"):
+            (self.ws / self.folder / "worktrees" / name / self.folder / "agent-memory").mkdir(parents=True)
+        sandbox, deny, _allow = runtime_claude.settings(self.pol())
+        rules = [*deny, *sandbox["filesystem"]["denyWrite"]]
+        self.assertFalse([r for r in rules if "/worktrees/*" in r or "a) b" in r or "[x]" in r], rules)
+        left = runtime_claude.present_controls(self.ws).unrendered
+        for name in ("*", "a) b", "[x]"):
+            self.assertIn(f"{self.folder}/worktrees/{name}/{self.folder}/agent-memory", left)
+        self.assertTrue(rule_hits(deny, "Edit", f"{self.wt}/{self.folder}/agent-memory/x", self.home), "w still is")
+
+    def test_the_tools_own_entries_are_left_alone(self):
+        for n in ("scheduled_tasks.lock", "scheduled_tasks.json", "routines"):
+            (self.ws / self.folder / n).write_text("x")
+        deny = runtime_claude.settings(self.pol())[1]
+        for n in ("scheduled_tasks.lock", "scheduled_tasks.json", "routines"):
+            self.assertFalse(rule_hits(deny, "Edit", f"{self.ws}/{self.folder}/{n}", self.home), n)
+
+    def test_a_linked_or_unlistable_tool_folder_and_a_linked_entry_are_said(self):
+        (self.ws / self.folder / "linked").symlink_to(self.tmp)
+        wt2 = self.ws / self.folder / "worktrees" / "w2"
+        wt2.mkdir()
+        (wt2 / self.folder).symlink_to(self.tmp)
+        got = runtime_claude.present_controls(self.ws)
+        self.assertEqual(got.linked, [f"{self.folder}/linked"])
+        self.assertEqual(got.unlisted, [f"{self.folder}/worktrees/w2/{self.folder}"])
+        self.assertEqual([lv for lv, _t in runtime_claude.control_notes(self.ws)], ["info", "warn", "warn", "warn"])
 
     def test_a_workspace_behind_a_link_is_denied_under_both_spellings(self):
         link = self.tmp / "ws-link"

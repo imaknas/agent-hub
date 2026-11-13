@@ -184,6 +184,22 @@ def main() -> int:
     with open(common / "merge-branch.lock", "w") as lock, contextlib.ExitStack() as cleanup:
         fcntl.flock(lock, fcntl.LOCK_EX)
         work = wt   # where the rebase happens
+        # 1b. a sandboxed project's processes change nothing in its coding agent's folder but the worktrees (its
+        # sessions' denies, its services' rule; docs/design/runtime-versions.md section 7): a rebase or fast-forward
+        # touching a tracked file there would stop halfway and leave a checkout dirty, so it is refused before anything
+        # moves: the branch's changes (into the main checkout) and the base's since the branch left it (into this one)
+        if (info.get("enforce") or {}).get("sandbox") is True:
+            import policy
+            fork = git(wt, "merge-base", base, head0).stdout.strip()
+            moved = {"main": git(wt, "diff", "--name-only", f"{base}...{head0}").stdout.split(),
+                     "worktree": git(wt, "diff", "--name-only", f"{fork}..{base}").stdout.split() if fork else []}
+            held = {where: found for where, paths in moved.items() if (found := policy.protected_changes(paths))}
+            if held:
+                return fail("tool-folder", _("this merge would change files in the coding agent's folder, which the "
+                                             "project's sandbox can't write: {files}; nothing was moved. Make that "
+                                             "change outside the sandbox (in the main checkout, by hand), or drop it "
+                                             "from the branch", files=", ".join(sorted({f for fs in held.values()
+                                                                                        for f in fs}))))
         if a.dry_run:
             # a dry run rebases a detached copy of the branch's commit in a temporary worktree in the repo's git dir (a
             # sandboxed session can write there), removed whatever happens: no ref moves, no worktree changes

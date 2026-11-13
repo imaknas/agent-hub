@@ -76,5 +76,7 @@
  "{point}: Claude Code's completions run with no tools again": "{point}:Claude Code 的 completion 執行時又不帶任何工具了",
  "the run of {point} gave an init event whose tools can't be read: ended, its result refused": "{point} 的執行給的 init 事件讀不出有哪些工具:已中止,結果不採用",
  "{folder} in {project}: its sessions can't write {names} (each entry present there is denied, so the agent's or the app's own writes there fail too)": "{project} 的 {folder}:它的 session 不能寫 {names}(那裡現有的每一項都擋寫,所以 agent 或 app 自己往那裡寫也會失敗)",
- "{folder} in {project}: {n} {n:entry has|entries have} a name no rule can hold ({names}: a glob character, a space, a parenthesis…), so no rule names {n:it|them} and its sessions can write {n:it|them}; rename {n:it|them}": "{project} 的 {folder}:有 {n} 項的名字規則裝不下({names}:萬用字元、空白、括號…),沒有規則指到,它的 session 寫得到;請改名"
+ "{folder} in {project}: {n} {n:entry has|entries have} a name no rule can hold ({names}: a glob character, a space, a parenthesis…), so no rule names {n:it|them} and its sessions can write {n:it|them}; rename {n:it|them}": "{project} 的 {folder}:有 {n} 項的名字規則裝不下({names}:萬用字元、空白、括號…),沒有規則指到,它的 session 寫得到;請改名",
+ "{project}: {n} tool {n:folder|folders} can't be listed ({names}: a link, or unreadable), so nothing in {n:it|them} is denied by name: its sessions can write {n:it|them}": "{project}:有 {n} 個工具資料夾列不出內容({names}:是連結,或讀不到),裡面沒有任何東西被指名擋寫:它的 session 寫得到",
+ "{project}: {n} denied {n:entry is a link|entries are links} ({names}): the rules name the link, so what it points to stays writable from its sessions' Bash": "{project}:有 {n} 個被擋的項目是連結({names}):規則指的是連結本身,它指向的地方從 session 的 Bash 仍寫得到"
 }

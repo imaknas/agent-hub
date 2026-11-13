@@ -207,6 +207,20 @@ def protect_roots() -> list[dict]:
     return out
 
 
+def protected_changes(paths) -> list[str]:
+    """Of these paths (relative to a checkout), those in a runtime's own folder (protect_roots) outside the entries it
+    names writable: a sandboxed project's own processes change none of them (its services by the macOS rule, its
+    sessions by the denies on each entry present), so a merge or rebase that would change one stops halfway from inside
+    its sandbox. Said before anything moves (merge-branch)."""
+    roots = protect_roots()
+    out = []
+    for p in paths:
+        parts = pathlib.PurePosixPath(p).parts
+        if any(len(parts) > 1 and parts[0] == r["name"] and parts[1] not in r["writable"] for r in roots):
+            out.append(p)
+    return out
+
+
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
     return {k: str(names.repo_dir(ws / ".git") / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
 

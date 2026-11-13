@@ -108,12 +108,15 @@ echo y >> {folder}/kept 2>/dev/null || echo change-blocked
 rm {folder}/kept 2>/dev/null || echo remove-blocked
 mkdir {folder}/newdir 2>/dev/null || echo mkdir-blocked
 echo x > {w}/{folder}/settings.json 2>/dev/null || echo worktree-control-blocked
+echo x > {w}/{folder}/agent-memory 2>/dev/null || echo worktree-folder-blocked
+mkdir -p {w}/{folder}/worktrees/v && echo ok > {w}/{folder}/worktrees/v/a && echo nested-worktree-written
 echo ok > {w}/work.py && echo worktree-written
 mkdir -p {w}/sub && echo ok > {w}/sub/a && echo worktree-dir-written
 """
         r = self.run_in(probe, roots)
         self.assertEqual(r.stdout.split(), ["new-blocked", "change-blocked", "remove-blocked", "mkdir-blocked",
-                                            "worktree-control-blocked", "worktree-written", "worktree-dir-written"],
+                                            "worktree-control-blocked", "worktree-folder-blocked",
+                                            "nested-worktree-written", "worktree-written", "worktree-dir-written"],
                          r.stderr)
         self.assertFalse((self.ws / folder / "new-name").exists())
         # the positive control: without the rule a name no list knows is written

@@ -208,5 +208,53 @@ class DryRunMovesNothing(Project):
         self.assertEqual(self.git(self.ws, "log", "--format=%s", "main"), "feat: b\nchore: c on main\nchore: initial commit")
 
 
+class ToolFolderRefused(Project):
+    """A sandboxed project's processes change nothing in its coding agent's folder but the worktrees: a merge that would
+    change a tracked file there is refused before anything moves, naming it (docs/design/runtime-versions.md section 7;
+    the fast-forward stopped halfway and left the main checkout dirty)."""
+
+    def setUp(self):
+        super().setUp()
+        import runtime_claude
+        self.folder = runtime_claude.control_root()[0]
+        self.wt = self.worktree("feature")
+
+    def change(self, cwd, title):
+        (cwd / self.folder).mkdir(exist_ok=True)
+        (cwd / self.folder / "notes.md").write_text(title)
+        self.git(cwd, "add", f"{self.folder}/notes.md")
+        self.git(cwd, "commit", "-q", "-m", title)
+
+    def sandboxed(self, on=True):
+        self.index({"demo": {"v": 2, "name": "demo", "paths": {"workspace": str(self.ws)},
+                             **({"enforce": {"sandbox": True}} if on else {})}})
+
+    def refused(self):
+        before = self.snapshot()
+        r = self.merge(self.wt)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn(f"{self.folder}/notes.md", r.stdout)
+        self.assertEqual(self.snapshot(), before, "nothing moved")
+        self.assertEqual(self.events("merge.done"), [])
+
+    def test_the_branch_changing_it_is_refused(self):
+        self.sandboxed()
+        self.change(self.wt, "feat: notes")
+        self.refused()
+
+    def test_the_base_changing_it_since_the_branch_left_is_refused(self):
+        """the rebase would write it into the session's worktree"""
+        self.sandboxed()
+        self.commit(self.wt, "b", "feat: b")
+        self.change(self.ws, "chore: notes on main")
+        self.refused()
+
+    def test_an_unsandboxed_project_merges_it(self):
+        self.sandboxed(False)
+        self.change(self.wt, "feat: notes")
+        r = self.merge(self.wt)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
