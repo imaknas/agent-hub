@@ -52,6 +52,9 @@ class Check(unittest.TestCase):
         self.m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.m)
         self.m.STREAK = self.home / "streak.json"
+        sys.path.insert(0, str(ROOT / "tests"))
+        import store_fixture
+        store_fixture.stand_in(self)   # the platform's checked copy, which the requests are made with
         self.m.connector_jobs = lambda: ["proj/job"]   # one job uses the subscription login (its gate: the other test file)
         self.alerts = []
         self.m.alert.once = lambda key, problems, ok, ids=None: self.alerts.append((key, list(problems), ok))

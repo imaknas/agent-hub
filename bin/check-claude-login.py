@@ -113,6 +113,9 @@ def main() -> int:
         print(_("not checked: the runtime {runtime} runs only in the platform's throwaway worktree; its login shows "
                 "in its runs (a lost login fails them as a login error)", runtime=runtime_ports.default_name()))
         return 0   # the alert is left as it is: nothing was checked, so nothing recovered either
+    # no checked copy of the tool to make the request with (doctor and the status page say so): the files and dates are
+    # still checked, the requests aren't, and a request that wasn't made is no failure
+    no_copy = runtime_ports.no_checked_copy()
     rt = runtime_ports.load(ports=("auth",))
     base = rt.clean_env({k: v for k, v in os.environ.items() if k != "LLM_AUTH"})
 
@@ -130,7 +133,10 @@ def main() -> int:
             if not c.present:
                 problem(f"{c.mode}:missing", _("{path} is missing ({means})", path=c.path, means=missing_means(c.mode)))
                 continue
-            if (err := ask(base if c.mode == "subscription" else {**base, "LLM_AUTH": c.mode})) is None:
+            if no_copy:
+                print(_("{name}: no request made: the platform has no copy of the coding agent to make it with: {reason}",
+                        name=c.name, reason=no_copy))
+            elif (err := ask(base if c.mode == "subscription" else {**base, "LLM_AUTH": c.mode})) is None:
                 print(_("{name}: ok", name=c.name))
             elif rt.is_login_error(err):
                 problem(f"{c.mode}:login", _("{label} ({used_by}) does not work: {err} — {renew}", label=c.label,
@@ -165,7 +171,8 @@ def main() -> int:
             problem(f"{k}:failing", _("claude requests failed {n} times in a row ({mode}): {err}", n=streak[k], mode=k,
                                       err=clean_error(err)))
 
-    alert.once("claude-login", hard, _("The claude login check is back to normal"), ids=ids)
+    if hard or not no_copy:   # with no request made, a login problem already alerted is not over
+        alert.once("claude-login", hard, _("The claude login check is back to normal"), ids=ids)
     for x in hard:
         print(f"⚠️ {x}")
     return 1 if hard else 0

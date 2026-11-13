@@ -648,7 +648,10 @@ def agent_credential(choice: str, presets: dict[str, dict]) -> None:
         return
     info = presets[choice]
     cred = info.get("credential") or {}
-    if not agent_found(info) and UI().acts:   # nothing to log in to yet: install_agent said how to install it
+    made = cred.get("kind") == "own-token" and pathlib.Path(os.path.expanduser(cred["file"])).exists()
+    # nothing to log in with yet (install_agent said how to install it), unless the token is already there: the
+    # platform's own copy is installed and checked with it, whether or not the user has a copy
+    if not made and not agent_found(info) and UI().acts:
         return
     if cred.get("kind") == "own-token":
         f = pathlib.Path(os.path.expanduser(cred["file"]))

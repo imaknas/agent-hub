@@ -283,7 +283,7 @@ class ClaudeBilling(unittest.TestCase):
                              ('{"total_cost_usd": "lots"}', None)):
             done = subprocess.CompletedProcess([], 1, stdout=stdout, stderr="")
             with self.subTest(stdout), mock.patch.object(self.rc, "describe", lambda t: ["claude"]), \
-                    mock.patch.object(self.rc, "_env", lambda t: {}), \
+                    mock.patch.object(self.rc, "_env", lambda t, **k: {}), \
                     mock.patch.object(self.rc.subprocess, "run", lambda *a, **k: done):
                 res = self.rc.run(task)
             self.assertFalse(res.ok)

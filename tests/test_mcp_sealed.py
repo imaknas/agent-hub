@@ -37,7 +37,7 @@ class McpSealed(unittest.TestCase):
         # (sealed by construction, not by declaration)
         src = (ROOT / "bin" / "runtime_claude.py").read_text()
         complete_src = src.split("def complete(", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn("completion_command(req)", complete_src, "complete() runs the one builder")
+        self.assertIn("completion_command(req, ", complete_src, "complete() runs the one builder")
         self.assertIn(FLAG, src.split("def completion_command(", 1)[1].split("\ndef ", 1)[0])
         # tool_servers: none (a project's declared agent, project-agent): the adapter adds the flag itself
         flags_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def _flags(", 1)[1].split("\ndef ", 1)[0]

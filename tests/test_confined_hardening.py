@@ -71,7 +71,7 @@ class PromptOnStdin(Scratch):
         super().setUp()
         sys.path.insert(0, str(ROOT / "tests"))
         import store_fixture
-        store_fixture.stand_in(self)   # the platform's checked copy (its path is _exe's, stood in below)
+        self.exe = str(store_fixture.stand_in(self))   # the platform's checked copy, what the run starts
 
     def task(self):
         return runtime_ports.Task(point="agent-job", prompt=self.PROMPT, spec={"permission_mode": "auto"},
@@ -84,19 +84,18 @@ class PromptOnStdin(Scratch):
         def fake(cmd, **kw):
             seen.update(cmd=cmd, input=kw.get("input"))
             return subprocess.CompletedProcess(cmd, 0, json.dumps({"result": "ok"}), "")
-        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), mock.patch("subprocess.run", fake):
+        with mock.patch("subprocess.run", fake):
             res = runtime_claude.run(self.task())
         self.assertTrue(res.ok)
         self.assertEqual(seen["input"], self.PROMPT)
         self.assertNotIn(self.PROMPT, seen["cmd"])
-        self.assertEqual(seen["cmd"][:2], ["claude", "-p"])
+        self.assertEqual(seen["cmd"][:2], [self.exe, "-p"])
 
     def test_a_lease_keeps_its_flags(self):
         seen = {}
-        with mock.patch.object(runtime_claude, "_exe", lambda: "claude"), \
-                mock.patch("os.execvpe", lambda exe, cmd, env: seen.update(cmd=cmd)):
+        with mock.patch("os.execvpe", lambda exe, cmd, env: seen.update(cmd=cmd)):
             runtime_claude.exec_stream(self.task())
-        self.assertEqual(seen["cmd"][:4], ["claude", "-p", "--permission-mode", "auto"])
+        self.assertEqual(seen["cmd"][:4], [self.exe, "-p", "--permission-mode", "auto"])
         self.assertNotIn(self.PROMPT, seen["cmd"])
 
 

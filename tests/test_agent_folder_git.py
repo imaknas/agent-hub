@@ -371,6 +371,37 @@ class ProbeThroughTheRealPath(tbs.Fixture):
                     self.assertNotEqual(r.stdout.strip(), "None", "not a pass")
                     self.assertTrue(r.stdout.strip(), r.stderr)
 
+    def test_a_first_installs_check_runs_with_an_empty_store(self):
+        """A candidate is checked before any copy is promoted: the check's process names the binary under check
+        (check_binary), the store is empty, and both of the probe's runs still reach that binary, the guarded one through
+        llm.py in the process and the bare one through llm.py --dry-run in a child of its own."""
+        (self.tmp / "config" / "hub.json").write_text(json.dumps({**json.loads((self.tmp / "config" / "hub.json").read_text()),
+                                                                  "runtime": {"default": "claude"}}))
+        (self.tmp / "home" / ".claude").mkdir()
+        (self.tmp / "home" / ".claude" / "headless-oauth-token").write_text("t\n")
+        import runtime_store
+        self.assertIsNone(runtime_store.current("claude"), "nothing promoted")
+        seen = self.tmp / "seen.json"
+        exe = self.tmp / "candidate" / "node_modules" / ".bin" / "claude"
+        exe.parent.mkdir(parents=True)
+        exe.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                       f"json.dump({{'var': os.environ.get({VAR!r}), 'cwd': os.getcwd()}}, open({str(seen)!r}, 'w'))\n"
+                       "print(json.dumps({'type': 'result', 'result': 'ok', 'is_error': False, 'session_id': 's', 'num_turns': 1}))\n")
+        exe.chmod(0o755)
+        repo = self.tmp / "repo"
+        repo.mkdir()
+        env = {**self.env, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_PYTHON": sys.executable}
+        code = (f"import sys; sys.path.insert(0, {str(BIN)!r}); import conformance_claude as m, runtime_claude as rc\n"
+                f"rc.check_binary({str(exe)!r})\n"
+                f"import pathlib; print(repr(m.agent_run(pathlib.Path({str(repo)!r}), sys.argv[1] == 'guarded')))\n")
+        for how, want in (("guarded", "1"), ("bare", None)):
+            with self.subTest(how):
+                seen.unlink(missing_ok=True)
+                r = subprocess.run([sys.executable, "-c", code, how], cwd=repo, capture_output=True, text=True, timeout=60,
+                                   env=env)
+                self.assertEqual(r.stdout.strip(), "None", r.stdout + r.stderr)
+                self.assertEqual(json.loads(seen.read_text())["var"], want)
+
     def on_command(self):
         self.ran = self.tmp / "ran"
         agent = [sys.executable, "-c", f"open({str(self.ran)!r}, 'a').write('x'); print('{{}}')"]

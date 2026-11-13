@@ -409,6 +409,22 @@ class CompletionTools(unittest.TestCase):
     def test_no_init_event_refuses(self):
         self.answering()
         self.assertFalse(self.complete().ok)
+        self.assertTrue(self.alerts[-1][1])
+
+    def test_an_error_with_no_init_event_is_the_runs_own_failure(self):
+        """A login that failed ends before any init event: said as the run's error, not as a tools refusal, no alert."""
+        self.answering(result={"type": "result", "is_error": True, "result": "Invalid API key · Please run /login"})
+        got = self.complete()
+        self.assertFalse(got.ok)
+        self.assertIn("Invalid API key", got.error)
+        self.assertTrue(runtime_claude.is_login_error(got.error))
+        self.assertEqual(self.alerts, [("completion-tools:claude", [])], "nothing refused")
+
+    def test_its_error_output_is_read_to_the_end(self):
+        store_fixture.stand_in(self, body="#!/bin/sh\ncat > /dev/null\necho 'the tool said why' >&2\nexit 3\n")
+        got = self.complete()
+        self.assertFalse(got.ok)
+        self.assertIn("the tool said why", got.error)
 
     def test_conformance_reads_the_same_argv(self):
         import conformance_claude
@@ -448,6 +464,24 @@ class InitFindsTheAgent(unittest.TestCase):
         exe = store_fixture.stand_in(self)
         self.assertEqual(self.ah.agent_found(self.info, "claude"), exe, "the store's")
         self.assertIsNone(self.ah.agent_found(self.info), "what runs a command by name needs the user's own")
+
+    def test_a_token_with_no_copy_of_the_users_still_installs_the_platforms(self):
+        """The token is there (made earlier, or restored) and the user has no copy of their own: the platform's copy is
+        still installed and checked with it, then the login checked."""
+        store_fixture.empty(self)
+        home = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(__import__("shutil").rmtree, home, True)
+        (home / ".claude").mkdir()
+        (home / ".claude" / "headless-oauth-token").write_text("t\n")
+        steps = []
+        with mock.patch.dict(os.environ, {"HOME": str(home)}), \
+                mock.patch.object(self.ah, "store_install", lambda choice: steps.append(("install", choice)) or True), \
+                mock.patch.object(self.ah, "agent_login_check", lambda: steps.append(("login",)) and None), \
+                mock.patch("builtins.print"):
+            self.ah.init_dialogue.use(self.ah.init_dialogue.Terminal(True))
+            presets = {"claude": runtime_claude.install_info()}
+            self.ah.agent_credential("claude", presets)
+        self.assertEqual(steps, [("install", "claude"), ("login",)])
 
     def test_store_install_says_why_it_cant(self):
         store_fixture.empty(self)

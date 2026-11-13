@@ -86,7 +86,7 @@ class Fixture(unittest.TestCase):
         self.called = self.tmp / "called"
         sys.path.insert(0, str(ROOT / "tests"))
         import store_fixture
-        store_fixture.stand_in(self, body=FAKE_CLAUDE)   # the platform's checked copy
+        self.exe = store_fixture.stand_in(self, body=FAKE_CLAUDE)   # the platform's checked copy
         # no machine's managed file
         p = mock.patch.object(runtime_claude, "MANAGED_MCP", (self.tmp / "managed-mcp.json",))
         p.start()
@@ -203,8 +203,8 @@ class FailClosed(Fixture):
         self.assert_closed(self.task([], env={"FAKE_MCP_EXIT": "1"}))
 
     def test_list_command_missing(self):
-        with mock.patch.object(runtime_claude, "_exe", lambda: str(self.tmp / "no-such-claude")):
-            self.assert_closed()
+        self.exe.unlink()   # the checked copy's executable gone: no copy to list with
+        self.assert_closed()
 
     def test_list_in_a_shape_it_cannot_read(self):
         self.listing.write_text("Checking MCP server health…\n\nfixture-prod-db\n")

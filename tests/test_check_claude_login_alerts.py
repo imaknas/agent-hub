@@ -24,7 +24,9 @@ from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
+sys.path.insert(0, str(ROOT / "tests"))
 import i18n  # noqa: E402
+import store_fixture  # noqa: E402
 
 # the two error texts the 11-13 alerts alternated between (the tail of claude's output, cut at a fixed length)
 TAIL = ("this login reached its time limit and cannot be renewed. Run `claude auth login` to sign in again, or use "
@@ -99,6 +101,7 @@ class Check(unittest.TestCase):
         self.addCleanup(env.stop)
         self.m = load("check_login_alerts_t", ROOT / "bin" / "check-claude-login.py")
         self.m.STREAK = self.home / "streak.json"
+        store_fixture.stand_in(self)   # the platform's checked copy, which the requests are made with
         for name in ("SENT", "FAILED"):
             p = mock.patch.object(self.m.alert, name, self.home / f"{name}.json")
             p.start()
@@ -162,6 +165,20 @@ class Check(unittest.TestCase):
         self.assertEqual(len(self.sent), 1, self.sent)
         self.assertIn(ui("claude requests failed {n} times in a row ({mode}): {err}", n=3, mode="token",
                          err="timeout talking to api"), self.sent[0])
+
+    def test_with_no_checked_copy_no_request_is_made_and_nothing_is_resolved(self):
+        """An empty store (a fresh install, a restore): the request can't be made, which is no login failure and no
+        recovery either; the files and their dates are still checked (doctor and the status page say there is no copy)."""
+        self.answers[None] = "Login expired · Please run /login"
+        self.run_check()
+        self.assertEqual(len(self.sent), 1)
+        store_fixture.empty(self)
+        self.asked.clear()
+        code, out = self.run_check()
+        self.assertEqual((code, self.asked, len(self.sent)), (0, [], 1), "nothing asked, the open alert left as it is")
+        (self.home / ".claude" / "headless-oauth-token").unlink()
+        code, _out = self.run_check()
+        self.assertEqual(code, 1, "a missing token is still a problem")
 
     def test_when_the_last_connector_job_goes_the_open_alert_is_resolved(self):
         self.answers[None] = "Login expired · Please run /login"
