@@ -337,12 +337,10 @@ def skipped(since: datetime.datetime) -> list[dict]:
             try:
                 for _t in src.records(f, tally):
                     pass
-            except SessionFormatError:
-                tally.setdefault("", [0, 0])
-                tally[""][0] += 1
-                tally[""][1] += 1
-            except (OSError, TypeError):
-                continue   # a source whose records() takes no tally yet, or a file gone meanwhile
+            except SessionFormatError:   # nothing in it could be read: every line it counted is a skip
+                tally = {v: [lines, lines] for v, (lines, _s) in tally.items()} or {"": [1, 1]}
+            except OSError:
+                continue   # a file gone meanwhile
             for version, (lines, skip) in tally.items():
                 row = rows.setdefault((src.NAME, version), {"source": src.NAME, "version": version, "lines": 0,
                                                             "skipped": 0, "files": 0})

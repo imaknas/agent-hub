@@ -35,8 +35,10 @@ class McpSealed(unittest.TestCase):
         missing = []
         # completion-shaped points: with no llm block they go to runtime_claude.complete, which always carries this flag
         # (sealed by construction, not by declaration)
-        complete_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def complete(", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn(FLAG, complete_src)
+        src = (ROOT / "bin" / "runtime_claude.py").read_text()
+        complete_src = src.split("def complete(", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("completion_command(req)", complete_src, "complete() runs the one builder")
+        self.assertIn(FLAG, src.split("def completion_command(", 1)[1].split("\ndef ", 1)[0])
         # tool_servers: none (a project's declared agent, project-agent): the adapter adds the flag itself
         flags_src = (ROOT / "bin" / "runtime_claude.py").read_text().split("def _flags(", 1)[1].split("\ndef ", 1)[0]
         self.assertIn('spec.get("tool_servers") == "none" and SEAL not in extra', flags_src)

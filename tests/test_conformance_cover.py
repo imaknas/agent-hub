@@ -6,6 +6,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "bin"))
+import conformance  # noqa: E402
 import runtime_ports  # noqa: E402
 
 
@@ -15,7 +16,7 @@ class Cover(unittest.TestCase):
         self.assertIn("claude", versioned)
         for name in versioned:
             with self.subTest(runtime=name):
-                entries = list(getattr(runtime_ports._module(name), "CONFORMANCE", None) or [])
+                entries = conformance.checks(name)
                 have = runtime_ports.capabilities(name)
                 covered = {c.port for c in entries}
                 self.assertEqual(sorted(have - covered), [], "ports with no check and no not-checkable entry")
@@ -33,8 +34,7 @@ class Cover(unittest.TestCase):
         for name in runtime_ports.RUNTIMES:
             if "distribution" not in runtime_ports.capabilities(name):
                 with self.subTest(runtime=name):
-                    self.assertFalse(getattr(runtime_ports._module(name), "CONFORMANCE", None),
-                                     "nothing to check without versions")
+                    self.assertEqual(conformance.checks(name), [], "nothing to check without versions")
 
 
 if __name__ == "__main__":

@@ -104,73 +104,20 @@ def restricted_check() -> str | None:
 
 
 def agent_run(repo: pathlib.Path, guarded: bool = True) -> str | None:
-    """One minimal request in this folder. Why not, or None. Guarded: on the platform's own path (llm.py, so the environment it really
-    gives). Not guarded: that same run's flags (llm.py --dry-run), with the variable taken out, to show the probe still tests something."""
-    llm = [sys.executable, str(hubconf.ROOT / "bin" / "llm.py"), "run", "login-check", "--cwd", str(repo)]
-    env = {**os.environ, "LLM_AUTH": "token"}
-    try:
-        if guarded:
-            r = subprocess.run(llm, input=REQUEST, capture_output=True, text=True, timeout=180, cwd=repo, env=env)
-        else:
-            dry = subprocess.run([*llm, "--dry-run"], input=REQUEST, capture_output=True, text=True, timeout=60, cwd=repo, env=env)
-            if dry.returncode != 0:
-                return (dry.stderr or dry.stdout).strip()[-200:] or f"exit {dry.returncode}"
-            rt = runtime_ports.load(ports=("auth",))
-            run_env, why = rt.auth_env("token", dict(os.environ))
-            if run_env is None:
-                return why
-            for k in getattr(rt, "NO_FOLDER_GIT", ()):
-                run_env.pop(k, None)
-            run_env["HUB_LLM_POINT"] = "login-check"
-            r = subprocess.run(json.loads(dry.stdout), input=REQUEST, capture_output=True, text=True, timeout=180, cwd=repo, env=run_env)
-    except subprocess.TimeoutExpired:
-        return _("no answer for 3 minutes")
-    return not_answered(r)
+    """One minimal request in this folder (conformance_claude.agent_run: guarded on the platform's own path, unguarded on
+    that run's flags without the variable). Why not, or None."""
+    import conformance_claude
+    return conformance_claude.agent_run(repo, guarded)
 
 
-def filter_probe(run=agent_run) -> str | None:
-    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong. All of it in hubconf.private_tmp: the
-    system's temp folder is every sandboxed project's to write, and this runs the filter as the user. A plain `git status` shows git
-    fires the filter, and the same run without the variable shows claude still would: with either silent, a pass would say nothing."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
-               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+def filter_probe(run=None) -> str | None:
+    """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong. The probe is
+    conformance_claude.filter_probe (one copy, also a conformance check), in a folder of hubconf.private_tmp(): the
+    system's temp folder is every sandboxed project's to write, and this runs the filter as the user."""
+    import conformance_claude
     with tempfile.TemporaryDirectory(prefix="filter-probe-", dir=hubconf.private_tmp()) as tmp:
-        repo, marker, script = pathlib.Path(tmp) / "repo", pathlib.Path(tmp) / "ran", pathlib.Path(tmp) / "filter.sh"
-        repo.mkdir()
-        script.write_text(f'#!/bin/sh\necho x >> "{marker}"\ncat\n')
-        script.chmod(0o755)
-
-        def git(*args):
-            subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, env=env, timeout=60)
-
-        def stat_dirty():
-            marker.unlink(missing_ok=True)
-            t = (repo / "a.txt").stat().st_mtime + 5
-            os.utime(repo / "a.txt", (t, t))
-        (repo / "a.txt").write_text("a\n")
-        git("init", "-q", "-b", "main")
-        git("add", "a.txt")
-        git("commit", "-qm", "x")
-        git("config", "filter.x.clean", str(script))
-        (repo / ".git" / "info" / "attributes").write_text("a.txt filter=x\n")
-        stat_dirty()
-        git("--no-optional-locks", "status", "--short")
-        if not marker.exists():
-            return _("the probe says nothing: a plain git status didn't run the filter either")
-        stat_dirty()
-        if (why := run(repo, False)):
-            return _("the probe could not run: {why}", why=why)
-        if not marker.exists():
-            return _("the probe no longer tests anything: without the variable claude didn't run the filter either, so its git "
-                     "status has moved or gone; look again at what stops it (runtime_claude.py NO_FOLDER_GIT)")
-        stat_dirty()
-        if (why := run(repo, True)):
-            return _("the probe could not run: {why}", why=why)
-        if marker.exists():
-            return _("claude ran a repo's git filter as you, in a platform run: a sandboxed project can run code outside its "
-                     "sandbox this way, until the variable that stops it is put right (runtime_claude.py NO_FOLDER_GIT)")
-    return None
+        why = conformance_claude.filter_probe(pathlib.Path(tmp), run=run or agent_run)
+    return why.removeprefix("FAIL: ") if why else None
 
 
 PROBED = hubconf.STATE / "claude-filter-probe.json"

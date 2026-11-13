@@ -71,7 +71,7 @@ class Runner(Temp):
         self.exe = self.tmp / "claude"
         self.exe.write_text("#!/bin/sh\n")
         for p in (mock.patch.object(conformance, "RESULTS", self.tmp / "results"),
-                  mock.patch("runtime_claude.version_of", lambda exe: "2.1.400"),
+                  mock.patch("runtime_claude.version_of", lambda exe, env=None: "2.1.400"),
                   mock.patch.object(conformance.hubconf, "private_tmp", lambda: self.tmp)):
             p.start()
             self.addCleanup(p.stop)
@@ -119,7 +119,7 @@ class Runner(Temp):
             conformance.run("fake")   # no distribution port
         with mock.patch.object(conformance, "checks", lambda r: []), self.assertRaises(RuntimeError):
             conformance.run("claude", str(self.exe), ["nosuch"])
-        with mock.patch("runtime_claude.version_of", lambda exe: None), self.assertRaises(RuntimeError):
+        with mock.patch("runtime_claude.version_of", lambda exe, env=None: None), self.assertRaises(RuntimeError):
             conformance.run("claude", str(self.exe))
 
     def test_a_reason_is_short_and_one_line(self):
@@ -172,7 +172,7 @@ class Runtimes(Temp):
         import runtimes
         with mock.patch.object(conformance, "RESULTS", self.tmp / "results"), \
                 mock.patch("runtime_claude.binary", lambda: "/bin/sh"), \
-                mock.patch("runtime_claude.version_of", lambda exe: "2.1.400"):
+                mock.patch("runtime_claude.version_of", lambda exe, env=None: "2.1.400"):
             lines = runtimes.show_runtime("claude")
             self.assertEqual(len(lines), 2, lines)
             conformance.record({"runtime": "claude", "version": "2.1.400", "binary": "/bin/sh", "digest": "x", "at": "t",

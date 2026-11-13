@@ -2701,8 +2701,8 @@ class Tick:
                 self.statuses.update(got if isinstance(got, dict) else {})
                 if isinstance(got, dict):   # said while it lasts: no session is woken meanwhile, only routed to
                     log_once("sessions-unlisted", _(
-                        "what sessions are doing can't be read (the agent's session listing failed): letters are routed "
-                        "but no session is woken until it works again") if "unlisted" in got.values() else "")
+                        "what sessions are doing can't be read (the agent's session listing failed): requests and questions "
+                        "are routed but wake no session until it works again") if "unlisted" in got.values() else "")
         if sid not in self.statuses:
             fn = getattr(self.rt, "session_status", None)
             got = self.timed(fn, sid) if callable(fn) else None

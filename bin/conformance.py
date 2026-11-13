@@ -3,12 +3,12 @@
 tool still does what each of the platform's ports rests on.
 
   conformance.py run <runtime> [--binary <exe>] [--only <check>]... [--report]
-        run the runtime's checks (its adapter's CONFORMANCE) against exe (default: the one platform runs start now) and
+        run the runtime's checks (conformance_<runtime>.CHECKS) against exe (default: the one platform runs start now) and
         record the result; --report prints it and records nothing (the only form a linked worktree of the hub allows:
         a pass recorded from half-edited code would drive a promotion)
   conformance.py child <runtime> <check> <world> [<exe>]      internal: one check, in its throwaway world
 
-Neutral: the checks are the adapters' (runtime_<name>.CONFORMANCE, a list of runtime_ports.Check); only runtimes with the
+Neutral: the checks are the adapters' (bin/conformance_<runtime>.py: CHECKS, a list of runtime_ports.Check); only runtimes with the
 distribution port have versions to check. How every check runs:
 - in its own process, whose environment points the platform's config, state, data, secrets (and so the session records),
   bus and logs, and HOME, at a throwaway world under hubconf.private_tmp() (never the system temp folder, which every
@@ -95,8 +95,23 @@ class World:
 
 # ---------- the runner ----------
 
+def adapter(runtime: str):
+    """The runtime's conformance adapter, bin/conformance_<runtime>.py (it holds the tool's syntax, as runtime_<name>.py
+    does), or None: a runtime with none has no checks."""
+    import importlib
+    if not runtime.isidentifier() or runtime not in runtime_ports.RUNTIMES:
+        return None
+    try:
+        return importlib.import_module(f"conformance_{runtime}")
+    except ModuleNotFoundError as e:
+        if e.name == f"conformance_{runtime}":
+            return None
+        raise
+
+
 def checks(runtime: str) -> list[Check]:
-    return list(getattr(runtime_ports._module(runtime), "CONFORMANCE", None) or [])
+    mod = adapter(runtime)
+    return list(getattr(mod, "CHECKS", None) or []) if mod else []
 
 
 def digest(exe) -> str:
@@ -116,20 +131,43 @@ def run_one(runtime: str, check: Check, exe: str | None, top: pathlib.Path) -> O
     if check.run is None:
         return Outcome("not-checkable", _short(check.measurement))
     world = World(top / f"{check.name}-{secrets.token_hex(4)}").create()
+    prep = getattr(adapter(runtime), "prepare", None)
     try:
-        r = subprocess.run([sys.executable, str(pathlib.Path(__file__).resolve()), "child", runtime, check.name,
-                            str(world.root), exe or ""], capture_output=True, text=True, timeout=check.timeout_s,
-                           env=world.env(), stdin=subprocess.DEVNULL)
+        if callable(prep):
+            try:   # in this process, which still sees the live home: what the check's runs log in with
+                prep(world)
+            except OSError as e:
+                raise RuntimeError(_("the check's world could not be prepared: {error}", error=type(e).__name__)) from e
+        # its own process group, so a timeout ends the tool's processes too, not only the child
+        p = subprocess.Popen([sys.executable, str(pathlib.Path(__file__).resolve()), "child", runtime, check.name,
+                              str(world.root), exe or ""], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                             env=world.env(), stdin=subprocess.DEVNULL, start_new_session=True)
         try:
-            got = json.loads(r.stdout.strip().splitlines()[-1])
+            out, _err = p.communicate(timeout=check.timeout_s)
+        except subprocess.TimeoutExpired:
+            _kill_group(p)
+            return Outcome("error", _("no answer in {s} s", s=check.timeout_s))
+        _kill_group(p)   # what the check left running
+        try:
+            got = json.loads(out.strip().splitlines()[-1])
             return Outcome(got["state"], _short(got.get("reason"))) if got.get("state") in runtime_ports.CHECK_STATES \
                 else Outcome("error", _("the check answered no state"))
         except (ValueError, IndexError, KeyError, AttributeError, TypeError):
-            return Outcome("error", _("the check's process ended without an answer (exit {code})", code=r.returncode))
-    except subprocess.TimeoutExpired:
-        return Outcome("error", _("no answer in {s} s", s=check.timeout_s))
+            return Outcome("error", _("the check's process ended without an answer (exit {code})", code=p.returncode))
     finally:
         shutil.rmtree(world.root, ignore_errors=True)
+
+
+def _kill_group(p) -> None:
+    import signal
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    try:
+        p.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def run(runtime: str, exe: str | None = None, only: list[str] | None = None) -> dict:
@@ -139,27 +177,28 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None) -> 
         raise RuntimeError(_("the runtime {runtime} has no distribution port: it is unversioned, nothing to check",
                              runtime=runtime))
     exe = exe or getattr(mod, "binary")()
-    resolved = shutil.which(exe) or exe
-    version = mod.version_of(resolved)
-    if not version:
-        raise RuntimeError(_("{exe} does not say its version", exe=exe))
+    resolved = os.path.abspath(shutil.which(exe) or exe)
     todo = [c for c in checks(runtime) if not only or c.name in only]
     unknown = sorted(set(only or ()) - {c.name for c in todo})
     if unknown:
         raise RuntimeError(_("no such check: {names}", names=", ".join(unknown)))
-    out = {"runtime": runtime, "version": version, "binary": str(resolved), "digest": digest(resolved),
-           "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "checks": {}}
     top = pathlib.Path(tempfile.mkdtemp(prefix="conformance-", dir=hubconf.private_tmp()))
     try:
+        # even asking its version runs the candidate's code: in a world of its own, never the live home (section 3a)
+        version = mod.version_of(resolved, env=World(top / "version").create().env())
+        if not version:
+            raise RuntimeError(_("{exe} does not say its version", exe=exe))
+        out = {"runtime": runtime, "version": version, "binary": str(resolved), "digest": digest(resolved),
+               "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "checks": {}}
         for c in todo:
             tries, got = 1, run_one(runtime, c, str(resolved), top)
             if got.state == "fail" and c.kind == "function":
                 tries, got = 2, run_one(runtime, c, str(resolved), top)
             out["checks"][c.name] = {"port": c.port, "kind": c.kind, "state": got.state, "reason": got.reason,
                                      "tries": tries}
+        return out
     finally:
         shutil.rmtree(top, ignore_errors=True)
-    return out
 
 
 def results_file(runtime: str, version: str) -> pathlib.Path:
@@ -215,6 +254,11 @@ def child(runtime: str, name: str, root: str, exe: str) -> int:
     if check is None or check.run is None:
         return say(Outcome("error", _("no such check: {names}", names=name)))
     try:
+        enter = getattr(adapter(runtime), "enter", None)
+        if callable(enter):
+            enter(world)   # the environment every run of this check inherits (the tool's config dir, its login)
+            if (why := world.isolated()):   # what it changed must still point into the world
+                return say(Outcome("error", why))
         got = check.run(world)
     except Exception as e:   # a check that breaks is an error, said by its kind only (never its text: it may hold output)
         return say(Outcome("error", _("the check broke: {error}", error=type(e).__name__)))
@@ -222,9 +266,17 @@ def child(runtime: str, name: str, root: str, exe: str) -> int:
                else Outcome("error", _("the check answered no state")))
 
 
+def unrun_safety(doc: dict) -> int:
+    """How many safety checks couldn't be run (not-checkable): a pass says nothing about what they guard."""
+    return sum(1 for c in doc.get("checks", {}).values() if c.get("kind") == "safety" and c.get("state") == "not-checkable")
+
+
 def show(doc: dict) -> str:
     lines = [_("{runtime} {version}: {verdict} ({binary}, checked {at})", runtime=doc["runtime"], version=doc["version"],
                verdict=verdict(doc), binary=doc["binary"], at=doc["at"])]
+    if (n := unrun_safety(doc)):
+        lines.append(_("  {n} safety {n:check|checks} not run yet (not-checkable): a pass says nothing about what "
+                       "{n:it guards|they guard}", n=n))
     for name, c in doc["checks"].items():
         lines.append(f"  {c['state']:<13} {name} ({c['port']}, {c['kind']})" + (f": {c['reason']}" if c["reason"] else ""))
     return "\n".join(lines)
@@ -240,6 +292,10 @@ def main(argv: list[str]) -> int:
         print(usage(), file=sys.stderr)
         return 2
     report = "--report" in argv
+    if "--only" in argv and not report:
+        # a version's result is all of its checks: some of them would overwrite it with a part (step 2 promotes on it)
+        print(_("conformance: --only runs part of the checks, so it only reports: add --report"), file=sys.stderr)
+        return 2
     if hubconf.worktree_lookup() and not report:
         print(_("conformance: {root} is a linked worktree of the hub; results are recorded only from the main checkout "
                 "({main}); --report works here", root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)

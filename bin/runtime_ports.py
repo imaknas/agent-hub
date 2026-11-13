@@ -397,8 +397,9 @@ PORTS = {
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
 # ---------- conformance (docs/design/runtime-versions.md section 2) ----------
-# An adapter with the distribution port declares CONFORMANCE: [Check], one or more per port it implements, which
-# bin/conformance.py runs against a binary in a throwaway world (tests/test_conformance_cover.py: no port goes unaccounted).
+# A runtime with the distribution port has a conformance adapter, conformance_<runtime>.py, whose CHECKS ([Check], one
+# or more per port it implements) bin/conformance.py runs against a binary in a throwaway world
+# (tests/test_conformance_cover.py: no port goes unaccounted).
 
 class Outcome(NamedTuple):
     state: str          # one of CHECK_STATES

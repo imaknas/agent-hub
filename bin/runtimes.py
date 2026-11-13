@@ -57,6 +57,8 @@ def show_runtime(name: str) -> list[str]:
         lines.append(_("  {version}: {verdict}, checked {at} ({counts})", version=doc.get("version"),
                        verdict=conformance.verdict(doc), at=doc.get("at"),
                        counts=", ".join(f"{k} {v}" for k, v in sorted(counts.items()))))
+        if (n := conformance.unrun_safety(doc)):
+            lines.append(_("    {n} safety {n:check|checks} not run yet", n=n))
     return lines
 
 

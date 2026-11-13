@@ -10,5 +10,6 @@
  "the sessions' versions couldn't be read: {error}": "讀不到 session 的版本:{error}",
  "version not readable": "讀不到版本",
  "(version not written)": "(沒寫版本)",
- " ⚠️ more than 5%: the weekly statistics may undercount this version": " ⚠️ 超過 5%:每週統計可能少算這個版本"
+ " ⚠️ more than 5%: the weekly statistics may undercount this version": " ⚠️ 超過 5%:每週統計可能少算這個版本",
+ "    {n} safety {n:check|checks} not run yet": "    {n} 個安全檢查還沒跑"
 }

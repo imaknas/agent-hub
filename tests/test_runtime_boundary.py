@@ -64,7 +64,8 @@ RATCHET_EXEMPT = {"bin/runtime_claude.py",   # the translation lives only here
                   # someone not using Claude leaves this module off
 # session sources: each is the one place that reads its tool's session files (bin/sessions.py); the neutral reader
 # itself, bin/sessions.py, is in NEUTRAL above
-RATCHET_EXEMPT_GLOBS = ("bin/sessions_*.py",)
+# and the conformance adapters: each holds its tool's checks (bin/conformance.py runs them; runtime-versions.md section 2)
+RATCHET_EXEMPT_GLOBS = ("bin/sessions_*.py", "bin/conformance_*.py")
 RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude's model names")]
 RUNTIME_BASELINE = ROOT / "tests" / "fixtures" / "runtime-baseline.json"
 

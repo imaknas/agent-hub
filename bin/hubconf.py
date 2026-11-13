@@ -416,8 +416,8 @@ def known_args(argv: list[str], flags: set[str], valued: set[str] = frozenset())
     while i < len(argv):
         if argv[i] in flags:
             i += 1
-        elif argv[i] in valued and i + 1 < len(argv):
-            i += 2
+        elif argv[i] in valued and i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+            i += 2   # a value is never another option (`--binary --report` is refused, not read as a path)
         else:
             return False
     return True

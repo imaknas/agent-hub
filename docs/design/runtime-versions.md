@@ -79,7 +79,7 @@ command template) keeps today's behaviour and doctor says it is unversioned.
 
 ## 2. Conformance checks, one or more per port
 
-A neutral runner, `bin/conformance.py`, runs an adapter's checks (`runtime_claude.CONFORMANCE`, later `runtime_codex.CONFORMANCE`)
+A neutral runner, `bin/conformance.py`, runs an adapter's checks (`conformance_claude.CHECKS`, later `conformance_codex.CHECKS`: each tool's checks in an adapter of their own)
 against **a binary in the platform's store** and records the result. Each check guards a port and is a **safety** check (it holds a
 confinement property) or a **function** check.
 
@@ -353,6 +353,64 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    the ports split so protections stay), first install, rollback, `MIN_VERSION`; `update-claude` retired by `legacy_name`; callers of
    `hubconf.tool("claude")` move to `binary()`; DV3's platform config dir for the runs it covers, with `PROJECTS`, `transcript()`,
    `lease-resume` and the connectors login left on the shared dir until V-M8.
+   **Implementation plan (11-14, for its blind review before building), one commit each:**
+   1. `bin/runtime_store.py` (neutral): `<instance>/runtimes/<runtime>/<version>/` (the instance directory, not the hub
+      checkout; outside every sandbox's writes, like the secrets directory's parent) holding the copy and `promoted.json`
+      (version, the executable's path inside the copy, sha256, size, mtime, when, the conformance result's file).
+      `current` and `previous` are symlinks to version folders, swapped by `os.replace` of a fresh link. `hold(runtime)`
+      resolves `current` once and takes a shared `flock` on `<version>/.lock` for the run's life; `remove(version)` takes it
+      exclusive and non-blocking, and leaves a held folder. `verify(entry)`: size and mtime against `promoted.json` on every
+      run, the full sha256 once a day (a stamp per version); a mismatch refuses with "the platform's Claude Code changed after
+      it was checked". The store is left out of the backup (`backup.covers()`), and doctor shows it.
+   2. `runtime_claude.binary()` becomes the store's held `current` (its `node_modules/.bin/claude`), verified; no store copy
+      raises `runtime_ports.NoCheckedCopy` (a subclass of `Unsupported`) instead of falling back to PATH. `_env` puts the copy's
+      bin first and nvm's after it, adds `pin_env(copy)` and the refusing `security` (DV5 (c), the same stub as the checks'), and
+      for completions and judgment points a platform `CLAUDE_CONFIG_DIR` (`<instance>/runtimes/claude/config`), set only in the
+      child's environment (DV3; `_home()`, `credential_paths()` and `user_control()` keep reading the real `~/.claude`). Runs
+      that resume or fork a session, leases, and `connectors: true` jobs keep the shared dir, as DV3 and V-M8 say.
+   3. `runtime_ports.load(..., platform_runs=True)`: when the runtime reports no checked copy, the ports that start platform runs
+      (agent, completion, stream, auth, confine) are `Unsupported` with that reason; the ports that describe the user's sessions
+      (control, lifecycle, instructions, sessions, the settings translation) load as before. `capabilities()` is unchanged, so
+      `CAGED_NEEDS` keeps every sandboxed project's hooks. llm.py, doctor and the status page say "no checked copy of Claude Code
+      yet". Mailbox dispatch splits its gate: routing, holds and wakes need `sessions` (and `wake`); forks, resumes and triage
+      need `agent` from a checked copy.
+   4. `bin/update-runtimes.py` (neutral platform job, `projects/brunna.yaml`, nightly, `legacy_name` of `claude/update-claude`, a
+      no-op for a runtime not in use): `latest()` newer than `current` → `install` beside it → `conformance.run` → promote only
+      when every safety check and every function check of a port the instance uses passes and the version is at least
+      `MIN_VERSION`; otherwise held back, alerted per check and reason (`alert.once` with stable ids), once more after 7 days.
+      With no new version: the daily subset (agent, completion) on `current`, alerting the same way. Then section 8: nvm's copy
+      raised to the promoted version when it is older, never lowered. Held-back candidates and unheld versions other than
+      `current` and `previous` removed after 14 days. `update-claude.py` and its job are removed; its probe lives in
+      `conformance_claude.py` already.
+   5. First install and rollback: `brunna runtimes install <runtime>` (latest → checks → promote; init and `brunna llm setup`
+      call it after the agent question, saying first that it downloads about 300 MB and runs checks for minutes) and
+      `brunna runtimes rollback <runtime>` (the safety checks again on `previous`, then the links swapped). A restore runs
+      install.
+   6. Every remaining caller of `hubconf.tool("claude")` moves to `binary()`; `agenthub.agent_found` reports the store copy.
+   Tests: a store built from fake installs (the distribution port stubbed), every refusal path, the promotion rules, the
+   no-copy split (a sandboxed project's hooks and denies unchanged with an empty store), dispatch's split gate, and one real
+   install of the current version into a scratch store before merging.
+   **Blind review of this plan (11-14): three blocking, to be folded in before building.**
+   - B1: with no copy, `session_statuses` → `_exe()` would raise through `Tick.status` and fail dispatch for every project; with
+     no checked copy the listing must give `unlisted` (routed, never woken), tested on runtime_claude, not the fake.
+   - B2: the stub and the platform config dir go by auth mode, not to every run: `login-check` (subscription, hourly) and
+     `connectors: true` jobs keep the shared dir and the Keychain; `mailbox-conversation` and `agent-job` sessions (resumed by id;
+     `run-agent-job.sh` tells the owner to `claude --resume`) stay on the shared dir. A table per point: dir and stub.
+   - B3: nothing fills the store on a running machine: `update-runtimes` with no `current` does the first install, `brunna
+     upgrade` runs it as an in-step command, and the `binary()` switch lands last, in a merge of its own, after `current`
+     exists here. Order: store → install/rollback → update-runtimes → the split and the readers of the no-copy state → the
+     `binary()` switch → callers.
+   Should-fix: the promotion rule is `conformance.verdict` (not-checkable doesn't block, error holds back); `auth` stays loadable
+   (describe/clean only; the refusal lives in `binary()`); `llm_ready` and the librarian read the no-copy state; `health()` and
+   `_listed_servers` handle it; `_home()` ignores the platform dir (it feeds `credential_paths()`/`user_control()`); the
+   updater pin also puts the copy's `node_modules/.bin` first and `verify` compares that executable's real path; section 8
+   needs a global install function (`-g`, integrity from `npm view dist.integrity`), not `install()`; a store-wide writer
+   lock, installs staged then renamed, `promoted.json` fsynced before the links, `previous` before `current`; the hold across
+   `exec` (leases) and its scope in long-lived processes; init's order (install unpromoted → token → checks → promote → login
+   check; `setup-token` with no `claude`; `agent_found`'s default); a machine with no npm/nvm says so; each run records the
+   version and digest it ran with; section 4's per-run tool check for Claude placed in a step; "in use" includes `llm.points`
+   pins and providers; a hubconf accessor for the store path; removal skips the config dir; the job runs in the background;
+   `test_llm_golden` gets a fake store and records the environment's names; `_npm_env` builds a clean environment.
 3. **Session versions**: recorded at start, the job that checks a newly seen version, the narrow per-version gate (`CAGED_NEEDS`
    unchanged), dispatch's split gate, session-side calls on matching
    versions, the SessionStart notice.
@@ -360,7 +418,7 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    as today plus a deny for every other entry present under `.claude/` except `worktrees`, and the control check's per-version
    canary. The sandbox-parity tests
    are updated to match.
-5. **Codex Step 1** builds on all of it: `runtime_codex.CONFORMANCE` (M1, M8, M9's cases), its store and platform home, section 3a's
+5. **Codex Step 1** builds on all of it: `conformance_codex.CHECKS` (M1, M8, M9's cases), its store and platform home, section 3a's
    login rule, the per-run tool list (V-M1).
 
 ## Decisions for the owner

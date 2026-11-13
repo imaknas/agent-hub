@@ -2136,26 +2136,22 @@ def install(version: str, folder) -> pathlib.Path:
     return exe
 
 
-def version_of(exe) -> str | None:
-    """The version this claude says it is (`claude --version`), or None."""
+def version_of(exe, env: dict | None = None) -> str | None:
+    """The version this claude says it is (`claude --version`), or None. env: the environment to run it in (a candidate
+    is run only inside a throwaway world's, never the live home's); its PATH is kept first, the platform's after it."""
+    import hubconf
+    run_env = dict(os.environ if env is None else env)
+    run_env["PATH"] = ":".join(p for p in (run_env.get("PATH"), hubconf.LAUNCHD_PATH) if p)
     try:
         r = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
-                           env=_npm_env())
+                           env=run_env)
     except (OSError, subprocess.SubprocessError):
         return None
     m = _VERSION.match(r.stdout)
     return m.group(1) if r.returncode == 0 and m else None
 
 
-from runtime_ports import Check  # noqa: E402
-
-# The conformance checks of a Claude Code binary (bin/conformance.py; runtime-versions.md section 2). Every port has an
-# entry (tests/test_conformance_cover.py); the ones still being written in step 1 say so as not-checkable.
-_PENDING = "not written yet (runtime-versions.md step 1)"
-CONFORMANCE = [Check(port, port, "safety" if port in ("confine", "control", "rule_check") else "function", None, _PENDING)
-               for port in ("agent", "lifecycle", "instructions", "control", "sessions", "stream", "auth", "completion",
-                            "confine", "tool_servers", "rule_check", "run_server", "wake", "session_status",
-                            "session_summary", "distribution")]
+# The conformance checks of a Claude Code binary are bin/conformance_claude.py's (runtime-versions.md section 2).
 
 
 def pin_env(folder) -> dict:
@@ -2164,8 +2160,8 @@ def pin_env(folder) -> dict:
     return {"DISABLE_AUTOUPDATER": "1", "npm_config_prefix": str(folder)}
 
 
-def complete(req, conf) -> CompletionResult:
-    import tempfile
+def completion_command(req) -> list:
+    """The argv of a completion (complete() runs it; conformance_claude checks the same one has no tools)."""
     # --restricted: no settings file or rules file of any folder (real run: docs/design/mailbox-session-first.md, step 3's record)
     cmd = [_exe(), "-p", "--restricted", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
     if req.model:
@@ -2174,6 +2170,12 @@ def complete(req, conf) -> CompletionResult:
         cmd += ["--append-system-prompt", req.system]
     if req.schema is not None:
         cmd += ["--json-schema", json.dumps(req.schema, ensure_ascii=False)]
+    return cmd
+
+
+def complete(req, conf) -> CompletionResult:
+    import tempfile
+    cmd = completion_command(req)
     env, why = auth_env(conf.get("auth") or "token", os.environ)
     if env is None:
         return CompletionResult(False, stop="error", error=why)

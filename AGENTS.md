@@ -34,7 +34,8 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   hooks) are only reinforcement: removing them does not affect correctness. A session the user opens themselves has only
   the tool's native protection; there the platform advises and does not guarantee.
 - **Tool syntax lives only in adapters**: `runtime_<name>.py`, `provider_<name>.py`, `sessions_<tool>.py` (reading one
-  tool's session files), `modules/<tool>.yaml`. Everywhere else the platform uses only neutral terms (the `runtime_ports` interfaces, paths, commands, tiers, event names).
+  tool's session files), `conformance_<runtime>.py` (one tool's conformance checks, run by `bin/conformance.py`),
+  `modules/<tool>.yaml`. Everywhere else the platform uses only neutral terms (the `runtime_ports` interfaces, paths, commands, tiers, event names).
 - **When a capability is missing, turn the feature off explicitly and say why** (`runtime_ports.Unsupported`, doctor's
   feature table); never run on with empty data.
 - Mechanical checks (the commit gate runs them): `tests/test_runtime_boundary.py` (Claude syntax and model names may

@@ -26,6 +26,7 @@ PENDING = {"librarian-state", "librarian-todo-format", "librarian-index"}
 # files using the Claude adapter directly (all Claude-only mechanisms, to move into the runtime interface later):
 DIRECT = {
     "bin/lease-relay.py",               # Claude Code's permission relay (--permission-prompt-tool) itself
+    "bin/conformance_claude.py",        # an adapter: Claude Code's conformance checks (runtime-versions.md section 2)
     # long-running session flags, MCP config (moves into the runtime after layer 1's open_session)
     "bin/lease-runner.py",
     "bin/render-project-settings.py",   # neutral policy → Claude's settings.local.json

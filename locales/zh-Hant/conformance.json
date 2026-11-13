@@ -10,5 +10,8 @@
  "no answer in {s} s": "{s} 秒內沒有回答",
  "the check answered no state": "檢查沒有回報狀態",
  "the check's process ended without an answer (exit {code})": "檢查的程序結束了,沒有回答(exit {code})",
- "the check broke: {error}": "檢查本身壞了:{error}"
+ "the check broke: {error}": "檢查本身壞了:{error}",
+ "conformance: --only runs part of the checks, so it only reports: add --report": "conformance:--only 只跑部分檢查,所以只能報告:請加 --report",
+ "the check's world could not be prepared: {error}": "沒辦法準備檢查用的一次性環境:{error}",
+ "  {n} safety {n:check|checks} not run yet (not-checkable): a pass says nothing about what {n:it guards|they guard}": "  {n} 個安全檢查還沒跑(not-checkable):pass 不代表它們守的東西沒問題"
 }
