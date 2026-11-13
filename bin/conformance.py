@@ -81,7 +81,9 @@ class World:
         e.update(PATH=hubconf.LAUNCHD_PATH, HOME=str(self.home), TMPDIR=str(self.tmp))
         for var, part in (("CONFIG", self.config), ("STATE", self.state), ("DATA", self.data), ("SECRETS", self.secrets)):
             e = names.env_set(e, var, str(part))
-        return e
+        # bin/py finds the platform's Python under the home, which is the world's: name it, or the platform's own scripts
+        # (the hooks a check fires) can't start there
+        return names.env_set(e, "PYTHON", sys.executable)
 
     def isolated(self) -> str | None:
         """In the child: None when every place the platform writes is inside the world, else which isn't."""

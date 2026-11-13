@@ -118,6 +118,17 @@ class Through(unittest.TestCase):
             self.one("agent-result")
 
 
+class FolderGitStates(unittest.TestCase):
+    def test_each_probe_answer_maps_to_its_state(self):
+        world = mock.Mock(tmp="/nowhere")
+        for why, state in ((None, "pass"), ("FAIL: ran it", "fail"), ("NONE: nothing to guard", "not-checkable"),
+                           ("the probe could not run: x", "error")):
+            with self.subTest(why=why), mock.patch.object(conformance_claude, "filter_probe", lambda *a, **k: why):
+                got = conformance_claude.confine_folder_git(world)
+            self.assertEqual(got.state, state)
+            self.assertFalse(got.reason.startswith(("FAIL:", "NONE:")))
+
+
 class Enter(unittest.TestCase):
     def test_enter_keeps_the_world_and_adds_the_tools(self):
         with tempfile.TemporaryDirectory() as d:

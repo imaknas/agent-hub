@@ -117,7 +117,7 @@ def filter_probe(run=None) -> str | None:
     import conformance_claude
     with tempfile.TemporaryDirectory(prefix="filter-probe-", dir=hubconf.private_tmp()) as tmp:
         why = conformance_claude.filter_probe(pathlib.Path(tmp), run=run or agent_run)
-    return why.removeprefix("FAIL: ") if why else None
+    return why.removeprefix("FAIL: ").removeprefix("NONE: ") if why else None
 
 
 PROBED = hubconf.STATE / "claude-filter-probe.json"

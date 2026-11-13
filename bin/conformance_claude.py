@@ -211,8 +211,12 @@ def confine_folder_git(world) -> Outcome:
     """A platform run leaves a repo's git filter alone (NO_FOLDER_GIT), with its positive control: the same run without
     the variable fires it. Model calls, in a repo inside the world."""
     why = filter_probe(pathlib.Path(world.tmp), exe=rc.binary())
-    return Outcome("pass") if why is None else Outcome("fail" if why.startswith("FAIL:") else "error",
-                                                       why.removeprefix("FAIL:").strip())
+    if why is None:
+        return Outcome("pass")
+    # NONE: this version runs no git in the folder even without the variable (2.1.322, 11-13): nothing to guard on this
+    # path, and nothing to test; a version that runs it again brings the control back and is checked as before
+    state = "fail" if why.startswith("FAIL:") else "not-checkable" if why.startswith("NONE:") else "error"
+    return Outcome(state, why.removeprefix("FAIL:").removeprefix("NONE:").strip())
 
 
 def _platform_run(repo: pathlib.Path, tmp: pathlib.Path) -> tuple[int, dict | None]:
@@ -275,7 +279,7 @@ def agent_run(repo: pathlib.Path, guarded: bool = True, exe: str | None = None, 
 
 def filter_probe(tmp: pathlib.Path, exe: str | None = None, run=None) -> str | None:
     """Whether a platform run still leaves a repo's git filter alone: None, or what is wrong (prefixed "FAIL:" when the
-    property doesn't hold; otherwise the probe couldn't tell). A plain `git status` shows git fires the filter, and the
+    property doesn't hold, "NONE:" when the unguarded run shows nothing to guard; otherwise the probe couldn't tell). A plain `git status` shows git fires the filter, and the
     same run without the variable shows claude still would: with either silent, a pass would say nothing. run(repo,
     guarded) makes the request (agent_run by default). Also update-claude.py's, on the claude platform runs start now,
     in a folder of hubconf.private_tmp() (the system's temp folder is every sandboxed project's to write)."""
@@ -311,8 +315,9 @@ def filter_probe(tmp: pathlib.Path, exe: str | None = None, run=None) -> str | N
     if (why := run(repo, False)):
         return _("the probe could not run: {why}", why=why)
     if not marker.exists():
-        return _("the probe no longer tests anything: without the variable claude didn't run the filter either, so its "
-                 "git status has moved or gone; look again at what stops it (runtime_claude.py NO_FOLDER_GIT)")
+        return "NONE: " + _("the probe no longer tests anything: without the variable claude didn't run the filter "
+                            "either, so its git status has moved or gone; look again at what stops it "
+                            "(runtime_claude.py NO_FOLDER_GIT)")
     dirty()
     if (why := run(repo, True)):
         return _("the probe could not run: {why}", why=why)
@@ -329,6 +334,9 @@ def lifecycle_events(world) -> Outcome:
     project = pathlib.Path(world.project)
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=project, capture_output=True, timeout=60)
     rc.install_lifecycle(project)
+    # a project's hooks run only in a folder the config dir trusts, as the owner's projects are trusted in theirs
+    trust = pathlib.Path(world.tool) / ".claude.json"
+    trust.write_text(json.dumps({"projects": {str(project.resolve()): {"hasTrustDialogAccepted": True}}}))
     r = _claude(["-p", "--tools", "", "--model", FAST, "--output-format", "json", "--strict-mcp-config",
                  "--setting-sources", "project,local"], cwd=project, stdin=ASK)
     got = _result(r)

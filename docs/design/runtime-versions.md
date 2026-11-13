@@ -349,6 +349,20 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      that can't have a positive control yet is a named `not-checkable` entry.
    - Before merging: a cold review of the code, `bin/linux-test` on the new modules, one real run against the current
      binary recorded here.
+   - **Done (11-14).** The checks are `bin/conformance_claude.py` (an adapter, like `sessions_<tool>.py`), with
+     `prepare`/`enter` for the world's login (the headless token only; `CLAUDE_CONFIG_DIR` in the world, the refusing
+     `security` first on PATH, the updater off and pinned into the world, the platform's Python named for `bin/py`). Two
+     blind reviews (design, code) found five blocking bugs, all fixed: two checks that could never pass, two gate tests,
+     and `enter()` clearing the environment after the isolation proof when there was no token. `bin/linux-test` on the
+     new modules: 246 tests pass. **The real run on 2.1.322 (11-14, from the worktree, `--report`):** agent-result,
+     agent-models, completion-schemas (all ten schemas), completion-no-tools (with the schema case), instructions-reach,
+     sessions-read, stream-exchange, tool-servers-listed, auth-login-error and auth-keychain (its stub saw the lookups,
+     none of the user's own item) pass. confine-folder-git found that 2.1.322 runs no git in the folder in a `-p` run even
+     without the variable (the nightly probe has said so since 11-13): nothing to guard on that path, so it is
+     not-checkable until a version runs git again, when the control returns. lifecycle-events: the hooks fire (seen
+     once `bin/py` was told the platform's Python in the world), but the installed hooks run the main checkout's
+     `hub-event`, whose logs follow an overridden state only once this step is merged; from the worktree they logged
+     three lines into the live log. It is run again from main after the merge.
 2. **The store + `update-runtimes`** for Claude: promotion, hold-back, the digest check, the updater pinned, no PATH fallback (with
    the ports split so protections stay), first install, rollback, `MIN_VERSION`; `update-claude` retired by `legacy_name`; callers of
    `hubconf.tool("claude")` move to `binary()`; DV3's platform config dir for the runs it covers, with `PROJECTS`, `transcript()`,
@@ -406,6 +420,14 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    (a sandboxed project's hooks and denies unchanged, dispatch routes and doesn't wake), the environment table per run,
    `_home()` with the platform dir set, `test_llm_golden` with a fake store recording the environment's names,
    `bin/linux-test` on the store, and one real install of the current version into a scratch store before merge A.
+   **Re-review of r2 (11-14): B1–B3 resolved, nothing new blocks.** To fold in while building: the token's presence in a
+   run's environment is what tells `_env` its row (named and tested); `update-runtimes.py --first` is the last in-step
+   command of an upgrade and its failure is a red doctor row, never a halted upgrade; `lease-resume` (interactive, which
+   updates itself, V-M5) goes through an adapter function with `pin_env`, the hold and `verify`, and the stub only on a
+   token; `setup-token` never runs on an unpromoted copy (the user's own copy, or a scratch config dir); an old-layout
+   machine (no instance directory) keeps its store under the hub's `.state` (already in every sandbox's `deny_write`);
+   the inherited lock descriptor is opened read-only; `agent_found` also counts the user's own copy, so init's default
+   doesn't flip to none on an empty store; the stub lives in the store and a token run refuses when it is missing.
    **Blind review of r1 (11-14): three blocking, folded into r2 above.**
    - B1: with no copy, `session_statuses` → `_exe()` would raise through `Tick.status` and fail dispatch for every project; with
      no checked copy the listing must give `unlisted` (routed, never woken), tested on runtime_claude, not the fake.
