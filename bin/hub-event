@@ -254,21 +254,44 @@ def _hook_version() -> tuple[str, str | None] | None:
 _GATE: dict = {}   # session → the safety checks its version failed (gated), asked once per hook
 
 
-def gate(ev) -> list[str]:
-    """The per-version gate (runtime_ports.gated; docs/design/runtime-versions.md section 6): the safety checks this
-    session's version failed when its project's sessions are sandboxed, [] otherwise. The version is this hook's own
-    process's (at a start, the record on file can still be the last process's), the project its folder's, asked only
-    when that version has a failure on record."""
-    if ev.session in _GATE:
-        return _GATE[ev.session]
+def _failing(version) -> bool:
+    return runtime_ports.checkable_version(version) and bool(
+        runtime_ports.failed_checks(runtime_ports.session_result(_RT_NAME, version), "safety"))
+
+
+def session_version_now(ev) -> tuple[str, str | None] | None:
+    """(version, build) of the session this hook is for. Its process record's when the record names this hook's process
+    (the version read when the process was first recorded: what an installed copy's files say can change under a running
+    session, nvm's package.json after an update); read from the process otherwise (a start, whose record on file can
+    still be the last process's). When the two disagree and either has a failure on record, the record counts only if
+    its start time is this process's too (one process lookup, only then)."""
     try:
         got = _hook_version()
     except Exception:   # a version that can't be read is unreadable: pending, never gated
         got = None
-    rec = None
+    pid_of = getattr(_RT, "session_pid", None)
+    pid = pid_of(os.environ) if callable(pid_of) else None
+    f = hubconf.session_file(ev.session, runtime_ports.SESSION_RECORD)
+    rec = runtime_ports._read_record(f) if f else None
+    if not pid or not rec or rec["pid"] != pid or rec["runtime"] != _RT_NAME or not isinstance(rec.get("version"), str):
+        return got
+    mine = (rec["version"], rec.get("build") if isinstance(rec.get("build"), str) else None)
+    if got and got[0] != mine[0] and (_failing(got[0]) or _failing(mine[0])) \
+            and runtime_ports.process_start(pid) != rec["start"]:
+        return got
+    return mine
+
+
+def gate(ev) -> list[str]:
+    """The per-version gate (runtime_ports.gated; docs/design/runtime-versions.md section 6): the safety checks this
+    session's version failed when its project's sessions are sandboxed, [] otherwise. The version is this hook's
+    session's (session_version_now), the project its folder's, asked only when that version has a failure on record."""
+    if ev.session in _GATE:
+        return _GATE[ev.session]
+    got, rec = session_version_now(ev), None
     if got and runtime_ports.checkable_version(got[0]):
         rec = {"runtime": _RT_NAME, "version": got[0], **({"build": got[1]} if got[1] else {})}
-        if runtime_ports.failed_checks(runtime_ports.session_result(_RT_NAME, got[0]), "safety"):
+        if _failing(got[0]):
             rec["project"] = _project_of_folder(ev.cwd) or ""
     _GATE[ev.session] = runtime_ports.gated(ev.session, rec)
     return _GATE[ev.session]
@@ -277,7 +300,7 @@ def gate(ev) -> list[str]:
 def gate_notice(ev, failed) -> str:
     """What a gated session is told once, at its start."""
     v = runtime_ports.session_version(ev.session) or {}
-    got = _hook_version() or (v.get("version"), None)
+    got = session_version_now(ev) or (v.get("version"), None)
     return _("This session's {runtime} version {version} failed the platform's sandbox check ({checks}): the platform "
              "delivers no letters to this session and wakes it for none. Letters for this project wait for another "
              "session, and `brunna inbox` here doesn't take them. Updating the tool and opening a new session ends this.",

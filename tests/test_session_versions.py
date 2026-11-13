@@ -392,6 +392,31 @@ class HookGate(Instance):
                 self.assertIn("mail", self.ran)
                 self.assertIn("wake_address", self.ran)
 
+    def live_record(self, version, start=None):
+        f = hubconf.session_file(B, runtime_ports.SESSION_RECORD)
+        f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        f.write_text(json.dumps({"runtime": "claude", "pid": self.p.pid, "project": "box", "cwd": str(self.tmp),
+                                 "start": start or runtime_ports.process_start(self.p.pid), "version": version}))
+
+    def test_the_record_of_this_process_counts_over_files_changed_under_it(self):
+        """nvm's package.json says another version after an update, while the running session is still the one recorded."""
+        self.result(control=("safety", "fail"))
+        self.live_record(OLD)
+        with mock.patch.object(runtime_claude, "session_version", lambda pid: (NEW, None)):
+            self.hook("prompt")
+        self.assertNotIn("mail", self.ran)
+        self.ran.clear()
+        self.m._GATE.clear()
+        self.live_record(NEW)
+        self.hook("prompt")   # the files say OLD (failed); the process was recorded as NEW
+        self.assertIn("mail", self.ran)
+
+    def test_a_record_of_another_process_with_the_same_pid_doesnt(self):
+        self.result(control=("safety", "fail"))
+        self.live_record(NEW, start="1")
+        self.hook("prompt")
+        self.assertNotIn("mail", self.ran)
+
     def test_the_worktree_entry_too(self):
         self.result(control=("safety", "fail"))
         raw = json.dumps({"session_id": B, "cwd": str(self.tmp)})
