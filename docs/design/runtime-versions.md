@@ -336,6 +336,9 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
      skips per version; `sessions.skipped(since)`. The "skips more than 5%" row goes in `brunna runtimes`, not doctor (it reads
      a week of transcripts).
    - Done: `unlisted`, routed to but never woken, and said once in the dispatch log while it lasts.
+   - Done: the distribution port (optional; `latest`, `install`, `version_of`, `pin_env`, `MIN_VERSION` 2.1.319) for Claude,
+     doctor's "unversioned" row for a runtime without it, and `runtime_claude.binary()` with `check_binary()`, the only way
+     to point a run at a copy under check (in process, never from the environment).
    - Next: the runner, the results store, the coverage test and `brunna runtimes`, against the fake runtime. Each check
      runs in a subprocess whose environment points state, config, data, secrets, bus, home and the tool's config dir at a
      throwaway world, and the first check proves the live bus and session records are untouched. The binary to check is
