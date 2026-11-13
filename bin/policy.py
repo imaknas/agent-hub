@@ -70,7 +70,8 @@ CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOO
              "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
 # credential locations every sandbox is denied whatever {settings} says (docs/design/capabilities.md, 11-08 A1 point 2);
 # a runtime's own login is declared by its adapter (runtime_ports.credential_paths)
-# (~/.codex moves to the Codex adapter's credential_paths once there is one)
+# (~/.codex stays here whichever runtimes are installed: it holds every project's Codex conversations too; the Codex
+# adapter's credential_paths adds a $CODEX_HOME elsewhere; docs/design/runtime-codex.md r2)
 CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
                "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
 # what the user's shell and git run outside any sandbox (11-08 A1 point 3)

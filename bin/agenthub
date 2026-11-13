@@ -24,6 +24,9 @@ Getting started:
   brunna user-settings [--update]   the platform's own entries in your tool settings (installed by you, such as
                         the worktree hooks): which are from an earlier version; --update rewrites only those
                         (upgrade runs it)
+  brunna user-settings --install --runtime <name>
+                        put the platform's hooks into that agent's settings for your user (Codex: $CODEX_HOME/hooks.json
+                        and their trust in config.toml); only you run it, nothing in the platform does
   brunna init --questions [--answers <file>] | --answers <file>
                         for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
@@ -1359,6 +1362,44 @@ def doctor_user_settings(add, installed) -> None:
             add("warn", _("{what} are from an earlier version of brunna: sessions there may not get what this one "
                           "added (such as being woken for a letter after a day idle)", what=what),
                 _("brunna upgrade brings them up to date, or brunna user-settings --update on its own"))
+        missing = getattr(mod, "user_missing", None)
+        try:
+            why = missing() if callable(missing) and not behind else None
+        except OSError:
+            why = None
+        if why:
+            add("warn", _("{runtime}: {why}", runtime=name, why=why),
+                _("brunna user-settings --install --runtime {runtime} (a setting for your user: only you run it)",
+                  runtime=name))
+        unrecorded = getattr(mod, "unrecorded", None)
+        try:
+            ids = unrecorded() if callable(unrecorded) else []
+        except OSError:
+            ids = []
+        if ids:
+            add("warn", _("{runtime}: {n} {n:session|sessions} of the last hour ran without the platform's hooks (not "
+                          "installed, or skipped by the tool as untrusted or changed): no letters, notes reminders or "
+                          "rules reached {n:it|them}", runtime=name, n=len(ids)),
+                _("brunna user-settings --install --runtime {runtime}, then a new session", runtime=name))
+
+
+def doctor_confined(add, installed) -> None:
+    """Per sandboxed project, which agents' sessions there are confined and which get nothing from the platform's hooks
+    (runtime_ports.sessions_confined; hub-event refuses the others there; docs/design/runtime-codex.md r2)."""
+    import runtime_ports
+    names = [n for n in installed if n != "none"]
+    if len(names) < 2:
+        return
+    yes = [n for n in names if runtime_ports.sessions_confined(n)]
+    no = [n for n in names if n not in yes]
+    for project, doc in sorted(hubconf.projects().items()):
+        if (doc.get("enforce") or {}).get("sandbox") is not True:
+            continue
+        add("info" if not no else "warn",
+            _("{project} (sandboxed): sessions confined: {yes}; not confined, so the platform's hooks give them nothing "
+              "there: {no}", project=project, yes=", ".join(yes) or "-", no=", ".join(no) or "-"),
+            _("open {project}'s sessions with {yes}", project=project, yes=runtime_ports.or_list(yes)) if no and yes
+            else "")
 
 
 def doctor_control(add, why_no_sandbox, installed) -> None:
@@ -1441,10 +1482,24 @@ def cmd_doctor(argv: list[str]) -> int:
     rname = runtime_ports.default_name()
     optional = runtime_ports.optional_features()   # off is said, not a reminder: letters still arrive at the next hook
     installed = runtime_ports.installed()
-    if rname == "none":   # no AI agent at all: one plain row, not one per feature (newcomer-path.md B8)
+    others = [n for n in installed if n != "none"]
+    if rname == "none" and not others:   # no AI agent at all: one plain row, not one per feature (newcomer-path.md B8)
         add("warn", _("AI agent features are off: no AI agent is set up for brunna to run. Notes, schedules and the "
                       "mailbox work without one"),
             _("set one up: brunna init --agent {names}", names="|".join(agent_presets())))
+    elif rname == "none":   # sessions of an agent the platform doesn't start (docs/design/runtime-codex.md r2)
+        add("warn", _("the platform starts no AI agent (runtime.default: none): mailbox dispatch is off, so a letter nobody "
+                      "picks up waits for a session's hook or for you; sessions of {names} are served by their hooks",
+                      names=", ".join(others)),
+            _("set one up: brunna init --agent {names}", names="|".join(agent_presets())))
+        for n in others:
+            notes = runtime_ports.feature_notes(n)
+            for feat, ok, miss in runtime_ports.feature_table(n):
+                if ok:
+                    add("ok", _("{runtime}: {feature}: available ({note})", runtime=n, feature=feat, note=notes[feat])
+                        if feat in notes else _("{runtime}: {feature}: available", runtime=n, feature=feat))
+                else:
+                    add("info", _("{runtime}: {feature}: off (has no {missing})", runtime=n, feature=feat, missing=miss))
     elif installed == [rname]:   # one coding agent (runtime.installed unset or only the default): as before A1
         notes = runtime_ports.feature_notes(rname)
         for feat, ok, miss in runtime_ports.feature_table(rname):
@@ -1566,6 +1621,7 @@ def cmd_doctor(argv: list[str]) -> int:
         add("info", _("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
                       "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement"))
         doctor_control(add, why, installed)
+        doctor_confined(add, installed)
     hb = hubconf.STATE / "scheduler-heartbeat"
     if hb.exists():
         age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(hb.stat().st_mtime)).total_seconds() / 60
@@ -1974,12 +2030,46 @@ def cmd_land(argv: list[str]) -> int:
     return max([1 if left else 0, *(subprocess.run(s).returncode for s in steps)])
 
 
+def user_install(name: str) -> int:
+    """`user-settings --install --runtime <name>`: that runtime's hooks for the user, by its user_install (AGENTS.md: a
+    user-level change only on the owner's own yes; this command is that yes, and nothing in the platform runs it)."""
+    import runtime_ports
+    try:
+        mod = runtime_ports._module(name)
+    except KeyError as e:
+        print(e.args[0] if e.args else e, file=sys.stderr)
+        return 2
+    fn = getattr(mod, "user_install", None)
+    if not callable(fn):
+        print(_("{runtime}: nothing to install in your settings (its hooks are per project, written by the platform)",
+                runtime=name))
+        return 0
+    try:
+        lines = fn(True)
+    except Exception as e:   # a file it won't edit (a link, a shape it doesn't know): nothing was written
+        print(_("✗ {runtime}: nothing written: {error}", runtime=name, error=e), file=sys.stderr)
+        return 1
+    for line in lines:
+        print(_("✓ {what} installed", what=line))
+    if not lines:
+        print(_("✓ {runtime}: the platform's entries in your settings are current", runtime=name))
+    if name not in runtime_ports.installed():
+        print(_("{runtime} isn't in {settings} runtime.installed: add it there, or its sessions aren't counted as live",
+                runtime=name))
+    return 0
+
+
 def cmd_user_settings(argv: list[str]) -> int:
     """The platform's own entries in the user's tool settings, through each installed runtime's user_refresh: which are
     from an earlier version, and with --update those entries rewritten (AGENTS.md, user-level tool settings: run by the
-    owner, or by upgrade, which the owner runs; nothing is added to settings that have none)."""
+    owner, or by upgrade, which the owner runs; nothing is added to settings that have none). --install --runtime <name>
+    adds them for that runtime (user_install), the owner's own command."""
+    if len(argv) == 3 and "--install" in argv and "--runtime" in argv[:2] \
+            and argv[argv.index("--runtime") + 1] != "--install":
+        return user_install(argv[argv.index("--runtime") + 1])
     if argv not in ([], ["--update"]):
-        print(_("usage: {cli} user-settings [--update]", cli=names.current("cli")), file=sys.stderr)
+        print(_("usage: {cli} user-settings [--update] | --install --runtime <name>", cli=names.current("cli")),
+              file=sys.stderr)
         return 2
     import runtime_ports
     apply, rc = argv == ["--update"], 0

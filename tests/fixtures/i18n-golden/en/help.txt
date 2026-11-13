@@ -26,6 +26,9 @@ Getting started:
   brunna user-settings [--update]   the platform's own entries in your tool settings (installed by you, such as
                         the worktree hooks): which are from an earlier version; --update rewrites only those
                         (upgrade runs it)
+  brunna user-settings --install --runtime <name>
+                        put the platform's hooks into that agent's settings for your user (Codex: $CODEX_HOME/hooks.json
+                        and their trust in config.toml); only you run it, nothing in the platform does
   brunna init --questions [--answers <file>] | --answers <file>
                         for an AI agent setting brunna up in its chat (README, "Set up through your agent"): the
                         questions as JSON; then the answers applied, ending with one JSON line. Consents and keys are
