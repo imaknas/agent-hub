@@ -420,6 +420,23 @@ copies and the Codex daemon update themselves and are only checked (section 6). 
    (a sandboxed project's hooks and denies unchanged, dispatch routes and doesn't wake), the environment table per run,
    `_home()` with the platform dir set, `test_llm_golden` with a fake store recording the environment's names,
    `bin/linux-test` on the store, and one real install of the current version into a scratch store before merge A.
+   **Merge B built (11-14), on its branch, not merged.** Items 4–7 as planned, with these settled while building:
+   - The row of the run table: the platform's config dir only for a token run whose declaration's shape isn't agent
+     and that neither resumes nor forks, and every completion; every agent-shaped point (the librarian's agent parts,
+     consolidate, agent jobs, leases) stays on the shared `~/.claude`, which is narrower than the first row above
+     (`runtime_claude.run_kind`). A completion on the subscription login (no token) gets the shared dir and no stub.
+   - In a conformance check (`check_binary`) the check's world decides the config dir, the stub and the pin
+     (`conformance_claude.enter`); `_env` only puts the binary's folder first. `checked_copy()` counts the copy under
+     check, so a first install's checks run with an empty store; a dry run (`llm.py --dry-run`, the folder-git probe's
+     bare run) describes with no copy and starts nothing.
+   - Each run resolves the copy once (`_run_copy`) for its binary, environment and recorded version.
+   - Mailbox dispatch loads its gate with `platform_runs=False` and, with no copy, routes and holds letters but starts
+     no fork or triage (each letter's one chance isn't spent on a refusal); the rest of the split gate is step 3.
+   - `check-claude-login` makes no request with no copy (no login failure, no recovery); the files and dates are still
+     checked. `lease-runner` parses through the runtime with `platform_runs=False`; `llm.py exec` refuses.
+   - Not yet run against a real binary: stream-json `complete()`, the platform config dir, `resume_exec`. Before the
+     merge, a checked `current` must exist on this machine (merge A's first install), and the conformance run from main
+     after it. `run-agent-job.sh`'s resume hint still names `claude` (section 5, step 3).
    **Re-review of r2 (11-14): B1–B3 resolved, nothing new blocks.** To fold in while building: the token's presence in a
    run's environment is what tells `_env` its row (named and tested); `update-runtimes.py --first` is the last in-step
    command of an upgrade and its failure is a red doctor row, never a halted upgrade; `lease-resume` (interactive, which
