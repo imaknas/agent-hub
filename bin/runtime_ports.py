@@ -23,6 +23,9 @@ The current interfaces (the other layers get added one at a time, following the 
   `bin/hub-event <event>`
     parse_event(event, raw) -> HubEvent | None          native hook input → a neutral event (None if no real session
                                                         is running)
+    unusable(event, raw) -> str | None                   optional: why an input gave no event: None for no session at
+                                                         all (empty input), else a neutral reason hub-event logs
+                                                         (docs/design/runtime-versions.md section 6)
     inject(event, text) -> str                           text to put into the agent's context → the native output
                                                          format ("" if this event can't take it)
     deny(event, reason) -> str                           block this action → the native output format

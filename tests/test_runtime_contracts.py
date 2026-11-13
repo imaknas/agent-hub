@@ -544,6 +544,14 @@ class LifecycleContract(unittest.TestCase):
             self.assertEqual(t["elsewhere"], {"kind": "machine"})
             self.assertIsNone(m.parse_event("prompt", fx.raw(None, WS)), "no session = not a real session running")
             self.assertIsNone(m.parse_event("prompt", "not json"))
+            why = getattr(m, "unusable", None)
+            if callable(why):   # optional: why an input gave no event (runtime-versions.md section 6)
+                self.assertIsNone(why("prompt", ""), "empty input is no session, not a fault")
+                self.assertIsNone(why("prompt", fx.raw(SID, WS)), "a usable input has no reason")
+                for bad in ("not json", fx.raw(None, WS)):
+                    reason = why("prompt", bad)
+                    self.assertTrue(reason and isinstance(reason, str), bad)
+                    self.assertIsNone(m.parse_event("prompt", bad))
         self.each(check)
 
     def test_inject_and_deny_only_where_meaningful(self):

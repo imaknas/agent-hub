@@ -35,7 +35,8 @@ neutral things and know no runtime's format.
 
 Invariants (the same as the `|| true` after every hook used to be): always exit 0; not a real session, or not in an
 onboarded project: do nothing. A hook's error output is thrown away, so every run logs one line in .logs/hub-event.log
-(event, project, which ran, which failed).
+(event, project, which ran, which failed), and so does an input that gave no event, as `unusable=<reason> runtime=<name>`
+(an unknown event, or a payload the runtime's `unusable` names), except an empty one, which is no session on purpose.
 
 Runs on the platform's Python (bin/py, 3.13 minimum).
 """
@@ -314,14 +315,30 @@ def _read_stdin() -> str:
     return ""
 
 
-def _log(event, project, ran, failed) -> None:
+def _log(event, project, ran, failed, extra: str = "") -> None:
     try:
         LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(LOG, "a") as fh:
             fh.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} {event} {project or '-'} "
-                     f"ran={','.join(ran) or '-'} failed={','.join(failed) or '-'}\n")
+                     f"ran={','.join(ran) or '-'} failed={','.join(failed) or '-'}{' ' + extra if extra else ''}\n")
     except OSError:
         pass
+
+
+def _no_event(rt, name: str, event: str, raw: str) -> None:
+    """An input that gave no event: logged as unusable=<reason> with its runtime unless it is no session at all (empty
+    input, which onboard, recover and sync-local-setup send on purpose), so a payload a new version of the tool changed
+    is seen instead of passing in silence (docs/design/runtime-versions.md section 6)."""
+    if event not in HANDLERS and event not in WORKTREE_EVENTS.values():
+        _log(event, None, [], [], f"unusable=unknown_event runtime={name}")
+        return
+    why = getattr(rt, "unusable", None)
+    try:
+        reason = why(event, raw) if callable(why) else ("unparsed" if (raw or "").strip() else None)
+    except Exception as e:
+        reason = f"unusable_raised:{type(e).__name__}"
+    if reason:
+        _log(event, None, [], [], f"unusable={reason} runtime={name}")
 
 
 CAGED_NEEDS = {"control", "confine"}
@@ -333,8 +350,9 @@ def handle(event: str, raw: str, rt=None, name: str | None = None) -> str:
     global _RT, _RT_NAME
     _RT_NAME = name = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = rt or runtime_ports.load(name, ports=("lifecycle",))
-    ev = rt.parse_event(event, raw)
-    if ev is None or event not in HANDLERS:
+    ev = rt.parse_event(event, raw) if event in HANDLERS else None
+    if ev is None:
+        _no_event(rt, name, event, raw)
         return ""
     ev = ev._replace(session=runtime_ports.qualify(name, ev.session))
     ws = _workspace(ev.cwd)
@@ -412,6 +430,7 @@ def worktree(what: str, raw: str, name: str | None = None) -> int:
     rt = _RT = runtime_ports.load(_RT_NAME, ports=("lifecycle",))
     ev = rt.parse_event(WORKTREE_EVENTS[what], raw)
     if ev is None:
+        _no_event(rt, _RT_NAME, WORKTREE_EVENTS[what], raw)
         return 0
     ev = ev._replace(session=runtime_ports.qualify(_RT_NAME, ev.session))
     ws = _workspace(ev.cwd)

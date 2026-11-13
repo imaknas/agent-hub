@@ -1339,18 +1339,41 @@ def wait_hook() -> dict:
     return {"type": "command", "command": wait_command(), "asyncRewake": True, "timeout": WAIT_TIMEOUT_S}
 
 
-def parse_event(event: str, raw: str):
+def _hook_input(raw: str) -> tuple[dict | None, str | None]:
+    """(the hook's JSON, None) or (None, why it can't be used). Empty input is no session, not a fault: onboard, recover
+    and sync-local-setup run the hooks with none."""
+    if not (raw or "").strip():
+        return None, None
     try:
-        data = json.loads(raw or "{}")
+        data = json.loads(raw)
     except ValueError:
+        return None, "not_json"
+    if not isinstance(data, dict):
+        return None, "not_an_object"
+    if not data.get("session_id"):
+        return None, "no_session_id"
+    if not isinstance(data["session_id"], str):
+        return None, "session_id_not_text"
+    if not data.get("cwd"):
+        return None, "no_cwd"
+    if not isinstance(data["cwd"], str):
+        return None, "cwd_not_text"
+    return data, None
+
+
+def unusable(event: str, raw: str) -> str | None:
+    """Why this hook input gave no event (runtime_ports lifecycle, optional): None when it is no session at all (empty
+    input), else a neutral reason that hub-event logs, so a payload a new version changed doesn't pass in silence."""
+    return _hook_input(raw)[1]
+
+
+def parse_event(event: str, raw: str):
+    data, _ = _hook_input(raw)
+    if data is None:   # no hook JSON = no real session running (onboard/recover also run the setup), or unusable
         return None
-    session = data.get("session_id")
-    if not session:  # no hook JSON = no real session running (onboard/recover also run the setup)
-        return None
-    cwd = data.get("cwd")   # as the input names it: this process's own folder would be it resolved, and the name decides
-    if not cwd or not isinstance(cwd, str):
-        return None
-    ti = data.get("tool_input") or {}
+    session = data["session_id"]
+    cwd = data["cwd"]   # as the input names it: this process's own folder would be it resolved, and the name decides
+    ti = data.get("tool_input") if isinstance(data.get("tool_input"), dict) else {}
     if event == "tool_used":
         return HubEvent(event, session, cwd, command=str(ti.get("command", "")))
     if event == "open_session_attempt":

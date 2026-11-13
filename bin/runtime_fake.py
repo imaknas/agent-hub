@@ -135,13 +135,20 @@ import json  # noqa: E402
 from runtime_ports import EVENTS, HubEvent  # noqa: E402
 
 
-def parse_event(event: str, raw: str):
+def unusable(event: str, raw: str) -> str | None:
+    if not (raw or "").strip():
+        return None
     try:
-        d = json.loads(raw or "{}")
+        d = json.loads(raw)
     except ValueError:
+        return "not_json"
+    return None if isinstance(d, dict) and d.get("sid") else "no_session_id"
+
+
+def parse_event(event: str, raw: str):
+    if unusable(event, raw) or not (raw or "").strip():
         return None
-    if not d.get("sid"):
-        return None
+    d = json.loads(raw)
     target = ({"cwd": d.get("where"), "elsewhere": {"kind": d["elsewhere"]} if d.get("elsewhere") else None}
               if event == "open_session_attempt" else None)
     return HubEvent(event, d["sid"], d.get("dir", ""), command=d.get("cmd") if event == "tool_used" else None,
