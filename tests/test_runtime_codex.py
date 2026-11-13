@@ -210,12 +210,15 @@ class TrustHash(unittest.TestCase):
     H = {"type": "command", "command": "/opt/brunna/bin/py /opt/brunna/bin/hub-event --runtime codex session_start",
          "additionalContextLimit": 0}
 
-    def test_the_form_is_pinned(self):
-        ident = {"event_name": "session_start", "hooks": [{"type": "command", "command": self.H["command"], "timeout": 600,
-                                                          "async": False, "additionalContextLimit": 0}]}
-        import hashlib
-        want = "sha256:" + hashlib.sha256(json.dumps(ident, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        self.assertEqual(runtime_codex.trust_hash("session_start", None, self.H), want)
+    def test_the_hashes_codex_trusted_are_pinned(self):
+        """Measured 11-14 on 0.169 in a scratch home: with these values in config.toml both handlers ran and their output
+        landed in the thread (docs/design/runtime-codex.md, "Measured 11-14")."""
+        a = {"type": "command", "command": "/usr/bin/printf brunna-pin-a", "additionalContextLimit": 0}
+        b = {"type": "command", "command": "/usr/bin/printf brunna-pin-b"}
+        self.assertEqual(runtime_codex.trust_hash("session_start", None, a),
+                         "sha256:dc10fd9825058a70f9eea41435c31da81b95861dea5d49b43ad1dc52b6184e62")
+        self.assertEqual(runtime_codex.trust_hash("session_start", "startup", b),
+                         "sha256:d6efab4bc7a7dd3f0799f58594cc36e9b83c5d7e599c1df0833a0cb4a019c212")
 
     def test_defaults_are_filled_in_and_the_matcher_counts(self):
         h = runtime_codex.trust_hash
@@ -233,7 +236,7 @@ class TomlWriter(unittest.TestCase):
     def test_appends_replaces_and_keeps_the_rest(self):
         text = 'a = 1 # one\r\n[x]\nb = "c"'
         once = runtime_codex.set_trust(text, {self.K: "sha256:1"})
-        self.assertTrue(once.startswith('a = 1 # one\r\n[x]\nb = "c"\n'))
+        self.assertTrue(once.startswith('a = 1 # one\r\n[x]\nb = "c"\r\n'), "a file with CRLF gets CRLF")
         twice = runtime_codex.set_trust(once, {self.K: "sha256:2"})
         self.assertEqual(twice, once.replace("sha256:1", "sha256:2"))
         added = runtime_codex.set_trust(f'[hooks.state."{self.K}"]\nenabled = true\n[y]\n', {self.K: "sha256:3"})
@@ -335,10 +338,6 @@ class Sessions(unittest.TestCase):
             self.assertEqual(runtime_codex.context_size(SID), 520)
             self.assertIsNone(runtime_codex.context_size(SID2))
             self.assertIsNone(runtime_codex.context_size("../x"))
-            self.assertEqual(runtime_codex.unrecorded(now=time.time()), [SID])
-            with ti.hub_json(installed=["claude", "codex"]):
-                self.record(SID)
-            self.assertEqual(runtime_codex.unrecorded(now=time.time()), [])
 
     def test_its_home_is_a_credential_and_codex_stays_denied(self):
         with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.tmp / "ch")}):
@@ -360,10 +359,26 @@ class ThroughTheHook(ti.Bus):
         return payload(name, cwd=str(self.ws), **change)
 
     def test_a_platform_run_gets_nothing_from_its_hooks(self):
-        self.send("m1")
-        with ti.hub_json(installed=["claude", "codex"]), mock.patch.dict(os.environ, {"HUB_LLM_POINT": "librarian-state"}):
-            self.assertEqual(self.he.handle("session_start", self.hook("session_start.json"), name="codex"), "")
-        self.assertEqual((self.presence(), self.delivered()), ([], []))
+        """Every handler of every event stands in, recording a call: none runs, and the input isn't even parsed. Without
+        the runtime's declaration they would (the check that this test can fail)."""
+        he = ti.load_file("hub_event_platform_run", BIN / "hub-event")
+        he.LOG = self.tmp / "hub-event-run.log"
+        ran = []
+        he.HANDLERS = {event: [(n, lambda ev, ws, n=n: ran.append(n)) for n, _f in handlers]
+                       for event, handlers in he.HANDLERS.items()}
+        parsed = []
+        real_parse = runtime_codex.parse_event
+        events = [("session_start", "session_start.json"), ("prompt", "user_prompt_submit.json"),
+                  ("tool_used", "post_tool_use.from-source.json"), ("pre_compact", "pre_compact.from-source.json"),
+                  ("session_end", "session_end.json")]
+        with ti.hub_json(installed=["claude", "codex"]), mock.patch.dict(os.environ, {"HUB_LLM_POINT": "librarian-state"}), \
+                mock.patch.object(runtime_codex, "parse_event", lambda e, r: parsed.append(e) or real_parse(e, r)):
+            for event, name in events:
+                self.assertEqual(he.handle(event, self.hook(name), name="codex"), "")
+            self.assertEqual((ran, parsed), ([], []))
+            with mock.patch.object(runtime_codex, "PLATFORM_RUNS_FIRE_HOOKS", False):
+                he.handle("session_start", self.hook("session_start.json"), name="codex")
+            self.assertTrue(ran and parsed, "without the declaration the handlers run: the guard is what stops them")
 
     def test_at_its_start_a_notice_names_the_letter_and_never_carries_its_text(self):
         self.send("m1")
@@ -554,6 +569,270 @@ class Doctor(unittest.TestCase):
         self.assertEqual(text, i18n.translate("agenthub", "{project} (sandboxed): sessions confined: {yes}; not confined, so "
                                               "the platform's hooks give them nothing there: {no}",
                                               {"project": "caged", "yes": "claude", "no": "codex"}))
+
+
+    def test_a_codex_only_instance_says_it_too(self):
+        ah = ti.load_file("agenthub_codex_only", BIN / "agenthub")
+        rows = []
+        with mock.patch.object(hubconf, "projects", lambda: {"caged": {"enforce": {"sandbox": True}}}):
+            ah.doctor_confined(lambda *a: rows.append(a), ["codex"])
+            self.assertEqual([r[1] for r in rows], [i18n.translate(
+                "agenthub", "{project} (sandboxed): sessions confined: {yes}; not confined, so the platform's hooks give "
+                "them nothing there: {no}", {"project": "caged", "yes": "-", "no": "codex"})])
+            rows.clear()
+            ah.doctor_confined(lambda *a: rows.append(a), ["claude"])
+        self.assertEqual(rows, [], "every one confined: the control rows say the rest")
+
+    def test_a_shells_home_elsewhere_is_said_until_the_settings_name_it(self):
+        ah = ti.load_file("agenthub_codex_homes", BIN / "agenthub")
+        with tempfile.TemporaryDirectory() as d:
+            elsewhere = str(pathlib.Path(d).resolve() / "codex-home")
+            for conf, want in (({}, 1), ({"credentials.dirs": [elsewhere]}, 0)):
+                rows = []
+                with mock.patch.dict(os.environ, {"CODEX_HOME": elsewhere}), \
+                        mock.patch.object(hubconf, "get", lambda k, default=None, conf=conf: conf.get(k, default)):
+                    ah.doctor_credential_homes(lambda *a: rows.append(a), ["codex"])
+                self.assertEqual(len(rows), want, conf)
+                if rows:
+                    self.assertIn(elsewhere, rows[0][1])
+                    self.assertIn("CODEX_HOME", rows[0][1])
+        self.assertIsNone(runtime_codex.credential_override({}))
+        self.assertIsNone(runtime_codex.credential_override({"CODEX_HOME": str(pathlib.Path.home() / ".codex")}))
+        got = runtime_claude.credential_override({"CLAUDE_CONFIG_DIR": "/somewhere/else"})
+        self.assertTrue(got and got[2] == ["/somewhere/else/.credentials.json"])
+
+    def test_one_runtimes_trouble_doesnt_stop_the_next(self):
+        ah = ti.load_file("agenthub_codex_trouble", BIN / "agenthub")
+        import types
+        broken = types.SimpleNamespace(user_refresh=lambda apply: (_ for _ in ()).throw(RuntimeError("boom")))
+        fine = types.SimpleNamespace(user_refresh=lambda apply: ["the thing"])
+        mods = {"broken": broken, "fine": fine}
+        rows = []
+        with mock.patch.object(runtime_ports, "_module", lambda name: mods[name]):
+            ah.doctor_user_settings(lambda *a: rows.append(a), ["broken", "fine"])
+        self.assertEqual(len(rows), 2)
+        self.assertIn("boom", rows[0][1])
+        self.assertIn("the thing", rows[1][1])
+
+
+class CodexOnlyDoctor(unittest.TestCase):
+    """cmd_doctor itself with runtime.default none and Codex installed (tests/test_doctor_rows.py's machine stand-ins)."""
+
+    def setUp(self):
+        import test_doctor_rows as tdr
+        self.tdr = tdr
+        tdr.Doctor.setUp(self)
+        self.cfg["runtime"] = {"default": "none", "installed": ["codex"]}
+        p = mock.patch.object(runtime_codex, "codex_home", lambda: self.tmp / "codex-home")
+        p.start()
+        self.addCleanup(p.stop)
+
+    def run_(self, cmd, *a, **k):
+        return self.tdr.Doctor.run_(self, cmd, *a, **k)
+
+    def test_it_says_dispatch_is_off_and_lists_codexs_features(self):
+        rows = self.tdr.Doctor.doctor(self)
+        texts = [r[1] for r in rows]
+        with mock.patch.object(hubconf, "_cfg", self.cfg):   # the language doctor ran in
+            self.check(texts)
+
+    def check(self, texts):
+        off = i18n.translate("agenthub", "the platform starts no AI agent (runtime.default: none): mailbox dispatch is off, so "
+                             "a letter nobody picks up waits for a session's hook or for you; sessions of {names} are "
+                             "served by their hooks", {"names": "codex"})
+        self.assertIn(off, texts)
+        rules = runtime_ports.features()[8][0]
+        self.assertTrue(any(t.startswith("codex") and rules in t for t in texts), "Codex's own feature rows")
+        none_row = i18n.translate("agenthub", "AI agent features are off: no AI agent is set up for brunna to run. Notes, "
+                                  "schedules and the mailbox work without one", {})
+        self.assertNotIn(none_row, texts)
+        missing = runtime_codex.user_missing()
+        self.assertTrue(any(missing in t for t in texts), "the hooks aren't installed: said")
+
+
+class Fixes(Home):
+    """The second review's findings (docs/design/runtime-codex.md, "Step 2: progress")."""
+
+    def test_a_group_shared_with_the_users_handler_is_refused(self):
+        mine = {"type": "command", "command": "echo mine"}
+        ours = runtime_codex.platform_handler("PostToolUse", "tool_used")
+        (self.home / "hooks.json").write_text(json.dumps({"hooks": {"PostToolUse": [{"matcher": "Edit", "hooks": [ours, mine]}]}}))
+        before = (self.home / "hooks.json").read_text()
+        with self.assertRaises(runtime_codex.Refused):
+            runtime_codex.user_install(True)
+        self.assertEqual((self.home / "hooks.json").read_text(), before)
+        self.assertEqual(runtime_codex.user_refresh(True), [], "upgrade says nothing and writes nothing")
+
+    def test_legal_toml_it_didnt_expect_is_kept_or_refused_never_a_traceback(self):
+        key = f"{os.path.realpath(self.home / 'hooks.json')}:session_start:0:0"
+        cfg = ('when = 1979-05-27T07:32:00Z\nn = nan\n'
+               '[hooks.state."\\U0001F600:x"]\ntrusted_hash = "old"\n')
+        (self.home / "config.toml").write_text(cfg)
+        runtime_codex.user_install(True)
+        got = tomllib.loads((self.home / "config.toml").read_text())
+        self.assertEqual(got["hooks"]["state"]["\U0001F600:x"], {"trusted_hash": "old"})
+        self.assertIn(key, got["hooks"]["state"])
+        self.assertTrue((self.home / "config.toml").read_text().startswith(cfg))
+        self.assertEqual(runtime_codex.set_trust('[hooks.state."\\U0001F600:x"]\ntrusted_hash = "a"\n', {"\U0001F600:x": "b"}),
+                         '[hooks.state."\\U0001F600:x"]\ntrusted_hash = "b"\n', "the header's key read as TOML reads it")
+        with mock.patch.object(runtime_codex, "_set_trust", lambda text, entries: 1 / 0):
+            with self.assertRaises(runtime_codex.Refused):
+                runtime_codex.set_trust("", {"k": "v"})
+            self.assertIsNotNone(runtime_codex.user_missing())
+
+    def test_crlf_files_keep_their_line_ends(self):
+        (self.home / "config.toml").write_bytes(b'model = "x"\r\n')
+        (self.home / "hooks.json").write_bytes(b'{\r\n  "hooks": {}\r\n}\r\n')
+        runtime_codex.user_install(True)
+        for f in ("config.toml", "hooks.json"):
+            data = (self.home / f).read_bytes()
+            self.assertEqual(data.count(b"\n"), data.count(b"\r\n"), f)
+        self.assertTrue((self.home / "config.toml").read_bytes().startswith(b'model = "x"\r\n'))
+
+    def test_a_file_changed_after_the_plan_is_not_written_and_a_half_write_says_what_landed(self):
+        plan = runtime_codex._plan()
+        (self.home / "config.toml").write_text("# someone else\n")
+        with self.assertRaises(runtime_codex.Refused):
+            runtime_codex._apply(plan)
+        self.assertFalse((self.home / "hooks.json").exists())
+        plan = runtime_codex._plan()
+        real = runtime_codex._write
+
+        def write(path, text):
+            if path.name == "config.toml":
+                raise OSError("disk full")
+            real(path, text)
+        with mock.patch.object(runtime_codex, "_write", write), self.assertRaises(runtime_codex.Refused) as cm:
+            runtime_codex._apply(plan)
+        self.assertTrue((self.home / "hooks.json").exists())
+        self.assertIn(str(self.home / "hooks.json"), str(cm.exception))
+        self.assertIsNotNone(runtime_codex.user_missing(), "doctor shows them untrusted")
+
+
+class Recorded(unittest.TestCase):
+    """unrecorded(): no false positives; and the end mark that a session ending on record leaves."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.home = self.tmp / "codex-home"
+        self.ws = self.tmp / "proj"
+        self.ws.mkdir()
+        (self.tmp / "caged").mkdir()
+        docs = {"proj": {"paths": {"workspace": str(self.ws)}}, "caged": {"paths": {"workspace": str(self.tmp / "caged")},
+                                                                          "enforce": {"sandbox": True}}}
+        for p in (mock.patch.object(runtime_codex, "codex_home", lambda: self.home),
+                  mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets"),
+                  mock.patch.object(hubconf, "projects", lambda: docs)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def rollout(self, sid, cwd, originator="codex_cli_rs"):
+        import datetime as dt
+        day = self.home / "sessions" / f"{dt.date.today():%Y/%m/%d}"
+        day.mkdir(parents=True, exist_ok=True)
+        f = day / f"rollout-2026-11-14T05-05-15-{sid}.jsonl"
+        f.write_text(json.dumps({"type": "session_meta", "payload": {"session_id": sid, "cwd": str(cwd),
+                                                                     "originator": originator}}) + "\n")
+        return f
+
+    def test_only_a_person_s_session_in_a_served_project_counts(self):
+        self.rollout(SID, self.ws / "sub")
+        self.rollout(SID2, self.tmp / "elsewhere")
+        self.rollout("01a1d6bb-0000-7000-8000-000000000003", self.tmp / "caged")
+        self.rollout("01a1d6bb-0000-7000-8000-000000000004", self.ws, originator="codex_exec")
+        self.assertEqual(runtime_codex.unrecorded(), [SID])
+
+    def test_a_session_that_ended_on_record_counts_as_recorded(self):
+        self.rollout(SID, self.ws)
+        key = f"codex:{SID}"
+        with ti.hub_json(installed=["claude", "codex"]):
+            runtime_ports.record_session(key, "codex", os.getpid(), str(self.ws), stale_s=runtime_codex.SESSION_STALE_S)
+            he = ti.load_file("hub_event_end_mark", BIN / "hub-event")
+            he._RT, he._RT_NAME = runtime_codex, "codex"
+            ev = runtime_ports.HubEvent("session_end", key, str(self.ws))
+            he.end_mark(ev, None)
+            he.wake_address_drop(ev, None)
+        self.assertFalse(hubconf.session_file(key, runtime_ports.SESSION_RECORD).exists())
+        self.assertTrue(hubconf.session_file(key, runtime_ports.SESSION_ENDED).exists(), "kept past the end")
+        self.assertEqual(runtime_codex.unrecorded(), [])
+        he._RT = runtime_claude
+        self.assertIsNone(he.end_mark(runtime_ports.HubEvent("session_end", "x", "/w"), None))
+        self.assertFalse(hubconf.session_file("x", runtime_ports.SESSION_ENDED).exists(), "only where a runtime checks")
+
+    def test_exec_is_told_by_its_rollout_before_its_command_line(self):
+        f = self.rollout(SID, self.ws, originator="codex_exec")
+        raw = json.dumps({"session_id": SID, "cwd": str(self.ws), "transcript_path": str(f)})
+        with mock.patch.object(runtime_ports, "_parent_and_command", lambda pid: (1, "/x/codex app-server")):
+            self.assertFalse(runtime_codex.person_session(7, {}, raw=raw))
+        g = self.rollout(SID2, self.ws)
+        raw = json.dumps({"session_id": SID2, "cwd": str(self.ws), "transcript_path": str(g)})
+        with mock.patch.object(runtime_ports, "_parent_and_command", lambda pid: (1, "/x/codex exec")):
+            self.assertTrue(runtime_codex.person_session(7, {}, raw=raw))
+        raw = json.dumps({"session_id": SID2, "cwd": str(self.ws), "transcript_path": "/etc/passwd"})
+        for cmd, person in (("/x/codex -m o3 exec hi", False), ("/x/codex -c a=b --full-auto e hi", False),
+                            ("/x/codex --model o3", True), ("/x/codex resume", True)):
+            with mock.patch.object(runtime_ports, "_parent_and_command", lambda pid, cmd=cmd: (1, cmd)):
+                self.assertEqual(runtime_codex.person_session(7, {}, raw=raw), person, cmd)
+
+    def test_the_executable_counts_not_an_argument(self):
+        self.assertFalse(runtime_codex.session_process("/bin/zsh -c /usr/local/bin/codex"))
+        self.assertFalse(runtime_codex.session_process("/usr/bin/vim /tmp/codex"))
+        self.assertTrue(runtime_codex.session_process("/x/.codex/packages/app-server-daemon/0.169.0/codex app-server"))
+
+
+class NoticeHold(ti.Bus):
+    """A session told only at its start holds a letter NOTICE_HOLD_MIN, not TAKE_TIMEOUT_MIN; its ack holds as anyone's."""
+
+    def held_after(self, sid, minutes, ack=False):
+        import datetime as dt
+        self.send("m1", "request")
+        r = self.hb.addressed_to(self.c, "proj")[0]
+        self.hb.record_presence(self.c, sid, "proj", self.ws, None)
+        self.hb.routed(self.c, r, sid, "hook")
+        if ack:
+            self.hb.publish(self.c, f"m1:delivered:{sid}:ack", "message.delivered", "proj", "proj", "m1",
+                            {"session": sid, "via": "ack"})
+        ts = (dt.datetime.now().astimezone() - dt.timedelta(minutes=minutes)).isoformat(timespec="seconds")
+        self.c.execute("UPDATE events SET ts=? WHERE type='message.routed'", (ts,))
+        self.c.commit()
+        with ti.hub_json(installed=["claude", "codex"]):
+            st = self.hb.letter_state(self.c, r, self.hb.Live(c=self.c))
+        return st
+
+    def test_a_codex_notice_holds_ten_minutes(self):
+        self.assertTrue(self.held_after(f"codex:{SID}", 5).held)
+        self.c.execute("DELETE FROM events")
+        self.c.commit()
+        self.assertFalse(self.held_after(f"codex:{SID}", self.hb.NOTICE_HOLD_MIN + 1).held)
+
+    def test_a_claude_session_still_holds_an_hour(self):
+        self.assertTrue(self.held_after(CLAUDE_SID, self.hb.NOTICE_HOLD_MIN + 1).held)
+
+    def test_an_ack_takes_it_as_anyones(self):
+        st = self.held_after(f"codex:{SID}", self.hb.NOTICE_HOLD_MIN + 1, ack=True)
+        self.assertEqual(st.taken, "now")
+
+    def test_the_notice_names_only_ids_of_the_right_form(self):
+        qs = [{"id": "q1", "ts": "2026-11-14T05:00:00+08:00", "text": "t"},
+              {"id": "a forged id with spaces", "ts": "2026-11-14T05:00:00+08:00", "text": "t"}]
+        self.hb.open_questions = lambda c, project=None: qs
+        note = self.hb.questions_note(self.c, "proj", texts=False)
+        self.assertIn("[q1]", note)
+        self.assertNotIn("forged", note)
+
+
+class RuleNames(unittest.TestCase):
+    def test_only_rule_names_are_listed(self):
+        import io
+        import prompts
+        with tempfile.TemporaryDirectory() as d:
+            f = pathlib.Path(d) / "RULES"
+            f.write_text("engineering\n../../etc/x Multi multi-agent-review\n")
+            err = io.StringIO()
+            with mock.patch("sys.stderr", err):
+                got = prompts.listed_rules(f, {"commits": "conventional"})
+        self.assertEqual(got, ["engineering", "multi-agent-review", "conventional-commits"])
+        self.assertIn("../../etc/x", err.getvalue())
 
 
 if __name__ == "__main__":
