@@ -280,6 +280,25 @@ class Pick(Harness):
         self.assertEqual(len(off), 1, off)
         self.assertIn("no completion anywhere", off[0])
 
+    def test_no_checked_copy_of_the_runtime_is_off_and_spends_nothing(self):
+        """The point runs on the runtime's completion and the store has no checked copy of it: the call would be refused,
+        so none starts (no route call, nothing counted for today); recency picks and the reason is said once."""
+        import completion
+        import runtime_ports
+        import store_fixture
+        store_fixture.empty(self)
+        self.m.route_target = mr.target   # the real one
+        self.logged.clear()
+        with mock.patch.object(completion, "settings", lambda: None), \
+                mock.patch.object(runtime_ports, "default_name", lambda: "claude"):
+            self.two()
+            self.dispatch()
+        self.assertEqual((self.starts, self.by("m1")), ([], [("S2", "recent")]))
+        self.assertEqual(mr.calls_today(["proj"]), 0)
+        off = [m for m in self.logged if "mailbox-route" in m]
+        self.assertEqual(len(off), 1, off)
+        self.assertIn(runtime_ports.no_checked_copy("claude"), off[0])
+
     def test_the_answer_and_its_file(self):
         self.two()
         self.dispatch()

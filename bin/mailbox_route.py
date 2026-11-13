@@ -164,12 +164,18 @@ def write_answer(k: str, sid: str) -> None:
 
 def target():
     """(where the point would run, None) or (None, why it can't run anywhere): no provider in the settings and a default
-    runtime with no completion interface. Off then: recency picks, and dispatch says why once."""
+    runtime with no completion interface, or no checked copy of the runtime that would run it. Off then: recency picks,
+    and dispatch says why once."""
     import completion
     import llm
+    import runtime_ports
     try:
         spec = llm.points()["points"][POINT]
-        return llm.completion_target(POINT, spec), None
+        tgt = llm.completion_target(POINT, spec)
+        # a runtime's completion runs its checked copy: with none, a call would be refused and spend the letter's route
+        if tgt.get("impl") in runtime_ports.RUNTIMES and (why := runtime_ports.no_checked_copy(tgt["impl"])):
+            return None, why
+        return tgt, None
     except completion.Refused as e:
         return None, str(e)
     except Exception as e:   # a broken settings file or registry: off, with the type only
