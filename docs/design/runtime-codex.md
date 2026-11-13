@@ -122,6 +122,113 @@ reader shared with `sessions_codex.py`, the same privacy gate as Claude's last r
 the platform's own runs (a sandboxed project's Codex session the owner opens is confined only if D2 says so); render-project-settings
 gets a Codex renderer beside Claude's. `FOLDER_GIT_OFF` stays unknown (Codex runs git in the folder) until measured.
 
+## Implementation plan (11-14), reviewed blind once (three blocking, folded into its r2 below)
+
+The owner's goal now (11-14): use Codex as a side session beside Claude Code. What that needs first is runtime-codex.md's
+**Step 2** (a Codex session the owner opens is served: letters seen live, notes reminders, the platform's rules, session
+state for dispatch), then **Step 4** (a sandboxed project's Codex sessions confined, D2 both layers), then **Step 1** (the
+platform's own runs on Codex, on runtime-versions' store; it is that doc's step 5), then **Step 3** (status, summary,
+resume/fork; wake stays off under D4 until M11). The owner's rule (11-01): built port by port, each port not there said
+to be off (`Unsupported`, doctor). Reordering is allowed by it; this plan asks the review whether Step 2 can stand
+without Step 1.
+
+### Step 2 first: `bin/runtime_codex.py` with lifecycle + instructions + sessions
+
+1. The adapter, registered in `runtime_ports.RUNTIMES` as `codex`, `MODELS` empty for now, ports: `lifecycle`
+   (`parse_event` / `unusable` for Codex's hook input; `inject` → its additionalContext output; `deny`; `install_lifecycle`
+   → see 2), `sessions` (`alive`, `live_sessions`, `context_size`, `current_session` from `CODEX_THREAD_ID` (M6)),
+   `instructions` **absent** (the tracked `AGENTS.md` is never written; rules arrive by SessionStart injection, the feature
+   row says so). `agent`, `completion`, `auth`, `confine`, `control`, `stream`, `wake`, `session_status`, `session_summary`,
+   `distribution` absent (Unsupported; doctor's table names each).
+2. **User-level hooks (D1)**: `~/.codex/hooks.json` with the platform's handlers for SessionStart, UserPromptSubmit, PostToolUse,
+   Stop/SessionEnd (whatever events Codex has, mapped to the platform's EVENTS), each command the hub's absolute path
+   `<hub>/bin/hub-event --runtime codex <event>`; their trust written into `~/.codex/config.toml`
+   `[hooks.state."<file>:<event>:<group>:<handler>"] trusted_hash` only after checking the definition under that key is the
+   platform's own (never from `hooks/list`'s current hash). This is a user-level change: **only with the owner's direct yes,
+   in a session** (AGENTS.md); the platform ships `brunna user-settings --install --runtime codex` (and `--update` for
+   upgrade's `user_refresh`), and nothing installs it automatically. Doctor reads `hooks/list` (app-server) for a hook that is
+   `modified` or `untrusted` and says so.
+3. `hub-event` for Codex: `handle()` returns at once on a platform run (`HUB_LLM_POINT` set), since Codex's platform runs
+   can't skip user-level hooks (M5); records keyed by Codex's session id, not the process (M7: all threads share one daemon);
+   `record_session` must not drop other records with the same pid for Codex (M7).
+4. The rules: the managed block that Claude gets in `CLAUDE.local.md` is injected by the SessionStart hook's
+   `additionalContext` for Codex (M2: it reaches the model).
+5. `runtime.installed: [claude, codex]` becomes valid (config check accepts a registered name), so dispatch routes letters
+   to Codex sessions; `can_wake` is false for Codex (D4), so letters to a Codex session go the way of a runtime with no wake
+   port (shown at its next hook; a background fork stays on Claude, the default; then triage).
+6. `sessions_codex.py` already reads Codex's sessions for statistics; nothing changes there.
+Tests: parse_event/unusable on Codex's hook payloads (fixtures from M2/M7's logged inputs), inject's output shape, the hooks
+file and trust entries rendered (to a scratch home, never `~/.codex`), the trust refused when the definition differs,
+handle() a no-op under HUB_LLM_POINT, records by session id with two sessions on one pid, runtime.installed with codex in
+config check, dispatch routing to a Codex session without waking it.
+
+### Step 4: a sandboxed project's Codex sessions (D2, both layers)
+
+1. Layer 1 (the agent's own sandbox): the platform renders the project's `.codex/config.toml` permission profile from
+   `policy.py` (reads denied for credentials, platform state, other projects; writes to its own folders; network off or the
+   allowed domains) — Codex's renderer beside Claude's in render-project-settings; `.codex/` protected from the project's
+   own writes (the adapter's `control` port: `.codex/config.toml`, `.codex/hooks.json`); the project's trust entry in the
+   user's `config.toml` (user-level: installed with the hooks above, owner's yes). Doctor and the status page show a
+   sandboxed project whose rendered config is missing or changed.
+2. Layer 2 (any agent): `brunna session <project> [--agent <name>]` starts the agent's terminal UI under the project's
+   service profile (`bin/sandboxed-run`), with the agent's state folder writable for that run. macOS first; Linux after M10.
+3. `CAGED_NEEDS` becomes a "sessions confined" check per runtime (control + confine for Claude; control + the rendered
+   profile for Codex), in hub-event and render-project-settings.
+4. Measurements first: M8's profile under a TUI session (not only `exec`), and V-M6 for Codex.
+
+### Step 1: platform runs on Codex (runtime-versions step 5)
+
+`distribution` (npm `@openai/codex`, the platform packages' integrity), `conformance_codex.py` (M1, M8, M9's cases, the per-run
+tool list V-M1), the store copy and a platform `CODEX_HOME` in the store (`config.toml` with the tool-free flags and the
+updater off, `hooks.json` none, `auth.json` a link to the user's (M9), only `sessions/` writable), `agent` + `completion` +
+`auth` + `confine` (the permission profile, M8), `MODELS` pinned per point kind (a v1 model, V-M1), section 3a's login rule
+for candidates (the linked auth.json only after the credential check says no refresh can fall due), and `modules/codex.yaml`
+offering `runtime.default: codex`. D3 (the default runtime) stays the owner's.
+
+### Step 3: status, summary, resume/fork
+
+`session_status` / `session_summary` from the rollout reader shared with `sessions_codex.py`; resume/fork with `codex exec
+fork`; wake off (D4) until M11.
+
+### r2 (11-14), after the blind review: three blocking, folded in; order Step 2 → Step 4 layer 1 → Step 1 → Step 4 layer 2 → Step 3
+
+- **B1** `install_lifecycle(ws)` for Codex is a per-project no-op returning False (it is called by `hub-event install` at every
+  session start and by render-project-settings every 15 minutes): the user-level hooks and their trust are written only by
+  `brunna user-settings --install --runtime codex`, run by the owner. Tested.
+- **B2** A Codex session's life: alive from its SessionStart until its SessionEnd, or until its presence is stale (no hook of
+  it for 2 hours: a TUI that quits fires no SessionEnd, M7, and the shared daemon's pid lives for days); `thread/loaded/list`
+  replaces the staleness cutoff once M11's framing is measured. An ack by a session that is no longer alive frees the letter
+  as for any closed session. Tested: TUI quit, daemon alive → the letter goes back after the cutoff.
+- **B3** Step 4's layer 2 waits: it needs Step 1's platform `CODEX_HOME` (never a writable `~/.codex`), and a measurement
+  of whether a sandboxed TUI's tools run in the shared daemon (then only the client would be confined). Layer 1 alone comes
+  after Step 2.
+- Step 2's text corrected: a Codex session is **not routed to or forked** (dispatch's candidates need `can_wake`, a fork needs
+  `can_resume` of the default runtime); its letters reach it only through its hooks, then triage on Claude. A Codex-only
+  instance (`runtime.default: none`) has no dispatch; doctor says so.
+- Event map: SessionStart, UserPromptSubmit, PostToolUse, PreCompact → `pre_compact`, SessionEnd → `session_end`; **Stop is
+  not mapped** (it fires every turn). `open_session_attempt` isn't mapped (no such tool).
+- `current_session` for Codex: `session_process` from `CODEX_THREAD_ID`, taking precedence over a Claude id in the same
+  environment (the daemon's environment can carry one, M6/M7). Tested with both ids present.
+- `~/.codex` stays denied in `CREDENTIALS` whichever runtimes are installed; `$CODEX_HOME` added through the adapter.
+- A sandboxed project's Codex session before Step 4: hub-event refuses service (`CAGED_NEEDS`), and doctor's per-project row
+  "which agents' sessions here are confined" ships with Step 2. Tested with `--runtime codex` in a sandboxed folder.
+- Doctor keeps "a Codex session with no record" (an untrusted or modified hook is skipped silently, M2); `hooks/list` only once
+  its framing is measured.
+- The trust hash: computed from Codex's source definition of the canonical form and checked against a scratch home before
+  use; the owner's `config.toml` edited by a minimal TOML writer that keeps the rest of the file byte for byte.
+- Hook command: `<hub>/bin/py <hub>/bin/hub-event --runtime codex <event>` (no shebang reliance).
+- Letters: injected only on SessionStart until UserPromptSubmit's and PostToolUse's `additionalContext` are measured to reach
+  the model; marked told only where it reaches. `additionalContext` is developer-role in Codex: letters are framed as data
+  (a notice and the `brunna inbox` pointer, never a letter's body), and the rules say to use the MCP tools where the
+  workspace-write sandbox blocks `brunna send`.
+- **Measure on 0.169 before building** (scratch `CODEX_HOME`s only, never `~/.codex`): M2 (hook payloads, trust key and hash,
+  additionalContext per event), M6 (`CODEX_THREAD_ID`), M7 (the daemon as parent, records per thread), PostToolUse for
+  code-mode `exec_command` (`tool_name`/`tool_input`), SessionStart after compaction and on resume. The payloads become
+  test fixtures.
+- Step 1 names its dependency: runtime-versions merge B, step 4 and step 3 first; V-M1, M1 and M9 re-measured on 0.169;
+  `MIN_VERSION` at least 0.167. Step 3: forking a user's thread needs the user's `~/.codex` rollout (hooks.json loads there,
+  M5), `can_resume` stays the default runtime's, section 5's session-side rule applies.
+
 ## Found by the second blind review (11-08), taken into the steps
 
 - **Step 1 ships completion and tool-free points only.** Codex has no file-only tools: the shell is how it reads, and nothing yet
