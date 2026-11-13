@@ -613,8 +613,8 @@ def _ask(target, token: str, how: str) -> str:
                 "Then reply done. If it is refused, don't try another way; just reply done.")
     return (head + f"Use the Write tool once to write the file {target} with exactly this content: {token}\n"
             "First use the Read tool on that file (it may not exist yet; if it does, it is a throwaway copy made for "
-            "this test), then replace its whole content with Write. Use no other way to write it. If the write is "
-            "refused, don't try again; just reply done.")
+            "this test), then write it with Write, whatever the Read said, even if the Read was refused. Use no other "
+            "way to write it. If the write is refused, don't try again; just reply done.")
 
 
 def _attempt(project: pathlib.Path, settings: dict, target: pathlib.Path, how: str = "file") -> tuple[bool, bool]:
