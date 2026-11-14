@@ -118,8 +118,8 @@ swapping `.git/hooks`; renaming `.git`; `.git/info/attributes` (also as `attribu
 a bare repo renamed to `x/.git`.
 
 **Folded spellings:** the volume opens `.GIT`, `CONFIG`, `conﬁg` (U+FB01), `hooKs` (U+212A, Kelvin sign) and `hookſ` /
-`attributeſ` (U+017F) as the ASCII names (a full scan of the characters that fold to these names' letters found only
-these). Seatbelt refused every one of them with plain ASCII rules, for existing and new entries alike: it matches what
+`attributeſ` (U+017F) as the ASCII names (found by trying, against the volume, upper case and the 11 characters Python's
+case folding maps to ASCII letters, in each fenced name; not every code point). Seatbelt refused every one of them with plain ASCII rules, for existing and new entries alike: it matches what
 the volume resolves. Claude's and Codex's own sandboxes must be shown to do the same (canary). Side finding:
 `runtime_claude._folds` says nothing but the long s folds to a letter its names use; the Kelvin sign folds to `k`, which
 `.claude/hooks` and `.claude/skills` contain. Seatbelt is unaffected; Claude's own rule matching for a *missing*
@@ -143,7 +143,9 @@ be removed".
 | | brunna's `hook-write`, `set-origin`, `worktree-add`, `worktree-remove`; so `render-project-settings`' hook installer, `upgrade-idea`'s origin, `propose_apply`'s worktree, `merge-branch --dry-run`'s worktree |
 | | anything that installs hooks (`git lfs install`, pre-commit's installer) |
 
-Every break is loud (an error naming the file), except `push -u` (exit 0) and `branch -D` (warning only).
+Every break is loud (an error naming the file), except `push -u` (exit 0) and `branch -D` (warning only). Not
+measured: `git maintenance start` / `register` (they write the owner's global config, which every sandbox already
+denies, and schedule jobs), `git lfs install` itself (no git-lfs here; its hook writes are refused as above).
 
 **Package managers:** uv makes an empty `sdists-v9/.git` file in its cache at first use, opens it for writing on every
 run and removes it in `cache clean`; under the fence uv fails at once, fresh or warm cache, even for a registry package
@@ -189,7 +191,8 @@ marker and the folders pinned on its way, as absolute paths computed from the wo
   is expressed, and the folded spellings. Confined runs keep M7 of `confined-mail-tools.md` (every `.git` denied whole),
   which is stricter.
 - **Codex sessions** (the layer-1 profile, `runtime-codex.md` Step 4): `deny` globs, which r2 measured to work for
-  nested names (`read` entries can't be globs). Its `:tmpdir` is read-only for Codex's tools already.
+  nested names (`read` entries can't be globs). The renderer r2 plans (not built) makes `:tmpdir` read-only for Codex's
+  tools.
 - **Landlock** (Linux): can't express it (below).
 
 ### Nested repos and worktrees
@@ -232,12 +235,21 @@ checks apply), and the runner does it outside the sandbox. Ops:
 - `worktree add <path> [<branch>]`, `worktree remove <path>`, `worktree prune`;
 - `submodule init|update [<path>]` (the project's `.gitmodules`), if the owner wants submodules at all (question below).
 
+**When the runner may write at all:** only for a project whose every writer is fenced (its services, jobs and the
+sessions of each runtime it has, each canary passed) and whose scan passed. Before that, and always on Linux, nothing
+keeps `.git` still between the runner's check and its write, and a write as the owner would go wherever a planted link
+leads: measured, `git config` wrote through a `.git/config` that was a symlink to a tracked file, and
+`projects-and-repos.md` already records the hook installer writing through a planted `.git/hooks`. So until then
+brunna's own ops stay what they are today, jobs of the project, and `brunna git` says the project isn't fenced yet.
+
 **How the runner writes**, so that running git as the owner in a project's repo stays safe:
 
 - the scan first (below); a repo that doesn't pass is refused, with the reason;
-- config edits with `git config --file <path> <key> <value>` from a neutral folder, with `GIT_CONFIG_NOSYSTEM=1` and
-  `GIT_CONFIG_GLOBAL=/dev/null` (measured: runs nothing with a hostile config present, doesn't follow includes, doesn't
-  hang on a FIFO include);
+- config edits never in place: the runner copies the file (opened without following links, a regular file with one
+  link), edits the copy with `git config --file <copy> <key> <value>` from a neutral folder, with
+  `GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL=/dev/null` (measured on the file itself: runs nothing with a hostile
+  config present, doesn't follow includes, doesn't hang on a FIFO include), and installs it as a fresh inode through a
+  directory descriptor for `.git`, opened without following links (the neutraliser's path, below); hooks the same way;
 - worktrees with `git --git-dir=<common dir> -c core.hooksPath=/dev/null -c core.fsmonitor=false worktree add
   --no-checkout` (measured: with hostile filters, fsmonitor and hooks present, nothing ran), then the checkout itself
   (`reset --hard`) as the project, inside its sandbox, where its own filters run as itself; `worktree remove --force` and
@@ -246,6 +258,34 @@ checks apply), and the runner does it outside the sandbox. Ops:
 - everything checked against **one allowlist table** shared with the scan: the key, and the value (a remote URL is
   `https://`, `ssh://`, `git@host:` or a path the platform owns; no `ext::`, no `<helper>::`, no local path into another
   project). A key not in the table is refused; the error names the table.
+
+**The allowlist** (the first version; a key is added only with a reason it can't make git run or read anything else).
+Keys are matched case-insensitively in the section and key parts, as git does; `<n>`, `<b>` are any name:
+
+| key | value rule | why it is there |
+|---|---|---|
+| `core.repositoryformatversion` | `0` or `1` | written by `git init` |
+| `core.filemode`, `core.logallrefupdates`, `core.ignorecase`, `core.precomposeunicode`, `core.symlinks` | `true` / `false` | written by `git init` / `clone` |
+| `core.bare` | `false` | written by `git init`; a non-bare repo only |
+| `extensions.objectformat` | `sha1` / `sha256` | repository format |
+| `remote.<n>.url`, `remote.<n>.pushurl` | `https://…`, `ssh://…` or `user@host:path` with no option-looking host; or a path the platform owns (the memory bare repo); never `ext::`, `<helper>::`, `file://` or a path elsewhere | remotes |
+| `remote.<n>.fetch`, `remote.<n>.push` | a refspec: optional `+`, `refs/…:refs/…`, at most one `*` each side | remotes |
+| `remote.<n>.prune`, `remote.<n>.tagopt` | `true` / `false`; `--tags` / `--no-tags` | remotes |
+| `branch.<b>.remote`, `branch.<b>.pushremote` | the name of a remote in this file | upstream |
+| `branch.<b>.merge` | `refs/heads/…` | upstream |
+| `branch.<b>.rebase` | `true` / `false` / `merges` | upstream |
+| `user.name`, `user.email` | one line, printable, at most 200 characters | identity |
+| `push.default` | `current` / `simple` / `upstream` / `nothing` | preset |
+| `remote.pushdefault` | the name of a remote in this file | preset |
+| `branch.autosetupmerge` | `false` | preset |
+| `pull.rebase`, `pull.ff` | `true` / `false` / `only` | preset |
+| `submodule.<n>.url`, `submodule.<n>.active` | as `remote.<n>.url`; `true` / `false` | only if submodules are allowed (question 6) |
+
+Not in it, on purpose: every `include*`, `core.worktree`, `core.hooksPath`, `core.fsmonitor`, `core.sshCommand`,
+`core.pager`, `core.editor`, `alias.*`, `filter.*`, `diff.*`, `merge.*`, `gpg.*`, `credential.*`, `url.*`,
+`protocol.*`, `uploadpack.*`, `extensions.worktreeconfig` (set only by the platform, when a sparse checkout is asked
+through the runner), `lfs.*`. `push.autoSetupRemote` and `branch.autoSetupMerge=true` aren't either: with them git tries
+to write config the sandbox can't.
 
 **The rules text agents get** (in `templates/agent-instructions.md`, for sandboxed projects only):
 
@@ -298,7 +338,8 @@ tree (`landlock.py`'s header, and why it doesn't declare `runtime-files-locked`)
 service or job from writing `.git/config` or making a nested repo. The fence isn't offered there: the scan still runs
 and neutralises on its schedule (detection with a window, not prevention), the status row says "not supported on this
 OS", and a sandboxed project's sessions of any runtime whose git runs as the user count as **not confined** on Linux
-(Codex's confined check already answers so there, `runtime-codex.md` r2 nits).
+(as r2's nits plan for Codex's confined check, `runtime-codex.md`). On Linux brunna's own ops stay jobs of the project
+(below), since nothing keeps `.git` still between a check and a write as the owner.
 
 ## What this does for Codex layer 1
 
@@ -326,7 +367,7 @@ lands counts as not confined, and `update-runtimes` holds it back for sandboxed 
 ## brunna's own flows that change
 
 - `project_git`'s `hook-write`, `hook-remove`, `set-origin`, `worktree-add`, `worktree-remove` move from "a job as the
-  project" to the runner (they fail under the fence: measured). Callers: `render-project-settings` (hooks),
+  project" to the runner when the project's switch flips, not before (they fail under the fence: measured). Callers: `render-project-settings` (hooks),
   `upgrade-idea` (origin), `propose_apply` (worktree), `prune-worktrees` (removal).
 - `merge-branch --dry-run` asks the runner for its temporary worktree (today it runs `worktree add` from the session:
   fails under the fence, measured) or tests the rebased commit without one (`brunna test --rev` already exports a tree).
@@ -349,14 +390,21 @@ lands counts as not confined, and `update-runtimes` holds it back for sandboxed 
 
 ## Order of work
 
+Nothing writes as the owner into a project's `.git` before every writer of that project is fenced; a project becomes
+"fenced" as a whole, by a per-project switch the platform flips only when the last writer's fence is rendered and its
+canary passed.
+
 1. The scan, report only, with the status and doctor rows: no behaviour changes, and it shows what is already out there.
-2. The runner's `git` kind and the moves of brunna's own ops (hooks, origin, worktrees, `merge-branch --dry-run`) to it.
-3. The presets, written by onboarding and `render-project-settings`.
-4. The fence in Seatbelt (services, command jobs, cap-run), with the uv exception; the one-time install (fresh inodes)
-   and neutralising.
-5. The fence in Claude sessions' settings, with its canary in `conformance_claude.py`; the rules text.
-6. The fence in Codex's rendered profile, its canary, and the confined check's "fence holds" (Step 4 r2 steps 3–5).
-7. Linux: the scan and the rows only.
+2. The runner's `git` kind and the allowlist, built and tested, but answering "not fenced yet" for every project.
+3. The fence rendered for each writer, behind the per-project switch: Seatbelt (services, command jobs, cap-run) with
+   the uv exception; Claude sessions' settings with its canary in `conformance_claude.py`; Codex's rendered profile with
+   its canary. A writer that can't fence keeps the project unfenced.
+4. Flipping the switch for a project: the one-time install (every fenced file rewritten as a fresh inode, links
+   replaced, unknown hooks moved out, as question 4 decides), then the presets, then brunna's own ops (hooks, origin,
+   worktrees, `merge-branch --dry-run`) move from jobs of the project to the runner, and the rules text for that project
+   changes. The scan then runs on its schedule and before every runner op.
+5. The confined check's "fence holds" for Codex (Step 4 r2 steps 3–5).
+6. Linux: the scan and the rows only; ops stay jobs of the project.
 
 ## Open questions for the owner
 
@@ -377,7 +425,9 @@ lands counts as not confined, and `update-runtimes` holds it back for sandboxed 
 5. **Hook frameworks you set up yourself** (`core.hooksPath` into a tracked folder, pre-commit, husky): they run the
    project's tracked content as you on every commit. Remove them in sandboxed projects, or keep them as your choice with
    a doctor warning?
-6. **Submodules** in sandboxed projects: through the runner, or not supported?
+6. **Submodules** in sandboxed projects: through the runner, or not supported? With `modules` fenced as a whole tree,
+   work *inside* an existing submodule (a commit, a fetch, its index) also fails in the sandbox (follows from the rule;
+   not measured). The alternative is fencing the same names inside each `modules/**` git dir instead of the whole tree.
 
 ## Risks: what this still doesn't cover
 
