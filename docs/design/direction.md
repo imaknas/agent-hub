@@ -144,6 +144,10 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - Phase 1 (schema fields, `policy.for_point`, the shim, coverage, the evals module) and phase 2 are not built.
    - Recording, replay and scoring exist only through i18n's E2.
    - Privacy routing waits on this.
+6. **Credentials for unattended jobs** (`platform-credentials.md`, design 11-15, not built): the platform holds its own
+   grants, such as an OAuth MCP server's, in the secrets directory and hands one to a job's run only through a stdio
+   bridge it attaches. No job reads the Keychain (DV5 stays). Waits on owner question 1 (which client the grant uses)
+   before step 4; steps 1–3 don't.
 
 ### 3. Projects and repos (`projects-and-repos.md`)
 
