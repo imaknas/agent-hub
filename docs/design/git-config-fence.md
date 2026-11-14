@@ -573,47 +573,79 @@ neutralising changed, from `.state/git-fence/<project>/`, and reports what it re
 
 ### Step 1 as built (11-14): the scan, report only
 
-`bin/git_fence.py`, the platform job `brunna/git-fence` (nightly, 04:50, background). It changes no project file and
-neutralises nothing.
-- **What it covers**, per sandboxed project: its workspace, runtime folder, `allow_write` and the memory clone its
-  workspace links to, walked without following a link (to 400,000 entries, five minutes per project, a stop said as a
-  finding). Every `.git` entry is classified: the repo's own git dir at a folder's top; a gitfile into a known git dir's
-  `worktrees/<n>` or `modules/**`; anything else a finding (a nested repo, a gitfile pointing elsewhere, a link named
-  `.git`). Folders shaped like a git dir (HEAD, objects, refs) outside any `.git` are findings.
-- **In each git dir** (worktrees' and modules' own included): every config source through the allowlist above with
-  r2 S2's additions (`extensions.refstorage`, `extensions.worktreeconfig`, `maintenance.*` with plain token values);
-  any `include*` is a finding, never followed; `core.hooksPath` its own finding (question 5). Hooks other than git's
-  samples and the platform's current text (`render-project-settings.wanted_hooks`); `info/attributes` not empty;
-  alternates; a `commondir` in a main git dir, a worktree's `commondir` other than `../..`, a `gitdir` that doesn't lead
-  back; legacy `remotes/` and `branches/` not empty; every symbolic link and every file with more than one name (B2),
-  except under the platform's own folder (`.git/brunna/`, its caches) and the files under `objects/`, which git links
-  between local clones and checks by their hash; index entries the checkout would write into the git dir (B1: every
-  index, a worktree's and a split index's shared part included, versions 2 to 4; counted, the paths not shown); rebase
-  state with exec lines, said as a note (a session's own work), never "not holding".
-- **How it reads:** every file opened without following a link and without blocking, a regular file only (fstat), at
-  most a size cap (1 MB, 256 MB for an index); what git must parse (a config source) is copied into a folder of its own
-  in `hubconf.private_tmp()` and read with `git config --file <copy> --null --list` from there, with no system or global
-  config and a timeout: no include is followed and no git runs in a project's repo, so nothing of the project's runs.
-  It needs no git facts from the repo itself, so it doesn't go through `project_git`.
-- **The commit gate** (B3): on or off, the platform's pre-commit in place (its current text), exempt from the sandbox,
-  and whether this machine can sandbox; said in each project's row.
-- **The temp area** (S1): the user's own temp folder and the shared one (macOS: the user's folder under
-  `/private/var/folders` and `/private/tmp`; Linux: `/tmp`, `/var/tmp`), eight levels deep, a million entries, said when
-  it stops early. Folders shaped like a git dir there are one row of their own and one alert, however many: a test run
-  can leave thousands. They don't make a project's row "not holding": the fence's `HEAD` rule (S1) isn't built, so
-  nothing in a project can stop them yet.
-- **Output:** `.state/git-fence/scan.json`; a status page section (one row per sandboxed project, holds or not holding
-  with its first finding and the commit gate's state, and the temp area's row); a doctor row per project; an alert on a
-  new finding through `alert.once` (one stable id per finding, repeated daily while it stays, its clearing said).
-  `bin/git_fence.py --report [--project P] [--json]` scans and prints without writing anything.
-- **Tests** (`tests/test_git_fence.py`, a throwaway instance, the scan as its own process): a clean repo with a linked
-  worktree holds; a hostile one (a FIFO include, a filter and fsmonitor in its config, a planted hook, a link at
-  `logs/HEAD`, `info/attributes`, alternates, a hard link to a git dir file, a `commondir`, a nested repo, a gitfile
-  pointing elsewhere, a bare repo in the workspace and one in the temp root) is reported in full, and the planted
-  canary didn't run (the positive control: the same plant runs on a plain `git status`); a crafted index is counted and a
-  truncated one is "can't be checked"; a FIFO where a hook or config belongs is reported, not waited on; the commit gate
-  with the platform's own hook holds and with a changed one doesn't; rebase exec lines are a note; the job keeps its
-  result and leaves the repo as it was; index parsing against what git itself writes in versions 2, 3 and 4.
-- **Limits, said:** a folder swapped for a link between the walk and an open can make the scan read a file the owner
-  can read (only parsed and named); only the user's own part of macOS's per-user temp folders is walked.
+`bin/git_fence.py`, the platform job `brunna/git-fence`. Revised the same day after a blind code review that found four
+places where it said "holds" while the owner's git ran a planted canary (a folder it couldn't list, a gitfile into a
+pointer it didn't check, git-dir shapes it didn't recognise, an index read differently from git); all four are covered
+below and by tests. It changes no project file and neutralises nothing.
 
+- **When:** every 15 minutes (r2 B1's window: an index can be written between two scans), in the background; the temp
+  area at most once a day, its last result kept in between. The status page section and doctor say the window ("a
+  change can stand that long before it is seen"). `--apply` takes no narrowing option (`--project`, `--no-temp`,
+  `--temp-root` are refused), so a partial scan never ends findings it didn't look at.
+- **Where:** per sandboxed project, its workspace, runtime folder, `allow_write` and the memory clone its workspace
+  links to, walked without following a link, each root itself tested too. **A folder it can't list is a finding**
+  ("can't be listed"), in the walk and in every git dir, never skipped. The time limit (five minutes per project) and the
+  entry count (400,000) are checked at every folder entry, a stop said as "incomplete"; at most 300 findings are kept per
+  project, the rest counted.
+- **`.git` entries:** the repo's own git dir at a folder's top; a gitfile is accepted **only when it leads exactly to a
+  git dir this scan inspected** (a worktree's admin dir, a module's git dir); anything else is a finding (a nested repo,
+  a gitfile elsewhere, a link named `.git`). **Git-dir shapes** follow git's own test, loosened to what can be planted:
+  HEAD (any kind of entry) with objects and refs of any kind (a link, an executable file), or HEAD with a commondir.
+- **Each git dir** (a repo's own; each `worktrees/<n>`; every folder under `modules/`, a worktree's `modules/` too, a
+  folder there being inspected when it has HEAD, a config, a commondir or an index, walked into otherwise, since a
+  module's name can hold slashes):
+  - config sources through the allowlist above with r2 S2's additions and these, each with its value rule:
+    `core.autocrlf` (true, false, input), `remote.<n>.gh-resolved` and `branch.<b>.vscode-merge-base` (a ref-like
+    token: tools' bookkeeping, read by no git command), `branch.<b>.description` (printable text, used only in a cover
+    letter), `lfs.repositoryformatversion` (0) and `lfs.locksverify` (a bool). Every other `lfs.*` is reported: `lfs.url`
+    and its kin send the owner's credentials and objects where they name. In a module's git dir, the `core.worktree` git
+    writes there is allowed when it leads to a folder in the project whose `.git` file leads back, and its
+    `remote.origin.url` follows the URL rule. A path URL passes only when it is **this project's own memory bare repo**
+    (`policy.memory_bare`); any `include*` is a finding, never followed; `core.hooksPath` has its own;
+  - hooks other than git's samples and the platform's own text **in any UI language** (a hook's message is in the
+    language the platform had when it wrote it);
+  - `info/attributes`, alternates, a `commondir` (in a repo's or a module's git dir: any; in a worktree's: anything but
+    `../..`, a missing one included), a worktree `gitdir` that doesn't lead back (a relative one, from
+    `worktree.useRelativePaths`, resolved against the admin dir), every entry of `remotes/` and `branches/` (files there
+    are remotes git reads);
+  - every symbolic link and every file with more than one name in the whole git dir (worktrees' and modules' included),
+    except under the platform's own folder (`.git/brunna/`, its caches) and the files under any `objects/`, which git
+    links between local clones and checks by their hash;
+  - the index entries the scan reports (r2 B1): every index (a worktree's, a module's, a split index's shared parts in
+    any of them), each read once (by device and inode), read as git's own reader reads it (the name length as git reads
+    it, the extended flags wherever set, the entries ending where the extensions begin, the checksum verified); one git
+    couldn't read is "can't be checked";
+  - rebase state with exec lines, said as a note.
+- **The commit gate** (B3): on or off, the platform's pre-commit in place, exempt or not, and whether this machine can
+  sandbox, in each project's row.
+- **The temp area** (S1): the user's own temp folder and the shared one (macOS: the user's folder under
+  `/private/var/folders` and `/private/tmp`; Linux: `/tmp`, `/var/tmp`): a `.git` of any kind at each root and in each
+  folder just below it (it makes every folder below it a checkout), and folders shaped like a git dir to eight levels and
+  a million entries, each cut said. One row and one alert for the area, however many: a test run can leave thousands.
+  They don't make a project's row "not holding": the fence's `HEAD` rule (S1) isn't built, so nothing in a project can
+  stop them yet.
+- **How it reads:** every file opened without following a link and without blocking, a regular file only (fstat), at
+  most 1 MB (256 MB for an index); a config source is copied into a folder of its own in `hubconf.private_tmp()` and read
+  with `git config --file <copy> --null --list` from there, with no system or global config and a timeout (git's error
+  text shown without the copy's path). No git runs in a project's repo, so nothing of the project's runs, and no git
+  facts are needed through `project_git`. Paths are opened by path, not through descriptors held from the walk (a git
+  dir's `info`, its `rebase-merge`, the commit gate's `.git`): a link at one is itself a finding of the same scan, but
+  one made between two steps can make the scan read a file the owner can read (only parsed, and named in the report).
+- **Output:** `.state/git-fence/scan.json` (no URL credentials kept: a value's `user:token@` is left out); a status page
+  section and a doctor row per project and one for the temp area; an alert through `alert.once` (one stable id per
+  finding, one for the temp area). Every value from a project's files is shown with control and invisible characters
+  escaped and an `@` broken by a zero-width space (no terminal escape, no chat mention), in `--report`, doctor, the
+  status page and alerts. `bin/git_fence.py --report [--project P] [--json] [--no-temp] [--temp-root D]` scans and
+  prints without writing anything.
+- **Tests** (`tests/test_git_fence.py`, a throwaway instance, the scan as its own process): a clean repo with a linked
+  worktree holds; a hostile one is reported in full and its planted canary doesn't run (the positive control: it runs on
+  a plain `git status`); nothing in the project changes (every entry's mode, size, mtime and inode before and after);
+  folders it can't list (a git dir's hooks, a folder holding a nested repo); `remotes/` and `branches/` files; gitfiles
+  into a module whose commondir points away and into a folder deeper than a worktree's admin dir, and a folder under
+  `modules/` that isn't shaped; shape variants (folders, files, links, commondir) and a root that is itself shaped; a
+  `.git` at a temp root and just below it; the index entries the scan reports, an index git couldn't read, the name
+  length as git reads it, extended flags, the checksum, extensions that don't end where they should, against what git
+  itself writes in versions 2 to 4 (a long name included); a FIFO where a hook or config belongs; the deadline
+  ("incomplete"); the commit gate with the platform's hook in each language and a changed one; rebase notes; the job's
+  result, its once-a-day temp walk, its refusal of narrowing options, and its alert received by a stand-in channel; the
+  allowlist (its additions, another project's memory repo refused) and the escaping of shown values.
