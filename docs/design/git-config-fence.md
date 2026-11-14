@@ -1,7 +1,8 @@
 # The git config fence: nothing in a sandboxed project writes what makes git run code
 
 Status: plan, 11-14; r2 after a blind review (below, it holds where the text above disagrees). Built: r2 B3
-(the commit gate's tiers in the project's sandbox) and cap-runner's FIFO fix (S5); the rest not built. Measured the same day in scratch repos (git 2.50.1, macOS on a case-insensitive APFS
+(the commit gate's tiers in the project's sandbox), cap-runner's FIFO fix (S5) and step 1, the scan (report only;
+"Step 1 as built" at the end); the rest not built. Measured the same day in scratch repos (git 2.50.1, macOS on a case-insensitive APFS
 volume), with the platform's real Seatbelt profile (`seatbelt.service_profile`) standing in for a sandboxed writer and a
 candidate fence appended to it. No model calls; Claude's and Codex's own sandboxes were not run (their part is the
 conformance canary, below). This is D9 of `runtime-codex.md` as the owner redefined it on 11-14.
@@ -569,3 +570,50 @@ neutralising changed, from `.state/git-fence/<project>/`, and reports what it re
 **Order, revised:** ship now B3 (done) and the report-only scan, extended with index entries (B1), links and
 `nlink > 1` anywhere in git dirs (B2), git-dir-shaped folders in the temp roots (S1) and the commit gate's status
 (B3). The rest as planned above.
+
+### Step 1 as built (11-14): the scan, report only
+
+`bin/git_fence.py`, the platform job `brunna/git-fence` (nightly, 04:50, background). It changes no project file and
+neutralises nothing.
+- **What it covers**, per sandboxed project: its workspace, runtime folder, `allow_write` and the memory clone its
+  workspace links to, walked without following a link (to 400,000 entries, five minutes per project, a stop said as a
+  finding). Every `.git` entry is classified: the repo's own git dir at a folder's top; a gitfile into a known git dir's
+  `worktrees/<n>` or `modules/**`; anything else a finding (a nested repo, a gitfile pointing elsewhere, a link named
+  `.git`). Folders shaped like a git dir (HEAD, objects, refs) outside any `.git` are findings.
+- **In each git dir** (worktrees' and modules' own included): every config source through the allowlist above with
+  r2 S2's additions (`extensions.refstorage`, `extensions.worktreeconfig`, `maintenance.*` with plain token values);
+  any `include*` is a finding, never followed; `core.hooksPath` its own finding (question 5). Hooks other than git's
+  samples and the platform's current text (`render-project-settings.wanted_hooks`); `info/attributes` not empty;
+  alternates; a `commondir` in a main git dir, a worktree's `commondir` other than `../..`, a `gitdir` that doesn't lead
+  back; legacy `remotes/` and `branches/` not empty; every symbolic link and every file with more than one name (B2),
+  except under the platform's own folder (`.git/brunna/`, its caches) and the files under `objects/`, which git links
+  between local clones and checks by their hash; index entries the checkout would write into the git dir (B1: every
+  index, a worktree's and a split index's shared part included, versions 2 to 4; counted, the paths not shown); rebase
+  state with exec lines, said as a note (a session's own work), never "not holding".
+- **How it reads:** every file opened without following a link and without blocking, a regular file only (fstat), at
+  most a size cap (1 MB, 256 MB for an index); what git must parse (a config source) is copied into a folder of its own
+  in `hubconf.private_tmp()` and read with `git config --file <copy> --null --list` from there, with no system or global
+  config and a timeout: no include is followed and no git runs in a project's repo, so nothing of the project's runs.
+  It needs no git facts from the repo itself, so it doesn't go through `project_git`.
+- **The commit gate** (B3): on or off, the platform's pre-commit in place (its current text), exempt from the sandbox,
+  and whether this machine can sandbox; said in each project's row.
+- **The temp area** (S1): the user's own temp folder and the shared one (macOS: the user's folder under
+  `/private/var/folders` and `/private/tmp`; Linux: `/tmp`, `/var/tmp`), eight levels deep, a million entries, said when
+  it stops early. Folders shaped like a git dir there are one row of their own and one alert, however many: a test run
+  can leave thousands. They don't make a project's row "not holding": the fence's `HEAD` rule (S1) isn't built, so
+  nothing in a project can stop them yet.
+- **Output:** `.state/git-fence/scan.json`; a status page section (one row per sandboxed project, holds or not holding
+  with its first finding and the commit gate's state, and the temp area's row); a doctor row per project; an alert on a
+  new finding through `alert.once` (one stable id per finding, repeated daily while it stays, its clearing said).
+  `bin/git_fence.py --report [--project P] [--json]` scans and prints without writing anything.
+- **Tests** (`tests/test_git_fence.py`, a throwaway instance, the scan as its own process): a clean repo with a linked
+  worktree holds; a hostile one (a FIFO include, a filter and fsmonitor in its config, a planted hook, a link at
+  `logs/HEAD`, `info/attributes`, alternates, a hard link to a git dir file, a `commondir`, a nested repo, a gitfile
+  pointing elsewhere, a bare repo in the workspace and one in the temp root) is reported in full, and the planted
+  canary didn't run (the positive control: the same plant runs on a plain `git status`); a crafted index is counted and a
+  truncated one is "can't be checked"; a FIFO where a hook or config belongs is reported, not waited on; the commit gate
+  with the platform's own hook holds and with a changed one doesn't; rebase exec lines are a note; the job keeps its
+  result and leaves the repo as it was; index parsing against what git itself writes in versions 2, 3 and 4.
+- **Limits, said:** a folder swapped for a link between the walk and an open can make the scan read a file the owner
+  can read (only parsed and named); only the user's own part of macOS's per-user temp folders is walked.
+
