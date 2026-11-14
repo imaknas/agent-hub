@@ -190,6 +190,13 @@ Built: steps 0–2 and step 4, the waiting report. Left:
   were to move to `docs/design/` (after a check for private material).
 - **Versioning:** CONTRIBUTING.md says `!` raises the major version; releases before 1.0 have raised only the minor.
   One of the two should change.
+- **One copy of each coding agent (backlog, owner 11-15):** today the platform keeps its checked copy in the store and
+  raises the user's own install to the same version, two copies of one version. An opt-in, off by default:
+  the user's `claude`/`codex` command becomes a link to the store's current copy. It has to detect how the tool was
+  installed (npm, Homebrew, the native installer at `~/.local/bin`, desktop apps only) and refuse where it would clash;
+  the desktop apps' own copies stay theirs. A user-level change, so only the user turns it on.
+- **A project model call's own time limit:** `models:` takes only `tier`, and a project's call stops at the platform's
+  600 s; long prompts on the strong tier hit it (reported 11-15). A `timeout_s` per call point, under a platform cap.
 
 ### 6. Waiting on the owner
 
