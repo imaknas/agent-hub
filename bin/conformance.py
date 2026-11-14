@@ -51,7 +51,14 @@ from runtime_ports import Check, Outcome  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-RESULTS = hubconf.STATE / "runtime-conformance"
+# None: <state>/runtime-conformance, read at each call from hubconf.STATE (not frozen at import: a test that points
+# hubconf.STATE elsewhere must never write the live results; a stray result written so on 11-14 showed in doctor).
+# Tests may still set RESULTS itself.
+RESULTS: pathlib.Path | None = None
+
+
+def _results() -> pathlib.Path:
+    return RESULTS if RESULTS is not None else hubconf.STATE / "runtime-conformance"
 REASON_MAX = 300
 
 
@@ -272,7 +279,7 @@ def record_any(doc: dict) -> pathlib.Path:
 
 
 def results_file(runtime: str, version: str) -> pathlib.Path:
-    return RESULTS / runtime / f"{version}.json"
+    return _results() / runtime / f"{version}.json"
 
 
 def record(doc: dict) -> pathlib.Path:
@@ -301,7 +308,7 @@ def record_session(doc: dict, current: str | None) -> pathlib.Path:
 def recorded(runtime: str) -> list[dict]:
     """Every recorded result of this runtime (a full one: not a session version's), newest check first."""
     out = []
-    for f in sorted((RESULTS / runtime).glob("*.json")) if (RESULTS / runtime).is_dir() else []:
+    for f in sorted((_results() / runtime).glob("*.json")) if (_results() / runtime).is_dir() else []:
         if f.name.endswith(".session.json"):
             continue
         try:
