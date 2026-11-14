@@ -254,7 +254,7 @@ def links(d: dict) -> dict:
     checkouts, the workspace and the runtime folder. Any process of the project can otherwise swap a tracked folder for a
     link while someone else's unsandboxed checkout writes there (the owner's terminal or editor, a coding agent's own
     worktree mode, a deploy's pull), and that checkout then writes the project's files wherever the link points, as the
-    owner. {roots: [Path], folders: LINK_FOLDERS, inside: [Path] (the platform's own folders, which no checkout writes:
+    owner. Only friction: a folder holding a link can still be moved in (seatbelt.link_rules says why). {roots: [Path], folders: LINK_FOLDERS, inside: [Path] (the platform's own folders, which no checkout writes:
     the test runner's runs, where tracked links are checked out and tests make links, and the tool caches cache_env
     names, where uv's cache links its wheels to their unpacked archives (measured 11-14: `uv pip install` and `uv sync`
     failed without it); both spellings), allow: [Path] (exact link paths one platform job may make; empty here, the

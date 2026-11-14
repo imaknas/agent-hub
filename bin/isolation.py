@@ -54,7 +54,8 @@ GUARANTEES = {
     "unix-sockets-blocked": "unix-domain sockets can't be created (no D-Bus, no systemd user manager)",
     "signals-blocked": "the owner's other processes can't be signalled",
     "runtime-files-locked": "what its sessions load settings, hooks and tools from can't be written (policy protect)",
-    "links-blocked": "no symbolic link can be made in its own checkouts but in the tool folders that need them (policy links)",
+    "links-blocked": "no symbolic link can be made directly in its own checkouts but in the tool folders that need them "
+                     "(policy links); a folder holding one can still be moved in, so this is friction, not a boundary",
 }
 # what a sandboxed service or job must never get past, whatever the backend
 REQUIRED = ("own-writes-only", "isolated-reads", "declared-port-only")

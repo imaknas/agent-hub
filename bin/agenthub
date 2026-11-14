@@ -1507,8 +1507,9 @@ def doctor_checkout_race(add, why_no_sandbox, installed) -> None:
     if why_no_sandbox:
         pass   # the sandbox row says why nothing of theirs runs here at all
     elif "links-blocked" in isolation.guarantees():
-        add("info", _("sandboxed projects' own services and jobs make no symbolic link in their checkouts (except "
-                      "inside {folders} folders), so they can't redirect a checkout of yours there",
+        add("warn", _("sandboxed projects' own services and jobs can't make a symbolic link directly in their "
+                      "checkouts (except inside {folders} folders), but they can still move in a folder that holds one, "
+                      "so while they run they can redirect a checkout of yours there: this is friction, not a boundary",
                       folders=", ".join(f["name"] for f in policy.LINK_FOLDERS)))
     else:
         add("warn", _("on this machine ({adapter}) sandboxed projects' own services and jobs can make symbolic links in "
