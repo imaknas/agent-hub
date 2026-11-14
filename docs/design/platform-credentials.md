@@ -52,15 +52,17 @@ and the GET stream.
   template, or a literal header in clear.
 
 **M2, the same server with no header.** "Needs authentication". Claude fetched the protected-resource and
-authorization-server metadata, made 16 credential lookups, and made three `security -i` calls (its way of **writing**
-the Keychain).
+authorization-server metadata, made 16 credential lookups, and made three `security -i` calls. The stub logs only
+arguments, not what `-i` reads on stdin, so that these are Keychain **writes** is an inference (`-i` is how a caller keeps
+a secret off the command line). A side finding: for the same reason the conformance check's logging stub can't tell
+these calls from reads either. Its refusal still holds.
 
 **M3, an authenticating proxy (loopback TCP).** Claude was pointed at a local proxy that adds the real token and
 forwards only `/mcp`. It connected.
 - With no header of its own, an upstream 401 passed through made Claude start OAuth against the proxy: metadata, a
-  `POST /register` (Dynamic Client Registration), and two `security -i` writes.
+  `POST /register` (Dynamic Client Registration), and two `security -i` calls.
 - With a per-run header (a nonce the proxy checks and replaces), the same 401 failed visibly, with no OAuth and no
-  Keychain writes. So with an HTTP connection, a header of the run's own is what stops the fallback.
+  `-i` call. So with an HTTP connection, a header of the run's own is what stops the fallback.
 
 **M4, a stdio bridge.** A small stdio MCP server, started by Claude from the run's config, that reads the token from a
 file, forwards to the remote server and passes `tools/call` only for the tools it was given. It connected.
@@ -68,6 +70,14 @@ file, forwards to the remote server and passes `tools/call` only for the tools i
 - A rejected token reached Claude as a JSON-RPC error ("credential rejected by the server"): failed, no OAuth (a stdio
   server has none).
 - `claude mcp list` prints the bridge's command line: paths, never a value.
+- **Not measured, though C5 chooses this delivery** (measured only through `claude mcp list` in a throwaway config dir):
+  - no `tools/call` through the bridge (M6's model run went through the proxy);
+  - the bridge's tool filter and refusals (the dummy server has one tool);
+  - a `-p --strict-mcp-config --mcp-config` run with the bridge;
+  - SSE answers or the GET stream (the dummy answers JSON only; the measurement proxy and bridge buffer);
+  - a run on the shared `~/.claude` that agent jobs actually run on (the run table's agent-shaped row).
+
+  Step 3 measures all of these before it is merged.
 
 **M5, the `--mcp-config` path the platform's runs use.** A `-p` run with `--strict-mcp-config --mcp-config <file>` loads
 a header-bearing HTTP server from that file and connects before the model is called. The platform's own stdio server is
@@ -76,8 +86,9 @@ attached the same way today (`confined-mail-tools.md` M2).
 **M6, what the model can reach.** One haiku run, stream-json, `dontAsk`, allowed only `Bash(printenv PCRED_CANARY)` and
 the dummy server's tool, through the nonce-bound proxy:
 - The Bash tool printed a canary variable set only in Claude's own environment, so **the model's shell inherits
-  Claude's environment**. Claude has an env scrub (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`), but it is off by default and
-  covers only the vendor's own names.
+  Claude's environment** (one canary, in one run). The binary also holds an env scrub setting
+  (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`). It wasn't set in this run, and what it removes wasn't measured. The platform
+  doesn't rely on it.
 - The tool call reached the server with the real token.
 - The init event listed the server as `connected`, with no URL or header in it.
 - The nonce appeared in no stdout, transcript or file of the run's config dir. The headless token appeared in none of
@@ -142,11 +153,14 @@ secrets:
    without a terminal. These are reinforcement only: the consent that counts is the owner's at the provider's page.
 2. **Discovery.** RFC 9728 from `server.url`, then RFC 8414 (and OpenID discovery as a fallback). The issuer, the
    endpoints and what is supported are recorded.
-3. **Client**, tried in this order and recorded with the grant:
-   - (a) A **client ID metadata document** when the server supports it and the platform has one configured
+3. **Client.** The command uses one route, named by the owner (owner question 1), and records it with the grant. With
+   none named, it takes (a) when it is configured and the server supports it, else it stops and asks for (c). It never
+   tries (b) unasked.
+   - (a) A **client ID metadata document**
      (`credentials.client_metadata_url` in `brunna.json`: an https URL the owner controls, holding a document whose
-     `client_id` is that URL and whose redirect URIs are loopback). Owner question 1.
-   - (b) **RFC 7591 dynamic registration** when `registration_endpoint` answers a registration with JSON. It registers a
+     `client_id` is that URL and whose redirect URIs are loopback).
+   - (b) **RFC 7591 dynamic registration** (`--register`), only when the provider documents its
+     `registration_endpoint` as RFC 7591. Upwork's points at what looks like its human sign-up page. It registers a
      public client named for the platform, `token_endpoint_auth_method: none`, loopback redirects.
    - (c) **The owner's own client**: `--client-id`, with a client secret read from the terminal without echo (for a
      provider's developer-portal app). The secret is stored with the grant, never in `brunna.json`.
@@ -192,8 +206,8 @@ says so.
   between the provider's answer and the rename leaves `.new`, which the next refresher takes first.
 - **Failure.**
   - `invalid_grant` or a revoked grant sets `needs_grant` and raises an alert (`alert.py`: once, again daily, and a
-    recovery when it is granted again). It also adds an owner to-do line through the project's STATE.md handling (owner
-    question 5).
+    recovery when it is granted again). Owner question 6 asks whether it also adds an owner to-do line through the
+    project's STATE.md handling.
   - A run that needs the credential then doesn't start: `job.failed` with "the platform's grant for upwork needs the
     owner: `brunna credentials grant …`".
   - A network error is retried at the next tick. The run fails only when the access token has actually expired.
@@ -279,7 +293,7 @@ The token reaches the remote server and nothing else in the run:
   config dir) gain the refusing `security`.
 - **`connectors: true` stays** for claude.ai connectors (the account's servers, whose OAuth Anthropic holds and which
   only the subscription login loads). A connector that is a standard remote MCP server can move to a platform grant if
-  the owner wants (owner question 6).
+  the owner wants (owner question 7).
 - The earlier plan's `mcp_servers:` and its unsealed run are not built.
 
 ## Moving the daily job
@@ -349,23 +363,28 @@ cold review.
 1. **Which client the platform's Upwork grant uses:**
    - (a) a client ID metadata document at an https URL the owner controls (one for this deployment; or brunna publishes
      one for all installs, which makes brunna a named client at every provider);
-   - (b) dynamic registration, if Upwork's `registration_endpoint` turns out to be RFC 7591 (tried once during the
-     grant);
+   - (b) dynamic registration, only if Upwork documents its `registration_endpoint` as RFC 7591. The advertised URL
+     looks like the human sign-up page, so posting a registration there unasked is not done;
    - (c) the owner's own Upwork developer app (`--client-id`/secret), which also opens `client_credentials` if Upwork
      allows it for the MCP.
 
-   Recommended: try (b) during the first grant and use (a) if it fails. Whether a second grant coexists with the owner's
-   interactive one is learned at that first grant: if granting the platform's copy logs the owner's Claude Code out of
-   Upwork, the routes that share a client are out.
-2. **Code-running rules.** Recommended: no Bash or command rule in an unsandboxed project's credentials job (C6). The
+   Recommended: (a) if the owner has an https place for the document, else (c). (b) only after Upwork's developer docs
+   confirm it. Whether a second grant coexists with the owner's interactive one is learned at that first grant: if
+   granting the platform's copy logs the owner's Claude Code out of Upwork, the routes that share a client are out.
+2. **How the grant reaches the run.** Recommended: a stdio bridge the platform attaches (C5). Every runtime has stdio,
+   it opens no port, and its lifetime is the run's. The alternative is a loopback proxy the platform runs per job, with
+   a per-run nonce header (M3). That keeps the token out of every process the agent starts, but it needs a port, a
+   lifetime of its own and each runtime's header syntax. The bridge is the less measured of the two (M4's list), so
+   step 3 measures it first. If it fails there, the proxy is the fallback.
+3. **Code-running rules.** Recommended: no Bash or command rule in an unsandboxed project's credentials job (C6). The
    alternative is to allow them only once the project is sandboxed.
-3. **Resources and prompts.** Should the bridge pass MCP resources and prompts as well as tools? Recommended: tools only
+4. **Resources and prompts.** Should the bridge pass MCP resources and prompts as well as tools? Recommended: tools only
    until a job needs more.
-4. **The refresh job's cadence.** Hourly, with the daily use of refresh tokens (C4). Fine for a provider with
+5. **The refresh job's cadence.** Hourly, with the daily use of refresh tokens (C4). Fine for a provider with
    short-lived refresh tokens; nothing is published for Upwork.
-5. **A broken grant.** Is an alert enough, or should it also be an owner to-do line (an owner-tagged line in the project's STATE.md,
-   registered with the assistant when the assistant module is on)?
-6. **The other connectors jobs.** Should they move to platform grants where the connector is a standard remote MCP
+6. **A broken grant.** Is an alert enough, or should it also be an owner to-do line (an owner-tagged line in the
+   project's STATE.md, registered with the assistant when the assistant module is on)?
+7. **The other connectors jobs.** Should they move to platform grants where the connector is a standard remote MCP
    server, and leave `connectors: true` only for what only the account can load?
 
 ## Risks

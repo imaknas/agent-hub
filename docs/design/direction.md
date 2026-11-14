@@ -146,8 +146,8 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - Privacy routing waits on this.
 6. **Credentials for unattended jobs** (`platform-credentials.md`, design 11-15, not built): the platform holds its own
    grants, such as an OAuth MCP server's, in the secrets directory and hands one to a job's run only through a stdio
-   bridge it attaches. No job reads the Keychain (DV5 stays). Waits on owner question 1 (which client the grant uses)
-   before step 4; steps 1–3 don't.
+   bridge it attaches (owner question 2; a loopback proxy is the alternative). No job reads the Keychain (DV5 stays).
+   Waits on owner question 1 (which client the grant uses) before step 4; steps 1–3 don't.
 
 ### 3. Projects and repos (`projects-and-repos.md`)
 
