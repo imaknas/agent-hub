@@ -1592,7 +1592,7 @@ So `verdict` is fail, `verdict(for_promotion=True)` pass, and `login_unrun` name
   - The README, `docs/features.md` and the module's description say the runs wait for a first check with the owner's
     login;
 - the job `codex-login` is hourly, `bin/py bin/check-runtime-login.py --runtime codex`;
-- the secret `codex-login` is `~/.codex/auth.json`, with no backup.
+- the secret `codex-login` was `~/.codex/auth.json` (removed after the code reviews: see below).
 
 The module is off on this machine.
 
@@ -1620,6 +1620,104 @@ The module is off on this machine.
 - D14's measurement.
 
 Nothing points a judgment point at Codex yet.
+
+#### Step 1 after its two cold code reviews (11-14)
+
+Two cold reviews of the build found one blocking point and a list of should-fix items and nits, all taken. Not merged.
+
+**B1, blocking: a sandboxed project could read the platform's Codex run homes.**
+- `<instance>/runtimes` was only write-denied, so a sandboxed project could read a run home's rollout (a project's
+  notes as the prompt, and the answer), `last-message.txt` and the sqlite logs. The review reproduced it with an
+  instance-dir layout and real Seatbelt.
+- Fix: Codex's `credential_paths()` names the store's Codex folder whole. `ALWAYS_PROTECTED` puts it into every
+  sandbox: Seatbelt's read denies, Landlock's, and Claude's session settings.
+- **Claude's equivalent had the same hole, and is fixed the same way.** The platform's Claude completions run with
+  `CLAUDE_CONFIG_DIR` at `<runtimes>/claude/config` (`run_kind` "own"), which was readable too. They keep no transcript
+  there (`--no-session-persistence`), but whatever Claude Code writes into its config dir was in reach. Claude's
+  `credential_paths()` now names that folder whole.
+- Test (`StoreDenied`): the production layout with no STATE override covers the policy's credentials,
+  `seatbelt.read_denies`, `landlock.denied` and `runtime_claude.settings`, plus a real `sandbox-exec` that refuses a
+  planted rollout and reads the project's own file. Without the fix both tests fail.
+
+**Should-fix, review 1 (runs and login):**
+- **S1:** `rollout_problems` requires `permission_profile.network == "restricted"` and `sandbox_policy.network_access`
+  false where it is given. `agent-profile` gains a network probe (curl), whose control runs with the network on.
+- **S2:** `tools_shape` merges every `additional_tools` item, and `rollout_problems` checks every `world_state`, not the
+  first.
+- **S3:** `run_args` passes `-c web_search="disabled"` as well. **A residual that only the after-run check covers:** a
+  hosted tool (one the server runs, not the client) can't be seen by `prompt-input` if the server adds it. The rollout's
+  `additional_tools` and `world_state` are the only evidence, so its result is refused after the fact, not prevented.
+- **S4:** `platform_denies()` builds the run's deny list from `policy.credentials()` (the settings' credentials,
+  `policy.CREDENTIALS`, every protected runtime's) and the places `seatbelt.read_denies` uses:
+  - every project root, `workspace_root`, `services_root`, `git_origin`, the memory copies, the bus;
+  - the hub's state and logs, the evals, the instance with its secrets and data;
+  - the keychains.
+
+  If any of it can't be computed, the run is refused with the reason, never run with less.
+- **S5:** `/Users`, `/Volumes`, `/opt`, `/usr/local` and `/home` are denied where they exist. The read-backs are the
+  run's folder and its version's vendor folder (Codex adds its own `arg0` read). Measured on 0.169: a shell still starts
+  and the profile check passes.
+- **S6:** `agent-profile` probes 21 cases:
+  - the platform's places outside the world's home (its state, its bus, its data folder);
+  - the network;
+  - a hard link;
+  - the run's login link.
+
+  The positive control is a `:workspace` profile with the network on and the run's home writable, so every refused probe
+  has one, the login-link write included.
+- **Nits:**
+  - npm runs with `--ignore-scripts` in an environment built from nothing of the caller's;
+  - `folder_refusal` requires the folder under the memory copies or the private temp folder, and refuses
+    `.git/modules` and any hook that isn't a sample;
+  - `point_refusal` refuses `Edit(./.)`, `Edit(./)`, any `.git*` path, and write rules without a tool that writes;
+  - `turn_context.model` must be the model asked for;
+  - context is matched after leading blanks;
+  - the rc canary's controls are split (below);
+  - `brunna runtimes` reads the store copy's version from the store, and asks a binary only in a throwaway `HOME`.
+- **The rc canary**, measured on 0.169 in four cases:
+
+  | case | rc files run |
+  | --- | --- |
+  | guarded (the run's own `HOME`, the snapshot off) | none |
+  | the user's `HOME` alone, the snapshot off | none |
+  | the snapshot alone, rc files planted in the run's own `HOME` | `.zshenv`, `.zprofile`, `.zshrc` |
+  | both | the same |
+
+  So the snapshot is what sources the shell, and the run's own `HOME` is a second layer. `home-flags` requires the
+  guarded case clean and both snapshot controls to show the rc files. The `HOME`-alone case proves nothing on 0.169 and
+  isn't required.
+
+**Review 2 (the neutral layer):**
+1. **The codex module's `secrets:` entry is gone.** check-secrets would have checked it for a sessions-only Codex, at a
+   fixed `~/.codex` whatever `$CODEX_HOME` said. The `codex-login` job checks the file where Codex keeps it
+   (`codex_home()`), and only while the platform runs work on Codex. check-secrets also skips a module named for a
+   runtime outside `platform_work()`.
+2. **cap-runner's prune and recover walk the job folders as one chain of fds:**
+   - workspace, `.hub-run`, `jobs` and the job, each opened without following a link;
+   - the state is read from the job's fd, and recover writes through it;
+   - prune removes the job by name under the jobs fd (`shutil.rmtree(name, dir_fd=…)`);
+   - a rejected job's fd is closed in a `finally`.
+
+   Tests swap `jobs` for a link after the read: prune leaves the outside folder and recover writes the real job's state.
+3. **When a runtime leaves platform work, its open alerts end.** `update-runtimes` (each `runtime-*-<name>` key),
+   `session-versions` (`session-versions-<name>`) and `check-runtime-login` (`runtime-login-<name>`) call `alert.once`
+   with no problem on their skip paths. That sends nothing for a key that was never alerted.
+- **Nits:**
+  - `doctor_notes` returns nothing while the platform runs no work on Codex;
+  - the re-key's one-off recovery says "from now on said in one alert per failed check";
+  - test-runner says why an unsandboxed project's checkout inside a sandboxed one's folders is refused;
+  - `run_wrapped` reports a run killed by a signal as that, not as a sandbox that couldn't start;
+  - the `update-runtimes` header is current;
+  - `NothingNewWhileOnlyInstalled` exercises the status page (`store_alerts()`), the secrets, `doctor_notes`, `brunna
+    runtimes`, `update-runtimes.main` and the login job, rather than grepping source.
+
+**Run again against the real 0.169.0** (scratch prefix and instance, no login): the same as before.
+- pass: `distribution-integrity`, `home-flags`, `agent-profile` (21 probes, each with its control), `auth-link-write`,
+  `auth-login-error`, `control-globs`;
+- fail: `session-folder-git` (B1);
+- not-checkable: the login checks and `updater-off`.
+
+An agent-shaped `_one_run` with the wider denies still leaves a rollout with no problem (a 401).
 
 ## Found by the second blind review (11-08), taken into the steps
 
