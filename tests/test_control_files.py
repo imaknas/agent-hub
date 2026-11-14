@@ -128,8 +128,8 @@ class Policy(Base):
 class SeatbeltLock(Base):
     """A sandboxed project's service or job (bin/sandboxed-run on macOS) can't write them."""
 
-    def run_in(self, script, roots=(), protect=None):
-        pol = {"workspace": self.ws, "write": [], "other_projects": [], "deny_read": [], "credentials": [],
+    def run_in(self, script, roots=(), protect=None, write=()):
+        pol = {"workspace": self.ws, "write": [str(w) for w in write], "other_projects": [], "deny_read": [], "credentials": [],
                "credential_files": [], "protect": PROTECT if protect is None else protect, "protect_roots": list(roots)}
         prof = seatbelt.service_profile(pol, [self.ws])
         return subprocess.run([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", script], capture_output=True,
@@ -185,7 +185,7 @@ mkdir -p {stage}/c/.claude 2>/dev/null || echo claude-stage-blocked
 mkdir -p {stage}/d && echo ok > {stage}/d/file && echo plain-staged
 mv {stage}/a {self.ws}/sub2 2>/dev/null; mv {stage}/b {self.ws}/sub3 2>/dev/null; mv {stage}/c {self.ws}/sub4 2>/dev/null
 mv {stage}/d {self.ws}/.claude/worktrees/w2 2>/dev/null && echo plain-moved
-""", protect=protect)
+""", protect=protect, write=[stage])   # a place it may write, as its runtime folder or the temp area
         self.assertEqual(r.stdout.split(), ["codex-stage-blocked", "agents-stage-blocked", "claude-stage-blocked",
                                             "plain-staged", "plain-moved"], r.stderr)
         for p in ("sub2/.codex", "sub3/.agents", "sub4/.claude"):
