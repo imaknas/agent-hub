@@ -104,12 +104,12 @@ jobs:
   run: bin/librarian-publish.sh
   cwd: hub
 # the git config fence's scan, report only (docs/design/git-config-fence.md, r2's order of work step 1): every
-# sandboxed project's repos and the temp area, read without running git in them; the result for the status page and
-# doctor in .state/git-fence/scan.json, an alert on a new finding. It changes nothing
+# sandboxed project's repos every 15 minutes (r2 B1's window), the temp area once a day, read without running git in
+# them; the result for the status page and doctor in .state/git-fence/scan.json, an alert on a new finding. It changes
+# nothing
 - name: git-fence
-  at: 04:50
+  every: 15m
   background: true
-  max_attempts_per_day: 3
   run: bin/py bin/git_fence.py --apply
   cwd: hub
 # the waiting report (docs/design/test-waiting.md B7): the last 7 days of agent sessions' waiting on tests (transcripts,

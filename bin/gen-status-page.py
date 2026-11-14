@@ -435,7 +435,7 @@ def git_fence_html() -> str:
         return ""
     return (f"<h2>{esc(_('Git config fence (report only, scanned {at})', at=str(rep.get('at', ''))[:16]))}</h2>"
             f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Fence')}</th><th>{_('What the scan found')}</th>"
-            f"</tr>{''.join(rows)}</table></div><div class='sub gap'>"
+            f"</tr>{''.join(rows)}</table></div><div class='sub gap'>{esc(git_fence.window_text())}. "
             f"{_('Details: bin/git_fence.py --report (docs/design/git-config-fence.md)')}</div>")
 
 

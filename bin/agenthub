@@ -1482,8 +1482,9 @@ def doctor_git_fence(add) -> None:
     rep = git_fence.load()
     if rep is None:
         add("info", _("the git config fence hasn't scanned the sandboxed projects yet"),
-            _("bin/git_fence.py --report scans now (the brunna/git-fence job does it nightly)"))
+            _("bin/git_fence.py --report scans now (the brunna/git-fence job does it every 15 minutes)"))
         return
+    add("info", _("the git config fence (report only): {window}", window=git_fence.window_text()))
     for name, level, line, details in git_fence.rows(rep):
         add("ok" if level == "ok" else "warn",
             _("{project} (sandboxed): git config fence {line}", project=name, line=line) if name else line,
