@@ -8,6 +8,11 @@ volume), with the platform's real Seatbelt profile (`seatbelt.service_profile`) 
 candidate fence appended to it. No model calls; Claude's and Codex's own sandboxes were not run (their part is the
 conformance canary, below). This is D9 of `runtime-codex.md` as the owner redefined it on 11-14.
 
+**Superseded in part (11-14):** the owner chose git through the platform (`git-broker.md`): a sandboxed project writes
+no git dir at all, and a platform broker runs its git. That design replaces this one's per-name fence, its narrow
+`brunna git` runner and its one-time install; this doc's scan, config allowlist, URL rule and presets stay, as that
+doc's table says.
+
 ## The problem and the owner's decision
 
 A sandboxed project's sessions and services may write their own `.git` today, by design (`runtime-versions.md` r3;

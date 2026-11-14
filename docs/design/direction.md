@@ -83,6 +83,11 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - **D9, the git config fence** (`git-config-fence.md`, planned 11-14 on measurements): nothing in a sandboxed
      project's sandbox writes git configuration; the platform writes what is needed, and "the fence holds" becomes
      Codex's confined condition.
+   - **Git through the platform** (`git-broker.md`, designed 11-14 on measurements, the owner's decision): in a
+     sandboxed project the sandbox writes no git dir at all; the `git` on its PATH forwards to a platform broker that
+     runs real git under the project's profile (writes to the git dir, no program but git's own) or, for the registry's
+     remotes, as the owner. It replaces the fence's per-name list and its narrow runner; the scan stays as a second
+     layer. Not built; its open questions (push, scratch repos, hooks, signing) are the owner's.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
