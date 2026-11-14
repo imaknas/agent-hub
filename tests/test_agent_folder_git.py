@@ -228,6 +228,7 @@ class Probe(unittest.TestCase):
 class PrivateTmpPrune(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp)
         p.start()
         self.addCleanup(p.stop)
@@ -839,7 +840,7 @@ class SystemTempIsNoPlaceForIt(unittest.TestCase):
     """The system's temp folder is every sandboxed project's to write. What the platform runs, loads or trusts as the user goes in
     hubconf.private_tmp; these are the uses left, each with its reason in docs/design/mailbox-session-first.md. A new one has to say why.
     A hint, not a proof: it reads lines, so a call split over lines or a path built elsewhere goes unseen."""
-    LEFT = {"bin/gen-index-roster.sh", "bin/config-check", "bin/run-tests", "bin/test-runner.py", "bin/sync-local-setup.sh", "bin/runtime_acp.py", "bin/seatbelt.py", "bin/landlock.py",
+    LEFT = {"bin/gen-index-roster.sh", "bin/config-check", "bin/testguard.py", "bin/test-runner.py", "bin/sync-local-setup.sh", "bin/runtime_acp.py", "bin/seatbelt.py", "bin/landlock.py",
             "bin/cap-runner.py", "bin/linux-test", "bin/lint", "bin/conformance.py",
             # they name the temp area only to deny control names there, and a canary stages a tree there to prove it
             # (docs/design/runtime-codex.md, Step 4 r2, review A-B2); nothing of the platform's goes there

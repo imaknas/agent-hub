@@ -1257,3 +1257,20 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
+
+
+# A test run started by hand (`python -m unittest …`, or a test file run as a script) would resolve all of the above to the machine's
+# live platform: run it again as a guarded child instead (bin/testguard.py). Last, so the guard can use this module. The guard is
+# imported only for a test's entry point that no runner set up: the fake hubs tests build copy only the part of bin/ they need.
+def _test_entry() -> bool:
+    if __name__ == "__main__" or names.env("TEST_RUNNER") or names.env("TEST_GUARD"):
+        return False
+    m = sys.modules.get("__main__")
+    return (getattr(getattr(m, "__spec__", None), "name", "") or "").startswith("unittest") \
+        or pathlib.Path(getattr(m, "__file__", None) or "").name.startswith("test")
+
+
+if _test_entry():
+    import testguard as _testguard
+    if _testguard.bare_test_run():
+        _testguard.reexec()

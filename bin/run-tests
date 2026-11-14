@@ -11,7 +11,7 @@ its tests (the floor becomes the slowest single test). The E1 goldens' second pa
 (tests/test_i18n_golden_en.py) becomes one more item per golden module (I18N_GOLDEN_LANG=en), so it is spread over the
 pool too instead of being one long item.
 
-A run that finds the system's temp folder takes a private one for its tests (private_temp below).
+The run's HOME, secrets and temp folder are its own and removed afterwards (bin/testguard.py); what a test left in them fails the run.
 
 The output ends like unittest's own (people and agents read it): `Ran <n> tests in <s>s`, then `OK` / `OK (skipped=k)` or
 `FAILED (failures=…, errors=…, skipped=…)`; before it, the full output of every module that failed (its `FAIL:` /
@@ -29,15 +29,14 @@ import os
 import pathlib
 import queue
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import names  # noqa: E402
+import testguard  # noqa: E402
 
 RAN = re.compile(r"^Ran (\d+) tests? in ([\d.]+)s$", re.M)
 RESULT = re.compile(r"^(OK|FAILED)(?: \((.*)\))?$", re.M)
@@ -57,55 +56,20 @@ def key(item: tuple[str, str | None]) -> str:
     return item[0] + (f"@{item[1]}" if item[1] else "")
 
 
-# No test reaches the real coding agent: a fresh HOME (no nvm there, so hubconf.tool and nvm_bin find none) and a recording `claude`
-# first on PATH. A test that means to run one has its own stand-in; any call that lands here fails the run.
-# In the tree's .state, not the temp area: the sandbox tests need a HOME the sandbox can't write (test_cap_profile skips otherwise)
-_state = pathlib.Path(__file__).resolve().parents[1] / ".state"
-_state.mkdir(parents=True, exist_ok=True)
-GUARD = pathlib.Path(tempfile.mkdtemp(prefix="run-tests-guard-", dir=_state))
-(GUARD / "home" / "workspace").mkdir(parents=True)
-(GUARD / "bin").mkdir()
-CALLS = GUARD / "calls.log"
-(GUARD / "bin" / "claude").write_text(f'#!/bin/sh\necho "$PWD :: $*" >> "{CALLS}"\necho "run-tests: no test may start a real claude" >&2\nexit 97\n')
-(GUARD / "bin" / "claude").chmod(0o755)
-
-
-def private_temp() -> pathlib.Path | None:
-    """The tests run as the user and execute what they write in their temp folder, and the system's is every sandboxed project's to
-    write. The test runner hands over a private one (bin/test-runner.py: tier_tmp); run by hand, this run takes its own. A clone that
-    isn't an install (no instance, no settings file) has no projects to race it: it keeps the temp folder it was given. An install with no
-    private folder outside every repo (the old layout's, in the hub root) doesn't run, as the test runner's tiers don't."""
-    import hubconf
-    import isolation
-    if not isolation.in_system_tmp(tempfile.gettempdir()) or (hubconf.instance_home() is None and not hubconf.config_path().exists()):
-        return None
-    try:
-        return hubconf.test_tmp("run-tests-")
-    except OSError as e:
-        print(f"run-tests: no private temp folder for the tests ({e.strerror or e}); they don't run in the system's, which every sandboxed "
-              f"project can write. A hub in the old layout moves with {names.current('cli')} move-instance", file=sys.stderr)
-        sys.exit(2)
-
-
-TMP = private_temp()
+# The platform the tests see, a HOME, secrets and temp folder of the run's own, a recording `claude`: bin/testguard.py, which
+# also guards a test run started by hand. An install with no private temp folder outside every repo doesn't run.
+try:
+    G = testguard.Guard()
+except OSError as e:
+    print(f"run-tests: no private temp folder for the tests ({e.strerror or e}); they don't run in the system's, which every sandboxed "
+          f"project can write. A hub in the old layout moves with {names.current('cli')} move-instance", file=sys.stderr)
+    sys.exit(2)
 
 
 def env_for(tests: pathlib.Path, lang: str | None) -> dict[str, str]:
-    # the tree under test is the platform the tests see (as the test runner's export is): an explicit root skips hubconf's
-    # lookup of the main checkout, so a run in a linked worktree never reaches the machine's live instance. Only the
-    # root: HOME and STATE would leak into the fake hubs the tests build (docs/design/test-waiting.md A1)
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")])),
-           "HOME": str(GUARD / "home"), "PATH": f"{GUARD / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"}
-    names.env_set(env, "SECRETS", str(GUARD / "secrets"))   # this run's own: what is left there is this run's tests', whoever else runs
-    if not names.env("PYTHON", environ=env):
-        names.env_set(env, "PYTHON", sys.executable)   # bin/py looks for it under HOME
+    env = G.env(tree=tests.resolve().parent)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(tests), os.environ.get("PYTHONPATH")]))
     names.env_set(env, "TEST_RUNNER", "1")
-    # no bytecode written, as the test runner's tiers write none: an interpreter's own cache can live under HOME (macOS's
-    # python3 keeps its .pyc in ~/Library/Caches/com.apple.python), and what is left in HOME fails the run as a leak
-    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
-    if TMP:
-        env["TMPDIR"] = str(TMP)
-    names.env_set(env, "ROOT", names.env("ROOT") or str(tests.resolve().parent))
     # the gate runs as a zh-Hant instance and CI (bin/linux-test: plain unittest, a bare HOME) as an English one, so a
     # test that assumes either language fails in one of them without running anything twice; a caller's own setting wins
     for var in ("LANG_UI", "LANG_CONTENT"):
@@ -248,16 +212,9 @@ def main(argv: list[str]) -> int:
             cache.write_text(json.dumps({k: round(v, 2) for k, v in secs.items()}, indent=1, sort_keys=True))
         except OSError:
             pass
-    calls = CALLS.read_text().splitlines() if CALLS.exists() else []
-    # what a test left where a real run would write real files: this run's HOME and private temp folder
-    try:
-        leaks = [f"HOME: {p.relative_to(GUARD / 'home')}" for p in (GUARD / "home").rglob("*") if not p.is_dir()]
-        leaks += [f"private temp: {p.name}" for p in (GUARD / "secrets" / "tmp").glob("*")]
-    except OSError as e:
-        leaks = [f"the leak check could not run: {e}"]
-    shutil.rmtree(GUARD, ignore_errors=True)
-    if TMP:
-        shutil.rmtree(TMP, ignore_errors=True)
+    calls = G.agent_calls()
+    leaks = G.leaks()   # what a test left where a real run would write real files: this run's HOME, secrets and temp folder
+    G.remove()
     if leaks:
         failed.append("leaks")
         total["errors"] += 1

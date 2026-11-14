@@ -38,6 +38,11 @@ class T(unittest.TestCase):
 """
 
 
+LEAVES_TMPDIR = """import tempfile, unittest
+class T(unittest.TestCase):
+    def test_x(self):
+        tempfile.mkdtemp(prefix="left-behind-")
+"""
 SAYS_TMPDIR = """import os, pathlib, unittest
 class T(unittest.TestCase):
     def test_x(self):
@@ -66,8 +71,9 @@ class Guard(unittest.TestCase):
             env.pop("BRUNNA_ROOT", None)
             return subprocess.run([sys.executable, str(BIN / "run-tests"), d], capture_output=True, text=True, timeout=120, env=env)
 
-    def test_what_a_test_leaves_in_its_home_or_the_private_temp_folder_fails_the_run(self):
-        for body, says in ((WRITES_HOME, "HOME: left"), (LEAVES_TEMP, "private temp: consolidate-left")):
+    def test_what_a_test_leaves_in_its_home_or_a_temp_folder_fails_the_run(self):
+        for body, says in ((WRITES_HOME, "HOME: left"), (LEAVES_TEMP, "private temp: consolidate-left"),
+                           (LEAVES_TMPDIR, "temp folder: left-behind-")):
             with self.subTest(says=says):
                 r = self.run_on(body)
                 self.assertNotEqual(r.returncode, 0, r.stdout)
@@ -95,9 +101,10 @@ class Guard(unittest.TestCase):
                     said = pathlib.Path((d / "said").read_text())
                     if want_private:
                         self.assertTrue(said.is_relative_to(d / "instance" / "secrets" / "tmp"), said)
-                        self.assertFalse(said.exists(), "removed with the run")
-                    else:
-                        self.assertEqual(said, pathlib.Path(extra["TMPDIR"]))
+                    else:   # a folder of the run's own in the one it was given, removed with the run
+                        self.assertEqual(said.parent, pathlib.Path(extra["TMPDIR"]))
+                        self.assertTrue(said.name.startswith("run-tests-"), said)
+                    self.assertFalse(said.exists(), "removed with the run")
 
     def test_an_install_with_no_private_folder_outside_a_repo_does_not_run(self):
         """The old layout: settings in the hub root, secrets in <hub>/.secrets, inside the hub's repo. As the test runner's tiers, no run."""
