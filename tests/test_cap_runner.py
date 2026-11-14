@@ -215,28 +215,67 @@ class CapRunner(unittest.TestCase):
 
 
 class SwappedRequest(unittest.TestCase):
-    """A request file in the project's folder can be swapped between the runner's check and its read: a FIFO there must
-    not hold the shared service (docs/design/git-config-fence.md, r2 S5)."""
+    """The job folders are in the project's folder: what the runner checked a moment ago may be swapped since. Nothing
+    there may hold the shared service (a FIFO), be followed (a link), or be read as a request unless it is a regular
+    file (docs/design/git-config-fence.md, r2 S5)."""
+
+    def setUp(self):
+        self.d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.fd = os.open(self.d, os.O_RDONLY)
+        self.addCleanup(os.close, self.fd)
+
+    def returns(self, fn, wait=5):
+        """fn's result or the exception it raised, as long as it returns at all."""
+        done = []
+
+        def go():
+            try:
+                done.append(fn())
+            except Exception as e:   # noqa: BLE001 (what it raised is the result here)
+                done.append(e)
+        t = threading.Thread(target=go, daemon=True)
+        t.start()
+        t.join(wait)
+        self.assertTrue(done, "it returned")
+        return done[0]
 
     def test_a_fifo_is_refused_without_blocking(self):
-        d = pathlib.Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
-        os.mkfifo(d / "request.json")
-        fd = os.open(d, os.O_RDONLY)
-        self.addCleanup(os.close, fd)
-        done = []
-        t = threading.Thread(target=lambda: done.append(self._read(fd)), daemon=True)
-        t.start()
-        t.join(5)
-        self.assertEqual(done, ["refused"], "the read returns at once and refuses it")
+        os.mkfifo(self.d / "request.json")
+        self.assertIsInstance(self.returns(lambda: cr.read_json(self.fd, "request.json")), ValueError)
 
-    @staticmethod
-    def _read(fd):
-        try:
-            cr.read_json(fd, "request.json")
-        except ValueError:
-            return "refused"
-        return "read"
+    def test_a_fifo_with_a_writer_is_refused_too(self):
+        """Without the regular-file check a FIFO someone writes into would be read as the request."""
+        os.mkfifo(self.d / "request.json")
+        w = os.open(self.d / "request.json", os.O_RDWR)   # a writer holding it open, its request already written
+        self.addCleanup(os.close, w)
+        os.write(w, json.dumps({"v": 1}).encode())
+        self.assertIsInstance(self.returns(lambda: cr.read_json(self.fd, "request.json")), ValueError)
+
+    def test_a_folder_renamed_into_place_is_refused(self):
+        (self.d / "request.json").mkdir()
+        self.assertIsInstance(self.returns(lambda: cr.read_json(self.fd, "request.json")), ValueError)
+
+    def test_writing_the_state_replaces_a_fifo_left_in_the_way(self):
+        os.mkfifo(self.d / ".state.tmp")
+        self.assertIsNone(self.returns(lambda: cr.write_state(self.fd, state="running")))
+        self.assertEqual(json.loads((self.d / "state.json").read_text())["state"], "running")
+
+    def test_a_jobs_state_is_read_the_same_way(self):
+        """recover() at start-up and prune(): a FIFO or a link at state.json is no state, and nothing hangs."""
+        os.mkfifo(self.d / "state.json")
+        self.assertIsNone(self.returns(lambda: cr.job_state(self.d)))
+        (self.d / "state.json").unlink()
+        target = self.d / "elsewhere.json"
+        target.write_text(json.dumps({"state": "done"}))
+        os.utime(target, (0, 0))
+        (self.d / "state.json").symlink_to(target)
+        self.assertIsNone(cr.job_state(self.d, older_than=time.time()), "the link isn't followed for its age")
+        self.assertIsNone(cr.job_state(self.d))
+        (self.d / "state.json").unlink()
+        (self.d / "state.json").write_text(json.dumps({"state": "done"}))
+        self.assertEqual(cr.job_state(self.d), {"state": "done"})
+        self.assertIsNone(cr.job_state(self.d, older_than=0), "newer than the cut-off")
 
 
 if __name__ == "__main__":

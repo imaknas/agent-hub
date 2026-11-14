@@ -148,8 +148,14 @@ def subdir(parent_fd: int, name: str, create: bool = False) -> int:
 
 
 def write_state(job_fd: int, **data) -> None:
+    """state.json, through a new file: the job folder is in the project's folder, so whatever sits at .state.tmp (a
+    FIFO with no reader would hold the shared service on open) is removed and the file made fresh, exclusively."""
     body = json.dumps({**data, "at": now()}, ensure_ascii=False).encode()
-    fd = os.open(".state.tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644, dir_fd=job_fd)
+    try:
+        os.unlink(".state.tmp", dir_fd=job_fd)
+    except FileNotFoundError:
+        pass
+    fd = os.open(".state.tmp", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=job_fd)
     try:
         os.write(fd, body)
     finally:
@@ -157,13 +163,36 @@ def write_state(job_fd: int, **data) -> None:
     os.rename(".state.tmp", "state.json", src_dir_fd=job_fd, dst_dir_fd=job_fd)
 
 
+def job_state(d: pathlib.Path, older_than: float | None = None):
+    """A job's state.json, read as read_json does (the folder is the project's: no link followed at the folder or the
+    file, no blocking open, a regular file only); None when it can't be read, or (older_than) when it is newer."""
+    try:
+        fd = os.open(d, DIRFLAGS)
+    except OSError:
+        return None
+    try:
+        if older_than is not None and os.stat("state.json", dir_fd=fd, follow_symlinks=False).st_mtime >= older_than:
+            return None
+        return read_json(fd, "state.json")
+    except (OSError, ValueError):
+        return None
+    finally:
+        os.close(fd)
+
+
 def read_json(dir_fd: int, name: str):
     """A file in a folder the project writes: what was checked a moment ago may have been swapped since, so it is opened
     without blocking (a FIFO put there would otherwise hold the shared service), and only a regular file is read."""
     fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+    try:
+        regular = stat.S_ISREG(os.fstat(fd).st_mode)
+    except OSError:
+        os.close(fd)
+        raise
+    if not regular:
+        os.close(fd)
+        raise ValueError(f"{name} is not a regular file")
     with os.fdopen(fd, "rb") as f:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise ValueError(f"{name} is not a regular file")
         return json.loads(f.read(MAX_REQ + 1).decode())
 
 
@@ -605,10 +634,7 @@ class Runner:
             if (began := process_started(pgid)) is not None and abs(began - at) < 3:
                 self.kill(pgid, signal.SIGKILL)
         for project, job_id, d in self.each_job():
-            try:
-                st = json.loads((d / "state.json").read_text())
-            except (OSError, ValueError):
-                continue
+            st = job_state(d)
             if not isinstance(st, dict) or st.get("state") not in ("queued", "running"):
                 continue
             try:
@@ -626,12 +652,8 @@ class Runner:
     def prune(self) -> None:
         cutoff = time.time() - KEEP_S
         for _project, _job_id, d in self.each_job():
-            try:
-                st = json.loads((d / "state.json").read_text())
-                old = (d / "state.json").stat().st_mtime < cutoff
-            except (OSError, ValueError):
-                continue
-            if old and st.get("state") in TERMINAL:
+            st = job_state(d, older_than=cutoff)
+            if isinstance(st, dict) and st.get("state") in TERMINAL:
                 shutil.rmtree(d, ignore_errors=True)
         for p in [*DIR.glob("*/*.sb"), *DIR.glob("*/*.in.json")]:
             if p.stat().st_mtime < cutoff:
