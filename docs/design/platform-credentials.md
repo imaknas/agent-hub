@@ -1,7 +1,7 @@
 # Credentials for unattended jobs are the platform's own grants
 
-Status: design, 11-15, not built. Measured the same day (Claude Code 2.1.323 from the store, Codex 0.167.0). Nothing
-here is implemented; the owner's open questions are at the end.
+Status: design r2, 11-15, after one blind review (its findings and how each is taken are at the end); not built.
+Measured the same day (Claude Code 2.1.323 from the store, Codex 0.167.0). The owner's open questions are near the end.
 
 ## The problem
 
@@ -122,6 +122,9 @@ the dummy server's tool, through the nonce-bound proxy:
 
 ## The design
 
+This is r2, after the blind review of 11-15. The section "r2 (11-15), after the blind review" at the end lists each
+finding and how it is taken.
+
 ### C1. A platform credential in the registry
 
 A `secrets:` entry gets an optional `kind`:
@@ -136,14 +139,20 @@ secrets:
   why: the daily job's own grant (the owner's interactive one is separate)
 ```
 
-- **Owner-only.** An entry with `kind` is a security field: a `manifest.update` that adds, changes or removes one is
-  returned whole, as `PLATFORM_OWNED` fields are (a `PLATFORM_OWNED_NESTED`-style rule over `secrets[kind]`).
+- **Owner-only.** A `manifest.update` that adds, changes or removes an entry with `kind` is returned whole.
+  - This needs a check of its own, `credential_entries(doc)`, compared whole as `connector_jobs()` is.
+  - `PLATFORM_OWNED_NESTED` can't do it, because it names fixed keys, not list items.
 - **No `path`.** The platform places the file itself (C3), so `check-secrets`, the backup and the sandbox denies find it
   without the project naming a place. `registry.py` refuses `path`, `env_key` or `expires` on such an entry.
-- `server.id` follows `ToolServer.id`'s spelling (`[a-z0-9-]`, not reserved) and is unique across the project's
-  credential entries. `server.url` is `https` and has no userinfo, query or fragment. Its origin is the only one the
-  bridge (C5) ever connects to, apart from the token endpoint found when the grant is made.
+- **Spelling.**
+  - `server.id` follows `ToolServer.id`'s spelling (`[a-z0-9-]`, not reserved) and is unique across the project's
+    credential entries.
+  - `server.url` is `https` and has no userinfo, query or fragment.
+  - The bridge (C5) connects to that exact URL and to nothing else, apart from the token endpoint recorded at the grant.
 - `static` is the same without a refresh: for servers that take an API key or a long-lived bearer token.
+- **v1 is for unsandboxed projects only.** The registry refuses `credentials:` in a project with `enforce.sandbox`, and
+  says why: a sandboxed project's confined runs can't name any `mcp__…` rule today (`rule_problems`, `SANDBOXED_TOOLS`).
+  See C7.
 
 ### C2. The owner grants it once
 
@@ -151,157 +160,235 @@ secrets:
 
 1. **Refusals.** It refuses inside any platform run (the job/lease variables are set, or the instance's run marker) and
    without a terminal. These are reinforcement only: the consent that counts is the owner's at the provider's page.
-2. **Discovery.** RFC 9728 from `server.url`, then RFC 8414 (and OpenID discovery as a fallback). The issuer, the
-   endpoints and what is supported are recorded.
-3. **Client.** The command uses one route, named by the owner (owner question 1), and records it with the grant. With
+2. **Discovery, checked.**
+   - RFC 9728 from `server.url`: the metadata's `resource` must equal `server.url`, or the grant stops.
+   - RFC 8414 from the named authorization server (OpenID discovery as a fallback): its `issuer` must equal the server it
+     was fetched for, or the grant stops.
+   - It prints the hosts of the authorization and token endpoints, and the owner confirms them before the browser opens.
+   - The issuer, the endpoints and what is supported are recorded with the grant. They are **never re-discovered at a
+     refresh**: a refresh uses the recorded token endpoint only.
+3. **Client.** The command uses the one route the owner names (owner question 1) and records it with the grant. With
    none named, it takes (a) when it is configured and the server supports it, else it stops and asks for (c). It never
    tries (b) unasked.
-   - (a) A **client ID metadata document**
-     (`credentials.client_metadata_url` in `brunna.json`: an https URL the owner controls, holding a document whose
-     `client_id` is that URL and whose redirect URIs are loopback).
-   - (b) **RFC 7591 dynamic registration** (`--register`), only when the provider documents its
-     `registration_endpoint` as RFC 7591. Upwork's points at what looks like its human sign-up page. It registers a
-     public client named for the platform, `token_endpoint_auth_method: none`, loopback redirects.
+   - (a) A **client ID metadata document** (`credentials.client_metadata_url` in `brunna.json`: an https URL the owner
+     controls, holding a document whose `client_id` is that URL and whose redirect URIs are loopback).
+   - (b) **RFC 7591 dynamic registration** (`--register`), only when the provider documents its `registration_endpoint`
+     as RFC 7591. Upwork's points at what looks like its human sign-up page. It registers a public client named for the
+     platform (`token_endpoint_auth_method: none`, loopback redirects).
    - (c) **The owner's own client**: `--client-id`, with a client secret read from the terminal without echo (for a
      provider's developer-portal app). The secret is stored with the grant, never in `brunna.json`.
-   A route that fails says why and stops. It never silently falls back to borrowing another tool's client ID.
-4. **Authorization code with PKCE `S256`**, `state`, and RFC 8707 `resource=<server.url>`. Scopes come from the
-   resource metadata's `scopes_supported`, or `--scope`, else none requested. The redirect goes to a one-shot listener on
-   `127.0.0.1:<free port>`. When the owner's browser is on another machine, they paste the full redirected URL back into
-   the terminal (the page fails to load there, but its URL carries the code).
-5. **Exchange and store** (C3), then **verify**: `initialize` and `tools/list` through the bridge's own code path (C5),
-   never a `tools/call`. It prints the tool count, the scopes granted and the access token's lifetime. It never prints a
-   token.
+   - **The redirect URI is recorded with the client**:
+     - a loopback with any port when the route allows it (RFC 8252);
+     - else the fixed URI the client was registered with (`--redirect-uri`, e.g. `http://127.0.0.1:<port>/callback`
+       on a set port).
+   - A route that fails says why and stops. It never silently falls back to borrowing another tool's client ID.
+4. **Authorization code with PKCE `S256`**, `state`, and RFC 8707 `resource=<server.url>`.
+   - Scopes come from the resource metadata's `scopes_supported`, or `--scope`, else none are requested.
+   - The redirect goes to a one-shot listener on the recorded redirect URI.
+   - When the owner's browser is on another machine, they paste the full redirected URL back into the terminal (the page
+     fails to load there, but its URL carries the code).
+   - On the redirect: `state` must match, and `iss` must equal the recorded issuer when the server advertises
+     `authorization_response_iss_parameter_supported` (RFC 9207).
+5. **Exchange and store** (C3), then **verify**.
+   - It runs `initialize` and `tools/list` through the bridge's own code, never a `tools/call`.
+   - It prints the tool count, the scopes granted and the access token's lifetime. It never prints a token.
 
 `brunna credentials set <project> <name>` stores a `static` value read from the terminal without echo.
-`brunna credentials revoke <project> <name>` calls the revocation endpoint (RFC 7009) with the refresh token, then
-deletes the file. The owner can also revoke at the provider's connected-apps page. A later refresh then fails, and C4
-says so.
+
+`brunna credentials revoke <project> <name>`:
+- takes the lock (C4) and calls the revocation endpoint (RFC 7009) with the refresh token;
+- deletes the file and any `.new`, **even when the revocation call fails**. A failed revocation raises an alert telling
+  the owner to revoke at the provider's connected-apps page.
 
 ### C3. Storage
 
 - The file is `<secrets_dir>/credentials/<project>/<name>.json`, mode 600, in folders of mode 700, written atomically
   (temp file, fsync, rename).
-- It holds the issuer, the endpoints, the client (ID, and secret for route (c)), the resource, the scopes, the access
-  token and when it expires, the refresh token, when the grant was made, and the route.
+- It holds the issuer, the endpoints, the client (ID, secret for route (c), redirect URI), the resource, the scopes, the
+  access token and when it expires, the refresh token, when the grant was made, and the route.
 - Beside it is a **status file** with no secret in it, `<name>.status.json`: access expiry, last refresh and its result,
   last error, refresh-token age, `needs_grant`. `check-secrets` and the status page read this file, never the
   credential. (`max_age_days` restarts at every refresh, so it can't stand in for this.)
-- The secrets directory is already in every sandbox's read deny (`policy.secret_dirs`) and in the backup
-  (`backup.covers`).
+- **Backup.**
+  - The secrets directory is already in the backup (`backup.covers`) and in every sandbox's read deny
+    (`policy.secret_dirs`).
+  - Whether credential files stay in the nightly cloud backup is owner question 3. A restored refresh token is normally
+    stale, so the recommended answer is that they don't.
 - On Linux the same files and modes apply. No OS keyring is used anywhere, so the same thing works on both OSes and with
   the screen locked.
+- **Follows the project.**
+  - `rename-project.sh` moves `credentials/<old>/` to `credentials/<new>/` with the registry entry, and its dry run
+    lists the move.
+  - `uninstall --purge` revokes every credential first (as `revoke` does), then deletes the folder.
 
 ### C4. Refresh
 
-- **Who.** One function, `credentials.fresh(project, name, for_seconds)`, used by:
-  - the bridge at its start, for the run's timeout plus a margin;
-  - the bridge again on a 401 mid-run (once);
-  - a platform job, `brunna/credentials` (hourly, zero LLM), which refreshes anything due within the next two hours and
-    any refresh token older than a day. Refresh tokens that expire when unused are then used at least daily, even when
-    no job runs.
-- **Locking.** `flock` on `<name>.lock` beside the file. A second refresher waits, then reads the fresh token rather
-  than refreshing again (rotating refresh tokens are often single-use).
-- **Rotation.** The token response is written to `<name>.json.new` and fsynced before it replaces the file. A crash
-  between the provider's answer and the rename leaves `.new`, which the next refresher takes first.
+Access tokens are refreshed on demand, before a run. The scheduled job only keeps refresh tokens alive.
+
+- **`credentials.fresh(project, name, need_s)`**, under the lock:
+  - It returns the stored access token when more than `need_s` of its lifetime remains.
+  - Otherwise it refreshes once and returns the new token **whatever its lifetime**, so a provider with short-lived
+    tokens never loops.
+  - `need_s` is the run's timeout plus five minutes, capped at an hour. A token that expires mid-run is handled on the
+    401 (below).
+- **Before the launch, in `llm.py`.** `llm.py` calls `fresh()` before it starts the runtime. A failure there is
+  `job.failed` with the reason, and the runtime never starts. The bridge only reads the file, so nothing slow sits
+  inside Claude's 30-second MCP connect timeout (the debug log in M1: "Starting connection with timeout of 30000ms").
+- **On a 401 mid-run.** The bridge never refreshes in its own process: Claude kills it on a timeout or at the end of
+  the run.
+  - It starts one short, detached process, `bin/py -I bin/credentials.py refresh <project> <name> --failed <sha256 of
+    the token that failed>`, in a new session with an explicit, minimal environment.
+  - It waits up to 20 seconds for that process, then re-reads the file and retries the request once.
+  - The refresh, under the lock, re-reads the file first. It refreshes only when the stored access token's hash is the
+    one that failed; else another refresher already did it.
+  - Any number of re-reads, at most one refresh per failed token.
+- **The scheduled job, `brunna/credentials`** (hourly, zero LLM). It refreshes a credential only when its refresh token
+  hasn't been used for about a day, so a provider that expires unused refresh tokens keeps the grant alive. It writes
+  every status file. It never refreshes access tokens ahead of time.
+- **Locking.** `flock` on `<name>.lock` beside the file.
+- **Rotation.** The token response is written to `<name>.json.new` and fsynced before it replaces the file.
+  - A later refresher that finds `.new` takes it only when it parses as a whole credential and is newer than the file
+    (its issue time and its refresh token differ). Otherwise it deletes it and says so in the status file.
+- **A lost response.** When a refresh request fails without an answer (timeout, connection lost after sending), the
+  rotated refresh token may be gone. The refresher tries once more with the stored one. If that also fails, it sets
+  `needs_grant`. It never loops.
 - **Failure.**
-  - `invalid_grant` or a revoked grant sets `needs_grant` and raises an alert (`alert.py`: once, again daily, and a
-    recovery when it is granted again). Owner question 6 asks whether it also adds an owner to-do line through the
-    project's STATE.md handling.
+  - `invalid_grant`, a revoked grant or the lost response above sets `needs_grant` and raises an alert (`alert.py`:
+    once, again daily, and a recovery when it is granted again). Whether it is also an owner to-do line is owner
+    question 4.
   - A run that needs the credential then doesn't start: `job.failed` with "the platform's grant for upwork needs the
     owner: `brunna credentials grant …`".
-  - A network error is retried at the next tick. The run fails only when the access token has actually expired.
+  - A network error at the launch's refresh fails that run with the reason. The next scheduled run tries again.
   - **Never a fallback**: not the Keychain, not the owner's interactive grant, not the subscription login.
 
 ### C5. Delivery: a stdio bridge the platform attaches to the run
 
-The token reaches the remote server and nothing else in the run:
+Decided in r2 (it was owner question 2): a stdio bridge. The loopback proxy of M3 stays the documented fallback, if
+step 3's measurements of the bridge fail.
 
-- The run stays sealed (`--strict-mcp-config`), on the headless token, with the refusing `security`: the run table's
-  current rows, unchanged.
-- `llm.py` attaches one more `runtime_ports.ToolServer` per credential the job uses, the way it attaches the platform's
-  mail server:
-  - `id` = `server.id`;
-  - `command` = the platform's Python;
-  - `args` = `bin/credential_bridge.py --run <run_dir>/credential-<id>.json`;
-  - `env` = only `HOME` and the platform's location variables;
-  - `tools` = the tools of that server the job's `allow:` names.
-- The run file (600, in the run folder, which `llm.py` removes when the run ends) names the project, the credential and
-  the allowed tools. The bridge reads the credential file itself: **the token is never in Claude's environment, args,
-  config file or the run folder** (M6: the model's shell inherits Claude's environment).
-- **The bridge** (stdio MCP ⇄ streamable HTTP):
+- **The run stays sealed** (`--strict-mcp-config`), on the headless token, with the refusing `security`.
+  - It keeps the run table's current row: agent-shaped token runs, agent jobs included, stay on the shared `~/.claude`.
+  - `llm.py` refuses to attach a credential to a run that isn't sealed.
+- **`llm.py` attaches one more `runtime_ports.ToolServer` per credential** the job uses, the way it attaches the
+  platform's mail server.
+  - `attach_server` appends to `task.servers`, never replaces it (today it sets `servers=(server,)`, `llm.py:539`).
+  - `id` = `server.id`; `command` = the platform's Python with `-I`; `args` = `bin/credential_bridge.py --run
+    <run_dir>/credential-<id>.json`; `env` = only `HOME` and the platform's location variables.
+  - `tools` = the tools of that server the job's rules name, from the adapter port `tools_named(task, server_id)` (C6).
+- **The run file** (600, in the run folder, which `llm.py` removes when the run ends) names the project, the job and
+  the credential.
+  - The bridge validates it as the mail server does (`confined-mail-tools.md` M3): opened with `O_NOFOLLOW`, regular
+    file, the user's own, not group- or world-writable (fstat), a path inside `<STATE>/agent-jobs/.settings/`, read
+    once.
+  - Then it recomputes from the registry that this project's job lists this credential, and which tools it may call.
+    Any mismatch refuses the start.
+- **The token's path.** The bridge reads the credential file itself. The token is never in Claude's environment,
+  arguments, config file or the run folder (M6: the model's shell inherits Claude's environment).
+- **The bridge's own environment is Claude's whole environment**, the headless token included: a stdio server inherits
+  it whatever the config's `env` says. So:
+  - it runs under `-I`;
+  - it never logs its environment;
+  - it starts no process except the one fixed refresh of C4, which gets an explicit minimal environment.
+- **Network.**
+  - `POST` and `GET` go only to the exact `server.url`; the refresh goes only to the recorded token endpoint.
+  - **No redirect is followed at all.** The standard library's opener re-sends the `Authorization` header on a 302
+    (measured in r2: a 302 on a `POST` became a `GET` to another origin, carrying the header). A 3xx is an error.
+  - It uses an explicit opener with an empty `ProxyHandler`, and ignores the proxy and CA environment variables (the
+    system trust store only).
+- **Methods.**
   - It passes `initialize`, `server/discover`, `ping`, notifications, `tools/list` (filtered to the allowed tools) and
-    `tools/call` for an allowed tool. Everything else gets a JSON-RPC error: other methods, server-to-client requests
-    (sampling, elicitation), resources and prompts unless a later owner decision adds them, and batches.
-  - It connects only to `server.url`'s origin and the recorded token endpoint, follows no redirect to another origin,
-    and streams SSE answers through.
-  - It turns an upstream 401 or 403 into a JSON-RPC error after its one refresh, so the client never sees an HTTP 401
+    `tools/call` for an allowed tool.
+  - On `initialize` it strips the client's capabilities (roots, sampling, elicitation) before forwarding.
+  - Server-to-client requests from upstream are answered upstream with an error, never passed to the client.
+  - Everything else from the client gets a JSON-RPC error: resources, prompts, other methods, and batches.
+- **Output.**
+  - It forwards parsed and re-encoded JSON, never raw bytes. Every frame to the client is checked for the access token,
+    the refresh token and the client secret, and they are redacted if present.
+  - SSE answers are streamed event by event, each parsed the same way.
+  - An upstream 401 or 403 becomes a JSON-RPC error after the one refresh attempt, so the client never sees an HTTP 401
     to start its own OAuth (M3).
-  - It writes a request log with no secret in it: method, tool name, status and duration.
-- **Why not the alternatives:**
+- **Its status.** The bridge writes `credential-<id>.status.json` in the run folder: initialized, tools listed, auth
+  failures and whether each recovered, last error. It writes a request log with no secret: method, tool name, status,
+  duration.
+- **A broken bridge fails the job.** After the run, `llm.py` reads that status. A run whose bridge never initialized,
+  or whose bridge saw an auth failure it didn't recover from, is a failed run (`job.failed`, the bridge's reason), even
+  when the model reported success.
+- **Why not the alternatives.**
   - A header from `${VAR}`: the token would be in Claude's environment, which the model's Bash inherits (M6).
-  - A literal header in the run's config: `claude mcp get` prints it (M1), and the config sits in a folder the run's
-    tools must never be allowed to read.
+  - A literal header in the run's config: `claude mcp get` prints it (M1).
   - A loopback proxy (M3): it works with a per-run nonce header and a tool filter, but its port can be reached by any
-    local process, it needs its own lifetime and port handling, and the header syntax would be the adapter's. Kept as
-    the fallback for a runtime that can't start stdio servers (none known).
-- **Neutral by construction.** A stdio server is the one MCP shape every runtime has. The adapter only writes what it
-  already writes for `ToolServer` (`runtime_claude._server_config`, Codex's `[mcp_servers]` when its runs gain tool
-  servers). No header or OAuth syntax enters the platform. A runtime without `run_server` makes these jobs
-  `Unsupported`, with its reason.
+    local process, it needs its own lifetime, and the header syntax would be each adapter's.
+- **Neutral by construction.** A stdio server is the one MCP shape every runtime has.
+  - The adapter only writes what it already writes for `ToolServer` (`runtime_claude._server_config`, Codex's
+    `[mcp_servers]` when its runs gain tool servers).
+  - No header or OAuth syntax enters the platform.
+  - A runtime without `run_server` makes these jobs `Unsupported`, with its reason.
+- **The sandbox.** The bridge runs outside the project's OS sandbox, as the mail server does: Claude Code's sandbox
+  covers Bash only (`confined-mail-tools.md` M4, measured on a real run).
 
 ### C6. Which jobs may use which credential
 
-- A job lists `credentials: [<name>]` (owner-only). Such a job is **frozen whole**, as `connector_jobs()` freezes a
-  `connectors: true` job (the earlier plan's B1): `allow:`, prompt, `cwd` and schedule. A letter can't change what runs
-  with the grant.
-- `registry.py` refuses `credentials:` in four cases:
-  - on event jobs, mailbox points and jobs without `allow:`;
+- A job lists `credentials: [<name>]` (owner-only). Such a job is **frozen whole** (`allow:`, prompt, `cwd`, schedule),
+  as `connector_jobs()` freezes a `connectors: true` job (the earlier plan's B1). A letter can't change what runs with
+  the grant.
+- **`registry.py` refuses `credentials:`:**
+  - on event jobs, mailbox points, the `project-agent` point (a project's own declared agent call), leases, and jobs
+    without `allow:`;
   - with `connectors: true`;
+  - in a sandboxed project (C1, C7);
   - when the job's rules name tools of `server.id` but the job doesn't list the credential, or the other way round;
-  - when an unsandboxed project's job `allow:` holds a rule that runs code or reads outside the job's folder (`Bash`,
-    any command rule, a `Read` wider than its folders): such a run could read the credential file directly. A
-    sandboxed project's runs can't read the secrets directory (OS deny), so there the rule is the usual confined one.
-- The bridge's tool list is computed from the registry at run time (S2 of the earlier review), never from the run's
-  environment.
+  - when the job's `allow:` holds a rule that runs code or reads outside the job's folders (`Bash`, any command rule, a
+    `Read` wider than its folders). Such a run could read the credential file or the run file directly.
+- **Rule parsing stays in the adapter.** The registry and `llm.py` never parse `mcp__`, `Bash(` or `Read(` themselves
+  (`tests/test_runtime_boundary.py`'s ratchet forbids it).
+  - They ask through the adapter's ports: `servers_named`, `rule_problems` (extended with the code-running and
+    wide-read refusal for credential jobs) and a new `tools_named(task, server_id)`.
+  - `tools_named` strips the `mcp__<id>__` prefix of each rule naming that server, since a tool name may hold `__`
+    itself (`upwork__get_messages`). It doesn't split on `__`.
+- The bridge's tool list is computed from the registry at run time, never from the run's environment (C5).
 
 ### C7. Sandboxed projects and the network
 
-- **Network.** The model never connects to the server, the bridge does, so the server's domain is **not** added to the
-  project's `network:` list.
-- **Unmeasured: is the bridge sandboxed?** Claude Code's OS sandbox wraps the Bash tool, not the MCP servers it starts.
-  If a later version sandboxes stdio servers, the bridge can't read the secrets directory and fails visibly. The
-  conformance check (Tests) catches that before such a version is promoted. Measure it once on a sandboxed project's
-  run before step 4.
-- **Hardening, not required.** On macOS the bridge can run under the platform's own Seatbelt profile: network to the two
-  origins only, and reads of its credential file and the platform's code. This has to be measured, because a second
-  Seatbelt layer can't start inside one (`seatbelt.py`). For now it is a follow-up.
+- **v1 refuses sandboxed projects** (C1). Their confined runs may name only reading and editing files and WebFetch to
+  their own domains: `rule_problems` refuses every `mcp__…` rule there (`SANDBOXED_TOOLS`), so a credentials job couldn't
+  call its tools anyway. A carve-out would have to say which MCP tools a sandboxed project's unattended run may call,
+  with prompts nobody else writes. That is owner question 5, not built here.
+- **An egress path `network:` doesn't describe.** The bridge connects to `server.url` from outside any sandbox, so the
+  project's `network:` list doesn't cover it. The registry's credential entry is its declaration. The status page and
+  `registry.py check --secrets-report` list it beside `network:`.
+- **Hardening, not required.** On macOS the bridge could run under the platform's own Seatbelt profile: network to the
+  two endpoints only, reads of its credential file and the platform's code. That has to be measured first, because a
+  second Seatbelt layer can't start inside one (`seatbelt.py`). It is a follow-up.
 
 ### C8. Status, doctor, check-secrets
 
-- `check-secrets` gets a row per credential: granted or not, access expiry, last refresh and its result, refresh-token
-  age, and `needs_grant` (from the status file). A missing credential is a problem, as a missing secret is. It never
-  reads the credential file beyond whether it exists and its mode.
-- The status page gets the same rows, plus the jobs each credential serves.
-- Doctor gets a feature row: "unattended jobs on the platform's own MCP grants", supported where the runtime has
+- **`check-secrets`** gets a row per credential: granted or not, access expiry, last refresh and its result,
+  refresh-token age, `needs_grant` (from the status file).
+  - A missing credential is a problem, as a missing secret is.
+  - It never reads the credential file beyond whether it exists and its mode.
+- **The status page** gets the same rows, the jobs each credential serves, and its egress (C7).
+- **Doctor** gets a feature row, "unattended jobs on the platform's own MCP grants", supported where the runtime has
   `run_server`.
-- `registry.py check --secrets-report` lists which jobs use which credential.
+- **`registry.py check --secrets-report`** lists which jobs use which credential.
 
 ### C9. What this replaces and what it leaves
 
-- **DV5 is unchanged.** No platform run reads the Keychain. The jobs that move off `connectors: true` (and the shared
-  config dir) gain the refusing `security`.
+- **DV5 is unchanged.** No platform run reads the Keychain.
+  - A job that moves off `connectors: true` gains the headless token and the refusing `security`.
+  - As an agent-shaped token run, it stays on the shared `~/.claude` (the run table's row).
 - **`connectors: true` stays** for claude.ai connectors (the account's servers, whose OAuth Anthropic holds and which
   only the subscription login loads). A connector that is a standard remote MCP server can move to a platform grant if
-  the owner wants (owner question 7).
+  the owner wants (owner question 6).
 - The earlier plan's `mcp_servers:` and its unsealed run are not built.
 
 ## Moving the daily job
 
-1. The owner answers question 1 (which client the grant uses).
+1. The owner answers questions 1–3 (the client, the grant's breadth, backup).
 2. The owner adds the credential entry and `credentials: [upwork]` to the job's registry entry (owner-only fields: a
-   change in the config repo with the owner's yes). The job's `allow:` stays as it is: it names only `mcp__upwork__…`
-   tools, `ToolSearch`, `PushNotification` and its own folder, with no code-running rule, so C6 accepts it.
+   change in the config repo with the owner's yes).
+   - The project is unsandboxed, as v1 needs.
+   - The job's `allow:` stays as it is: it names only `mcp__upwork__…` tools, `ToolSearch`, `PushNotification` and its
+     own folder, with no code-running rule, so C6 accepts it.
 3. The owner runs `brunna credentials grant <project> upwork` and approves the consent page.
 4. `schedulectl run <project>/daily-check`. The run is sealed, on the token, with the stub, and the bridge is its only
    server.
@@ -312,100 +399,206 @@ The project hears about it with a `brunna send --type info` once it works (its s
 ## Tests
 
 - **Registry:**
-  - `kind` entries are owner-only (a manifest.update that touches one is returned whole);
-  - the field rules of C1 and C6;
+  - `kind` entries are owner-only (a manifest.update that touches one is returned whole, through
+    `credential_entries`);
+  - the field rules of C1 and C6, with the refusals for sandboxed projects and the excluded points;
   - a credentials job is frozen;
-  - the code-running refusal for unsandboxed projects.
+  - the code-running and wide-read refusal comes through the adapter's `rule_problems`;
+  - `tools_named` with a tool name that holds `__`.
 - **`credentials.py` against a fake authorization server** (local HTTP; no real provider):
-  - discovery;
-  - each client route and its refusal;
+  - discovery, with a mismatched `resource` and a mismatched `issuer` both refused;
+  - `iss` on the redirect;
+  - each client route and its refusal, and a fixed redirect URI;
   - PKCE and state checked;
   - the paste-back path;
-  - refresh under two concurrent refreshers (one refresh, both get the new token);
-  - rotation with a crash between the answer and the rename;
-  - `invalid_grant` → `needs_grant`, an alert, and the run refused;
-  - revoke.
+  - `fresh()`: no refresh with lifetime left, one refresh otherwise, a just-issued short token accepted;
+  - two concurrent refreshers make one refresh;
+  - a 401 refresh with a stale `--failed` hash doesn't refresh;
+  - a crash between the answer and the rename, with a valid `.new` taken and an invalid or older one dropped;
+  - a lost response: one more try, then `needs_grant`, no loop;
+  - `invalid_grant` → `needs_grant`, an alert, and the run refused at launch;
+  - revoke with a failing endpoint still deletes and alerts;
+  - rename and purge.
 - **The bridge against a dummy MCP server** (the measurement's, made a fixture):
   - the header is added;
-  - only allowed tools are listed and called;
-  - other methods are refused;
+  - only allowed tools are listed and called, and other methods and batches are refused;
+  - client capabilities are stripped, and server-to-client requests are answered upstream with errors;
   - SSE answers are streamed;
-  - a 401 becomes a refresh, then a JSON-RPC error;
-  - no request goes to another origin;
-  - the log holds no token (a canary token, grepped).
+  - a 401 starts one detached refresh, then one retry, then a JSON-RPC error and a status that fails the run;
+  - **a 302 on a `POST` is an error**, and no request goes to another URL;
+  - proxy variables are ignored;
+  - the run file's checks (a link, another owner, a writable mode, a path outside `.settings`, a job not listing the
+    credential);
+  - a frame from upstream that echoes the token is redacted.
+- **A canary token**, run through the fake, appears in none of:
+  - the run folder, Claude's environment, arguments or config;
+  - the bridge's stderr and log;
+  - Claude's MCP log files (`mcp-logs-…` in the config dir);
+  - the session transcript.
 - **llm.py / adapter:**
-  - the run's `--mcp-config` holds the bridge entry with no `$` and no token;
-  - the run stays sealed and on the stub (`test_llm_golden` with a fake store);
-  - a canary token appears in no file of the run folder, env or args.
-- **Conformance (`conformance_claude`, a new check per version, no account)**, which turns M1–M4 into a gate. A version
-  where a stdio server's tools don't load, or where the Keychain is reached for it, is held back:
-  - a stdio server from `--mcp-config` loads under `--strict-mcp-config` with the stub;
-  - its tools are listed;
-  - the stub logs only the config dir's own login items, and no `-i` call.
-- `check-secrets` rows from status files only. `bin/linux-test` runs the store and refresh on Linux.
+  - the run's `--mcp-config` holds the bridge entry with no `$` and no token, appended beside the mail server;
+  - an unsealed run is refused;
+  - the run stays on the stub (`test_llm_golden` with a fake store);
+  - a bridge status of "never initialized" fails the run.
+- **Conformance (`conformance_claude`, a new check per version, no account and no model call).** It turns M1–M5 into a
+  gate.
+  - The check starts a `-p` run in a throwaway config dir with no login, `--strict-mcp-config` and the bridge in
+    `--mcp-config`, with the stub. M5 showed the MCP connection and `tools/list` happen before the login is needed. The
+    run then fails at the login, without calling a model.
+  - The check reads the dummy upstream's log and the bridge's status file: `initialize` and `tools/list` arrived through
+    the bridge, with the header.
+  - The stub logged only the config dir's own login items and no `-i` call.
+  - A version that fails it is held back.
+- `check-secrets` rows come from status files only. `bin/linux-test` runs the store and refresh on Linux.
 
 ## Order of work
 
-1. Registry: `kind`, `server`, `credentials:`, owner-only and frozen, the C6 refusals. Plus `check-secrets` and status
-   rows from status files. No credential exists yet; the rows say "not granted".
-2. `credentials.py`: storage, status file, `fresh()` with the lock and rotation, the `brunna/credentials` job, alerts.
-   Tested against the fake authorization server.
-3. `credential_bridge.py`, and its attachment in `llm.py` beside the mail server, plus the conformance check.
-   Measured once on a sandboxed project (C7).
-4. `brunna credentials grant|set|revoke`, with the three client routes.
-5. The daily job's move (above), by the owner.
+1. **Registry:** `kind`, `server`, `credentials:`, `credential_entries` owner-only and frozen, the C6 refusals through
+   the adapter's ports (`tools_named`, the extended `rule_problems`). Plus `check-secrets` and status rows from status
+   files. No credential exists yet; the rows say "not granted".
+2. **`credentials.py`:** storage, status file, `fresh()`, the detached `refresh`, the lock, `.new` validation, the
+   `brunna/credentials` job, alerts, rename and purge. Tested against the fake authorization server.
+3. **`credential_bridge.py`**, its attachment in `llm.py` (appended, sealed runs only, `fresh()` before the launch, the
+   bridge status read after it), and the conformance check.
+   - Before merge it measures what M4 left open on a real run: a `tools/call` through the bridge, the filter, the `-p`
+     path, SSE, and a run on the shared `~/.claude`.
+   - If the bridge fails there, the loopback proxy (M3) takes its place, with a design note first.
+4. **`brunna credentials grant|set|revoke`**, with the three client routes.
+5. **The daily job's move** (above), by the owner.
 
 Each step is merged on its own through `merge-branch`. Before step 3 is built, the design and then the code each get a
 cold review.
 
 ## Open owner questions
 
-1. **Which client the platform's Upwork grant uses:**
-   - (a) a client ID metadata document at an https URL the owner controls (one for this deployment; or brunna publishes
-     one for all installs, which makes brunna a named client at every provider);
-   - (b) dynamic registration, only if Upwork documents its `registration_endpoint` as RFC 7591. The advertised URL
-     looks like the human sign-up page, so posting a registration there unasked is not done;
-   - (c) the owner's own Upwork developer app (`--client-id`/secret), which also opens `client_credentials` if Upwork
-     allows it for the MCP.
+1. **Which client the platform's grant uses.**
+   - (a) A client ID metadata document at an https URL the owner controls: one for this deployment, or one brunna
+     publishes for all installs (which makes brunna a named client at every provider).
+   - (b) Dynamic registration, only if Upwork documents its `registration_endpoint` as RFC 7591. The advertised URL
+     looks like the human sign-up page, so the platform doesn't post a registration there unasked.
+   - (c) The owner's own Upwork developer app (`--client-id` and secret).
 
-   Recommended: (a) if the owner has an https place for the document, else (c). (b) only after Upwork's developer docs
-   confirm it. Whether a second grant coexists with the owner's interactive one is learned at that first grant: if
-   granting the platform's copy logs the owner's Claude Code out of Upwork, the routes that share a client are out.
-2. **How the grant reaches the run.** Recommended: a stdio bridge the platform attaches (C5). Every runtime has stdio,
-   it opens no port, and its lifetime is the run's. The alternative is a loopback proxy the platform runs per job, with
-   a per-run nonce header (M3). That keeps the token out of every process the agent starts, but it needs a port, a
-   lifetime of its own and each runtime's header syntax. The bridge is the less measured of the two (M4's list), so
-   step 3 measures it first. If it fails there, the proxy is the fallback.
-3. **Code-running rules.** Recommended: no Bash or command rule in an unsandboxed project's credentials job (C6). The
-   alternative is to allow them only once the project is sandboxed.
-4. **Resources and prompts.** Should the bridge pass MCP resources and prompts as well as tools? Recommended: tools only
-   until a job needs more.
-5. **The refresh job's cadence.** Hourly, with the daily use of refresh tokens (C4). Fine for a provider with
-   short-lived refresh tokens; nothing is published for Upwork.
-6. **A broken grant.** Is an alert enough, or should it also be an owner to-do line (an owner-tagged line in the
-   project's STATE.md, registered with the assistant when the assistant module is on)?
-7. **The other connectors jobs.** Should they move to platform grants where the connector is a standard remote MCP
-   server, and leave `connectors: true` only for what only the account can load?
+   Recommended: (a) if the owner has an https place for the document, else (c); (b) only after Upwork's developer docs
+   confirm it.
+
+   None of the three routes uses Claude Code's client. Whether Upwork lets a second grant for the same user stand beside
+   the owner's interactive one is learned at the first grant. If the owner's Claude Code loses its Upwork connection
+   then, the platform's grant is revoked and the owner is told.
+2. **A full-rights grant.** Upwork publishes no scopes, so the platform's grant will likely carry everything the owner's
+   account can do on the MCP (send messages, submit proposals). Only the bridge's tool filter would hold the job to its
+   read tools. Does the owner accept that?
+   Recommended: yes for this job's read-only tool list. Request narrower scopes at the grant if route (c)'s developer
+   app offers them.
+3. **Refresh tokens in the nightly cloud backup.** A restored refresh token is normally stale (rotated since), so the
+   backup gives little, while an unrotated one is a live credential off the machine.
+   Recommended: leave credential files out of the backup (the registry's `backup: false` with "re-grant after a
+   restore"); `check-secrets` accepts it.
+4. **A broken grant.** Alert only, or also an owner to-do line (an owner-tagged line in the project's STATE.md,
+   registered with the assistant when the assistant module is on)?
+   Recommended: both. Re-granting is something only the owner can do, which is what owner to-dos are for.
+5. **Sandboxed projects.** v1 refuses them (C7). Should a carve-out (named MCP tools for a sandboxed project's
+   unattended run) be designed?
+   Recommended: not until a sandboxed project needs one.
+6. **The other connectors jobs.** Should they move to platform grants where the connector is a standard remote MCP
+   server, leaving `connectors: true` only for what only the account can load?
+   Recommended: one at a time, after the daily job has run on its grant for a week.
+
+Decided in r2 (were questions):
+- the bridge, with the proxy as fallback (old Q2);
+- tools only, no resources or prompts (old Q4);
+- refresh on demand plus a keep-alive job (old Q5, C4);
+- no code-running rules, now a registry refusal with sandboxed projects out of v1 (old Q3).
 
 ## Risks
 
 - **The bridge as a confused deputy.** It holds a token with the owner's Upwork rights.
-  - What bounds it: only the allowed tools, only the declared origin, only for a run `llm.py` started (its run file).
-  - The residual: a run whose rules could read the run file or the credential. C6 refuses those in unsandboxed
-    projects, and the OS denies them in sandboxed ones.
-- **Scope.** The grant has whatever the consent page grants, often more than the job's read-only tools (Upwork publishes
-  no scopes). The bridge's tool filter is the boundary, not the token's scope. Request narrower scopes where the
-  provider lists them.
-- **The token at rest.** A file readable by the owner's user, like the headless token and the backup keys. Any process
-  of the owner's that isn't sandboxed can read it. This is the same trust as the platform's other secrets, and narrower
-  than the Keychain item it replaces (one server, not the login and every server).
-- **Restoring a backup.** A restored file holds a refresh token that may since have rotated. Using it fails as
-  `invalid_grant`, and on providers with reuse detection it may revoke the whole grant family. After a restore, expect
-  `needs_grant` and re-grant. The restore notes say so; never retry a stale refresh in a loop.
+  - What bounds it: only the allowed tools, only the exact URL, only for a run `llm.py` started (the validated run
+    file, rechecked against the registry).
+  - The residual: a run whose rules could read the run file or the credential. C6 refuses those.
+- **The guarantee is per confined run.** It covers the credentials job's own run. Other unsandboxed processes of the
+  same project (its sessions, services, other jobs' shells) can read the credential file as the owner's user, as they
+  can any platform secret.
+- **Scope.** The grant has whatever the consent page grants (owner question 2). The bridge's tool filter is the
+  boundary, not the token's scope.
+- **The token at rest.** A file readable by the owner's user, like the headless token and the backup keys. This is
+  narrower than the Keychain item it replaces (one server, not the login and every server).
+- **Restoring a backup.** If credentials are backed up at all (owner question 3), a restored refresh token being stale is
+  the normal case, not an edge case.
+  - It fails as `invalid_grant`, and on providers with reuse detection it may revoke the whole grant family.
+  - After a restore, expect `needs_grant` and re-grant. The restore notes say so; a stale refresh is never retried in a
+    loop.
 - **Provider policy.** A provider may limit grants per user and client, or rotate or expire refresh tokens on its own
   schedule. Both show as `needs_grant` with an alert, never as a silent fallback.
 - **Protocol drift.** The bridge's method allowlist fails closed on a new MCP method that a newer client needs at start
   (like `server/discover`, seen in M1). The conformance check runs the bridge against each new version before it is
   promoted.
 - **Revocation lag.** Revoking at the provider takes effect at its next check. `brunna credentials revoke` deletes the
-  local copy at once.
+  local copy at once, even when the provider's endpoint fails.
+
+## r2 (11-15), after the blind review
+
+One cold review of r1. Nothing blocked the architecture. All eight should-fix findings and the nits are taken, as
+below.
+
+- **S1, a broken bridge left the job green.** Taken in C4 and C5:
+  - `llm.py` calls `fresh()` before the launch, and a failure is `job.failed` with the reason;
+  - the bridge only reads the file, so nothing slow sits in Claude's 30-second MCP connect;
+  - the bridge writes a status file in the run folder, and `llm.py` fails the run when the bridge never initialized or
+    saw an unrecovered auth failure.
+- **S2, refresh.** Taken in C4:
+  - `fresh()` is defined (refresh under `need_s`, a just-issued token accepted whatever its lifetime);
+  - refresh happens before the launch in `llm.py`;
+  - a mid-run refresh happens in a short detached `credentials.py refresh`, never in Claude's child;
+  - on a 401: re-read under the lock, refresh only if the stored token is the one that failed (by hash), at most once;
+  - the hourly job only keeps refresh tokens alive and writes status;
+  - a lost response gets one more try, then `needs_grant`;
+  - a leftover `.new` is validated before it is taken;
+  - revoke takes the lock, deletes `.new`, and deletes locally even when RFC 7009 fails, with an alert.
+- **S3, sandboxed projects.** r1 was wrong here: `rule_problems` already refuses every `mcp__…` rule in a sandboxed
+  project's confined run (`SANDBOXED_TOOLS`).
+  - v1 is for unsandboxed projects only, and the registry refuses `credentials:` in a sandboxed project with that reason
+    (C1, C6, C7).
+  - The step-3 measurement on a sandboxed project is dropped.
+  - The old Q3 is now a registry rule, and the carve-out is owner question 5.
+  - The bridge is recorded as an egress path that `network:` doesn't describe (C7, C8).
+- **S4, the run file.** Taken in C5: it names the job; the bridge validates it as the mail server does (`O_NOFOLLOW`,
+  fstat owner and mode, inside `<STATE>/agent-jobs/.settings/`, read once), then rechecks the job and its tools against
+  the registry.
+- **S5, tool neutrality.** Taken in C6: all `mcp__`, `Bash(` and `Read(` parsing goes behind the adapter (`servers_named`,
+  the extended `rule_problems`, the new `tools_named(task, server_id)`, which strips the prefix rather than splitting
+  on `__`). r1's C6 would have put that parsing in `registry.py`, which the ratchet forbids.
+- **S6, the bridge's network and output.** Taken in C5:
+  - no redirects at all. Measured in r2: the standard library re-sent `Authorization` on a 302 from `POST` to a `GET` at
+    another origin. The exact `server.url` only, with a 302-on-POST test;
+  - `-I`, an explicit opener with an empty `ProxyHandler`, proxy and CA variables ignored, no process but the fixed
+    refresh. r1's claim that the bridge's environment is only what the config names was wrong: it inherits Claude's
+    whole environment, the headless token included;
+  - re-encoded JSON with every frame redacted;
+  - client capabilities stripped on `initialize`, and server-to-client requests answered upstream with errors;
+  - the canary test widened to the bridge's stderr, Claude's `mcp-logs-` files and the transcript.
+- **S7, the grant flow.** Taken in C2:
+  - `resource` must equal `server.url`, and `issuer` must match;
+  - `iss` is checked on the redirect where advertised (RFC 9207);
+  - the endpoint hosts are printed for the owner to confirm;
+  - no re-discovery at refresh;
+  - a fixed or registered redirect URI is recorded with the client.
+- **S8, rename and purge.** Taken in C3: credentials follow `rename-project.sh`, and `uninstall --purge` revokes them
+  first.
+- **Nits, all taken:**
+  - sealed runs only (C5);
+  - `attach_server` appends (C5);
+  - `credential_entries` as an owner-only check of its own (C1);
+  - the bridge outside the sandbox is cited, from `confined-mail-tools.md` M4 (the review said M2; the measured
+    statement is in M4);
+  - C9 keeps agent token runs on the shared `~/.claude`;
+  - `project-agent` and leases are in C6's refusals;
+  - the per-run scope of the guarantee is in Risks;
+  - how the conformance gate sees the tool list without a model call is under Tests;
+  - stale refresh tokens in a backup are the normal case (Risks).
+- **Owner questions.**
+  - Q2 (the bridge), Q4 (tools only) and Q5 (cadence, from S2) are decided in the design.
+  - Q1's last sentence is rewritten (no route shares Claude Code's client), and `client_credentials` is dropped (it
+    authenticates an app, not the owner, and nothing says Upwork's MCP accepts it).
+  - Q3 is rewritten per S3.
+  - Two questions are added: the full-rights grant, and refresh tokens in the cloud backup.
+  - The list keeps only what is the owner's, each with a recommendation.

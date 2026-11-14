@@ -146,8 +146,9 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - Privacy routing waits on this.
 6. **Credentials for unattended jobs** (`platform-credentials.md`, design 11-15, not built): the platform holds its own
    grants, such as an OAuth MCP server's, in the secrets directory and hands one to a job's run only through a stdio
-   bridge it attaches (owner question 2; a loopback proxy is the alternative). No job reads the Keychain (DV5 stays).
-   Waits on owner question 1 (which client the grant uses) before step 4; steps 1–3 don't.
+   bridge it attaches (r2 after a blind review; a loopback proxy is the fallback). No job reads the Keychain (DV5
+   stays). v1 is for unsandboxed projects. Step 4 waits on owner question 1 (the client), the move on questions 2–3;
+   steps 1–3 don't.
 7. **A project's skills** (`skills-sync.md`, the owner's decision 11-15, built 11-15): a sandboxed project develops them
    in `skills/`, and `brunna skills sync` installs them into the agents' skill folders only after the owner's typed
    yes (the platform reminds with an owner to-do per change set). Left: the migration of the project that tracks 44
