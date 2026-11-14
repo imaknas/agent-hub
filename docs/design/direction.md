@@ -71,15 +71,15 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - **Step 3:** wake, status, resume and fork. Wake also waits on M11 (is a client attached), under D4.
    - **Step 4 layer 1** (Codex's own sandbox, rendered by the platform): planned and revised after a cold review (r2,
      11-14, on measurements with the owner's login). **It can't ship as "confined"**: Codex runs `git status` as the user
-     in the session's folder, and a filter in the repo's config ran from it. r2's first steps close today's holes
-     anyway: `.codex` is protected in no sandbox now, and the version gate and probe come next. The path to "confined" is
-     D9.
+     in the session's folder, and a filter in the repo's config ran from it. r2's steps 1–2 are built (11-14): `.codex`
+     and `.agents` are protected in every sandbox, and a per-version probe (`conformance_codex.py`) runs, whose B1 check
+     fails on 0.167. The path to "confined" is D9.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
    Measurements still open: `--output-schema` with the platform's own schemas, the model pin per kind of point (V-M1),
-   M10 and M11, the network proxy, worktree trust, `turn_context` timing at UserPromptSubmit, and a sandboxed project's
-   `brunna send` end to end. The Step 2 follow-ups (`TELLS_ON` widening, `current_session` inside Codex's sandbox) are in
+   M10 and M11, the network proxy, the daemon's socket from a tool shell with the network on, worktree trust,
+   `turn_context` timing at UserPromptSubmit, and a sandboxed project's `brunna send` end to end. The Step 2 follow-ups (`TELLS_ON` widening, `current_session` inside Codex's sandbox) are in
    `runtime-codex.md`.
 3. **The long-running session port.** This is `runtime-abstraction.md` step 4, `runtime-acp.md` step 4 and
    `tool-agnostic.md`'s postponed "leasing over ACP". The lease runner still builds Claude's flags itself and reads
@@ -165,14 +165,16 @@ Built: steps 0–2 and step 4, the waiting report. Left:
 ### 6. Waiting on the owner
 
 - Codex D3: which runtime is the default.
-- Codex Step 4 (`runtime-codex.md`, the plan and its r2), with the provisional answers r2 works to:
-  - **D5**, trust entries: (b) `brunna user-settings --trust`, run by the owner, recommended; (a) Codex's own prompt
-    can't be stopped, so it is checked.
-  - **D6**: a session the owner overrode by flag isn't served (provisional).
-  - **D7**: `approval_policy = "never"` (provisional).
-  - **D8**: no network until the proxy is measured (provisional).
+- Codex Step 4 (`runtime-codex.md`, the plan and its r2). D5–D8 were decided by the owner 11-14:
+  - D5: trust entries through `brunna user-settings --trust`, and Codex's own prompt checked;
+  - D6: an overridden session isn't served;
+  - D7: `never`;
+  - D8: network on (the project's domains where the proxy can name them, else full and said).
+
+  Still open:
   - **D9**: the path to a confined Codex session (layer 2 with `--no-daemon`, a fence on git config, or wait for Codex).
-  - **D10**: whether r2's steps 3–5 are built now as hardening.
+  - **D10**: whether r2's steps 3–5 are built now as hardening. Provisionally: steps 1–2 built 11-14, steps 3–5 wait for
+    D9.
 - test-waiting B8 and A2.
 - Positioning: no wording decision is recorded since the README was rewritten.
 - Principal Handoff: whether to send the drafted ACP RFD.

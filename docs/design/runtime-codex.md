@@ -4,8 +4,8 @@ Status (11-14): step 0 (fail closed) built 11-08; **Step 2 built 11-14** (`bin/r
 "Step 2: progress (11-14)" below); steps 1, 3, 4 not built. Step 4 layer 1 is planned ("Step 4 layer 1: plan (11-14)"),
 on measurements with the owner's login ("Measured 11-14 (with the owner's login)"), and revised after a cold review
 ("r2 (11-14), after the blind review"). **It can't ship as "confined"**: Codex runs git as the user in the session's
-folder, and a repo filter ran from it (B1). r2 builds the hardening that closes today's holes, and leaves the path to
-"confined" to the owner (D9). Step 1 follows `runtime-versions.md` steps 1–4 (it is that
+folder, and a repo filter ran from it (B1). r2's steps 1–2 are built (11-14): `.codex` and `.agents` protected in every
+sandbox, and a per-version probe whose B1 check fails on 0.167. The path to "confined" is the owner's (D9). Step 1 follows `runtime-versions.md` steps 1–4 (it is that
 doc's step 5). The Codex preset now leaves `runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
@@ -548,8 +548,19 @@ A cold review of the plan above found two blocking points (B1, B2), thirteen sho
 measurements it asked for were taken the same day; they are under "Measured 11-14 for r2", at the end of this doc. Where
 r2 and the plan above disagree, r2 holds.
 
-Provisional owner decisions until the owner says otherwise: D6 not served; D7 `never`; D8 no network until the proxy is
-measured (with S8 below). D5 is revised under S2.
+**The owner's decisions (11-14, directly in the session):**
+- **D5:** (b) recommended, and (a) checked: as revised under S2.
+- **D6:** a session the owner overrode by flag is not served.
+- **D7:** `approval_policy = "never"`.
+- **D8, reversed: network on.** In the owner's words, a Codex session in a sandboxed project without network is about half
+  useless. Where Codex's sandbox proxy can name domains (`features.network_proxy`, `network.domains`), the profile gets the
+  project's allowed domains (the policy's `network`, as Claude's allowlist); that is measured before steps 3–5. Where it
+  can't, the profile gets full network, and doctor says plainly that this is wider than Claude's allowlist.
+- **Measure first for steps 3–5, from D8:** with the network on under the rendered profile, can a tool shell reach the
+  daemon's unix socket (`codex queue`, a raw connect)? It was measured only with the network off, where both were refused.
+  If it can, the profile denies the socket's folder (`/tmp/codex-daemon-<uid>/`, and whatever `~/.codex/app-server-control/`
+  links to), or the session could drive the daemon as the owner.
+- D9 stays open. D10 is provisional: steps 1–2 are built (below), steps 3–5 wait for D9.
 
 **B1 decides the outcome: layer 1 does not ship as "confined".**
 - Codex runs git itself in the session's folder, as the user and outside its tool sandbox. Measured from `codex exec`
@@ -658,7 +669,7 @@ measured (with S8 below). D5 is revised under S2.
   plain `memory_sync` already is.
 - **S7.** The per-session check reads only the `turn_context` whose `turn_id` is the hook's own. If that isn't in the rollout
   yet, the hook tells nothing and records nothing for that turn.
-- **S8.** The renderer also writes `web_search = "disabled"` and `[features] apps = false`. Doctor's row says plainly that
+- **S8.** The renderer also writes `web_search = "disabled"` and `[features] apps = false` (the network itself is D8's). Doctor's row says plainly that
   user-level MCP servers (the brunna MCP server included) run outside the profile, with the user's authority. "Network off"
   is about the session's tools only.
 - **S9.** A version gate:
@@ -709,7 +720,65 @@ measured (with S8 below). D5 is revised under S2.
   it puts Codex's own git inside the OS sandbox and depends on no agent setting); option (ii), a platform-wide fence on git
   config sources; or option (iii), wait for Codex.
 - **D10, build steps 3–5 now as hardening, or stop after steps 1–2 until D9?** Recommended: steps 1–2 now (they close real
-  holes), and steps 3–5 with D9's path.
+  holes), and steps 3–5 with D9's path. Provisionally taken: steps 1–2 are built.
+
+**Steps 1–2 as built (11-14).**
+- **Step 1 (S1, S3).**
+  - `runtime_codex` has the `control` port: `CONTROL = (".codex", tree), (".agents", tree)`; `control_root() = (".codex",
+    ())`; `session_folders` (the folder itself); `foreign_controls` (every entry in `.codex/`, a link said as one).
+  - Adapters that declare `ALWAYS_PROTECTED` (Codex and Claude) are protected whatever is installed
+    (`runtime_ports.protected_runtimes`). `policy.protect()` and `protect_roots()` read that list, so:
+    - Claude's session settings get `Edit` denies on `**/.codex` and `**/.agents`, which its sandbox takes in for Bash
+      (V-M9);
+    - the services' Seatbelt profile denies them at any depth, and Codex's tool folder is one rule with nothing writable;
+    - the confined runs' settings get them too.
+  - Claude's renderer adds a `denyWrite` on each other agent's control folder at the top of every session folder
+    (`_other_controls`), whether it exists or not, as the second layer.
+  - Claude's `control` check gains six canaries:
+    - `.codex/canary` and `.agents/canary`, through Edit and through `sh -c`;
+    - `sub/.codex/canary` and `.claude/worktrees/wt-canary/.codex/canary`, through `sh -c`.
+
+    Each has its positive control, and the check's timeout grows to match. Not run against the real Claude here: it needs
+    the headless token, a file under `~/.claude`. The stand-in tool used by the tests takes the `Edit` rules into its
+    sandbox, as the tool does.
+  - Doctor's per-project row names each unconfined agent's reason (`runtime_ports.unconfined_reason`; Codex's
+    `unconfined()`: B1).
+  - Tests: `test_control_files` (Claude's settings for both folders, Seatbelt holding them at the top, nested, in a
+    worktree and against a move), `test_runtime_codex.Control`, `test_runtime_installed`, `test_sandbox_deny_parity`,
+    `test_conformance_claude`.
+- **Step 2 (S9).**
+  - `bin/conformance_codex.py` holds three checks, all session-side, with no model and no login, in a `CODEX_HOME` of the
+    world's:
+    - **session-folder-git** (safety): a clean filter in the repo's config, a staged file whose timestamp moved, and `codex
+      debug prompt-input`, which runs Codex's own `git status`. A git that logs its calls tells "Codex ran no git" (an
+      error) from "its git ran nothing" (a pass).
+    - **control-globs** (safety): `codex sandbox -P` with `runtime_codex.profile_control_entries` (the `deny` globs)
+      refuses `.codex` and `.agents` at the top, nested and by a move, while an allowed write lands; with a profile
+      lacking the entries, everything lands.
+    - **lifecycle-hooks**: not checkable (it needs a model call).
+  - Run against 0.167.0 in a scratch world: session-folder-git **fails** (B1) and control-globs **passes**.
+  - `conformance.py run` takes a runtime with no distribution port that says its version and has only session-side
+    checks (`versioned`). Its result goes to `<version>.session.json` (`record_any`), which `runtime_ports.gated` reads,
+    so a sandboxed project's Codex session of a failing version is gated as well as refused.
+  - Nothing runs the probe on a schedule yet: `session_versions.py` serves runtimes with the distribution port (Step 1).
+    The owner or a later step runs `conformance.py run codex` from the main checkout.
+  - A Codex session's version is its rollout's `session_meta.cli_version` (the daemon's), read only from a rollout in the
+    user's Codex home (`runtime_codex.session_version(pid, raw=)`). hub-event hands the hook's input to a
+    `session_version` that takes it (`_version_of`).
+  - Tests: `tests/test_conformance_codex.py`, with a stand-in `codex` whose sandbox is Seatbelt.
+- **S12's ratchet.** `tests/test_runtime_boundary.py` counts Codex's syntax too (`\.codex`, `CODEX_*`, `turn_context`,
+  `[permissions.`), with `runtime_codex.py` and `modules/codex.yaml` exempt. The baseline starts at policy.py's
+  `CREDENTIALS` and agenthub's help. hub-event and render-project-settings.py are in `NEUTRAL`.
+- **S10 is left for steps 3–5.** It only matters once a Codex session has a rendered profile (Claude's sessions already
+  deny `~/.codex` through `CREDENTIALS`). The renderer then denies each other installed runtime's home, declared by its
+  adapter; Claude's declares only its credential file today, so it gains a home declaration.
+- **Left for steps 3–5:**
+  - the renderer and render-project-settings (S3's no-removal-while-trusted, S11);
+  - the static and per-turn confined check (S7) and the hub-event pieces (S5, S6);
+  - doctor's trust rows, `user-settings --trust` and `user_cleanup` (S2);
+  - D8's network (the proxy, the socket);
+  - S10;
+  - running the probe on a schedule.
 
 ## Found by the second blind review (11-08), taken into the steps
 
