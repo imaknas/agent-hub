@@ -25,6 +25,7 @@
  "brunna runtimes shows each version the sessions ran and its checks": "brunna runtimes 會列出 session 跑過的每個版本和它的檢查結果",
  "{runtime} {version}: its copy went before it was checked; the next run checks it": "{runtime} {version}:檢查前它的副本就被移走了;下一次執行再檢查",
  "the copy of {version} says it is {got}": "{version} 的副本說自己是 {got}",
- "{runtime} {version}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to its sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions; if the check was wrong, `brunna runtimes recheck {runtime} {version}` runs it again": "你的 session 在跑的 {runtime} {version} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這個版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session;如果是檢查判錯,`brunna runtimes recheck {runtime} {version}` 會重跑",
- "update the tool and open new sessions; if a check was wrong: brunna runtimes recheck {runtime} {version}": "更新工具並開新的 session;如果是檢查判錯:brunna runtimes recheck {runtime} {version}"
+ "update the tool and open new sessions; if a check was wrong: brunna runtimes recheck {runtime} {version}": "更新工具並開新的 session;如果是檢查判錯:brunna runtimes recheck {runtime} {version}",
+ "{runtime}: no failed session check now": "{runtime}:現在沒有沒通過的 session 檢查",
+ "{runtime} {versions}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to their sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions; if the check was wrong, `brunna runtimes recheck {runtime} <version>` runs it again": "你的 session 在跑的 {runtime} {versions} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這些版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session;如果是檢查判錯,`brunna runtimes recheck {runtime} <版本>` 會重跑"
 }

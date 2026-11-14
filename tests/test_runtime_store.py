@@ -256,6 +256,27 @@ class UpdateRuntimes(Temp):
         with mock.patch.object(self.m.hubconf, "get", lambda k, d=None: conf.get(k, d)):
             self.assertEqual(self.m.in_use(), ["claude"], "only runtimes with a distribution port")
 
+    def test_a_runtime_only_installed_for_sessions_is_not_in_use(self):
+        """runtime-codex.md, Step 1 r2, D11: a copy of the platform's only for a runtime that runs platform work."""
+        dist = {"claude", "codex"}
+        caps = lambda n: {"distribution"} if n in dist else set()   # noqa: E731
+        for conf, want in (({"runtime.default": "claude", "runtime.installed": ["claude", "codex"]}, ["claude"]),
+                           ({"runtime.default": "claude", "llm.points": {"first-look": {"runtime": "codex"}}},
+                            ["claude", "codex"]),
+                           ({"runtime.default": "claude", "llm.providers": {"c": {"impl": "codex"}}}, ["claude", "codex"]),
+                           ({"runtime.default": "codex", "runtime.installed": ["claude", "codex"]}, ["codex"])):
+            with mock.patch.object(self.m.hubconf, "get", lambda k, d=None: conf.get(k, d)), \
+                    mock.patch.object(self.m.runtime_ports, "capabilities", caps):
+                self.assertEqual(self.m.in_use(), want, conf)
+
+    def test_a_copy_whose_login_checks_havent_run_isnt_promoted(self):
+        doc = self.doc()
+        doc["checks"]["completion-no-tools"] = {"port": "completion", "kind": "safety", "state": "not-checkable",
+                                                "reason": "needs a login", "login": True}
+        self.assertIn("completion-no-tools", self.m.promotable(doc, self.dist) or "")
+        doc["checks"]["completion-no-tools"]["state"] = "pass"
+        self.assertIsNone(self.m.promotable(doc, self.dist))
+
 
 class Location(unittest.TestCase):
     def test_a_throwaway_state_keeps_its_own(self):

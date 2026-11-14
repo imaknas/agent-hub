@@ -711,11 +711,11 @@ class Job(Instance):
         self.assertEqual(self.runs, [])
         self.assertNotIn(OLD, session_versions.load("claude").get("not_installable") or {})
 
-    def test_a_failed_safety_check_alerts_per_version_and_check_until_the_version_is_gone(self):
+    def test_a_failed_safety_check_alerts_per_check_and_reason_until_no_version_seen_fails_it(self):
         self.outcome["control"] = "fail"
         self.live_session("S1", OLD)
         self.run_job()
-        self.assertIn((f"session-version-claude-{OLD}", ["control"]), self.alerts)
+        self.assertIn(("session-versions-claude", ["control:r"]), self.alerts)
         self.assertEqual([r["state"] for r in session_versions.summary("claude")], ["failed"])
         self.assertEqual([row[0] for row in session_versions.doctor_rows("claude")], ["warn"])
         self.live.clear()
@@ -724,7 +724,33 @@ class Job(Instance):
         session_versions.save("claude", st)
         self.alerts.clear()
         self.run_job()
-        self.assertIn((f"session-version-claude-{OLD}", []), self.alerts)
+        self.assertIn(("session-versions-claude", []), self.alerts)
+
+    def test_a_runtime_whose_sessions_cant_be_confined_gets_no_session_copies_unless_it_runs_platform_work(self):
+        """runtime-codex.md, Step 1 r2, S6: nothing installed or checked for it."""
+        why = {"codex": "Codex runs git in the folder (B1)"}
+        for work, want in ((["claude"], ["claude"]), (["claude", "codex"], ["claude", "codex"])):
+            with mock.patch.object(runtime_ports, "installed", lambda: ["claude", "codex"]), \
+                    mock.patch.object(runtime_ports, "capabilities", lambda n: {"distribution"}), \
+                    mock.patch.object(runtime_ports, "unconfined_reason", lambda n: why.get(n)), \
+                    mock.patch.object(runtime_ports, "platform_work", lambda: work):
+                self.assertEqual(session_versions.runtimes(), want)
+
+    def test_another_version_failing_the_same_way_is_the_same_alert(self):
+        self.outcome["control"] = "fail"
+        self.live_session("S1", OLD)
+        self.live_session("S2", "2.1.398")
+        self.run_job()
+        keys = {k for k, ids in self.alerts if ids}
+        self.assertEqual(keys, {"session-versions-claude"}, "keyed by check and reason, never by version")
+        self.assertEqual([ids for k, ids in self.alerts if k == "session-versions-claude"][-1], ["control:r"])
+
+    def test_the_per_version_alerts_of_before_end_once(self):
+        session_versions.save("claude", {"seen": {}, "alerted": [OLD]})
+        self.run_job()
+        self.run_job()
+        self.assertEqual([k for k, _ids in self.alerts if k == f"session-version-claude-{OLD}"],
+                         [f"session-version-claude-{OLD}"])
 
     def test_a_pair_checked_against_another_copy_reruns_the_fork_alone_and_an_error_daily(self):
         self.live_session("S1", OLD)

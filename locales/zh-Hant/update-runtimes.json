@@ -32,5 +32,6 @@
  "{runtime}: the newest version can't be told, so none is checked: {error}": "{runtime}:查不到最新版本,所以沒有版本被檢查:{error}",
  "{runtime} {version}: the checks could not run, so it isn't promoted: {error}": "{runtime} {version}:檢查跑不了,所以不採用:{error}",
  "{runtime} {version}: not promoted: {error}": "{runtime} {version}:沒採用:{error}",
- "{runtime}: update-runtimes broke: {error}": "{runtime}:update-runtimes 壞了:{error}"
+ "{runtime}: update-runtimes broke: {error}": "{runtime}:update-runtimes 壞了:{error}",
+ "the checks that need your login haven't run on it yet: {checks}": "需要你登入的檢查還沒在它上面跑過:{checks}"
 }

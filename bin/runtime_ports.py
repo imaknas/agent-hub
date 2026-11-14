@@ -518,6 +518,15 @@ class Check(NamedTuple):
     # session-side set, which the per-version gate and the session-side calls read); "platform": only on a copy for the
     # platform's own runs. Every check runs on a candidate for promotion
     side: str = "platform"
+    # True: it runs only with the user's login in the world (a model call). The runner runs these last and withholds them
+    # after any safety fail, and when the adapter's login_window(seconds) says a refresh of that login could fall due
+    # during them (docs/design/runtime-versions.md section 3a; runtime-codex.md, Step 1 r2, S4); a copy whose login checks
+    # haven't run is never promoted on the rest alone
+    login: bool = False
+    # "sessions": what it holds is a property of the user's sessions of that version only: its fail gates those sessions
+    # (gated) but doesn't hold back the platform's copy, whose runs never start where the property matters (the adapter's
+    # own rule, tested). An error still holds the copy back (runtime-codex.md, Step 1 r2, S7)
+    holds: str = ""
 
 
 CHECK_STATES = ("pass", "fail", "error", "not-checkable")
@@ -829,6 +838,26 @@ def installed() -> list[str]:
         if isinstance(n, str) and n in RUNTIMES and n not in out:
             out.append(n)
     return out or [default_name()]
+
+
+def platform_work() -> list[str]:
+    """The runtimes the platform starts its own runs with: runtime.default, a judgment point's pin (llm.points.<point>.runtime)
+    and a provider whose impl is a runtime. Not runtime.installed alone: a runtime only there is one the user opens sessions
+    with, which gets no copy of the platform's, no check that uses the user's login and nothing installed for it while its
+    sessions can't be confined (docs/design/runtime-codex.md, Step 1 r2, D11 and S6)."""
+    try:
+        import hubconf
+        points, providers = hubconf.get("llm.points") or {}, hubconf.get("llm.providers") or {}
+    except Exception:
+        points, providers = {}, {}
+    out = [default_name()]
+    for point in points.values() if isinstance(points, dict) else ():
+        if isinstance(point, dict) and isinstance(point.get("runtime"), str):
+            out.append(point["runtime"])
+    for prov in providers.values() if isinstance(providers, dict) else ():
+        if isinstance(prov, dict) and isinstance(prov.get("impl"), str):
+            out.append(prov["impl"])
+    return [n for n in dict.fromkeys(out) if n in RUNTIMES]
 
 
 def bare_runtime() -> str:

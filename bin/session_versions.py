@@ -20,8 +20,8 @@ For each runtime the user opens sessions with (runtime_ports.installed) that has
    session-side checks (Check.side "session") run against it, paired with the platform's current copy, under section
    3a's login rule (the conformance runner's world). Recorded as <version>.session.json as each finishes
    (conformance.record_session). A result paired with another copy than current has its sessions-fork run again; one
-   with an error has those checks run again once a day. A safety check failed: an alert per version and check, which
-   ends once the version isn't seen any more.
+   with an error has those checks run again once a day. A safety check failed: an alert per check and reason, naming
+   the versions, which ends once no version seen fails it (alert_failed).
 4. The store's session copies pruned (runtime_store.prune).
 Cheap work first: a run that installs and checks takes long (control alone can take hours), and the scheduler starts no
 second copy while one runs.
@@ -97,8 +97,13 @@ def _age_days(when: str | None, now: datetime.datetime) -> float:
 
 
 def runtimes() -> list[str]:
-    """The runtimes the user opens sessions with that have versions (the distribution port)."""
-    return [n for n in runtime_ports.installed() if "distribution" in runtime_ports.capabilities(n)]
+    """The runtimes the user opens sessions with that have versions (the distribution port), and whose session copies serve
+    something: a runtime whose sessions in a sandboxed project can't be confined whatever their version gates nothing by
+    version, so nothing is installed or checked for it unless the platform runs its own work on it
+    (runtime_ports.platform_work; docs/design/runtime-codex.md, Step 1 r2, S6 and D11)."""
+    work = runtime_ports.platform_work()
+    return [n for n in runtime_ports.installed() if "distribution" in runtime_ports.capabilities(n)
+            and (n in work or runtime_ports.unconfined_reason(n) is None)]
 
 
 # ---------- 1. what is seen ----------
@@ -313,23 +318,39 @@ def check_version(runtime: str, mod, version: str, st: dict, published: list[str
         doc.pop("recheck", None)
     doc["retried"] = _today()
     conformance.record_session(doc, cur.version if cur else None)
-    alert_failed(runtime, version, doc)
+    alert_failed(runtime, st)
     return _("{runtime} {version}: session-side checks {verdict}", runtime=runtime, version=version,
              verdict=conformance.verdict(doc))
 
 
-def alert_failed(runtime: str, version: str, doc: dict | None) -> None:
-    """An alert per version and safety check it failed (none: resolved)."""
+def alert_failed(runtime: str, st: dict) -> None:
+    """One alert per runtime, one problem per safety check and reason that a version seen in SEEN_DAYS failed, naming the
+    versions. Keyed by check and reason, never by version: a tool that updates itself (Codex's daemon) would otherwise
+    alert again about the same known failure with every version (docs/design/runtime-codex.md, Step 1 r2, S6). The
+    per-version alerts of before are ended once (their recovery line)."""
     import alert
-    failed = runtime_ports.failed_checks(doc, "safety")
-    checks = (doc or {}).get("checks") or {}
-    alert.once(f"session-version-{runtime}-{version}",
-               [_("{runtime} {version}, which your sessions run, failed the platform's {check} check: {reason}. The "
-                  "platform delivers no letters to its sessions in sandboxed projects and wakes them for none; in other "
-                  "projects nothing is held back. Update the tool and open new sessions; if the check was wrong, "
-                  "`brunna runtimes recheck {runtime} {version}` runs it again",
-                  runtime=runtime, version=version, check=n, reason=checks[n].get("reason") or "-") for n in failed],
-               _("{runtime} {version}: no failed check now", runtime=runtime, version=version), ids=failed)
+    by = {}
+    for version in sorted(st.get("seen") or {}):
+        doc = runtime_ports.session_result(runtime, version) if runtime_ports.checkable_version(version) else None
+        checks = (doc or {}).get("checks") or {}
+        for n in runtime_ports.failed_checks(doc, "safety"):
+            by.setdefault((n, checks[n].get("reason") or "-"), []).append(version)
+    if not st.get("rekeyed"):
+        for version in st.get("alerted") or []:
+            alert.once(f"session-version-{runtime}-{version}", [],
+                       _("{runtime} {version}: no failed check now", runtime=runtime, version=version))
+    st["alerted"] = sorted({v for vs in by.values() for v in vs})
+    st["rekeyed"] = True
+    lines, ids = [], []
+    for (check, reason), versions in sorted(by.items()):
+        lines.append(_("{runtime} {versions}, which your sessions run, failed the platform's {check} check: {reason}. The "
+                       "platform delivers no letters to their sessions in sandboxed projects and wakes them for none; in "
+                       "other projects nothing is held back. Update the tool and open new sessions; if the check was "
+                       "wrong, `brunna runtimes recheck {runtime} <version>` runs it again",
+                       runtime=runtime, versions=", ".join(versions), check=check, reason=reason))
+        ids.append(f"{check}:{reason}")
+    alert.once(f"session-versions-{runtime}", lines, _("{runtime}: no failed session check now", runtime=runtime),
+               ids=ids)
 
 
 def run_runtime(runtime: str, now: datetime.datetime | None = None) -> list[str]:
@@ -344,11 +365,7 @@ def run_runtime(runtime: str, now: datetime.datetime | None = None) -> list[str]
     except runtime_ports.SessionsUnknown as e:
         return [_("{runtime}: which sessions run can't be read ({error}); nothing checked", runtime=runtime, error=e)]
     alert_unusable(runtime, st, unusable_counts(runtime, now))
-    for version in list(st.get("alerted") or []):   # versions no longer seen: their alert ends
-        if version not in st["seen"]:
-            alert_failed(runtime, version, None)
-    st["alerted"] = sorted(v for v in st["seen"] if runtime_ports.failed_checks(runtime_ports.session_result(runtime, v),
-                                                                                 "safety"))
+    alert_failed(runtime, st)   # versions no longer seen leave it
     save(runtime, st)
     published, asked = None, False
     for version in todo:
@@ -368,8 +385,7 @@ def run_runtime(runtime: str, now: datetime.datetime | None = None) -> list[str]
         save(runtime, st)
         if line:
             out.append(line)
-    st["alerted"] = sorted(v for v in st["seen"] if runtime_ports.failed_checks(runtime_ports.session_result(runtime, v),
-                                                                                 "safety"))
+    alert_failed(runtime, st)
     save(runtime, st)
     gone = runtime_store.prune(runtime)
     if gone:

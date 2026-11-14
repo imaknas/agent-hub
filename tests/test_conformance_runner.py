@@ -113,6 +113,50 @@ class Runner(Temp):
         doc = self.run_with(entries, {"a": [Outcome("pass")], "b": [Outcome("pass")], "c": [Outcome("pass")]})
         self.assertEqual(conformance.verdict(doc), "pass", "not-checkable doesn't hold a pass back")
 
+    def test_login_checks_run_last_and_are_withheld_after_a_safety_fail(self):
+        order = []
+        f = lambda w: None   # noqa: E731
+        entries = [Check("l", "completion", "function", f, login=True), Check("s", "confine", "safety", f),
+                   Check("a", "agent", "function", f)]
+
+        def one(runtime, check, exe, top):
+            order.append(check.name)
+            return Outcome("fail" if check.name == "s" and self.leak else "pass")
+        for self.leak in (False, True):
+            order.clear()
+            with mock.patch.object(conformance, "checks", lambda runtime: entries), \
+                    mock.patch.object(conformance, "run_one", one):
+                doc = conformance.run("claude", str(self.exe))
+            if not self.leak:
+                self.assertEqual(order, ["s", "a", "l"], "the login checks last")
+                self.assertEqual(doc["checks"]["l"].get("login"), True)
+            else:
+                self.assertEqual(order, ["s", "a"], "withheld after a safety fail")
+                self.assertEqual((doc["checks"]["l"]["state"], doc["checks"]["l"]["tries"]), ("error", 0))
+
+    def test_login_checks_wait_for_the_adapters_login_window(self):
+        f = lambda w: None   # noqa: E731
+        entries = [Check("l", "completion", "function", f, login=True), Check("a", "agent", "function", f)]
+        with mock.patch("runtime_claude.login_window", lambda s: "a refresh may fall due", create=True):
+            doc = self.run_with(entries, {"a": [Outcome("pass")]})
+        self.assertEqual((doc["checks"]["l"]["state"], doc["checks"]["l"]["reason"]), ("error", "a refresh may fall due"))
+        self.assertEqual(conformance.login_unrun(doc), ["l"])
+        doc = self.run_with(entries, {"a": [Outcome("pass")], "l": [Outcome("pass")]})
+        self.assertEqual(conformance.login_unrun(doc), [])
+        doc = self.run_with([Check("l", "completion", "function", None, "needs a login", login=True)], {})
+        self.assertEqual(conformance.login_unrun(doc), ["l"], "not-checkable is unrun")
+
+    def test_a_sessions_only_fail_doesnt_hold_a_promotion_but_its_error_does(self):
+        f = lambda w: None   # noqa: E731
+        entries = [Check("g", "sessions", "safety", f, side="session", holds="sessions"), Check("a", "agent", "function", f)]
+        doc = self.run_with(entries, {"g": [Outcome("fail", "x")], "a": [Outcome("pass")]})
+        self.assertEqual(conformance.verdict(doc), "fail")
+        self.assertEqual(conformance.verdict(doc, for_promotion=True), "pass")
+        doc = self.run_with(entries, {"g": [Outcome("error", "x")], "a": [Outcome("pass")]})
+        self.assertEqual(conformance.verdict(doc, for_promotion=True), "error")
+        doc = self.run_with([Check("b", "confine", "safety", f)], {"b": [Outcome("fail", "x")]})
+        self.assertEqual(conformance.verdict(doc, for_promotion=True), "fail", "only a holds: sessions check")
+
     def test_record_and_read_back(self):
         doc = self.run_with([Check("a", "agent", "function", lambda w: None)], {"a": [Outcome("pass")]})
         f = conformance.record(doc)

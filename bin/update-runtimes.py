@@ -36,7 +36,7 @@ import runtime_store  # noqa: E402
 _ = i18n.domain(__file__)
 HELD = hubconf.STATE / "runtime-held.json"   # runtime → {version, since}
 ESCALATE_DAYS = 7
-DAILY = ("agent-result", "completion-no-tools", "completion-schemas")
+DAILY = ("agent-result", "agent-models", "completion-no-tools", "completion-schemas", "home-flags")
 
 
 def usage() -> str:
@@ -44,16 +44,11 @@ def usage() -> str:
 
 
 def in_use() -> list[str]:
-    """The runtimes the platform starts runs with, that have a distribution port."""
-    names = {hubconf.get("runtime.default") or runtime_ports.DEFAULT}
-    names.update(hubconf.get("runtime.installed") or [])
-    for point in (hubconf.get("llm.points") or {}).values():
-        if isinstance(point, dict) and point.get("runtime"):
-            names.add(point["runtime"])
-    for prov in (hubconf.get("llm.providers") or {}).values():
-        if isinstance(prov, dict) and prov.get("impl") in runtime_ports.RUNTIMES:
-            names.add(prov["impl"])
-    return sorted(n for n in names if n in runtime_ports.RUNTIMES and "distribution" in runtime_ports.capabilities(n))
+    """The runtimes the platform starts runs with (runtime.default, llm.points pins, providers whose impl is a runtime), that
+    have a distribution port. A runtime only in runtime.installed is one the user opens sessions with: no copy of the
+    platform's, no check with the user's login, the user's own copy left alone (runtime_ports.platform_work;
+    docs/design/runtime-codex.md, Step 1 r2, D11)."""
+    return sorted(n for n in runtime_ports.platform_work() if "distribution" in runtime_ports.capabilities(n))
 
 
 def newer(a: str, b: str) -> bool:
@@ -93,8 +88,12 @@ def _problems(doc: dict) -> tuple[list[str], list[str]]:
 
 def promotable(doc: dict, mod) -> str | None:
     """None when this result may be promoted; else why not."""
-    if conformance.verdict(doc) != "pass":
+    if conformance.verdict(doc, for_promotion=True) != "pass":
         return _("its checks didn't pass")
+    if (waiting := conformance.login_unrun(doc)):
+        # the checks that need the user's login haven't run on it: never promoted on the rest alone (runtime-codex.md,
+        # Step 1 r2, S4)
+        return _("the checks that need your login haven't run on it yet: {checks}", checks=", ".join(waiting))
     floor = getattr(mod, "MIN_VERSION", None)
     if floor and newer(floor, doc["version"]):
         return _("{version} is below the oldest version the platform runs on ({floor})", version=doc["version"], floor=floor)

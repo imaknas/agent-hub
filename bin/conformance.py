@@ -227,12 +227,27 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None, pai
             raise RuntimeError(_("{exe} does not say its version", exe=exe))
         out = {"runtime": runtime, "version": version, "binary": str(resolved), "digest": digest(resolved),
                "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"), "checks": {}}
+        # the checks that need the user's login last, and none of them after a safety fail or when the adapter says a
+        # refresh of that login could fall due while they run (section 3a; runtime-codex.md, Step 1 r2, S4)
+        todo = [c for c in todo if not c.login] + [c for c in todo if c.login]
+        window = getattr(mod, "login_window", None)
         for c in todo:
+            held = None
+            if c.login and c.run is not None:
+                if any(r["kind"] == "safety" and r["state"] == "fail" for r in out["checks"].values()):
+                    held = _("withheld: a safety check failed first")
+                elif callable(window):
+                    held = window(c.timeout_s)
+            if held:
+                out["checks"][c.name] = {"port": c.port, "kind": c.kind, "state": "error", "reason": _short(held),
+                                         "tries": 0, "login": True}
+                continue
             tries, got = 1, run_one(runtime, c, str(resolved), top, *([pair] if pair else []))
             if got.state == "fail" and c.kind == "function":
                 tries, got = 2, run_one(runtime, c, str(resolved), top, *([pair] if pair else []))
             out["checks"][c.name] = {"port": c.port, "kind": c.kind, "state": got.state, "reason": got.reason,
-                                     "tries": tries}
+                                     "tries": tries, **({"login": True} if c.login else {}),
+                                     **({"holds": c.holds} if c.holds else {})}
         return out
     finally:
         shutil.rmtree(top, ignore_errors=True)
@@ -296,9 +311,12 @@ def recorded(runtime: str) -> list[dict]:
     return sorted(out, key=lambda d: str(d.get("at", "")), reverse=True)
 
 
-def verdict(doc: dict) -> str:
-    """pass when every check that could be run passed; fail when a safety check failed; else the worst state seen."""
-    states = {(c.get("kind"), c.get("state")) for c in doc.get("checks", {}).values()}
+def verdict(doc: dict, for_promotion: bool = False) -> str:
+    """pass when every check that could be run passed; fail when a safety check failed; else the worst state seen.
+    for_promotion: a fail of a check that holds the user's sessions only (Check.holds "sessions") doesn't count; its error
+    does (runtime-codex.md, Step 1 r2, S7)."""
+    states = {(c.get("kind"), c.get("state")) for c in doc.get("checks", {}).values()
+              if not (for_promotion and c.get("holds") == "sessions" and c.get("state") == "fail")}
     if ("safety", "fail") in states:
         return "fail"
     seen = {s for _k, s in states}
@@ -306,6 +324,11 @@ def verdict(doc: dict) -> str:
         if s in seen:
             return s
     return "pass"
+
+
+def login_unrun(doc: dict) -> list[str]:
+    """The checks that need the user's login and didn't run to a pass or fail on this result (not-checkable, withheld)."""
+    return [n for n, c in doc.get("checks", {}).items() if c.get("login") and c.get("state") not in ("pass", "fail")]
 
 
 # ---------- the child ----------
@@ -377,7 +400,7 @@ def main(argv: list[str]) -> int:
     only = [rest[i + 1] for i, a in enumerate(rest) if a == "--only"]
     try:
         doc = run(argv[1], exe, only or None, *([pair] if pair else []))
-    except (RuntimeError, KeyError) as e:
+    except (RuntimeError, KeyError, runtime_ports.Unsupported) as e:   # no checked copy to name: --binary names one
         print(f"conformance: {e}", file=sys.stderr)
         return 1
     print(show(doc))
