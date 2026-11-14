@@ -915,7 +915,9 @@ verified, or `NoCheckedCopy`. **`binary()` loses its PATH fallback.** It is used
   - the kinds of developer messages: the model's base instructions, permissions, and on GPT-6 models the collaboration
     mode; no `<tools>` (deferred namespaces), no skills, no AGENTS.md, no `multi_agent_role`.
 
-  A mismatch refuses the run.
+  A mismatch refuses the run. In a fresh home `prompt-input` sees the copy's bundled catalog (there is no cached one, and
+  it makes no request), so this check holds the binary's side only. The server's side (surface C) is caught by the check
+  after the run, or closed by pinning the catalog (4).
 - **After the run**, from the rollout in the run's home:
   - `additional_tools` as above;
   - `turn_context`: the model, `multi_agent_version == "disabled"`, `approval_policy == "never"`, `sandbox_policy.type
@@ -950,16 +952,23 @@ or is refused, and a new field fails it.
     features.unified_exec=true`, under a per-run permission profile. Codex has no file-only tools: its shell is how it
     reads.
   - Any other tool name is refused.
-- **The per-run profile** (`brunna-run`, all of it in `-c`, measured to arrive whole in `turn_context`):
-  - `extends = ":read-only"`;
-  - `write` for each path in `allowed_tools`;
-  - `deny` for what `policy.py` denies a platform run: credentials (`~/.codex` and `~/.claude` among them), other
-    projects, `platform_state`, `deny_read`, and the store's Codex folder;
+- **The per-run profile** (`brunna-run`, all of it in `-c`, measured to arrive whole in `turn_context`). The shell must
+  read no wider than the point needs, which is the copy: its prompt says so, and its allow list is `Edit(./…)` only.
+  `:read-only` alone reads the whole disk. So:
+  - `extends = ":read-only"` (the system's own files stay readable, so a shell starts);
+  - `deny` on the user's home folder whole, and on the temp roots (`/tmp`, `/private/tmp`, `/var/folders`), which
+    covers every project, the hub, the instance, the memory copies, credentials and the store;
+  - `read` on the copy itself, and `write` on each path in `allowed_tools`. The more specific entry wins over the deny
+    around it (measured);
+  - as a second layer, `deny` for every path the policy denies a sandbox (credentials, other projects, `platform_state`,
+    `deny_read`), from the same lists that render Claude's settings;
   - `network.enabled = false`.
 
-  `:minimal` can't be extended ("unsupported built-in"), and a profile with no base can't start `/bin/sh`, so
-  `:read-only` plus denies is the form (measured; it is Claude's form too). Measured with `codex sandbox -P`: `STATE.md`
-  writable, while `AGENT.md`, a new file in `memory/`, `$TMPDIR` and the network were refused.
+  `:minimal` can't be extended ("unsupported built-in"), and a profile with no base can't start `/bin/sh` (measured).
+  Measured with `codex sandbox -P`: the copy readable and `STATE.md` writable; `AGENT.md`, a new file in `memory/`, a
+  sibling of the copy, its parent folder, `$TMPDIR` and the network refused; `/etc/hosts` readable. Whether the
+  model's shell finds anything it needs outside the copy is on the login list (9). If this boundary can't be held, the
+  memory-copy points stay off on Codex (they have their `-edits` completions).
 - **`allowed_tools`:** only `Edit(./<path>)` and `Edit(./<dir>/**)`, resolved under the folder and never through a link.
   Any other rule is refused.
 - **`permission_mode`:** `dontAsk` and `acceptEdits` become `approval_policy = "never"`; anything else is refused.
@@ -1083,7 +1092,8 @@ world. Names are shared with Claude's where they mean the same, so `update-runti
   usage, the final message, `-o`); each model in `MODELS` is in the catalog the run used and answers.
 - **`agent-profile`** (safety, no model). `codex sandbox -P` with the per-run profile rendered for a memory-copy-shaped
   world. Canaries, as M8's:
-  - a credential canary, another project, platform state, the store's Codex folder;
+  - a file beside the copy, a file in the home folder, a credential canary, another project, platform state, the store's
+    Codex folder;
   - a write to `AGENT.md`, `RULES`, `.git/config`, a new `memory/` file, `$TMPDIR`;
   - a link and a rename;
   - the network.
@@ -1097,14 +1107,18 @@ world. Names are shared with Claude's where they mean the same, so `update-runti
 - **`updater-off`**: not-checkable. `exec` has no update path: 0.167.0, with 0.169.0 published, wrote no `version.json`
   or `packages/`, left the npm sink empty, and kept its digest. The store's digest check is what holds the copy.
 - **`lifecycle-hooks`** becomes checkable under section 3a: the platform's hooks installed by `user_install` into the
-  world's home, and a marker in `additionalContext` that reaches the model.
+  world's home, and a marker in `additionalContext` that reaches the model. It needs the login, so it runs only once
+  Codex runs platform work (D11); while Codex is only installed for sessions it stays not-checkable.
 - `session-folder-git` and `control-globs` stay. `test_conformance_cover` holds every port to a check or a named
   not-checkable entry.
 
-**The promotion rule needs one change.** `conformance.verdict()` fails on any safety fail. `session-folder-git` fails on
-every Codex version measured (B1), so no Codex copy would ever be promoted.
+**The promotion rule needs one change.** `conformance.verdict()` fails on any safety fail. `session-folder-git` failed
+on 0.167 (the probe) and Codex's git ran a filter on 0.169's daemon (by hand, B1), so no Codex copy would ever be
+promoted.
 - `Check` gains an optional `holds = "sessions"`, set only on `session-folder-git`. Its fail still gates that version's
-  sandboxed sessions (`runtime_ports.gated`) and alerts.
+  sandboxed sessions (`runtime_ports.gated`).
+- Its alert is keyed by check and reason, not by version, as `update-runtimes`' are. Otherwise every self-update of the
+  daemon would alert again about the same known failure, which doctor's confined row already names.
 - It doesn't hold back the platform's copy, because the agent port starts no run in a folder whose git config the
   platform doesn't own (1d, tested). Promotion reads `verdict(doc, for_promotion=True)`.
 - Claude's checks keep the default. The rule is the owner's to confirm (D13).
@@ -1191,7 +1205,10 @@ both, so layer 2 adds a config, not a mechanism:
 
 **8. Order of work** (each with its tests; one cold review of the code before merging):
 1. Distribution and the store's Codex layout (`executables`, `version_at`), `checked_copy`, `binary()` without the PATH
-   fallback, `in_use()`'s split. D11's default is "sessions only", so nothing installs yet.
+   fallback, `in_use()`'s split. With D11's default ("sessions only") no platform copy is installed and no login is
+   used, but `session-versions` starts installing the versions the user's Codex sessions run (session copies, about
+   370 MB each, at most 5) and runs their model-free checks. That is wanted (the per-version gate needs it), and it is
+   said in the merge's note.
 2. The home template and builder, the config, `credentials()`, `codex-login`, `auth-link-write`, `home-flags`,
    `agent-profile`, `distribution-integrity`.
 3. The completion port with its two checks; `completion-no-tools`, `completion-schemas`; the promotion rule (D13).
@@ -1216,7 +1233,14 @@ folders):
   from the 0.169 source and seen once;
 - usage in `turn.completed`, and the error text of a lost login;
 - `lifecycle-hooks` in the world (additionalContext reaching the model);
-- the time a completion takes (the librarian's nightly budget).
+- the time a completion takes (the librarian's nightly budget), and what a logged-in run fetches into a fresh home
+  (the catalog, plugins, skills) and how long that adds.
+
+**Model-free, at build** (not measured for this plan):
+- Codex's own git calls (a logging `git` first on PATH) under `exec` with the platform home, in the completion's empty
+  folder and in a memory-copy-shaped clone.
+- The existing `conformance.py run codex` against 0.169.0. It wasn't run here: from this worktree its world would have
+  been made under the live instance's private folder.
 
 **10. Risks.**
 - **Surface C.** The server can change the tool shape (11-08's code mode did). The per-run check refuses rather than
@@ -1759,8 +1783,9 @@ schema.
 - A scratch `$HOME/.codex` held a SessionStart hook trusted by `trust_hash`. It fired for a run with no `CODEX_HOME`
   (the positive control). It didn't fire for a run whose `CODEX_HOME` was Step 1's home, nor with
   `--dangerously-bypass-hook-trust`.
-- A `.codex/config.toml` turning the shell and agents on, and a `.codex/hooks.json`, in a run's untrusted folder: neither
-  loaded.
+- A `.codex/config.toml` turning the shell and agents on, in a run's untrusted folder (not a git repo), didn't load
+  (`prompt-input`). A `.codex/hooks.json` there didn't fire under `exec` with a home whose hooks were on. Its control,
+  the same hook as a user-level `hooks.json` in that home with `--dangerously-bypass-hook-trust`, fired.
 
 **The login link (M9 without a real login).**
 - Setup: dummy API keys and the file store, in a scratch "user" home. `codex login --with-api-key` wrote its
@@ -1780,3 +1805,6 @@ schema.
   - the network refused;
   - a folder outside and the home readable, so the denies come from the policy.
 - `:workspace` with the same entries wrote everything in the folder and `$TMPDIR`.
+- `extends = ":read-only"` with the folder holding the copy `deny`, the copy `read` and its `STATE.md` `write`: the copy
+  read and listed, `STATE.md` written; `AGENT.md`, a sibling folder's file and the parent's listing refused; `/etc/hosts`
+  read. The more specific entry wins over the deny around it.
