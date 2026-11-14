@@ -51,9 +51,14 @@ def unsupported(point: str) -> str | None:
         return _("runtime {name} has no completion interface, and {settings} has no llm section (set one up with "
                  "brunna llm setup)", name=name)
     try:
-        runtime_ports.load(name, ports=("agent",))
+        mod = runtime_ports.load(name, ports=("agent",))
     except runtime_ports.Unsupported as e:
         return str(e)
+    # a runtime that runs only some points (its optional point_refusal; runtime-codex.md, Step 1): off for the rest, so a
+    # caller with a fallback takes it (the librarian's completion parts)
+    refusal = getattr(mod, "point_refusal", None)
+    if callable(refusal) and (why := refusal(point, spec)):
+        return why
     if runtime_ports.throwaway_only(name) and point not in runtime_ports.THROWAWAY_POINTS:
         # it refuses every other point (runtime_command, runtime_acp): off, so a caller with a fallback takes it (the librarian's
         # completion parts) instead of failing on every item

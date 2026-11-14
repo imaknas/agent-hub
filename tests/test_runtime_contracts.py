@@ -324,8 +324,47 @@ class CodexFixture:
             d["tool_input"] = {"command": command}
         return json.dumps(d)
 
+    # the platform's own runs (Step 1): a memory-copy point in a plain clone of a memory repo, a stand-in codex
+    REPORTS = frozenset({"session"})
+    POINT = "librarian-state"
+    SCHEMA = True
+    ENV_CREDENTIAL = False   # its login is a file linked into each run's home, not a variable (M9)
+    LOGIN_ERROR = "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header"
+
+    def configure_run(self, tmp: pathlib.Path, mode: str) -> dict:
+        import yaml
+        import codex_fake
+        m = self.m
+        self.SPEC = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"][self.POINT]
+        origin, copy = tmp / "origin", tmp / "copies" / "box"
+        (origin / "box-memory.git").mkdir(parents=True)
+        (copy / ".git").mkdir(parents=True)
+        (copy / ".git" / "config").write_text(f'[core]\n\tbare = false\n[remote "origin"]\n\turl = '
+                                               f'{origin / "box-memory.git"}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n')
+        (copy / "STATE.md").write_text("s\n")
+        self.cwd = str(copy)
+        (tmp / "codex-home" / "auth.json").write_text("{}")
+        exe = codex_fake.write(tmp / "prefix", **({"answer": json.dumps(RUN_OK["structured_output"])} if mode == "ok"
+                                                    else {"fail": "boom: login expired"}))
+        m.check_binary(str(exe))
+        p = _hubconf.p
+        for patch in (mock.patch.object(_hubconf, "runtimes_dir", lambda: tmp / "runtimes"),
+                      mock.patch.object(_hubconf, "p", lambda k, d=None: origin if k == "git_origin" else p(k, d))):
+            patch.start()
+            self._patches.append(patch)
+        return {"HUB_LLM_POINT": self.POINT}
+
+    def configure_auth(self, tmp: pathlib.Path, token: bool) -> None:
+        if token:
+            (tmp / "codex-home" / "auth.json").write_text(json.dumps({"auth_mode": "chatgpt", "tokens": "contract-token"}))
+
+    _patches: list = []
+
     def teardown(self):
         self._home.stop()
+        self.m.check_binary(None)
+        while self._patches:
+            self._patches.pop().stop()
 
 
 FIXTURES = {"claude": ClaudeFixture, "fake": FakeFixture, "command": CommandFixture, "acp": AcpFixture,
@@ -510,9 +549,10 @@ class RunContract(unittest.TestCase):
                             continue   # this runtime cannot tell "a result but not completed normally"
                         env = fx.configure_run(pathlib.Path(d), mode)
                         rt = runtime_ports.load(name, ports=("agent",))
-                        task = runtime_ports.Task(point=getattr(fx, "POINT", "p"), prompt="hi", spec={}, env=env or None,
-                                                  timeout_s=30,
-                                                  output_schema={"type": "object"} if name in ("command", "acp") else None)
+                        task = runtime_ports.Task(point=getattr(fx, "POINT", "p"), prompt="hi", spec=getattr(fx, "SPEC", {}),
+                                                  env=env or None, timeout_s=30, cwd=getattr(fx, "cwd", None),
+                                                  output_schema={"type": "object"} if name in ("command", "acp")
+                                                  or getattr(fx, "SCHEMA", False) else None)
                         self.reports = reports
                         check(rt.run(task), rt.describe(task))
                     finally:
@@ -649,6 +689,9 @@ class AuthContract(unittest.TestCase):
         def check(m, fx):
             env, why = m.auth_env("token", dict(self.BASE))
             self.assertEqual(why, "")
+            if not getattr(fx, "ENV_CREDENTIAL", True):   # its login isn't a variable: nothing to add or remove
+                self.assertEqual(env, m.clean_env(env))
+                return
             self.assertNotEqual(env, m.clean_env(env), "a token login should carry extra credentials")
             self.assertEqual(m.clean_env(env), m.clean_env(dict(self.BASE)))
             # an env already carrying old credentials: replaced with this one's, never two stacked

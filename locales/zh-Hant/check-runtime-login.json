@@ -1,0 +1,9 @@
+{
+ "the login check broke: {error}": "登入檢查壞了:{error}",
+ "usage: check-runtime-login.py --runtime <name>": "用法:check-runtime-login.py --runtime <名稱>",
+ "{runtime}: it has no login check": "{runtime}:它沒有登入檢查",
+ "{runtime}: its login works": "{runtime}:登入正常",
+ "{runtime}: its login works again": "{runtime}:登入恢復正常",
+ "{runtime}: the platform runs no work on it; its login isn't checked": "{runtime}:平台沒有在它上面跑任何工作,不檢查它的登入",
+ "{runtime}: {problem}": "{runtime}:{problem}"
+}

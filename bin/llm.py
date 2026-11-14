@@ -369,6 +369,13 @@ def run(a) -> int:
         rt = runtime_ports.load(point_runtime(a.point, spec), ports=ports, platform_runs=not getattr(a, "dry_run", False))
     except runtime_ports.Unsupported as e:   # no coding agent, or no checked copy of it: the declared failure path, said
         return fail(key, spec, str(e))
+    # a runtime that runs only some points says which it doesn't (its optional point_refusal; runtime-codex.md, Step 1)
+    refusal = getattr(rt, "point_refusal", None)
+    if callable(refusal) and (why := refusal(a.point, spec)):
+        if getattr(a, "dry_run", False):
+            print(why, file=sys.stderr)
+            return 2
+        return fail(key, spec, why)
     # works_in: memory: the folder is a copy of a project's memory branch, so an agent started there loads what the project wrote. What
     # holds it is this look at the files, on every runtime: only notes, or no run
     in_memory = spec.get("works_in") == "memory"
