@@ -209,6 +209,11 @@
 - **allow cannot open an exception to a deny** (deny → ask → allow, the first deny wins): "may read only the other
   projects' STATE.md" is impossible; read `~/.memory-copies/<p>/STATE.md` instead.
 - **Hooks run outside the sandbox**: memory sync and the mailbox hook are not affected.
+- **pip in a sandboxed session fails with `SSLCertVerificationError('OSStatus -26276')` while curl works** (macOS,
+  11-14): pip 24.2+ verifies certificates through truststore, i.e. the system's trust service, which the sandbox can't
+  reach; the sandbox's proxy only allows by domain and doesn't intercept TLS. Keep verification on and use pip's own
+  CA bundle: `pip install --use-deprecated=legacy-certs …` (or `PIP_USE_DEPRECATED=legacy-certs`). Never
+  `--trusted-host`. The project's `network:` still needs `pypi.org` and `files.pythonhosted.org`.
 - **A project's own MCP of the same name overrides the claude.ai connector**: when a project has its own MCP called
   `upwork` (needs OAuth), a headless job run in that folder does not get claude.ai's Upwork tools. Agent jobs run in
   their own state directory with `cwd: state`.
