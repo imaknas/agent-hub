@@ -89,8 +89,11 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
      remotes, as the owner. It replaces the fence's per-name list and its narrow runner; the scan stays as a second
      layer. r2 after a blind review (11-14): no process writes both the worktree and the git dir (a symlink race
      otherwise plants files in `.git`), and `safe.bareRepository=explicit` in the owner's git config is a checked
-     precondition (set 11-14). Not built; open for the owner: push policy, signing, Codex app worktrees, submodules,
-     who switches a project on.
+     precondition (set 11-14). r3 after a second blind review (11-14): an unsandboxed checkout (the owner's, or an
+     agent tool's worktree mode) can be raced by any running project process into writing anywhere the owner can
+     write. This is true today, with or without the broker; a symlink-creation deny closes it for services and jobs
+     only. Not built; open for the owner: B-1's options, push policy, signing, Codex app worktrees, submodules, who
+     switches a project on.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
@@ -124,6 +127,9 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - The Keychain is blocked for services and capability runs, not for sessions. Loosening work mode's per-command
      prompts waits on that.
    - The git-filter protection in `mailbox-session-first.md` step 3 rests on one tool's environment variable.
+   - **Open today (measured 11-14, `git-broker.md` r3 B-1):** any process of a sandboxed project can race an unsandboxed
+     checkout (the owner's, or an agent tool's worktree mode) into writing its files anywhere the owner can write. The
+     options are the owner's.
 4. **Not enforced on either OS:**
    - the outbound domain allowlist (`policy.network`);
    - on Linux, inbound connections limited to localhost, and signals on kernels older than 6.12.

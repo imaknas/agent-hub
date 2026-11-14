@@ -2,7 +2,9 @@
 
 Status: design, 11-14, on measurements made the same day; r2 after a blind review the same day (at the end; it holds
 where the text above disagrees: chiefly, no process writes both the worktree and the git dir, and
-`safe.bareRepository=explicit` is a precondition again); nothing built. It takes over the prevention half of
+`safe.bareRepository=explicit` is a precondition again); r3 after a second blind review (at the very end; it holds
+over both: an unsandboxed checkout can be raced into writing anywhere the owner can write, and how far to go against
+that is the owner's choice); nothing built. It takes over the prevention half of
 `git-config-fence.md` (the per-name fence, the narrow `brunna git` runner and the one-time install). That doc's scan stays
 as a second layer, and so do its config allowlist and its presets. Measured in scratch repos (git 2.50.1, macOS on a
 case-insensitive APFS volume). A sandboxed writer was stood in for by the platform's real Seatbelt profile
@@ -21,7 +23,9 @@ sandbox must commit.
 
 **The owner's principle (11-14):** a user never has to remember a special way to use their agent. Any tool opened
 normally in a sandboxed project must be safe and get full brunna: the Codex app or CLI, Claude Code, their editor, a
-terminal, a git GUI.
+terminal, a git GUI. **Caveat (r3):** this design doesn't yet deliver that for checkouts. While a project process runs,
+an unsandboxed checkout (the owner's, or an agent tool's worktree mode) can be raced into writing anywhere the owner can
+write. That was true before this design too. The owner's options are in r3, "B-1: the options".
 
 **The owner's decision (11-14):** git goes through the platform. In a sandboxed project, the sandbox can't write any git
 dir at all. The `git` an agent runs inside the sandbox is a platform wrapper on its PATH. The wrapper forwards the
@@ -334,8 +338,9 @@ writes a `.git`, the gitfiles and `commondir` pointers it reads to find that dir
   - the editor callback's check of a returned todo;
   - **the check after a stop.** Whenever a broker-run rebase, cherry-pick or revert stops, the broker reads
     `rebase-merge/git-rebase-todo`, `rebase-merge/done` and `sequencer/todo`. These are git's own line format, written
-    by git, not by the project. If any line is an `exec` or `x` command, the broker runs `--abort` under the writer
-    profile and says why.
+    by git, not by the project. If any line is an `exec` or `x` command, the broker aborts the operation (composed:
+    P1 puts the refs and the index back and removes the state folder, P2 restores the worktree; r3 S-f) and says
+    why.
 
   Whether the sequencer of `cherry-pick` and `revert` accepts `exec` lines at all wasn't measured. Worktree content
   (`.gitattributes`, `.gitmodules`, symlinks) is read by git as the project, inside the project's own sandbox.
@@ -534,6 +539,11 @@ todos (exec lines run on the owner's `--continue`).
 
 ## What stays residual
 
+- **Arbitrary writes as the owner during any unsandboxed checkout (r3, B-1).** This covers the owner's terminal, editor
+  or git app, and an agent tool's own worktree mode. While any of the project's processes runs (a session's command, a
+  service, a job), a checkout can be raced into writing the project's files into any folder the owner can write:
+  `~`, `~/Library/LaunchAgents`, another project. Existing files there get overwritten. This holds today, with or
+  without the broker. The options are in r3.
 - **Worktree content read by the owner's own git.** The owner's global config is theirs. A tracked `.gitattributes` can
   select a driver it defines (git-lfs's filter, say), which then runs as the owner on content the project chose. The same
   goes for `.lfsconfig` (not measured: no git-lfs here) and the URLs in `.gitmodules` on the owner's own
@@ -577,6 +587,10 @@ platform.** That means:
 
 The scan finding nothing is not a condition (the fence doc's r3); a scan finding is a failure. D13 is re-decided then
 (`runtime-codex.md`).
+
+**Caveat (r3, until the owner decides B-1):** these conditions don't cover the owner's checkout race. While any of the
+project's processes runs, an owner's or an agent tool's unsandboxed checkout can be made to write the project's files
+anywhere the owner can write. Which conditions "confined" adds for that is the owner's choice (r3, "B-1: the options").
 
 ## Rollout per project, and the way back
 
@@ -820,11 +834,9 @@ this way.
     P1 the admin dir, and P2 the checkout.
 
   Each is in step 2 of the order of work, with the race probe run against it.
-- **Residual, newly listed: the owner's own unsandboxed checkouts race the same way.** A project process swapping a
-  folder for a link while the owner's terminal or editor checks out can land files in `.git`, as the owner. Nothing in
-  the sandbox can stop it, since the swap itself is an ordinary worktree write. The scan reports what lands (a
-  `rebase-merge/` or `sequencer/` the platform didn't write, unknown files in `.git`). The status page says that the
-  owner continuing an operation they didn't start is the risky step.
+- **Residual, newly listed: the owner's own unsandboxed checkouts race the same way.** r3 measured this as worse than
+  written here: the swap can point at any folder, not only `.git`. The result is arbitrary writes as the owner. See r3,
+  B-1.
 
 ### B2: git-dir shapes despite the "no HEAD" rule. `safe.bareRepository=explicit` is a precondition again.
 
@@ -1005,3 +1017,207 @@ in the B1 table. It does not build a single writer profile. Every composed opera
 B2 probes (a HEAD path through the broker; a renamed folder holding HEAD, with and without the precondition) as
 tests, plus the S1 ref probes, the S2 rebuild probes (fsmonitor, alternates, worktree repair) and S5's socket probe.
 Doctor's precondition check lands with step 1.
+
+## r3 (11-14), after the second blind review
+
+A second cold review of r2 found that the split held against everything it tried. It found one blocking point (B-1),
+eight should-fix items (S-a to S-h) and a nit. Its probes were re-run here, and the measurements below were added (git
+2.50.1, the real `service_profile` plus the candidate rules). Where r3 and anything above disagree, r3 holds.
+
+### B-1: the owner's checkout race (this exists today, with or without the broker)
+
+**The finding** (re-run):
+- A fenced project process loops, swapping a tracked folder `d/` for a symlink to a folder it can't write itself. The
+  stand-in here is a fake home folder, and the project's direct write there was refused.
+- The owner's plain `git switch` wrote **2,925** of the tree's files into that folder in the first round. That
+  included overwriting a file already there (`a2990`, now "planted 2990").
+- `git worktree add`, which is how an agent tool's worktree mode makes a checkout as the user, wrote **2,920** in the
+  first round.
+- The review also measured `checkout -f`, and found that `checkout.workers` and `core.symlinks=false` don't help.
+
+Aimed at `~` or `~/Library/LaunchAgents`, this is arbitrary writes as the owner, so code runs as the owner at the next
+login. No owner action is needed: an agent's own tool makes worktrees as the user while the session's commands run.
+
+**The residual, plainly** (also in "What stays residual" above): during any unsandboxed checkout (the owner's
+terminal, editor or git app, or an agent tool's worktree mode), while any process of the project runs (a session's
+command, a service, a job), the project can make that checkout write its files anywhere the owner can write.
+
+**A measured partial mitigation: no symlink creation in the workspace.**
+- The Seatbelt rule is `(deny file-write-create (require-all (subpath <workspace>) (vnode-type SYMLINK)))`.
+- **Refused:** `ln -s` in the workspace; a link made elsewhere and renamed into the workspace; a link renamed onto
+  `d`. A folder can't be hard-linked, so the swap needs a link.
+- **The race with the rule in the attacker's profile:** 40 rounds, nothing written into the fake home, and the
+  existing file intact.
+- **What it breaks:** `python3 -m venv` and `uv venv` (both link the interpreter), and npm's `node_modules/.bin` and
+  `file:` dependencies (npm exited 255).
+- **Carve-outs.** The rule allows link creation inside `<workspace>/.venv/` and inside any `node_modules/` folder; the
+  folder entries themselves stay covered.
+  - With them, `python3 -m venv .venv`, `uv venv .venv` and `npm install` of a `file:` package with a `bin` worked.
+  - A venv elsewhere (`venv2`) was still refused.
+  - **A link made inside a carve-out can't be renamed onto `d`** (refused). The rename's destination counts as a link
+    creation outside the carve-out.
+  - **The broker refuses tracked paths at or under a carve-out name** (`.venv`, `node_modules`), so no checkout ever
+    writes into a folder where links may exist.
+  - More carve-outs (other languages' tool folders) are added one at a time with that same refusal, from the refusal
+    log.
+- **P2 needs an allowance for tracked symlinks.** Under the rule, P2's checkout of a tracked link failed ("unable to
+  create symlink"). The allowance is computed per request: exactly the paths where this operation writes a tracked
+  link (`(literal <path>)` with the link type). Measured: with the allowance for `tl` only, `tl` was made and the other
+  tracked link was still refused.
+  - The allowance is P2's alone. P2 runs only git, under the exec guard (r3 S-f), and only while the broker holds the
+    index lock (S-e).
+  - The broker also refuses, at commit time, tracked links whose target is absolute or leaves the worktree.
+- **Coverage: services and jobs only.** Only the platform renders their Seatbelt profile. The agents' own sandboxes
+  can't say it, as far as their binaries show (read, not run):
+  - **Claude Code:** its sandbox settings take paths only (`filesystem` allow and deny for read and write, `network`,
+    unix sockets, `excludedCommands`). The Seatbelt profile it generates uses `vnode-type` only for directory metadata
+    reads and `/dev/null`. There is no symlink rule and no setting that makes one.
+  - **Codex 0.167:** its permission profiles take filesystem read, write and deny by path or glob, plus network. Its
+    Seatbelt generator uses `vnode-type DIRECTORY` only, to pin folders against removal. No symlink rule.
+
+    There was nothing to measure without a setting to try.
+
+  So a session's own commands (the commonest project process) stay able to swap.
+- **Claude Code has a `WorktreeCreate` hook** that replaces its git worktree creation: "for another version-control
+  system"; the hook prints the path it made. So the platform can make Claude's worktrees itself, through the broker
+  (P1 the admin dir, P2 the checkout under the symlink rule's allowance). The Codex CLI binary shows managed worktrees
+  in a "configured pool" and no such hook. The Codex app wasn't inspected.
+
+### B-1: the options (the owner's decision)
+
+| option | what it gives | what it costs |
+|---|---|---|
+| **1. Accept and document** | nothing new; the status page and doctor say it plainly | while any process of a sandboxed project runs, the owner's and the agent tools' checkouts can be made to write anywhere as the owner; "confined" can't be claimed for checkouts; the principle isn't met for them |
+| **2. Partial mitigation for services and jobs** (the symlink rule, the carve-outs, P2's allowance, the broker's refusals) | services and jobs can't swap at all (measured) | venvs and tool folders outside the carve-outs break for services and jobs, loudly; the carve-out list needs maintaining; **sessions stay open**, so it doesn't close B-1 alone |
+| **3. The platform makes worktrees for sandboxed projects** (Claude's `WorktreeCreate` hook → the broker, with P2 under the rule's allowance), and doctor warns about the owner's own checkouts | an agent tool's worktree mode stops being the no-owner-action trigger, for Claude; the owner is told when their checkout is exposed (a project process is running) | Codex has no such hook found; the owner's own checkouts are only warned about, not protected; a hook to build and maintain |
+| **4. Never "confined" while any process of the project can run during a checkout** | the confined check stops overclaiming | in practice a sandboxed project's sessions are never "confined" (their commands can always run during a checkout), so D9's goal of a confined Codex session isn't reached by this design |
+
+**Recommended:** 2 and 3 now, and 4 for sessions until a tool's own sandbox can refuse link creation in the workspace.
+The platform also asks Anthropic and OpenAI for that setting, which turns 4 off runtime by runtime as each canary
+passes. Until the owner decides, the principle (the top of this doc) and Codex's confined check carry the caveat
+written there.
+
+### Should-fix
+
+- **S-a, no owner-identity step resolves a path through a folder the project can write.**
+  - **`init`.** Measured: the broker checked `<dir>` (inside the project, new) and ran `git init --template=` as the
+    owner, while a fenced process flipped `<dir>` between absent and a link to the fake home. **The owner's git dir
+    landed in the fake home after 3 calls** (`HEAD`, `config`, `objects`, `refs`). Now:
+    - the broker makes `<dir>` through no-follow directory descriptors and takes its real path from the descriptor;
+    - `init` runs under a profile whose only write is `<that real path>/.git`, and the project's read rules apply;
+    - a swap afterwards makes git write elsewhere, which is refused.
+
+    Not yet measured with the fix (step 2).
+  - **Owner network operations** run only on the workspace's own `.git`. That entry is pinned by the fence, and no
+    folder above it is project-writable. For any other repo (a worktree's admin dir, a scratch repo), the broker
+    fetches into a broker-owned bare repo outside every project folder, and P1 fetches from there through a bundle.
+  - **Gitfiles** (worktrees, the rebuild) are written by the broker through no-follow directory descriptors.
+  - **P2 makes the temp index copy** into its own temp folder. The broker never writes a temp path a project could
+    have pre-made as a link.
+  - **The hook forwarder sends contents, not paths.** For the commit gate, it sends the in-flight index's bytes. The
+    broker writes them into its own private folder (`hubconf.private_tmp()`) and runs the test from there.
+  - **Scratch repos** are recorded by real path plus device and inode of their `.git`. A moved or replaced repo isn't
+    served.
+  - **The rebuild's worktree repair.** Measured: an old admin dir's `gitdir` aimed at the fake home made the owner's
+    `worktree repair` write a gitfile into the fake home, and `worktree list` then listed it as a worktree. Now:
+    - worktree paths come only from the registry or the platform's records (the tool worktree folders under the
+      workspace, walked without following links), never from the old admin dir;
+    - repair runs under a profile that may write only that worktree's `.git` and its admin dir.
+- **S-b, P1's and P2's reads are exactly the project's own read rules.** Measured with the review's probe:
+  - with P1 built on the project's profile, four reads were refused and nothing of project B's entered the objects:
+    `hash-object -w <B's file>`, the same through a folder link, `commit -F <B's file>`, `apply --cached <B's patch>`;
+  - with a git-dir writer that had no read denies, each of the four put B's secret into the objects;
+  - `add` through a folder link was refused by git itself ("beyond a symbolic link") either way;
+  - a hard link of B's file into the project's folder was refused;
+  - an https `ls-remote` worked under the project's profile with the exec guard (fetches from https under P1 are
+    fine).
+
+  The four become tests. **There is never a profile with the git-dir write and no read rules.**
+- **S-c, the self-check after P2.** Measured: with an unrelated local change in `a` (git's own `switch` carries it),
+  `diff-files --quiet` on the temp index failed the call. By then P2 had already rewritten `b`, HEAD stayed, status
+  showed both changed, and a retry was refused ("b not uptodate"). Now:
+  - the check covers only the paths this operation changes (`diff-tree` old → new, plus conflict paths), compared with
+    the dirty set taken before the operation;
+  - on failure, P2 puts back what it wrote: `read-tree -m -u <new> <old>` on its temp index, for those paths only.
+
+  Not yet measured with the fix.
+- **S-d, pushes.**
+  - **Services and jobs can't be told from sessions by the nonce**, since both can write the project's folder. So they
+    get **their own socket**: their Seatbelt profile allows only it, and the broker refuses pushes on it. Sessions use
+    the session socket. Codex sessions reach any socket, but a service can't reach the session socket.
+  - **`push_on_merge: true`:** `merge-branch` runs in the session, so its push reaches the broker like any session's
+    push. Allowing it means **any session of that project can push the default branch**: its checks run in the session
+    and can be skipped.
+  - **The CI rule is widened to `.github/**`.**
+  - Question 1 says what a push means: **every push runs this project's code in CI, with whatever secrets your
+    workflows give it.**
+- **S-e, locking.** The broker takes `.git/index.lock` (created exclusively, as git does) at step 1 and holds it to
+  step 4. P1 computes the next index into it, and step 4 renames it over `index`, which is how git commits an index.
+  So the owner's concurrent git waits or fails as with two terminals. Worktree-writing operations run one at a time
+  per worktree.
+- **S-f, the composed set is the allowlist.**
+  - There is never a combined profile: P1 writes only the git dir, and P2 only the worktree.
+  - The allowlist of forwarded operations is exactly the composed set. Everything else is refused, with its reason.
+  - **In place** (real git in the project's sandbox; they write no git dir): `clean`, `archive` (local, to stdout),
+    `check-ignore`, `check-attr`, `shortlog`, `diff-tree`, beside the read forms above.
+  - The check after a stop aborts by composition (fixed above).
+  - **Compositions planned for the everyday operations:**
+    - `--abort` (rebase, cherry-pick, revert, am): P1 puts the refs back and sets the index to that tree, removing the
+      state folder; P2 resets the worktree.
+    - `merge --abort`: like `reset --merge`; P2 does `read-tree -m -u` from the current index to HEAD, so unrelated
+      local changes stay.
+    - `--continue`: P1 commits the current index with the saved message, then the next step. The state is written in
+      git's own format with no `exec` lines, so the owner's own git can continue it too.
+    - `--skip`: P1 drops the step, P2 resets to HEAD.
+    - `restore --source <rev> <path>` and `checkout <rev> -- <path>`: P1 sets the next index for those paths
+      (checkout only); P2 runs `checkout-index` from a temp index holding `<rev>`'s entries.
+    - `stash apply`: as pop, without the drop.
+    - `merge --squash`: the merged tree into P1's next index, no commit, `SQUASH_MSG`; P2 materialises.
+    - `am`: each patch through `apply --cached` into P1's next index plus `commit-tree`; P2 materialises. A 3-way `am`
+      is refused at first.
+
+    Each gets the race probe and the S-c check as tests.
+- **S-g, Codex app worktrees.** They sit under the user's Codex home. Every sandbox denies that folder, because it
+  holds every conversation and the login. Serving one means carving that worktree out of that folder for the project's
+  sandboxes. That is the trade in question 3. The Codex CLI's managed worktrees have a "configured pool"; if it can be
+  placed inside the project, the carve-out isn't needed. To check.
+- **S-h, nested projects** aren't served, unless every rendering of the outer project (Seatbelt, Claude, Codex) denies
+  writes into the inner one. The review measured the outer project writing the inner one's folder by default.
+
+### Nit
+
+The hook forwarder runs under `python -I`, with every `PYTHON*` variable stripped, or as a compiled helper. Nothing
+from the project's environment shapes the program the exec guard lets run.
+
+### Open questions for the owner (r3: replaces both lists above)
+
+1. **B-1's options.** **Recommended:** 2 and 3 now; 4 for sessions until a tool's own sandbox can refuse link
+   creation in the workspace, and the platform asks Anthropic and OpenAI for that setting.
+2. **Pushing with your credentials.** Every push runs this project's code in CI, with whatever secrets your workflows
+   give it. **Recommended:**
+   - sessions only (a separate socket for services and jobs, where push is refused);
+   - the project's own non-default branches; no tags;
+   - nothing under `.github/**` unless the registry allows it;
+   - `--force-with-lease` there, any other force refused.
+
+   Keep `push_on_merge` off for sandboxed projects: with it on, any session of the project can push the default branch.
+3. **Signing.** **Recommended:** not through the broker. Your key is never used on a project's request.
+4. **Codex app worktrees.** Serving one means carving it out of your Codex home, which every sandbox denies because it
+   holds every conversation and your login. **Recommended:** don't carve. Git in such a worktree of a sandboxed project
+   says why it can't run, and points to a worktree inside the project (Claude's mode, or the Codex CLI's pool if it can
+   be placed there). Revisit once Codex can keep worktrees in the project.
+5. **Submodules.** **Recommended:** none at first.
+6. **Switching on.** **Recommended:** you flip it per project. The rebuild runs then, with nothing open and the
+   project's services stopped.
+
+### Order of work, revised again
+
+- **Step 1** gains the symlink rule for services and jobs, with the carve-outs, behind the per-project switch (if
+  option 2 is chosen), and doctor's B-1 row.
+- **Step 2** gains:
+  - S-a's real-path and descriptor discipline, with the `init` race and the repair probe as tests;
+  - S-b's four read probes; S-c's dirty-set check and its rollback; S-e's lock;
+  - S-f's compositions;
+  - P2's per-request link allowance.
+- **Step 4** gains Claude's `WorktreeCreate` hook (if option 3 is chosen), with the owner race probe run against a
+  worktree made through it.
