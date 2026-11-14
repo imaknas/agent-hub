@@ -2104,8 +2104,70 @@ def foreign_controls(workspace) -> list[str]:
 
 
 def platform_hooks() -> dict:
-    """The hooks a sandboxed project's settings hold: the platform's only (render-project-settings writes them)."""
-    return install_hooks({})["hooks"]
+    """The hooks a sandboxed project's settings hold: the platform's only (render-project-settings writes them), its
+    worktree hand-over included (worktree_hooks)."""
+    hooks = install_hooks({})["hooks"]
+    hooks.update(worktree_maker_hooks())
+    return hooks
+
+
+# ---------- its own worktree mode, handed to the platform (runtime_ports' worktree_maker interface) ----------
+# Claude Code makes a worktree with its own git, as the user, unless a WorktreeCreate hook is configured: then it runs
+# the hook and takes the path the hook prints as the last line of its stdout (a relative one against the session's
+# folder); a hook that exits non-zero, or prints nothing, fails the worktree ("WorktreeCreate hook failed"). The input
+# is the common hook fields plus `name`. WorktreeRemove, when configured, gets `worktree_path` and replaces its own
+# removal. Read from the binary (2.1.x, 11-14), not yet run with a model. In a sandboxed project the platform makes the
+# worktree as the project (session_worktree.py), so a project process can't race a checkout run as the owner
+# (docs/design/git-broker.md r3 B-1). Never `|| true`: if the platform can't, the worktree fails (closed), it is never
+# made as the owner.
+WORKTREE_EVENTS = (("WorktreeCreate", "worktree-make"), ("WorktreeRemove", "worktree-drop"))
+WORKTREES = pathlib.PurePosixPath(".claude") / "worktrees"   # where its worktree mode puts them, and its branch prefix
+WORKTREE_BRANCH = "worktree-"
+
+
+def worktree_command(what: str) -> str:
+    import hubconf
+    return (f"[ -x {hubconf.hub_bin('hub-event')} ] && exec {hubconf.sh_py(hubconf.MAIN / 'bin' / 'hub-event')} "
+            f"--runtime {NAME} {what}; echo 'brunna: the platform makes worktrees in this sandboxed project, and its "
+            f"entry point is missing' >&2; exit 1")
+
+
+def worktree_maker_hooks() -> dict:
+    return {event: [{"hooks": [{"type": "command", "command": worktree_command(what)}]}]
+            for event, what in WORKTREE_EVENTS}
+
+
+def worktree_request(raw: str) -> dict | None:
+    try:
+        data = json.loads(raw or "")
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("cwd"), str) or not data["cwd"]:
+        return None
+    if data.get("hook_event_name") == "WorktreeCreate" and isinstance(data.get("name"), str):
+        return {"make": True, "cwd": data["cwd"], "name": data["name"]}
+    if data.get("hook_event_name") == "WorktreeRemove" and isinstance(data.get("worktree_path"), str):
+        return {"make": False, "cwd": data["cwd"], "path": data["worktree_path"]}
+    return None
+
+
+def worktree_location(workspace, name: str) -> tuple[pathlib.Path, str]:
+    return pathlib.Path(workspace) / WORKTREES / name, WORKTREE_BRANCH + name
+
+
+def worktree_reply(path) -> str:
+    return str(path)
+
+
+def makes_worktrees(workspace) -> bool:
+    """Whether the project's settings file hands its worktree mode to the platform (render-project-settings writes it
+    for a sandboxed project)."""
+    try:
+        hooks = json.loads(settings_path(pathlib.Path(workspace)).read_text()).get("hooks") or {}
+    except (OSError, ValueError, AttributeError):
+        return False
+    return all(any(h.get("command") == worktree_command(what) for e in hooks.get(event) or [] for h in e.get("hooks") or [])
+               for event, what in WORKTREE_EVENTS)
 
 
 # ---------- rules file (runtime_ports' instructions interface) ----------

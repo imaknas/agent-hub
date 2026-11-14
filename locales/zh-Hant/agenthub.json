@@ -295,5 +295,11 @@
  "{project} (sandboxed): git config fence {line}": "{project}(沙盒):git config 圍欄{line}",
  "bin/git_fence.py --report lists every finding ({n})": "bin/git_fence.py --report 會列出每一項發現({n})",
  "the git config fence (report only): {window}": "git config 圍欄(只回報):{window}",
- "bin/git_fence.py --report scans now (the brunna/git-fence job does it every 15 minutes)": "bin/git_fence.py --report 現在就掃(brunna/git-fence 這個 job 每 15 分鐘掃一次)"
+ "bin/git_fence.py --report scans now (the brunna/git-fence job does it every 15 minutes)": "bin/git_fence.py --report 現在就掃(brunna/git-fence 這個 job 每 15 分鐘掃一次)",
+ "sandboxed projects' own services and jobs make no symbolic link in their checkouts (except inside {folders} folders), so they can't redirect a checkout of yours there": "沙盒化專案自己的服務和工作不能在它們的 checkout 裡建符號連結({folders} 資料夾裡面除外),所以沒辦法把你在那裡的 checkout 導到別處",
+ "on this machine ({adapter}) sandboxed projects' own services and jobs can make symbolic links in their checkouts, so while they run they can redirect a checkout of yours there to write anywhere you can: this OS's sandbox can't refuse links per folder": "這台機器({adapter})上,沙盒化專案自己的服務和工作可以在它們的 checkout 裡建符號連結,所以它們執行時,能把你在那裡的 checkout 導去寫你能寫的任何地方:這個作業系統的沙盒沒辦法按資料夾拒絕連結",
+ "{project} (sandboxed): while its programs run (its sessions' commands, services, jobs), a checkout you make in its folder (terminal, editor, git apps, the Codex app's worktrees) can be made to write its files anywhere you can write. Worktrees the platform makes as the project: {handed}": "{project}(沙盒化):它的程式在執行時(它的 session 的指令、服務、工作),你在它資料夾裡做的 checkout(終端機、編輯器、git 應用程式、Codex app 的 worktree)可能被導去把它的檔案寫到你能寫的任何地方。由平台以專案身分建 worktree 的:{handed}",
+ "stop its sessions and services before you check out there": "在那裡 checkout 之前,先停掉它的 session 和服務",
+ "{project} (sandboxed) tracks {n} {n:file|files} in folders where its services and jobs may make links (e.g. {example}): a checkout of yours writing there can still be redirected": "{project}(沙盒化)在它的服務和工作可以建連結的資料夾裡追蹤 {n} 個檔案(例如 {example}):你的 checkout 寫到那裡時仍可能被導到別處",
+ "stop tracking them": "不要再追蹤它們"
 }

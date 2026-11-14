@@ -1,3 +1,5 @@
 {
- "This session's {runtime} version {version} failed the platform's sandbox check ({checks}): the platform delivers no letters to this session and wakes it for none. Letters for this project wait for another session, and `brunna inbox` here doesn't take them. Updating the tool and opening a new session ends this.": "這個 session 的 {runtime} 版本 {version} 沒通過平台的沙箱檢查({checks}):平台不會把信送進這個 session,也不會為任何信喚醒它。給這個專案的信會等別的 session,在這裡跑 `brunna inbox` 也不會把信接走。更新工具、開一個新的 session 就會解除。"
+ "This session's {runtime} version {version} failed the platform's sandbox check ({checks}): the platform delivers no letters to this session and wakes it for none. Letters for this project wait for another session, and `brunna inbox` here doesn't take them. Updating the tool and opening a new session ends this.": "這個 session 的 {runtime} 版本 {version} 沒通過平台的沙箱檢查({checks}):平台不會把信送進這個 session,也不會為任何信喚醒它。給這個專案的信會等別的 session,在這裡跑 `brunna inbox` 也不會把信接走。更新工具、開一個新的 session 就會解除。",
+ "the hook's input isn't a request this command takes ({what})": "hook 的輸入不是這個指令接受的請求({what})",
+ "{cli}: {n} tracked {n:file|files} its sandbox may not write {n:is|are} left out of this worktree (e.g. {example}); change them outside the project's sandbox": "{cli}:有 {n} 個追蹤中的檔案是它的沙盒不能寫的,沒有放進這個 worktree(例如 {example});請在專案沙盒外修改它們"
 }

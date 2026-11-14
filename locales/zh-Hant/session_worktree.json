@@ -1,0 +1,10 @@
+{
+ "{folder} isn't in a sandboxed project: the tool makes its own worktrees there": "{folder} 不在沙盒化的專案裡:那裡的 worktree 由工具自己建",
+ "{project} has no workspace on this machine": "{project} 在這台機器上沒有工作區",
+ "not a worktree name the platform makes: {name}": "平台不建這個名稱的 worktree:{name}",
+ "{path} is already there or isn't in {project}'s workspace": "{path} 已經存在,或不在 {project} 的工作區裡",
+ "couldn't list {project}'s tracked links ({why})": "列不出 {project} 追蹤的符號連結({why})",
+ "making the worktree as {project} failed ({why}); nothing was made as you": "以 {project} 的身分建 worktree 失敗({why});沒有用你的身分建任何東西",
+ "{path} isn't a worktree in {project}'s workspace": "{path} 不是 {project} 工作區裡的 worktree",
+ "removing the worktree as {project} failed ({why})": "以 {project} 的身分移除 worktree 失敗({why})"
+}

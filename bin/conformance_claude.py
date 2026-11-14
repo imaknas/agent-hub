@@ -860,4 +860,10 @@ CHECKS = [
     Check("session-status", "session_status", "function", None, V_M6, side="session"),
     Check("session-summary", "session_summary", "function", None, V_M6, side="session"),
     Check("wake", "wake", "function", None, V_M6, side="session"),
+    # docs/design/git-broker.md r3 B-1: with the hook in a sandboxed project's settings, the tool's worktree mode runs it
+    # and makes no worktree of its own (as the user)
+    Check("worktree-maker", "worktree_maker", "safety", None,
+          "worktree mode (--worktree, the EnterWorktree tool, a worktree subagent) in a folder whose settings hold the "
+          "platform's WorktreeCreate hook runs the hook and its git makes no worktree as the user: needs V-M6's "
+          "interactive throwaway session", side="session"),
 ]

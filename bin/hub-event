@@ -24,6 +24,12 @@ wires its native hooks to this.
   hub-event [--runtime <name>] worktree-scope <top> <main>
                               worktree-memory.sh's question, with the hook's input on stdin: whether what's left of that hook
                               runs as the user (project_git.worktree_scope; its exit code, and the memory folder printed)
+  hub-event [--runtime <name>] worktree-make | worktree-drop
+                              the tool's own worktree mode in a sandboxed project, handed to the platform (the runtime's
+                              worktree_maker; session_worktree.py, docs/design/git-broker.md r3 B-1): the worktree made,
+                              or removed, as the project, never as the user; what the tool reads back (the path) on
+                              stdout. Unlike every other event it exits 1 with the reason on stderr when it can't, so the
+                              tool's worktree fails instead of being made as the user
   hub-event as-project <event> <workspace> <command>
                               inside a sandboxed project's sandbox: its handlers that touch its repo (AS_PROJECT),
                               JSON out (called by hub-event itself)
@@ -677,6 +683,34 @@ def as_project(event: str, ws: str, command: str) -> int:
     return 0
 
 
+def worktree_maker(what: str, raw: str, name: str | None) -> int:
+    """`hub-event worktree-make|worktree-drop`: 0 and the tool's reply, or 1 and why on stderr."""
+    import session_worktree
+    project = None
+    try:
+        rt = runtime_ports.load(name or runtime_ports.UNNAMED_HOOKS, ports=("worktree_maker",))
+        req = rt.worktree_request(raw)
+        if not req or bool(req.get("make")) != (what == "worktree-make"):
+            raise session_worktree.Refused(_("the hook's input isn't a request this command takes ({what})", what=what))
+        found = project_git.sandbox_of(req["cwd"])
+        project = found[0] if found else None
+        if req["make"]:
+            path, skipped = session_worktree.make(req["cwd"], req["name"], rt)
+            if skipped:
+                print(_("{cli}: {n} tracked {n:file|files} its sandbox may not write {n:is|are} left out of this worktree "
+                        "(e.g. {example}); change them outside the project's sandbox", cli=names.current("cli"),
+                        n=len(skipped), example=", ".join(skipped[:3])), file=sys.stderr)
+            print(rt.worktree_reply(path))
+        else:
+            session_worktree.drop(req["cwd"], req["path"])
+    except (session_worktree.Refused, runtime_ports.Unsupported) as e:
+        print(f"{names.current('cli')}: {e}", file=sys.stderr)
+        _log(what, project, [], [what])
+        return 1
+    _log(what, project, [what], [])
+    return 0
+
+
 def install(ws: pathlib.Path) -> int:
     """The hooks of every installed runtime with session events (runtime_ports.installed). None has them: say why,
     exit code 3 for "unsupported"."""
@@ -707,6 +741,13 @@ def main(argv) -> int:
         except Exception as e:   # a broken waiter ends quietly: the session never sees an error from it
             _log("wait", None, [], [f"hub-event:{type(e).__name__}"])
             return 0
+    if argv in (["worktree-make"], ["worktree-drop"]):
+        try:
+            return worktree_maker(argv[0], _read_stdin(), name)
+        except Exception as e:   # never made as the user: the tool's worktree fails, with the reason in the log
+            _log(argv[0], None, [], [f"hub-event:{type(e).__name__}"])
+            print(f"{names.current('cli')}: {type(e).__name__}: {e}", file=sys.stderr)
+            return 1
     if argv[:1] == ["worktree-scope"] and len(argv) == 3:
         try:
             return worktree_scope(argv[1], argv[2], _read_stdin(), name)

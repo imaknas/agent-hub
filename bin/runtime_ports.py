@@ -321,7 +321,8 @@ def port_labels() -> dict[str, str]:
             "tool_servers": _("way to tell which tool servers a run loads"),
             "rule_check": _("check of what a confined run's own rules may be"),
             "run_server": _("way to give a run the platform's mail tools"),
-            "distribution": _("way to install and pin a checked version")}
+            "distribution": _("way to install and pin a checked version"),
+            "worktree_maker": _("way to hand its own worktree mode to the platform")}
 
 
 def _feature_settings() -> tuple[bool, bool]:
@@ -431,7 +432,8 @@ def missing_session_ports(name: str | None = None) -> list[str]:
     """The optional ports this runtime lacks that no feature row names, for people (doctor's row for them)."""
     named = {p for _f, need in features() for p in need}
     have = capabilities(name)
-    return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named and p != "distribution"]
+    return [missing_label(name, p) for p in OPTIONAL if p not in have and p not in named
+            and p not in ("distribution", "worktree_maker")]   # each has its own doctor rows
 
 
 def unversioned(name: str | None = None) -> bool:
@@ -484,6 +486,12 @@ PORTS = {
     # vendor publishes it, returning the executable; version_of(exe) what an executable says it is; pin_env(folder) what keeps
     # a run of that copy from updating itself. MIN_VERSION beside them. Without it a runtime is unversioned (doctor says so)
     "distribution": ("latest", "install", "version_of", "pin_env"),
+    # worktree_maker (docs/design/git-broker.md r3 B-1, mitigation 3): the tool's own worktree mode handed to the
+    # platform, which makes the worktree as the project (session_worktree.py) instead of the tool doing it as the user.
+    # worktree_request(raw) → {make, cwd, name} or {make: False, cwd, path} from the tool's hook input, None when it isn't
+    # one; worktree_location(workspace, name) → (path, branch) where the tool expects it; worktree_reply(path) → what the
+    # hook prints for the tool to find it; makes_worktrees(workspace) → whether the project's tool settings hand it over
+    "worktree_maker": ("worktree_request", "worktree_location", "worktree_reply", "makes_worktrees"),
 }
 # Beside the distribution port, a runtime that runs a store's checked copy (bin/runtime_store.py) has checked_copy() →
 # (the copy, None) or (None, why there is none): load() refuses the ports that start platform runs while it says why
@@ -496,7 +504,7 @@ PORTS = {
 # session's own record named there instead (hub-event passes it when the signature has raw).
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
-OPTIONAL = ("wake", "session_status", "session_summary", "distribution")
+OPTIONAL = ("wake", "session_status", "session_summary", "distribution", "worktree_maker")
 # ---------- conformance (docs/design/runtime-versions.md section 2) ----------
 # A runtime with the distribution port has a conformance adapter, conformance_<runtime>.py, whose CHECKS ([Check], one
 # or more per port it implements) bin/conformance.py runs against a binary in a throwaway world

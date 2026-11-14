@@ -18,6 +18,15 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   ignored <worktree>                      JSON [ignored entries] (git status --ignored)
   worktree-add <repo> <path>              a detached worktree of HEAD at <path>; prints its HEAD
   worktree-remove <repo> <path> [--force]
+  tracked-links <repo> <rev>              JSON [the paths <rev> tracks as symbolic links]
+  session-worktree <repo> <path> <branch> <rules>
+                                          a coding agent's worktree, made by the platform as the project (its tool's
+                                          own worktree mode would make it as the owner: docs/design/git-broker.md r3
+                                          B-1): <branch> (new from HEAD, or the existing one) checked out at <path>.
+                                          <rules>: JSON {names: [control names, at any depth], roots: [{name,
+                                          writable}]}: the tracked paths the sandbox may not write are left out of the
+                                          checkout (skip-worktree, so git doesn't see them as deleted). JSON {path,
+                                          branch, skipped (at most 50), n_skipped}
   branch-delete <repo> <branch>           git branch -d (merged branches only)
   remove-dep <worktree> <dep> <marker> <line>
                                           delete a dependency folder (never through a symlink) and append <line> to
@@ -139,6 +148,46 @@ def op_worktree_remove(repo: str, path: str, *flags: str) -> int:
     r = git(repo, "worktree", "remove", *(["--force"] if "--force" in flags else []), path)
     sys.stderr.write(r.stderr)
     return r.returncode
+
+
+def op_tracked_links(repo: str, rev: str) -> int:
+    links = []
+    for entry in _z(git(repo, "ls-tree", "-r", "-z", "--full-tree", rev, check=True, text=False)):
+        meta, _, path = entry.partition("\t")
+        if meta.split(" ")[0] == "120000":
+            links.append(path)
+    return emit(links)
+
+
+def _not_writable(path: str, rules: dict) -> bool:
+    """What the project's sandbox may not write in a checkout (policy.protect and protect_roots, passed in): at or under a
+    control name at any depth, or in a runtime's own folder outside the entries it names writable."""
+    q, parts = "/" + path, pathlib.PurePosixPath(path).parts
+    if any(q.endswith("/" + n) or f"/{n}/" in q + "/" for n in rules.get("names") or []):
+        return True
+    return any(parts[:1] == (r.get("name"),) and (len(parts) < 2 or parts[1] not in (r.get("writable") or []))
+               for r in rules.get("roots") or [])
+
+
+def op_session_worktree(repo: str, path: str, branch: str, rules: str) -> int:
+    rules = json.loads(rules)
+    if git(repo, "check-ref-format", "--branch", branch).returncode != 0:
+        sys.stderr.write(f"not a branch name: {branch}\n")
+        return 2
+    if os.path.lexists(path):
+        sys.stderr.write(f"{path} is already there\n")
+        return 2
+    exists = git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0
+    git(repo, "worktree", "add", "--no-checkout", *([path, branch] if exists else ["-b", branch, path, "HEAD"]),
+        check=True)
+    git(path, "reset", "-q", check=True)   # the index from the branch; nothing written in the folder yet
+    skipped = [p for p in _z(git(path, "ls-files", "-z", check=True, text=False)) if _not_writable(p, rules)]
+    if skipped:
+        git(path, "update-index", "--skip-worktree", "-z", "--stdin", input=b"".join(os.fsencode(p) + b"\0"
+                                                                                      for p in skipped),
+            check=True, text=False)
+    git(path, "checkout-index", "-a", check=True)
+    return emit({"path": path, "branch": branch, "skipped": skipped[:50], "n_skipped": len(skipped)})
 
 
 def op_branch_delete(repo: str, branch: str) -> int:
@@ -494,7 +543,7 @@ def op_test_runs(repo: str, since: str) -> int:
 
 
 OPS = {"test-runs": op_test_runs, "worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
-       "worktree-remove": op_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
+       "worktree-remove": op_worktree_remove, "tracked-links": op_tracked_links, "session-worktree": op_session_worktree, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
        "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head, "first-look": op_first_look,

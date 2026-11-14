@@ -1491,6 +1491,58 @@ def doctor_git_fence(add) -> None:
             "" if level == "ok" else _("bin/git_fence.py --report lists every finding ({n})", n=len(details)))
 
 
+def doctor_checkout_race(add, why_no_sandbox, installed) -> None:
+    """The owner's checkout race (docs/design/git-broker.md, r3 B-1): while any process of a sandboxed project runs, an
+    unsandboxed checkout in its folder can be raced into writing its files anywhere the owner can write. What holds here:
+    its services and jobs make no link in their checkouts (policy links; the macOS profile, not Landlock), and a coding
+    agent's worktree mode is handed to the platform (runtime_ports' worktree_maker). The owner's own checkouts aren't
+    covered: said per project."""
+    import isolation
+    import policy
+    import runtime_ports
+    sandboxed = [(n, hubconf.path((d.get("paths") or {}).get("workspace"))) for n, d in sorted(hubconf.projects().items())
+                 if (d.get("enforce") or {}).get("sandbox") is True]
+    if not sandboxed:
+        return
+    if why_no_sandbox:
+        pass   # the sandbox row says why nothing of theirs runs here at all
+    elif "links-blocked" in isolation.guarantees():
+        add("info", _("sandboxed projects' own services and jobs make no symbolic link in their checkouts (except "
+                      "inside {folders} folders), so they can't redirect a checkout of yours there",
+                      folders=", ".join(f["name"] for f in policy.LINK_FOLDERS)))
+    else:
+        add("warn", _("on this machine ({adapter}) sandboxed projects' own services and jobs can make symbolic links in "
+                      "their checkouts, so while they run they can redirect a checkout of yours there to write anywhere "
+                      "you can: this OS's sandbox can't refuse links per folder", adapter=isolation.adapter()[0]))
+    makers = []
+    for name in installed:
+        try:
+            makers.append((name, runtime_ports.load(name, ports=("worktree_maker",))))
+        except runtime_ports.Unsupported:
+            continue
+    for project, ws in sandboxed:
+        handed = [n for n, mod in makers if ws and mod.makes_worktrees(ws)]
+        add("warn", _("{project} (sandboxed): while its programs run (its sessions' commands, services, jobs), a checkout "
+                      "you make in its folder (terminal, editor, git apps, the Codex app's worktrees) can be made to "
+                      "write its files anywhere you can write. Worktrees the platform makes as the project: {handed}",
+                      project=project, handed=", ".join(handed) or "-"),
+            _("stop its sessions and services before you check out there"))
+    import project_git
+    names_ = [f["name"] for f in policy.LINK_FOLDERS]
+    for project, ws in sandboxed:
+        if not ws or not os.path.lexists(ws / ".git"):
+            continue
+        try:
+            got = project_git.strs(project_git.data(project, ws, "tracked", ws, *names_))
+        except project_git.Unavailable:
+            continue   # the control rows say when its files can't be listed
+        if got:
+            add("warn", _("{project} (sandboxed) tracks {n} {n:file|files} in folders where its services and jobs may "
+                          "make links (e.g. {example}): a checkout of yours writing there can still be redirected",
+                          project=project, n=len(got), example=", ".join(got[:3])),
+                _("stop tracking them"))
+
+
 def doctor_control(add, why_no_sandbox, installed) -> None:
     """What keeps sandboxed projects off what their sessions load settings, hooks and tools from
     (docs/design/runtime-versions.md section 7): the macOS profile's one rule over the coding agent's folder and what it
@@ -1703,6 +1755,7 @@ def cmd_doctor(argv: list[str]) -> int:
         add("info", _("sandboxed projects' sessions: denied what their services are, except the Keychain, which isn't a file: "
                       "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement"))
         doctor_control(add, why, installed)
+        doctor_checkout_race(add, why, installed)
         doctor_confined(add, installed)
         doctor_git_fence(add)
     hb = hubconf.STATE / "scheduler-heartbeat"
