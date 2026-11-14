@@ -97,6 +97,23 @@ class NothingNewWhileOnlyInstalled(Temp):
         self.assertEqual(self.alerts, [])
         self.assertFalse((self.tmp / "runtimes").exists(), "nothing made in the store")
 
+    def test_doctor_and_the_status_page_have_nothing_red_for_it(self):
+        import importlib.machinery
+        import importlib.util
+        loader = importlib.machinery.SourceFileLoader("agenthub_codex_runs", str(ROOT / "bin" / "agenthub"))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        ah = importlib.util.module_from_spec(spec)
+        loader.exec_module(ah)
+        rows, stores = [], []
+        with mock.patch.object(ah, "doctor_store", lambda add, name: stores.append(name)):
+            ah.doctor_versions(lambda level, what, fix="": rows.append((level, what)), "claude", ["claude", "codex"])
+        self.assertEqual(stores, ["claude"], "no store row for a runtime only installed for sessions")
+        codex = [r for r in rows if "codex" in r[1]]
+        self.assertEqual([lvl for lvl, _w in codex], ["info"], "said once, never red")
+        page = (ROOT / "bin" / "gen-status-page.py").read_text()
+        self.assertIn("for n in runtime_ports.platform_work() if n != \"none\"", page,
+                      "the status page's no-copy alert is for the runtimes the platform runs work on")
+
     def test_a_pin_or_a_provider_brings_it_in(self):
         import importlib
         update = importlib.import_module("update-runtimes")
@@ -275,6 +292,25 @@ class Completion(Temp):
         got = rx.complete(self.req(), {})
         self.assertFalse(got.ok)
         self.assertTrue(rx.is_login_error(got.error))
+
+
+class Grace(Temp):
+    def test_a_run_past_its_time_gets_sigterm_and_a_grace_before_sigkill(self):
+        """r2 S5: a run killed mid-refresh may still write the new login."""
+        mark = self.tmp / "termed"
+        slow = self.tmp / "slow.sh"
+        slow.write_text(f"#!/bin/sh\ntrap 'echo term > {mark}; exit 0' TERM\nwhile :; do sleep 0.1; done\n")
+        slow.chmod(0o755)
+        code, _out, _err, timed_out = rx._execute([str(slow)], str(self.tmp), {"PATH": "/usr/bin:/bin"}, "", 1)
+        self.assertTrue(timed_out)
+        self.assertEqual(mark.read_text(), "term\n", "SIGTERM first, and the run had its grace to finish")
+        stubborn = self.tmp / "stubborn.sh"
+        stubborn.write_text("#!/bin/sh\ntrap '' TERM\nwhile :; do sleep 0.1; done\n")
+        stubborn.chmod(0o755)
+        with mock.patch.object(rx, "GRACE_S", 1):
+            code, _out, _err, timed_out = rx._execute([str(stubborn)], str(self.tmp), {"PATH": "/usr/bin:/bin"}, "", 1)
+        self.assertTrue(timed_out)
+        self.assertLess(code, 0, "SIGKILL after the grace")
 
 
 class Points(unittest.TestCase):

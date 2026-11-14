@@ -280,9 +280,9 @@ class NewUser(unittest.TestCase):
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "codex")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         d = self.cfg_json()
-        # Codex's own runtime runs the platform's work on its checked copy (docs/design/runtime-codex.md, Step 1); the
-        # command template is gone from the preset, and config check passes (init applied the config)
-        self.assertEqual((d["runtime"]["default"], d["runtime"]["installed"]), ("codex", ["codex"]))
+        # no default until a Codex copy can be promoted (docs/design/runtime-codex.md, Step 1 r2's step 6); its sessions
+        # are served; the command template is gone from the preset, and config check passes (init applied the config)
+        self.assertEqual((d["runtime"]["default"], d["runtime"]["installed"]), ("none", ["codex"]))
         self.assertNotIn("command", d["runtime"])
         self.assertTrue(d["modules"]["codex"])
         self.assertFalse(d["modules"]["claude"])
@@ -292,7 +292,7 @@ class NewUser(unittest.TestCase):
         self.hub_cmd("init", "--yes", "--no-launchd", "--owner", "Alex", "--llm", "none", "--agent", "none")
         r = self.hub_cmd("init", "--yes", "--no-launchd", "--agent", "codex")
         d = self.cfg_json()
-        self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("codex", True), r.stdout + r.stderr)
+        self.assertEqual((d["runtime"]["default"], d["modules"]["codex"]), ("none", True), r.stdout + r.stderr)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.git_cfg("status", "--porcelain", "--", "brunna.json").stdout, "", "committed")
 

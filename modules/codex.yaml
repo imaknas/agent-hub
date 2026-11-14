@@ -3,14 +3,14 @@
 # mailbox through brunna's MCP server (docs/mcp.md, registered by init); the weekly statistics read its session files. The
 # platform's own runs (Step 1) use a copy of Codex in the platform's store, checked and promoted by brunna/update-runtimes,
 # never your own: the judgment points that only answer (completions), then those that work in a copy of a memory branch;
-# the rest stay on another runtime or an LLM provider, and doctor says which. A sandboxed project's Codex sessions get
+# the rest stay on another runtime or an LLM provider, and doctor says which. Built, but no copy is promoted yet. A sandboxed project's Codex sessions get
 # nothing from the platform until Codex's own git is fenced (Step 4, git-config-fence.md). The first copy is promoted only
 # after the checks that need your login have run (with you: runtime-codex.md, Step 1 r2, the login list).
 # `agenthub init` offers it in its agent step and turns this module on when it is picked.
 v: 1
 name: codex
 type: module
-description: "your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider"
+description: "your Codex chats get letters and notes reminders from the platform; brunna's own decisions still need another agent or an LLM provider (its runs on a checked copy of Codex wait for a first check with your login)"
 runtime_preset:
   label: Codex
   find: codex
@@ -27,9 +27,10 @@ runtime_preset:
   mcp_unregister: [codex, mcp, remove, "{server}"]
   settings:
     runtime:
-      # an instance that picks Codex at init runs the platform on it; on one that already has another default, that stays
-      # the owner's choice (D3), and single points can be pinned to Codex instead (llm.points.<point>.runtime: codex)
-      default: codex
+      # no default yet: no copy of Codex can be promoted before the checks that need your login have run (runtime-codex.md,
+      # Step 1 r2's step 6), so the platform's own work goes to an LLM provider meanwhile (init offers brunna llm setup).
+      # Its sessions are served: installed joins what the instance has (apply_agent keeps the others)
+      default: none
       installed: [codex]
     modules:
       codex: true

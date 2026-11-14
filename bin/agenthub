@@ -555,7 +555,11 @@ def apply_agent(d: dict, choice: str, presets: dict[str, dict]) -> None:
         d["runtime"] = {**(d.get("runtime") or {}), "default": "none"}
         return
     s = presets[choice].get("settings") or {}
-    d["runtime"] = {**(d.get("runtime") or {}), **(s.get("runtime") or {})}
+    was = d.get("runtime") or {}
+    d["runtime"] = {**was, **(s.get("runtime") or {})}
+    if isinstance(was.get("installed"), list) and isinstance(d["runtime"].get("installed"), list):
+        # the agents whose sessions the instance serves are added to, never replaced
+        d["runtime"]["installed"] = list(dict.fromkeys([*was["installed"], *d["runtime"]["installed"]]))
     for m, on in (s.get("modules") or {}).items():
         d.setdefault("modules", {})[m] = on
 
@@ -1585,16 +1589,7 @@ def cmd_doctor(argv: list[str]) -> int:
         if name != "none" and (miss := runtime_ports.missing_session_ports(name)):
             add("info", _("the runtime {runtime} has no {missing}: routing a letter takes its sessions as idle, and reads "
                           "nothing they said", runtime=name, missing=runtime_ports.or_list(miss)))
-    for name in dict.fromkeys([rname, *installed]):
-        if name != "none" and runtime_ports.unversioned(name):
-            add("info", _("the runtime {runtime} is unversioned: the platform can't install or check a fixed version of it, "
-                          "so its runs use whichever copy is on PATH", runtime=name))
-        elif name != "none" and "distribution" in runtime_ports.capabilities(name):
-            doctor_store(add, name)
-    for name in dict.fromkeys([rname, *installed]):
-        if runtime_ports.folder_git_unknown(name):
-            add("info", _("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any "
-                          "sandbox, isn't known: a sandboxed project's repo config could then run as you", runtime=name))
+    doctor_versions(add, rname, installed)
     doctor_wake_misses(add)
     doctor_propose(add)
     doctor_memory_branches(add)
@@ -1764,6 +1759,30 @@ def doctor_propose(add) -> None:
                       "you in a folder the project can write can be sent elsewhere by it. Their letters stay open for their sessions, "
                       "and each start that was refused shows on the status page", projects=", ".join(off)),
             _("until the agent process itself runs under the sandbox, sessions handle those letters"))
+
+
+def doctor_versions(add, rname: str, installed: list[str]) -> None:
+    """Each runtime's copies: unversioned, or its checked copy in the store. A runtime the platform runs no work on (only in
+    runtime.installed: runtime_ports.platform_work) keeps no copy there and is said once, never red
+    (docs/design/runtime-codex.md, Step 1 r2, D11); the folder-git row is about the platform's runs, so only for those."""
+    import runtime_ports
+    work = runtime_ports.platform_work()
+    for name in dict.fromkeys([rname, *installed]):
+        if name == "none":
+            continue
+        if runtime_ports.unversioned(name):
+            add("info", _("the runtime {runtime} is unversioned: the platform can't install or check a fixed version of it, "
+                          "so its runs use whichever copy is on PATH", runtime=name))
+        elif "distribution" in runtime_ports.capabilities(name):
+            if name in work:
+                doctor_store(add, name)
+            else:
+                add("info", _("the runtime {runtime} serves your sessions only: the platform keeps no copy of it and starts "
+                              "none of its runs (pin a judgment point to it, or make it a provider, to change that)",
+                              runtime=name))
+        if name in work and runtime_ports.folder_git_unknown(name):
+            add("info", _("the runtime {runtime} runs in a project's folder, and whether it runs git of its own there, outside any "
+                          "sandbox, isn't known: a sandboxed project's repo config could then run as you", runtime=name))
 
 
 def doctor_store(add, name: str) -> None:

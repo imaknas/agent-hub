@@ -469,7 +469,9 @@ def main() -> None:
     # the coding agent's checked copy (docs/design/runtime-versions.md section 3): with none, no platform run starts
     try:
         import runtime_ports
-        for rname in dict.fromkeys(n for n in runtime_ports.installed() if n != "none"):
+        # only the runtimes the platform runs work on: one only installed for sessions keeps no copy (runtime-codex.md,
+        # Step 1 r2, D11)
+        for rname in dict.fromkeys(n for n in runtime_ports.platform_work() if n != "none"):
             if (why := runtime_ports.no_checked_copy(rname)):
                 alerts.append(("bad", _("The platform starts no {runtime} run: {reason}", runtime=rname, reason=why)))
     except Exception as e:  # the status page must not crash because of this

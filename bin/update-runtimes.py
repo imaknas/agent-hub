@@ -79,6 +79,8 @@ def _problems(doc: dict) -> tuple[list[str], list[str]]:
     """(the alert's lines, their stable ids: check and reason, never the version)."""
     lines, ids = [], []
     for name, c in doc.get("checks", {}).items():
+        if c.get("holds") == "sessions" and c.get("state") == "fail":
+            continue   # it holds the user's sessions only, never the copy (doctor's confined row names it)
         if c.get("state") in ("fail", "error"):
             lines.append(_("{runtime} {version}: {check} {state}: {reason}", runtime=doc["runtime"],
                            version=doc["version"], check=name, state=c["state"], reason=c.get("reason") or "-"))

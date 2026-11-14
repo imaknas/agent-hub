@@ -292,6 +292,18 @@ class UpdateRuntimes(Temp):
                     mock.patch.object(self.m.runtime_ports, "capabilities", caps):
                 self.assertEqual(self.m.in_use(), want, conf)
 
+    def test_the_held_back_alert_names_the_login_checks_not_a_sessions_only_fail(self):
+        doc = self.doc()
+        doc["checks"]["session-folder-git"] = {"port": "sessions", "kind": "safety", "state": "fail", "reason": "B1",
+                                               "holds": "sessions"}
+        doc["checks"]["completion-no-tools"] = {"port": "completion", "kind": "safety", "state": "not-checkable",
+                                                "reason": "needs a login", "login": True}
+        self.assertEqual(self.m._problems(doc), ([], []), "a sessions-only fail isn't the copy's problem")
+        with mock.patch.object(self.m.conformance, "run", lambda r, exe, only=None: doc):
+            self.m.first_or_new("claude", self.dist, first=False)
+        key, lines = [(k, ls) for k, ls in self.alerts if k == "runtime-held-claude"][-1]
+        self.assertTrue(lines and "completion-no-tools" in lines[0] and "B1" not in lines[0], lines)
+
     def test_a_copy_whose_login_checks_havent_run_isnt_promoted(self):
         doc = self.doc()
         doc["checks"]["completion-no-tools"] = {"port": "completion", "kind": "safety", "state": "not-checkable",

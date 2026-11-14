@@ -54,8 +54,11 @@ class Presets(unittest.TestCase):
         presets = ah.agent_presets()
         d = {"runtime": {"default": "claude"}, "modules": {"claude": True, "codex": False, "owner": True}}
         ah.apply_agent(d, "codex", presets)
-        self.assertEqual((d["runtime"]["default"], d["runtime"]["installed"]), ("codex", ["codex"]),
-                         "an instance that picks Codex runs the platform on its checked copy (runtime-codex.md, Step 1)")
+        self.assertEqual((d["runtime"]["default"], d["runtime"]["installed"]), ("none", ["codex"]),
+                         "no default until a Codex copy can be promoted (runtime-codex.md, Step 1 r2's step 6)")
+        e = {"runtime": {"default": "claude", "installed": ["claude"]}, "modules": {}}
+        ah.apply_agent(e, "codex", presets)
+        self.assertEqual(e["runtime"]["installed"], ["claude", "codex"], "added to, never replaced")
         self.assertNotIn("command", d["runtime"], "Codex's own runtime replaces the command template")
         self.assertEqual((d["modules"]["claude"], d["modules"]["codex"], d["modules"]["owner"]), (False, True, True))
         ah.apply_agent(d, "none", presets)

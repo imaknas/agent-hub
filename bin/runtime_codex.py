@@ -1356,6 +1356,16 @@ def profile_entries(read=(), write=(), exe: str | None = None) -> dict[str, str]
         dirs, files = [], []
     for p in (*dirs, *files):
         out[os.path.realpath(os.path.expanduser(p))] = "deny"
+    # where the platform keeps its own and the projects' things, wherever they are configured (not only under the home):
+    # every project root, the hub's state, the instance with its secrets and data (r2 S2's second layer)
+    try:
+        import hubconf
+        places = [*hubconf.project_roots(), hubconf.STATE, hubconf.secrets_dir(), hubconf.data_dir(),
+                  *([hubconf.instance_home()] if hubconf.instance_home() else [])]
+    except Exception:
+        places = []
+    for p in places:
+        out.setdefault(os.path.realpath(p), "deny")
     if exe:
         out[os.path.realpath(pathlib.Path(exe).parent.parent)] = "read"
     for p in read:

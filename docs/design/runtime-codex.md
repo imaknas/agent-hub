@@ -1474,6 +1474,11 @@ only in `runtime.installed`** (this machine), and a test holds that:
   records each one's real path, size, time and sha256, and `verify` checks them as it checks the executable.
 - **`point_refusal(point, spec)`**, an optional adapter function, is read by `llm_ready.unsupported` and `llm.py`. The
   librarian takes its `-edits` completion for a part Codex refuses.
+- **Doctor and the status page**: the store row (`doctor_versions`) and the status page's no-copy alert cover only the
+  runtimes in `platform_work()`. A sessions-only runtime gets one info row ("serves your sessions only"), never red. The
+  folder-git row is for those runtimes only too.
+- **The held-back alert** (`update-runtimes._problems`) leaves out a `holds: sessions` fail, so a Codex copy held back
+  for its unrun login checks says that, not B1.
 - **`bin/check-runtime-login.py --runtime <name>`** is neutral. It returns at once, saying so and with no alert, for a
   runtime the platform runs no work on. Otherwise it alerts once per runtime on the adapter's `login_check()` problems,
   by their ids.
@@ -1504,6 +1509,8 @@ only in `runtime.installed`** (this machine), and a test holds that:
   - the `brunna-run` profile:
     - `extends :read-only`;
     - the user's home, the store's Codex folder, the temp roots and every credential path the policy knows: `deny`;
+    - as r2 S2's second layer, wherever they are configured: every project root, the hub's state, the secrets and data
+      folders and the instance: `deny`;
     - the folder and the running version's vendor folder: `read`;
     - the written paths: `write`, with `<subtree>/**/.git*` `deny` for a folder;
   - network off.
@@ -1519,7 +1526,8 @@ only in `runtime.installed`** (this machine), and a test holds that:
 
     A mismatch refuses the result even of a run that failed, since what it was sent is the safety fact, and alerts per
     point (`completion-tools:codex:<point>`).
-  - A timeout sends SIGTERM, then SIGKILL after `GRACE_S = 10` (S5).
+  - A timeout sends SIGTERM, then SIGKILL after `GRACE_S = 10` (S5; tested with a run that traps TERM and one that
+    ignores it).
 - **Completion:**
   - a fresh folder under `private_tmp` with no `.git` above it;
   - the narrowed profile (S2);
@@ -1568,10 +1576,21 @@ pointed at a scratch instance; `--report`; no login):
 - fail: `session-folder-git` (all four drivers ran: B1 on 0.169, now by the probe too);
 - not-checkable: `updater-off` and the five login checks.
 
+An agent-shaped run went through the real 0.169.0 too, by `_one_run`'s own path, with no login: the shell on, `STATE.md`
+and `memory/reference` written. It failed with a 401, and its rollout matched (entries, the `.git*` glob, the shell's
+nested tools), so it wasn't "refused". `folder_refusal` passes every one of this machine's 26 memory copies, read as
+files. `consolidate`'s fresh clone under `private_tmp` has the same config, its remote a bare repo under the git origin.
+
 So `verdict` is fail, `verdict(for_promotion=True)` pass, and `login_unrun` names the five: not promoted.
 
 **`modules/codex.yaml`:**
-- the preset is `runtime.default: codex`, `runtime.installed: [codex]`, and no command template;
+- the preset is `runtime.default: none`, `runtime.installed: [codex]`, and no command template.
+  - **A departure from r2's step 5**, which set `default: codex`: no Codex copy can be promoted before the login
+    checks run (step 6). That default would give a new instance nothing that runs, plus a nightly install, checks and a
+    held-back alert. The default goes to `codex` once step 6 lands.
+  - `apply_agent` now adds a preset's `runtime.installed` to what the instance has instead of replacing it.
+  - The README, `docs/features.md` and the module's description say the runs wait for a first check with the owner's
+    login;
 - the job `codex-login` is hourly, `bin/py bin/check-runtime-login.py --runtime codex`;
 - the secret `codex-login` is `~/.codex/auth.json`, with no backup.
 
