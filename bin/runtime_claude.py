@@ -2123,6 +2123,7 @@ def platform_hooks() -> dict:
 WORKTREE_EVENTS = (("WorktreeCreate", "worktree-make"), ("WorktreeRemove", "worktree-drop"))
 WORKTREES = pathlib.PurePosixPath(".claude") / "worktrees"   # where its worktree mode puts them, and its branch prefix
 WORKTREE_BRANCH = "worktree-"
+WORKTREE_TIMEOUT_S = 1800   # the checkout runs as the project with project_git's bundle timeout; the hook outlasts it
 
 
 def worktree_command(what: str) -> str:
@@ -2133,7 +2134,7 @@ def worktree_command(what: str) -> str:
 
 
 def worktree_maker_hooks() -> dict:
-    return {event: [{"hooks": [{"type": "command", "command": worktree_command(what)}]}]
+    return {event: [{"hooks": [{"type": "command", "command": worktree_command(what), "timeout": WORKTREE_TIMEOUT_S}]}]
             for event, what in WORKTREE_EVENTS}
 
 

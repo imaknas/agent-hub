@@ -1513,7 +1513,7 @@ def doctor_checkout_race(add, why_no_sandbox, installed) -> None:
     else:
         add("warn", _("on this machine ({adapter}) sandboxed projects' own services and jobs can make symbolic links in "
                       "their checkouts, so while they run they can redirect a checkout of yours there to write anywhere "
-                      "you can: this OS's sandbox can't refuse links per folder", adapter=isolation.adapter()[0]))
+                      "you can: the platform doesn't refuse links on this OS (not built)", adapter=isolation.adapter()[0]))
     makers = []
     for name in installed:
         try:

@@ -180,13 +180,23 @@ def op_session_worktree(repo: str, path: str, branch: str, rules: str) -> int:
     exists = git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0
     git(repo, "worktree", "add", "--no-checkout", *([path, branch] if exists else ["-b", branch, path, "HEAD"]),
         check=True)
-    git(path, "reset", "-q", check=True)   # the index from the branch; nothing written in the folder yet
-    skipped = [p for p in _z(git(path, "ls-files", "-z", check=True, text=False)) if _not_writable(p, rules)]
+
+    def step(*args, **kw):
+        r = git(path, *args, **kw)
+        if r.returncode != 0:   # undone, so the same name can be made again: the worktree, and the branch if new
+            sys.stderr.write(f"git {args[0]}: {(r.stderr if isinstance(r.stderr, str) else os.fsdecode(r.stderr or b'')).strip()[-300:]}\n")
+            git(repo, "worktree", "remove", "--force", path)
+            git(repo, "worktree", "prune")
+            if not exists:
+                git(repo, "branch", "-D", branch)
+            sys.exit(1)
+        return r
+    step("reset", "-q")   # the index from the branch; nothing written in the folder yet
+    skipped = [p for p in _z(step("ls-files", "-z", text=False)) if _not_writable(p, rules)]
     if skipped:
-        git(path, "update-index", "--skip-worktree", "-z", "--stdin", input=b"".join(os.fsencode(p) + b"\0"
-                                                                                      for p in skipped),
-            check=True, text=False)
-    git(path, "checkout-index", "-a", check=True)
+        step("update-index", "--skip-worktree", "-z", "--stdin", input=b"".join(os.fsencode(p) + b"\0" for p in skipped),
+             text=False)
+    step("checkout-index", "-a")
     return emit({"path": path, "branch": branch, "skipped": skipped[:50], "n_skipped": len(skipped)})
 
 

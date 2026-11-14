@@ -297,6 +297,34 @@ class SessionWorktree(Base):
             with self.assertRaises(session_worktree.Refused):
                 session_worktree.drop(self.ws, bad)
 
+    def test_tracked_links_are_allowed_only_under_the_new_worktree(self):
+        import session_worktree
+        wt = self.ws / ".claude" / "worktrees" / "w"
+        self.assertEqual(session_worktree.link_paths(wt, ["src/l", "/etc/x", "../out", "a/../../b", ""]),
+                         [wt / "src" / "l"])
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_a_failed_make_leaves_nothing_behind(self):
+        """worktree add has registered the worktree and made the branch before the checkout: a checkout that fails
+        takes both back, so the same name can be made again."""
+        import session_worktree
+        (self.ws / "fail-here").write_text("x\n")
+        git(self.ws, "add", "fail-here")
+        git(self.ws, "commit", "-qm", "f")
+        real = self.wrap
+
+        def failing(project, cwd, argv, port=None, links=()):
+            got = real(project, cwd, argv, port, links)
+            return [*got[:2], got[2] + '(deny file-write* (regex #"/fail-here$"))\n', *got[3:]]
+        with mock.patch.object(isolation, "wrap", failing):
+            with self.assertRaises(session_worktree.Refused):
+                session_worktree.make(self.ws, "w3", runtime_claude)
+        self.assertNotIn("w3", git(self.ws, "worktree", "list"))
+        self.assertEqual(git(self.ws, "branch", "--list", "worktree-w3"), "")
+        self.assertFalse((self.ws / ".claude" / "worktrees" / "w3").exists())
+        path, _skipped = session_worktree.make(self.ws, "w3", runtime_claude)
+        self.assertTrue((path / "fail-here").is_file())
+
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
     def test_a_race_against_the_hook_path_writes_nothing_outside(self):
         """The same swap, against the worktree the platform makes: the checkout runs in the project's sandbox, so a
@@ -318,7 +346,8 @@ while [ $(date +%s) -lt $end ]; do
   [ -e {stop} ] && exit 0
 done
 """
-        prof = seatbelt.service_profile(self.pol(), [self.ws]) + f'(deny file-write* (subpath "{outside}"))\n'
+        # the attacker as a session's own command: no agent's sandbox refuses links, so no link rule here
+        prof = seatbelt.service_profile(self.pol(links=False), [self.ws]) + f'(deny file-write* (subpath "{outside}"))\n'
         a = subprocess.Popen([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", attacker], cwd=self.ws,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
@@ -332,6 +361,63 @@ done
             stop.write_text("")
             a.wait(timeout=30)
         self.assertEqual(list(outside.iterdir()), [])
+
+
+class RunAs(unittest.TestCase):
+    def test_run_as_takes_exact_link_allowances_before_the_command(self):
+        import project_git
+        got = []
+        with mock.patch.object(project_git, "run_as_cli", lambda *a: got.append(a) or 0):
+            self.assertEqual(project_git.main(["run-as", "p", "/d", "--allow-link", "/d/a", "--allow-link", "/d/b",
+                                               "--", "bash", "x"]), 0)
+            self.assertEqual(project_git.main(["run-as", "p", "/d", "--", "bash", "x"]), 0)
+        self.assertEqual(got, [("p", "/d", ["bash", "x"], ["/d/a", "/d/b"]), ("p", "/d", ["bash", "x"], [])])
+
+    def test_wrap_passes_them_to_sandboxed_run(self):
+        argv = isolation.wrap("p", "/d", ["x"], links=["/d/a"])
+        i = argv.index("--allow-link")
+        self.assertEqual(argv[i:i + 2], ["--allow-link", "/d/a"])
+        self.assertNotIn("--allow-link", isolation.wrap("p", "/d", ["x"]))
+
+
+class Doctor(Base):
+    def rows(self, guarantees, tracked=(), settings=None, adapter=("seatbelt", None)):
+        import importlib.machinery
+        import importlib.util
+        import project_git
+        import runtime_ports
+        loader = importlib.machinery.SourceFileLoader("agenthub_t", str(BIN / "agenthub"))
+        spec = importlib.util.spec_from_loader("agenthub_t", loader)
+        ah = importlib.util.module_from_spec(spec)
+        loader.exec_module(ah)
+        (self.ws / ".git").mkdir()
+        if settings is not None:
+            p = runtime_claude.settings_path(self.ws)
+            p.parent.mkdir(parents=True)
+            p.write_text(json.dumps(settings))
+        docs = {"proj": {"name": "proj", "paths": {"workspace": str(self.ws)}, "enforce": {"sandbox": True}},
+                "open": {"name": "open", "paths": {"workspace": str(self.tmp / "o")}}}
+        out = []
+        with mock.patch.object(hubconf, "projects", lambda: docs), \
+                mock.patch.object(isolation, "guarantees", lambda: list(guarantees)), \
+                mock.patch.object(isolation, "adapter", lambda: adapter), \
+                mock.patch.object(project_git, "data", lambda *a, **k: list(tracked)), \
+                mock.patch.object(runtime_ports, "load", lambda name, ports=(): runtime_claude):
+            ah.doctor_checkout_race(lambda level, what, fix="": out.append((level, what)), None, ["claude"])
+        return out
+
+    def test_macos_rows(self):
+        rows = self.rows(["links-blocked"], settings={"hooks": runtime_claude.worktree_maker_hooks()})
+        self.assertEqual([r[0] for r in rows], ["info", "warn"])
+        self.assertIn("proj", rows[1][1])
+        self.assertTrue(rows[1][1].endswith("claude"), rows[1][1])
+
+    def test_linux_and_tracked_tool_folders(self):
+        rows = self.rows([], tracked=["node_modules/x/a"], adapter=("landlock", None))
+        self.assertEqual([r[0] for r in rows], ["warn", "warn", "warn"])
+        self.assertIn("landlock", rows[0][1])
+        self.assertTrue(rows[1][1].endswith("-"), "no worktree hand-over without the hooks")
+        self.assertIn("node_modules/x/a", rows[2][1])
 
 
 class HubEvent(Base):

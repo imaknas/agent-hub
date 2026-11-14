@@ -58,6 +58,17 @@ def rules() -> dict:
     return {"names": [c["name"] for c in policy.protect()], "roots": policy.protect_roots()}
 
 
+def link_paths(path: pathlib.Path, links: list[str]) -> list[pathlib.Path]:
+    """The exact places the job may make a link: the tracked links' paths, which come from the project's own repo (its
+    word, read as the project), so only relative ones without a `..` that stay under the new worktree."""
+    out = []
+    for p in links:
+        rel = pathlib.PurePosixPath(p)
+        if p and not rel.is_absolute() and ".." not in rel.parts and "" not in rel.parts:
+            out.append(path / rel)
+    return out
+
+
 def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
     project, _doc, ws = _project(cwd)
     if not NAME.match(name or "") or ".." in name:
@@ -71,7 +82,7 @@ def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
     except project_git.Unavailable as e:
         raise Refused(_("couldn't list {project}'s tracked links ({why})", project=project, why=e)) from None
     r = project_git.job(project, ws, "session-worktree", ws, path, branch, json.dumps(rules()),
-                        links=[path / p for p in links], timeout=project_git.BUNDLE_TIMEOUT_S)
+                        links=link_paths(path, links), timeout=project_git.BUNDLE_TIMEOUT_S)
     try:
         got = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:
