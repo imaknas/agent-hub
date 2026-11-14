@@ -38,6 +38,13 @@ def git(cwd, *args, **kw) -> str:
                           **kw).stdout
 
 
+def registered(repo) -> list[str]:
+    """The worktrees git lists for repo, by path (never a substring of the listing: the temp folder's random name can
+    hold a worktree's name; it did on CI, 11-15)."""
+    return [line[len("worktree "):] for line in git(repo, "worktree", "list", "--porcelain").splitlines()
+            if line.startswith("worktree ")]
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
@@ -215,7 +222,7 @@ class SessionWorktree(Base):
                                    lambda: ["CLAUDE.local.md", ".claude/settings.local.json"]):
                 session_worktree.drop(self.ws, path, runtime_claude)
         self.assertFalse(os.path.lexists(path))
-        self.assertNotIn("w7", git(self.ws, "worktree", "list"))
+        self.assertNotIn(str(path), registered(self.ws))
         self.assertTrue((self.ws / "CLAUDE.local.md").is_file(), "the link removed, never what it points to")
 
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
@@ -231,7 +238,7 @@ class SessionWorktree(Base):
             with mock.patch.object(session_worktree, "platform_entries", lambda: []):
                 with self.assertRaises(session_worktree.Refused):
                     session_worktree.drop(self.ws, path, runtime_claude)
-        self.assertIn("w8", git(self.ws, "worktree", "list"))
+        self.assertIn(str(path), registered(self.ws))
         self.assertTrue((path / ".git").is_file())
 
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
@@ -283,7 +290,7 @@ class SessionWorktree(Base):
         with mock.patch.object(isolation, "wrap", failing):
             with self.assertRaises(session_worktree.Refused):
                 session_worktree.make(self.ws, "w3", runtime_claude)
-        self.assertNotIn("w3", git(self.ws, "worktree", "list"))
+        self.assertNotIn(str(self.ws / ".claude" / "worktrees" / "w3"), registered(self.ws))
         self.assertEqual(git(self.ws, "branch", "--list", "worktree-w3"), "")
         self.assertFalse((self.ws / ".claude" / "worktrees" / "w3").exists())
         path, _skipped = session_worktree.make(self.ws, "w3", runtime_claude)
@@ -292,10 +299,23 @@ class SessionWorktree(Base):
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
     def test_a_race_against_the_hook_path_writes_nothing_outside(self):
         """The same swap, against the worktree the platform makes: the checkout runs in the project's sandbox, so a
-        link could only redirect writes to places the project can write, and its sandbox makes no link anyway."""
+        link can only redirect its writes to places the project can write. `outside` is a place it can't: denied to every
+        process of the project here, the worktree job included. It must be said, not assumed: where the test's temp folder
+        is the system's (a CI clone, which keeps it), the service profile lets every project write it, and a link there
+        took the job's writes on CI (11-15), which is no escalation (the project writes there anyway) and not what this
+        tests."""
         import session_worktree
         outside = self.tmp / "outside"
         outside.mkdir()
+        deny_outside = f'(deny file-write* (subpath "{outside}"))\n'
+        real = self.wrap
+
+        def wrap(project, cwd, argv, port=None):
+            got = real(project, cwd, argv, port)
+            return [*got[:2], got[2] + deny_outside, *got[3:]]
+        p = mock.patch.object(isolation, "wrap", wrap)
+        p.start()
+        self.addCleanup(p.stop)
         (self.ws / "d").mkdir()
         for i in range(400):
             (self.ws / "d" / f"a{i:04d}").write_text(f"planted {i}\n")
@@ -311,7 +331,7 @@ while [ $(date +%s) -lt $end ]; do
 done
 """
         # the attacker as any process of the project: nothing refuses its links
-        prof = seatbelt.service_profile(self.pol(), [self.ws]) + f'(deny file-write* (subpath "{outside}"))\n'
+        prof = seatbelt.service_profile(self.pol(), [self.ws]) + deny_outside
         a = subprocess.Popen([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", attacker], cwd=self.ws,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
