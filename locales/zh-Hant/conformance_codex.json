@@ -26,5 +26,14 @@
  "{model}: {what}": "{model}:{what}",
  "tests nothing: the rc files didn't run with {what}": "什麼都沒測到:{what}時 rc 檔也沒跑",
  "the snapshot on": "打開 snapshot",
- "the snapshot on and the user's HOME": "打開 snapshot 並用使用者的 HOME"
+ "the snapshot on and the user's HOME": "打開 snapshot 並用使用者的 HOME",
+ "a completion called {tools}": "completion 呼叫了 {tools}",
+ "its answer isn't the JSON asked for": "它的回答不是要求的 JSON",
+ "no login to link into the world": "沒有可以連進檢查世界的登入",
+ "not JSON": "不是 JSON",
+ "tests nothing: with the shell on the run called no tool either": "什麼都沒測到:打開 shell 後執行也沒呼叫任何工具",
+ "the hook's context didn't reach the model": "hook 的上下文沒有到達模型",
+ "the run answered but didn't change STATE.md": "執行有回答,但沒改 STATE.md",
+ "the run failed: {error}": "執行失敗:{error}",
+ "the session failed (exit {code})": "session 失敗(exit {code})"
 }

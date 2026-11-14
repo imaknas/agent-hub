@@ -134,6 +134,13 @@ class Runner(Temp):
                 self.assertEqual(order, ["s", "a"], "withheld after a safety fail")
                 self.assertEqual((doc["checks"]["l"]["state"], doc["checks"]["l"]["tries"]), ("error", 0))
 
+    def test_a_sessions_only_fail_doesnt_withhold_the_login_checks(self):
+        f = lambda w: None   # noqa: E731
+        entries = [Check("g", "sessions", "safety", f, side="session", holds="sessions"),
+                   Check("l", "completion", "function", f, login=True)]
+        doc = self.run_with(entries, {"g": [Outcome("fail", "B1")], "l": [Outcome("pass")]})
+        self.assertEqual(doc["checks"]["l"]["state"], "pass", "a fail that holds the user's sessions only")
+
     def test_login_checks_wait_for_the_adapters_login_window(self):
         f = lambda w: None   # noqa: E731
         entries = [Check("l", "completion", "function", f, login=True), Check("a", "agent", "function", f)]

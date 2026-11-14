@@ -63,10 +63,12 @@ import i18n
 
 _ = i18n.domain(__file__)
 NAME = "codex"   # this runtime's name in runtime_ports.RUNTIMES: the hooks say whose they are
-# a judgment point's model_group → model (runtime_ports.models), from 0.169's bundled catalog ("fast and affordable",
-# "workhorse", "frontier"): each code_mode_only, so its tools are seen before a run; v2, whose sub-agents the run home's
-# `[agents] enabled = false` takes away (Step 1). Whether the live catalog and a ChatGPT plan say the same is the login list
-MODELS = {"fast": "gpt-6-luna", "standard": "gpt-6.1-sol", "strong": "gpt-6-astra"}
+# a judgment point's model_group → model (runtime_ports.models). Measured with the owner's login (11-14, 0.169): a ChatGPT
+# account's live catalog lists only gpt-6-luna ("fast and affordable"), gpt-5.6-terra ("balanced") and gpt-5.6-luna, and
+# the server refuses the bundled catalog's others ("not supported when using Codex with a ChatGPT account"). So strong is
+# the best the plan serves, not the frontier model; agent-models checks each against the account's catalog. Each is
+# code_mode_only, so its tools are seen before a run; sub-agents go with the run home's `[agents] enabled = false`
+MODELS = {"fast": "gpt-6-luna", "standard": "gpt-5.6-terra", "strong": "gpt-5.6-terra"}
 # what its agent takes as rules from a folder it works in (one per directory, git root down to the cwd; the override
 # replaces the other): never on a memory branch (runtime_ports.rules_file_names, bin/memory_paths.py)
 RULES_FILE_NAMES = ("AGENTS.md", "AGENTS.override.md")

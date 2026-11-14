@@ -127,11 +127,29 @@ class Through(unittest.TestCase):
         self.assertEqual([c.name for c in conformance_codex.CHECKS if c.side == "session"],
                          ["session-folder-git", "control-globs", "lifecycle-hooks"])
         self.assertEqual([c.name for c in conformance_codex.CHECKS if c.run and c.kind == "safety"],
-                         ["home-flags", "agent-profile", "auth-link-write", "session-folder-git", "control-globs"])
+                         ["home-flags", "agent-profile", "auth-link-write", "completion-no-tools", "session-folder-git",
+                          "control-globs"])
         self.assertEqual([c.name for c in conformance_codex.CHECKS if c.login],
                          ["completion-no-tools", "completion-schemas", "agent-result", "agent-models", "lifecycle-hooks"],
                          "every check that needs a model call is a login check")
-        self.assertTrue(all(c.run is None for c in conformance_codex.CHECKS if c.login), "not checkable without a login")
+        self.assertTrue(all(c.run for c in conformance_codex.CHECKS if c.login), "each runs once a login is linked")
+
+    def test_a_login_check_links_the_users_login_and_nothing_else(self):
+        """prepare leaves only the login file's path; a login check links it into the world's Codex home (M9), and a
+        world with no path isn't logged in (the check errors, never runs without)."""
+        import types
+        root, tool = self.tmp / "w", self.tmp / "w" / "tool"
+        root.mkdir()
+        world = types.SimpleNamespace(root=str(root), tool=str(tool))
+        login = self.tmp / "user" / "auth.json"
+        login.parent.mkdir()
+        login.write_text("{}")
+        self.assertFalse(conformance_codex._logged_in(world))
+        with mock.patch.object(runtime_codex, "codex_home", lambda: login.parent):
+            conformance_codex.prepare(world)
+        self.assertEqual((root / conformance_codex.LOGIN_TARGET).read_text(), str(login.resolve()))
+        self.assertTrue(conformance_codex._logged_in(world))
+        self.assertEqual(os.readlink(tool / "auth.json"), str(login.resolve()))
         self.assertEqual([c.name for c in conformance_codex.CHECKS if c.holds], ["session-folder-git"])
         self.assertTrue(conformance.versioned("codex"))
         self.assertTrue(conformance.versioned("claude"))

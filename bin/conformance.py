@@ -84,8 +84,10 @@ class World:
         for part in self.PARTS:
             getattr(self, part).mkdir(mode=0o700, parents=True, exist_ok=True)
         (self.config / "projects").mkdir(exist_ok=True)
+        # where a hub keeps its bare repos and memory copies, inside the world (a check of a run in a memory copy)
         (self.config / names.current("config_file")).write_text(json.dumps(
-            {"bus_dir": str(self.bus), "registry_dir": "projects"}, indent=2) + "\n")
+            {"bus_dir": str(self.bus), "registry_dir": "projects", "git_origin": str(self.home / "git-origin"),
+             "memory_copies": str(self.home / ".memory-copies")}, indent=2) + "\n")
         return self
 
     def env(self, base: dict | None = None) -> dict:
@@ -241,7 +243,9 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None, pai
         for c in todo:
             held = None
             if c.login and c.run is not None:
-                if any(r["kind"] == "safety" and r["state"] == "fail" for r in out["checks"].values()):
+                # a fail of a check that holds the user's sessions only says nothing about the copy's own runs
+                if any(r["kind"] == "safety" and r["state"] == "fail" and r.get("holds") != "sessions"
+                       for r in out["checks"].values()):
                     held = _("withheld: a safety check failed first")
                 elif callable(window):
                     held = window(c.timeout_s)

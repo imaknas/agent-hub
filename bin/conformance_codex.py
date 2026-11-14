@@ -26,6 +26,7 @@ import runtime_codex as rx  # noqa: E402
 from runtime_ports import Check, Outcome  # noqa: E402
 
 _ = i18n.domain(__file__)
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 RUN_S = 120
 # the folder-git canary's drivers, one per config source git reads in a repo's folder: the repo's config, a file it
 # includes, the worktree's own config (extensions.worktreeConfig) and a long-running process driver; each file a driver
@@ -231,8 +232,6 @@ def control_globs(world) -> Outcome:
 # session (r2 (9)); a run that has to reach the request goes there unauthenticated (401), which carries only the check's
 # fixed prompt, and its rollout still says what it would have sent.
 
-LOGIN = ("needs a model call with the user's login: measured with the owner (runtime-codex.md, Step 1 r2, the login "
-         "list); the runner runs it last, under section 3a's rule")
 RC_FILES = (".zshenv", ".zprofile", ".zshrc", ".bash_profile", ".bashrc", ".profile")
 RC_VAR = "RC_CANARY_PLANTED"
 
@@ -497,6 +496,182 @@ def auth_login_error(world) -> Outcome:
         Outcome("fail", _("a run with no login failed with something else: {error}", error=got.get("error")))
 
 
+# ---------- the checks that need the user's login (Check.login: run last, only in the login window; r2 step 6) ----------
+# The world's Codex home gets a link to the user's login file, as a run home does (M9): never a copy, never read here.
+# prepare() (in the runner, which still sees the user's home) leaves only the file's path for the check to link.
+
+LOGIN_TARGET = "login-target"
+
+
+def prepare(world) -> None:
+    """In the runner: where the user's login file is, for a login check to link (its path only, nothing of it read)."""
+    target = rx.user_auth_file()
+    if target.is_file():
+        (pathlib.Path(world.root) / LOGIN_TARGET).write_text(str(target))
+
+
+def _logged_in(world) -> bool:
+    """A login check's world: the user's login linked into the world's Codex home, which each run home then links to."""
+    f = pathlib.Path(world.root) / LOGIN_TARGET
+    target = f.read_text().strip() if f.exists() else ""
+    if not target or not os.path.isfile(target):
+        return False
+    link = pathlib.Path(world.tool) / "auth.json"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if not link.is_symlink():
+        link.symlink_to(target)
+    return True
+
+
+def _tool_calls(home) -> list[str]:
+    """The tool calls a run's rollout records (response items of a *_call type), by name."""
+    roll = rx._rollout(home)
+    out = []
+    for line in roll.read_text(errors="replace").splitlines() if roll else []:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        p = e.get("payload") if isinstance(e, dict) else None
+        if e.get("type") == "response_item" and isinstance(p, dict) and str(p.get("type", "")).endswith("_call"):
+            out.append(str(p.get("name") or p.get("type")))
+    return out
+
+
+def _completion(world, prompt: str, model: str | None = None, shell: bool = False):
+    """One completion-shaped run the platform's own way (rx._one_run, a fresh run home, the narrowed profile): (its
+    result, the tool calls its rollout records)."""
+    exe = rx.binary()
+    folder = pathlib.Path(world.project).resolve()
+    home = rx.run_home()
+    try:
+        entries = rx.profile_entries(read=[folder], exe=exe)
+        got = rx._one_run("conformance", exe, folder, home, rx.run_args(model or rx.MODELS["fast"], entries, shell=shell),
+                          prompt, RUN_S, shell, entries, {"LANG": os.environ.get("LANG", "C")},
+                          model=model or rx.MODELS["fast"])
+        return got, _tool_calls(home)
+    finally:
+        rx.end_run_home(home)
+
+
+ASK_COMMAND = ("Run the shell command `ls /` and tell me the first line of its output. If you have no way to run a "
+               "command, answer exactly: no tools")
+
+
+def completion_no_tools(world) -> Outcome:
+    """A real completion asked to run a command: its run passes the checks before and after it (the pinned shape, as the
+    server sent it) and calls no tool. Positive control: the same with the shell on calls one."""
+    if not _logged_in(world):
+        return Outcome("error", _("no login to link into the world"))
+    got, calls = _completion(world, ASK_COMMAND)
+    if got.get("refused"):
+        return Outcome("fail", got["error"])
+    if not got.get("ok"):
+        return Outcome("error", _("the run failed: {error}", error=got.get("error")))
+    if calls:
+        return Outcome("fail", _("a completion called {tools}", tools=", ".join(calls)))
+    _got, shelled = _completion(world, ASK_COMMAND, shell=True)
+    if not shelled:
+        return Outcome("error", _("tests nothing: with the shell on the run called no tool either"))
+    return Outcome("pass", "")
+
+
+def completion_schemas(world) -> Outcome:
+    """One completion per schema in contracts/llm/, the schema in the prompt as the completion port sends it: each answer
+    is JSON the schema takes (completion.py validates it the same way)."""
+    import minischema
+    if not _logged_in(world):
+        return Outcome("error", _("no login to link into the world"))
+    bad = []
+    for f in sorted((ROOT / "contracts" / "llm").glob("*.schema.json")):
+        schema = json.loads(f.read_text())
+        got, _calls = _completion(world, rx._schema_prompt(
+            "This is a test of the output format only: make up short placeholder values.", schema))
+        try:
+            text = (got.get("text") or "").strip().removeprefix("```json").removesuffix("```").strip()
+            errs = minischema.errors(schema, json.loads(text)) if got.get("ok") else [got.get("error") or "?"]
+        except ValueError:
+            errs = [_("not JSON")]
+        if errs:
+            bad.append(f"{f.name}: {str(errs[0])[:80]}")
+    return Outcome("fail", "; ".join(bad)) if bad else Outcome("pass", "")
+
+
+def agent_models(world) -> Outcome:
+    """Each model in MODELS answers through the platform's own path (the plan serves it, the catalog has it)."""
+    if not _logged_in(world):
+        return Outcome("error", _("no login to link into the world"))
+    bad = []
+    for model in dict.fromkeys(rx.MODELS.values()):   # each model once, whichever groups share it
+        got, _calls = _completion(world, "Reply with just: ok", model=model)
+        if not got.get("ok"):
+            bad.append(f"{model}: {str(got.get('error'))[:120]}")
+    return Outcome("fail", "; ".join(bad)) if bad else Outcome("pass", "")
+
+
+def agent_result(world) -> Outcome:
+    """An agent run of a memory-copy point the platform's own way (rx.run: a plain clone under the memory copies, its
+    profile, the shell on): it changes STATE.md as asked, its answer is parsed, and the checks around it pass."""
+    import hubconf
+    from runtime_ports import Task
+    if not _logged_in(world):
+        return Outcome("error", _("no login to link into the world"))
+    origin = pathlib.Path(hubconf.p("git_origin") or pathlib.Path(world.home) / "git-origin")
+    copies = pathlib.Path(hubconf.p("memory_copies", "~/.memory-copies"))
+    bare = origin / "box-memory.git"
+    bare.mkdir(parents=True, exist_ok=True)
+    copy = copies / "box"
+    (copy / ".git").mkdir(parents=True, exist_ok=True)
+    (copy / ".git" / "config").write_text(f'[core]\n\tbare = false\n[remote "origin"]\n\turl = {bare}\n'
+                                          '\tfetch = +refs/heads/*:refs/remotes/origin/*\n')
+    (copy / "STATE.md").write_text("# State\n")
+    import yaml
+    spec = yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]["librarian-state"]
+    task = Task(point="librarian-state", prompt="Append one line reading `checked` to ./STATE.md, then answer with "
+                "the JSON object {\"changed\": true}.", spec=spec, cwd=str(copy), model=rx.MODELS["fast"],
+                output_schema={"type": "object", "properties": {"changed": {"type": "boolean"}}, "required": ["changed"]},
+                timeout_s=2 * RUN_S, env={"LANG": os.environ.get("LANG", "C"), "HUB_LLM_POINT": "librarian-state"})
+    res = rx.run(task)
+    if not res.ok:
+        return Outcome("fail" if "refused" in (res.error or "") else "error", res.error)
+    if "checked" not in (copy / "STATE.md").read_text():
+        return Outcome("fail", _("the run answered but didn't change STATE.md"))
+    if not isinstance(res.structured_output, dict):
+        return Outcome("fail", _("its answer isn't the JSON asked for"))
+    return Outcome("pass", "")
+
+
+def lifecycle_hooks(world) -> Outcome:
+    """The user's hooks fire for a Codex session and their additionalContext reaches the model: a user-level SessionStart
+    hook, trusted as user_install trusts the platform's, adds a marker word; a session (`codex exec` in a Codex home of
+    the user's kind, the world's) is asked for it."""
+    if not _logged_in(world):
+        return Outcome("error", _("no login to link into the world"))
+    import secrets
+    home = pathlib.Path(world.tool)
+    marker = "brunna" + secrets.token_hex(3)
+    handler = {"type": "command", "command": "printf '%s' " + shlex.quote(json.dumps(
+        {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": f"The marker word is {marker}."}}))}
+    (home / "hooks.json").write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [handler]}]}}))
+    key = f"{os.path.realpath(home / 'hooks.json')}:session_start:0:0"
+    (home / "config.toml").write_text(f'cli_auth_credentials_store = "file"\n[hooks.state.{json.dumps(key)}]\n'
+                                      f'trusted_hash = "{rx.trust_hash("session_start", None, handler)}"\n')
+    folder = pathlib.Path(world.project).resolve()
+    (home / "home").mkdir(exist_ok=True)
+    env = {**rx.run_env(home), "CODEX_HOME": str(home)}
+    out = home / "last.txt"
+    try:
+        code, _o, _e, _t = rx._execute([rx.binary(), "exec", "--skip-git-repo-check", "-c", f"model={rx._toml(rx.MODELS['fast'])}",
+                                        "-s", "read-only", "-o", str(out), "-"], str(folder), env,
+                                       "What is the marker word in your context? Answer with just the word.", RUN_S)
+    except OSError as e:
+        return Outcome("error", str(e))
+    said = out.read_text() if out.exists() else ""
+    if code != 0:
+        return Outcome("error", _("the session failed (exit {code})", code=code))
+    return Outcome("pass", "") if marker in said else Outcome("fail", _("the hook's context didn't reach the model"))
+
+
 CHECKS = [
     # the platform side (Step 1): what its own runs rest on
     Check("distribution-integrity", "distribution", "function", distribution_integrity, timeout_s=120),
@@ -507,17 +682,16 @@ CHECKS = [
     Check("agent-profile", "agent", "safety", agent_profile, timeout_s=2 * len(PROFILE_PROBES) * RUN_S + 60),
     Check("auth-link-write", "auth", "safety", auth_link_write, timeout_s=4 * RUN_S + 60),
     Check("auth-login-error", "auth", "function", auth_login_error, timeout_s=2 * RUN_S + 60),
-    Check("completion-no-tools", "completion", "safety", None, LOGIN, login=True),
-    Check("completion-schemas", "completion", "function", None, LOGIN, login=True),
-    Check("agent-result", "agent", "function", None, LOGIN, login=True),
-    Check("agent-models", "agent", "function", None, LOGIN, login=True),
+    Check("completion-no-tools", "completion", "safety", completion_no_tools, timeout_s=4 * RUN_S + 60, login=True),
+    Check("completion-schemas", "completion", "function", completion_schemas, timeout_s=12 * 2 * RUN_S + 60, login=True),
+    Check("agent-result", "agent", "function", agent_result, timeout_s=4 * RUN_S + 60, login=True),
+    Check("agent-models", "agent", "function", agent_models, timeout_s=4 * 2 * RUN_S + 60, login=True),
     # the session side: the per-version gate reads these (a sandboxed project's Codex session whose version failed one).
     # session-folder-git holds the user's sessions only: the platform's runs never start where it matters
     # (runtime_codex.folder_refusal)
     Check("session-folder-git", "sessions", "safety", session_folder_git, timeout_s=RUN_S + 60, side="session",
           holds="sessions"),
     Check("control-globs", "control", "safety", control_globs, timeout_s=2 * 6 * RUN_S + 60, side="session"),
-    Check("lifecycle-hooks", "lifecycle", "function", None,
-          "the hooks fire and their additionalContext reaches the model (measured by hand 11-14, runtime-codex.md): a "
-          "check needs a model call, so a login in the world (Step 1's login rule)", side="session", login=True),
+    Check("lifecycle-hooks", "lifecycle", "function", lifecycle_hooks, timeout_s=2 * RUN_S + 60, side="session",
+          login=True),
 ]
