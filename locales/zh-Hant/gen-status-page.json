@@ -215,5 +215,6 @@
  "temp area": "暫存區",
  "Git config fence (report only, a best-effort check, scanned {at})": "Git config 圍欄(只回報,盡力而為的檢查,掃描於 {at})",
  "no known problem": "沒有已知問題",
- "problems found": "發現問題"
+ "problems found": "發現問題",
+ "Cannot read which skills wait for review: {e}": "無法讀取哪些 skills 在等審:{e}"
 }

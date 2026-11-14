@@ -137,6 +137,13 @@ jobs:
   every: 15m
   cwd: hub
   run: bin/py bin/render-project-settings.py
+# a project's skills waiting for the owner's review (docs/design/skills-sync.md): each sandboxed project's skills/
+# against what the owner last approved with `brunna skills sync`; a status-page row and one owner to-do per change
+# set. It installs nothing
+- name: skills-pending
+  every: 15m
+  cwd: hub
+  run: bin/py bin/skills_sync.py remind
 # the coding agents' checked copies (docs/design/runtime-versions.md section 3): a newer version installed, checked and
 # promoted or held back, the daily checks on the current one, the user's own copy raised to it (replaced
 # claude/update-claude, 11-14)

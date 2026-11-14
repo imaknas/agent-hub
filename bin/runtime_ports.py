@@ -86,8 +86,15 @@ The current interfaces (the other layers get added one at a time, following the 
                                                          can't be moved away or replaced)
     session_folders(workspace) -> list[Path]             where sessions of this project start (the folder, its
                                                          worktrees): each gets the platform's settings
-    foreign_controls(workspace) -> list[str]             what in the folder would make its sessions run something the
-                                                         platform didn't put there (committed hooks, tool servers)
+    foreign_controls(workspace, owned=None) -> list[str] what in the folder would make its sessions run something the
+                                                         platform didn't put there (committed hooks, tool servers);
+                                                         owned(rel) → True for an entry the platform installed and that
+                                                         is still exactly as installed (skills_sync.owned): not foreign
+    SKILL_DIRS (optional) = (rel, …)                     the folders, relative to a session folder, it loads a project's
+                                                         skills from (`brunna skills sync` installs there;
+                                                         docs/design/skills-sync.md); none: no skills installed for it
+    skill_notes(files) -> list[str] (optional)           what to show the owner first about a skill's files
+                                                         ({rel: bytes}) before installing it (e.g. hooks it declares)
     control_root() -> (folder, writable names) (optional) the tool's own folder in the project and the entries in it
                                                          that stay writable (its worktrees): a sandboxed project's
                                                          services and jobs create or change nothing else in it (one
@@ -284,6 +291,16 @@ def protected_runtimes() -> list[str]:
                              "files and login are left out of the sandboxes until it can\n")
             continue
     return list(dict.fromkeys(out))
+
+
+def skill_dirs(name: str) -> tuple[str, ...]:
+    """The folders, relative to a session folder, this runtime loads a project's skills from (its optional SKILL_DIRS;
+    docs/design/skills-sync.md): empty when it declares none."""
+    try:
+        got = getattr(_module(name), "SKILL_DIRS", ())
+    except Exception:
+        return ()
+    return tuple(d for d in got if isinstance(d, str) and d and not d.startswith("/") and ".." not in d.split("/"))
 
 
 def user_controls() -> tuple[list[str], list[str]]:

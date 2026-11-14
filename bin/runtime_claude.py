@@ -2082,9 +2082,10 @@ def session_folders(workspace) -> list[pathlib.Path]:
     return out
 
 
-def foreign_controls(workspace) -> list[str]:
+def foreign_controls(workspace, owned=None) -> list[str]:
     """Committed hooks or tool servers its sessions would load: the platform can't remove a committed file, so these
-    are only reported (read without following links: nofollow.py)."""
+    are only reported (read without following links: nofollow.py). A skill `brunna skills sync` installed and that is
+    still exactly as installed (owned) is the platform's: its hooks were shown to the owner (skill_notes)."""
     import nofollow
     ws, out = pathlib.Path(workspace), []
     try:
@@ -2098,9 +2099,26 @@ def foreign_controls(workspace) -> list[str]:
         out.append(_("{file} declares tool servers", file=".mcp.json"))
     for kind in ("agents", "skills"):
         for f in sorted((ws / ".claude" / kind).rglob("*.md")) if (ws / ".claude" / kind).is_dir() else []:
-            if not f.is_symlink() and re.search(r"(?m)^hooks:", f.read_text(errors="replace")[:4000]):
-                out.append(_("{file} declares hooks", file=str(f.relative_to(ws))))
+            rel = f.relative_to(ws)
+            if kind == "skills" and owned and len(rel.parts) > 3 and owned("/".join(rel.parts[:3])):
+                continue
+            if not f.is_symlink() and HOOKS_DECLARED.search(f.read_text(errors="replace")[:4000]):
+                out.append(_("{file} declares hooks", file=str(rel)))
     return out
+
+
+# A skill or agent file that declares hooks: its sessions run them (outside the sandbox) while it is in use
+HOOKS_DECLARED = re.compile(r"(?m)^hooks:")
+# Where it loads a project's skills from, in each session folder (its docs, "skills": .claude/skills/<name>/SKILL.md;
+# docs/design/skills-sync.md)
+SKILL_DIRS = (".claude/skills",)
+
+
+def skill_notes(files: dict) -> list[str]:
+    """What the owner sees first about a skill before `brunna skills sync` installs it: the files that declare hooks."""
+    return [_("{file} declares hooks, which its sessions run outside the sandbox while the skill is in use", file=rel)
+            for rel, data in sorted(files.items()) if rel.endswith(".md") and
+            HOOKS_DECLARED.search(data[:4000].decode("utf-8", "replace"))]
 
 
 def platform_hooks() -> dict:

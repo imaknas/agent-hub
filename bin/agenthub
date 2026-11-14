@@ -76,6 +76,10 @@ scheduling:
 owner (you; not commands for project sessions):
   brunna owner list | done/drop/already-done <key> | answer <question id> "answer"
                         = bin/owner.py: the built-in owner side ({settings} owner_side: builtin; with an assistant, list only)
+  brunna skills sync <project> [--yes] [--adopt] | status [<project>]
+                        a project's skills, developed in its skills/ folder: what changed, shown as a diff, installed
+                        into the folders its agents load skills from after you type yes (bin/skills_sync.py,
+                        docs/design/skills-sync.md); the platform reminds you when changes wait for review
 for project sessions (these are what the rules files name; the permission rules allow only these, not the admin commands above):
   brunna send | inbox | show | ack | pass | done | thread | open-questions …   = the project mailbox (bin/hubbus subcommands of the
                         same name)
@@ -1473,6 +1477,15 @@ def doctor_tracked_controls(add, sandboxed, names) -> None:
                           "can change any more (e.g. {example}); merge-branch refuses a merge that would change one",
                           project=project, n=len(got), example=", ".join(got[:3])),
                 _("change them outside the project's sandbox, or stop tracking them"))
+            # skills among them: developed in skills/ now, installed by the owner (docs/design/skills-sync.md)
+            import policy
+            import runtime_ports
+            dirs = [d for r in runtime_ports.protected_runtimes() for d in runtime_ports.skill_dirs(r)]
+            if dirs and (skills := [g for g in got if policy.is_control(g, dirs)]):
+                add("info", _("{project} (sandboxed): {n} of them {n:is a skill|are skills}; skills are developed in "
+                              "its skills/ folder and installed with brunna skills sync {project}", project=project,
+                              n=len(skills)),
+                    _("move them: docs/design/skills-sync.md, \"Moving a project's skills\""))
 
 
 def doctor_git_fence(add) -> None:
@@ -1537,6 +1550,9 @@ def doctor_control(add, why_no_sandbox, installed) -> None:
     sandboxed = [(n, hubconf.path((d.get("paths") or {}).get("workspace"))) for n, d in sorted(hubconf.projects().items())
                  if (d.get("enforce") or {}).get("sandbox") is True]
     doctor_tracked_controls(add, sandboxed, [c["name"] for c in policy.protect() if c["tree"]])
+    import skills_sync
+    for project, row in skills_sync.pending_rows():   # the reminder job's last run (docs/design/skills-sync.md)
+        add("info", skills_sync.pending_text(project, row))
     for name in installed:
         fn = getattr(runtime_ports._module(name), "control_notes", None)
         for _project, ws in sandboxed if callable(fn) else ():
@@ -2299,6 +2315,8 @@ COMMANDS = {
     # stdio is the protocol: exec into the server process, no extra layer
     "mcp": lambda argv: os.execv(sys.executable, [sys.executable, str(BIN / "mcp_server.py"), *argv]),
     "owner": lambda argv: subprocess.run([*hubconf.launch(BIN / "owner.py"), *argv]).returncode,
+    # the owner's review of a project's skills (docs/design/skills-sync.md); never a session command
+    "skills": passthrough("skills_sync.py"),
     # after a merge of agent-hub, run by merge-branch from the merged tree (docs/design/test-waiting.md step 2.2;
     # step 2.3 adds the hook install): the registry index rebuilt by the code that just landed
     "land": cmd_land,

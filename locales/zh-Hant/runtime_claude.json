@@ -83,5 +83,6 @@
  "this session was written by Claude Code {version}, and the platform's copy {current} {how}: not resumed (brunna runtimes shows the checks)": "這個 session 是 Claude Code {version} 寫的,而平台的版本 {current}{how}:不接續(brunna runtimes 看檢查結果)",
  "npm could not list the published versions: {error}": "npm 列不出已發布的版本:{error}",
  "failed to resume one ({reason})": "接續這種 session 失敗({reason})",
- "hasn't been checked resuming one yet": "還沒檢查過能不能接續這種 session"
+ "hasn't been checked resuming one yet": "還沒檢查過能不能接續這種 session",
+ "{file} declares hooks, which its sessions run outside the sandbox while the skill is in use": "{file} 宣告了 hooks,skill 使用中時它的 session 會在沙箱外執行它們"
 }

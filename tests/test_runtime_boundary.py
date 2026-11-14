@@ -20,7 +20,9 @@ NEUTRAL = ["policy.py", "seatbelt.py", "landlock.py", "isolation.py", "sandboxed
            "sessions.py", "weekly-reflect.py", "check-memory-gaps.py", "test-waiting-report.py",
            # the hooks' entry point and the settings applier: each runtime's syntax is its adapter's
            # (docs/design/runtime-codex.md, Step 4 r2, S12)
-           "hub-event", "render-project-settings.py"]
+           "hub-event", "render-project-settings.py",
+           # the owner's skills review: each tool's skill folders are its adapter's SKILL_DIRS
+           "skills_sync.py"]
 PATTERNS = [
     (re.compile(r"(?<![\w])\.claude\b"), "Claude's settings/credentials directory"),
     (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("),

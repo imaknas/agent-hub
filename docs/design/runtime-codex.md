@@ -762,6 +762,9 @@ r2 and the plan above disagree, r2 holds.
     - doctor names them per sandboxed project, read as the project (project-git-job `tracked`).
     - render-project-settings reports every protected runtime's `foreign_controls` as drift, so such a project's status row
       stays red until the files go. That is meant: they are what its sessions would load.
+    - Skills (11-15, the owner's decision): developed in `skills/`, installed into `.agents/skills` (and Claude's
+      `.claude/skills`) only by the owner's `brunna skills sync`, after a reviewed diff; an installed skill still exactly
+      as installed is not foreign (`skills-sync.md`).
   - **Claude's `control` check: nine canaries for other agents' control folders.**
     - `.codex/canary` and `.agents/canary`, through Edit and Bash.
     - `sub/.codex/canary` and `sub/.agents/canary` (Bash).

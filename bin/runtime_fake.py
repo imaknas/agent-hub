@@ -190,7 +190,7 @@ def session_folders(workspace) -> list:
     return [pathlib.Path(workspace)]
 
 
-def foreign_controls(workspace) -> list:
+def foreign_controls(workspace, owned=None) -> list:
     return []
 
 

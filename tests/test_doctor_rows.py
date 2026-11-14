@@ -285,8 +285,9 @@ class Doctor(unittest.TestCase):
             self.ah.doctor_tracked_controls(lambda level, what, fix="": rows.append((level, what)),
                                             [("boxed", ws), ("gone", self.tmp / "nope")], [".codex", ".agents"])
         self.assertEqual(asked, [("boxed", "tracked", (ws, ".codex", ".agents"))])
-        self.assertEqual([lv for lv, _w in rows], ["warn"])
+        self.assertEqual([lv for lv, _w in rows], ["warn", "info"])
         self.assertIn(".agents/skills/x/SKILL.md", rows[0][1])
+        self.assertIn("brunna skills sync boxed", rows[1][1], "skills among them: where they go now (skills-sync.md)")
 
     def test_macos_says_what_the_services_rule_stops_and_each_projects_entries(self):
         # the services rule, then the sandboxed project's present entries and its name no rule holds (once, not for

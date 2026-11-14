@@ -560,6 +560,12 @@ def main() -> None:
                                 more=_("; … ({n} in all)", n=len(errs)) if len(errs) > 4 else "")))
     for why in (reg_info.get("refused") or {}).values():   # a valid entry whose job alone doesn't run
         alerts.append(("notify", why))
+    try:   # skills waiting for the owner's review (bin/skills_sync.py remind; docs/design/skills-sync.md)
+        import skills_sync
+        for proj, row in skills_sync.pending_rows():
+            alerts.append(("notify", skills_sync.pending_text(proj, row)))
+    except Exception as e:  # the status page must not crash because of this
+        alerts.append(("bad", _("Cannot read which skills wait for review: {e}", e=e)))
 
     for job in jobs:
         name = job["name"]

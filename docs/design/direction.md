@@ -148,6 +148,11 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    grants, such as an OAuth MCP server's, in the secrets directory and hands one to a job's run only through a stdio
    bridge it attaches (owner question 2; a loopback proxy is the alternative). No job reads the Keychain (DV5 stays).
    Waits on owner question 1 (which client the grant uses) before step 4; steps 1–3 don't.
+7. **A project's skills** (`skills-sync.md`, the owner's decision 11-15, built 11-15): a sandboxed project develops them
+   in `skills/`, and `brunna skills sync` installs them into the agents' skill folders only after the owner's typed
+   yes (the platform reminds with an owner to-do per change set). Left: the migration of the project that tracks 44
+   skills in `.agents/skills` (the owner merges its commit by hand: merge-branch refuses deletions in a control folder),
+   and worktrees made after a sync get the skills only at the next one.
 
 ### 3. Projects and repos (`projects-and-repos.md`)
 
@@ -241,6 +246,8 @@ Built: steps 0–2 and step 4, the waiting report. Left:
 - capabilities' 11-08 A1 check in a session the owner opens.
 - `mailbox-session-first.md` step 4's systemd `KillMode` change, which was read, not run.
 - Whether a mailbox fork shows in the desktop app's session list.
+- `brunna skills sync` on a real project, and whether Claude Code or Codex in a worktree session finds the main
+  checkout's installed skills (`skills-sync.md`).
 
 ## Design docs whose status line was behind the code (11-13)
 

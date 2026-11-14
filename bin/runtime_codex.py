@@ -177,6 +177,9 @@ def rules_note() -> str:
 CONTROL = ((".codex", True), (".agents", True))
 TOOL_FOLDER = ".codex"
 ALWAYS_PROTECTED = True
+# Where it loads a project's skills from (the repo scope, measured 11-14 above; docs/design/skills-sync.md)
+SKILLS_FOLDER = ".agents"
+SKILL_DIRS = (f"{SKILLS_FOLDER}/skills",)
 
 
 def control_paths() -> list[tuple[str, bool]]:
@@ -205,11 +208,12 @@ FOREIGN_SKIP = (".git", "node_modules", ".venv", "venv", "__pycache__")   # not 
 FOREIGN_WALK_MAX = 50000   # folders looked through at most
 
 
-def foreign_controls(workspace) -> list[str]:
-    """What in the folder its sessions would load that the platform didn't put there: the platform writes nothing into a
-    control folder yet, so every .codex and .agents folder at any depth (a nested one loads for a session started below
-    it), in every spelling the volume opens as it, the top .codex's entries named one by one. Walked without following
-    links (a link of the name is said as one), past FOREIGN_SKIP; planted before the protection came, or by hand
+def foreign_controls(workspace, owned=None) -> list[str]:
+    """What in the folder its sessions would load that the platform didn't put there: every .codex and .agents folder at
+    any depth (a nested one loads for a session started below it), in every spelling the volume opens as it, the top
+    .codex's entries named one by one. The top .agents is looked into: a skill `brunna skills sync` installed and still
+    exactly as installed (owned) is the platform's, anything else in it is named. Walked without following links (a
+    link of the name is said as one), past FOREIGN_SKIP; planted before the protection came, or by hand
     (render-project-settings reports them as drift; Step 4 r2, review S5)."""
     ws = pathlib.Path(workspace)
     names = {f for n, _t in CONTROL for f in _folds(n)}
@@ -230,9 +234,36 @@ def foreign_controls(workspace) -> list[str]:
                             for e in sorted(os.listdir(here / n))]
                 except OSError as e:
                     out.append(_("{file} can't be listed ({why})", file=rel, why=e))
+            elif rel == SKILLS_FOLDER and owned:
+                out += _skills_folder(ws, owned)
             else:
                 out.append(_("{file} would be loaded by its Codex sessions", file=rel))
         dirs[:] = [d for d in dirs if d not in names and d not in FOREIGN_SKIP]
+    return out
+
+
+def _skills_folder(ws: pathlib.Path, owned) -> list[str]:
+    """The top .agents, entry by entry: only the skills sync installed (owned) in its skills folder are the platform's;
+    every other entry, and a skills folder that is a link or can't be listed, is said."""
+    out, top = [], ws / SKILLS_FOLDER
+    try:
+        entries = sorted(os.listdir(top))
+    except OSError as e:
+        return [_("{file} can't be listed ({why})", file=SKILLS_FOLDER, why=e)]
+    skills = pathlib.PurePosixPath(SKILL_DIRS[0]).name
+    for e in entries:
+        rel = f"{SKILLS_FOLDER}/{e}"
+        if e != skills or (top / e).is_symlink() or not (top / e).is_dir():
+            out.append(_("{file} is a link", file=rel) if (top / e).is_symlink() else
+                       _("{file} would be loaded by its Codex sessions", file=rel))
+            continue
+        try:
+            names = sorted(os.listdir(top / e))
+        except OSError as err:
+            out.append(_("{file} can't be listed ({why})", file=rel, why=err))
+            continue
+        out += [_("{file} would be loaded by its Codex sessions", file=f"{rel}/{x}") for x in names
+                if not owned(f"{rel}/{x}")]
     return out
 
 
