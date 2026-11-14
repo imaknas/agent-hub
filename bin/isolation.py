@@ -122,6 +122,18 @@ def as_project(project: str | None, cwd, argv: list[str]) -> list[str]:
     return wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv
 
 
+def readable_platform_folder() -> pathlib.Path | None:
+    """The platform's state folder or secrets folder when this process can open it (the first that opens), else None."""
+    for p in (hubconf.STATE, hubconf.secrets_dir()):
+        try:
+            fd = os.open(p, os.O_RDONLY | os.O_DIRECTORY)
+        except OSError:
+            continue
+        os.close(fd)
+        return pathlib.Path(p)
+    return None
+
+
 def reads_blocked() -> bool:
     """The REQUIRED isolated-reads guarantee, probed from inside: the platform's state and its secrets folder can't be
     opened. True only when at least one of them exists and neither opens (one missing tells nothing)."""
@@ -137,6 +149,20 @@ def reads_blocked() -> bool:
         os.close(fd)
         return False
     return blocked
+
+
+def confinement_gap(marked: bool) -> str:
+    """Why confined_now(marked) says no, for a refusal to say: the adapter can't see its sandbox, or the platform's
+    state can be read from inside it. The second happens where the sandbox can't hide that folder, e.g. one inside the
+    temp area every sandboxed project may write (Landlock grants that area whole: on Linux a platform state kept there is
+    never hidden)."""
+    a = adapter()
+    fn = getattr(a[1], "confined_now", None) if a else None
+    if not (fn and fn(marked)):
+        return "it was started through sandboxed-run but its sandbox can't be seen from inside"
+    if (p := readable_platform_folder()):
+        return f"the platform's own folder {p} can be read from inside its sandbox, which can't hide it there"
+    return "it was started through sandboxed-run but its sandbox can't be confirmed from inside"
 
 
 def confined_now(marked: bool = False) -> bool:
@@ -180,7 +206,7 @@ def run_as_project(project: str, doc: dict, argv: list[str], guard: str) -> tupl
     if not sandboxed({**doc, "name": project}) or confined_now(marked):
         return None
     if marked:
-        raise SandboxRefused("it was started through sandboxed-run but its sandbox can't be confirmed from inside")
+        raise SandboxRefused(confinement_gap(marked))
     if (why := can_sandbox()):
         raise SandboxRefused(why)
     return wrap(project, os.getcwd(), argv), {**kept_env(), guard: "1"}

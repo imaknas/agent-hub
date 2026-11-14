@@ -296,9 +296,11 @@ class SwappedJobs(unittest.TestCase):
         (self.outside / "precious.txt").write_text("keep me")
         (self.outside / "state.json").write_text(json.dumps({"state": "running"}))
         (self.tmp / "state").mkdir()
+        # every state file in the test's own folder: LOG and ACTIVE are fixed at import, beside the live state
         for p in (mock.patch.object(cr, "eligible", lambda: {"p": {"dirs": [self.ws], "caps": [], "models": {}}}),
                   mock.patch.object(cr, "DIR", self.tmp / "state"),
-                  mock.patch.object(cr, "LOG", self.tmp / "state" / "log.jsonl")):   # fixed at import: the tree's own .state
+                  mock.patch.object(cr, "LOG", self.tmp / "state" / "log.jsonl"),
+                  mock.patch.object(cr, "ACTIVE", self.tmp / "state" / "active.json")):
             p.start()
             self.addCleanup(p.stop)
 

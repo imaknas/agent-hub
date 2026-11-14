@@ -458,6 +458,17 @@ class RunAsProject(unittest.TestCase):
                 self.assertTrue(isolation.confined_now())
         self.assertFalse(landlock.confined_now(False), "without the mark, never")
 
+    def test_a_refusal_says_which_part_of_confinement_is_missing(self):
+        """CI, Linux: the fixture's platform state sat in the temp area Landlock grants whole, so the wrapped run saw it;
+        the refusal says that, not only "can't be confirmed"."""
+        fake = type("A", (), {"confined_now": staticmethod(lambda marked=False: True)})
+        with mock.patch.object(isolation, "adapter", lambda: ("landlock", fake)), \
+                mock.patch.object(isolation, "readable_platform_folder", lambda: pathlib.Path("/t/state")):
+            self.assertIn("/t/state", isolation.confinement_gap(True))
+        blind = type("A", (), {"confined_now": staticmethod(lambda marked=False: False)})
+        with mock.patch.object(isolation, "adapter", lambda: ("landlock", blind)):
+            self.assertIn("can't be seen", isolation.confinement_gap(True))
+
     def test_reads_blocked_is_a_probe(self):
         self.assertFalse(isolation.reads_blocked(), "this test process can read the platform's state")
 
