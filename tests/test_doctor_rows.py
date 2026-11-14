@@ -271,6 +271,23 @@ class Doctor(unittest.TestCase):
             self.ah.doctor_control(lambda level, what, fix="": rows.append((level, what)), no_sandbox, ["claude", "fake"])
         return rows
 
+    def test_a_sandboxed_project_tracking_files_under_control_names_is_said(self):
+        """runtime-codex.md, Step 4 r2, review S3: read as the project (project_git), never by git as the user"""
+        import project_git
+        ws = self.tmp / "tracked"
+        (ws / ".git").mkdir(parents=True)
+        asked, rows = [], []
+
+        def data(project, cwd, op, *args, **kw):
+            asked.append((project, op, args))
+            return [".agents/skills/x/SKILL.md"]
+        with mock.patch.object(project_git, "data", data):
+            self.ah.doctor_tracked_controls(lambda level, what, fix="": rows.append((level, what)),
+                                            [("boxed", ws), ("gone", self.tmp / "nope")], [".codex", ".agents"])
+        self.assertEqual(asked, [("boxed", "tracked", (ws, ".codex", ".agents"))])
+        self.assertEqual([lv for lv, _w in rows], ["warn"])
+        self.assertIn(".agents/skills/x/SKILL.md", rows[0][1])
+
     def test_macos_says_what_the_services_rule_stops_and_each_projects_entries(self):
         # the services rule, then the sandboxed project's present entries and its name no rule holds (once, not for
         # the unsandboxed project, nor for a runtime without the notes)

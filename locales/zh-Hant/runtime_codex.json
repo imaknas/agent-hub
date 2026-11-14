@@ -26,5 +26,6 @@
  "{hooks} was written, but {config} wasn't ({error}): the hooks are there untrusted, and doctor says so until this runs again": "{hooks} 寫好了,但 {config} 沒寫成({error}):hook 在那裡但未被信任,在再跑一次之前 doctor 都會提醒",
  "{file} can't be listed ({why})": "{file} 無法列出({why})",
  "{file} would be loaded by its Codex sessions": "{file} 會被這個專案的 Codex session 載入",
- "Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs from it as you (runtime-codex.md, B1)": "Codex 會在 session 的資料夾裡、自己的沙盒之外跑 git,repo 設定裡的 filter 會因此以你的身分執行(runtime-codex.md,B1)"
+ "Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs from it as you (runtime-codex.md, B1)": "Codex 會在 session 的資料夾裡、自己的沙盒之外跑 git,repo 設定裡的 filter 會因此以你的身分執行(runtime-codex.md,B1)",
+ "{folder} has too many folders to look through for planted ones": "{folder} 的資料夾太多,沒辦法逐一檢查有沒有被放進去的控制資料夾"
 }

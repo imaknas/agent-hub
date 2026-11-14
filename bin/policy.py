@@ -31,8 +31,10 @@ policy(name, doc, index) → {
   deny_write:         folders nothing of the project's writes (Path): the platform's places (hub, bare repos, memory
                       copies, the instance dir, the bus for an outbox project), what runs as the user outside any
                       sandbox (the platform's Python and uv, the CLI's folder, nvm, git's user config, the service
-                      manager's folder); deny_write_files: single files of the same kind (the shell's startup files,
-                      ~/.gitconfig, uv). Seatbelt and Landlock deny every write outside the project's own folders
+                      manager's folder), what a coding agent loads for every session of the user's (each protected
+                      runtime's user_control_paths, runtime_ports.user_controls); deny_write_files: single files of the
+                      same kind (the shell's startup files, ~/.gitconfig, uv). Seatbelt and Landlock deny every write
+                      outside the project's own folders
                       already: this is for the runtime's file tools
   deny_read:          the raw notes in the memory copies (glob), the platform's secrets (Path; during the move both the
                       old and new locations are blocked), the bus directory (a project whose mail goes through its
@@ -69,11 +71,12 @@ HOME = pathlib.Path.home()
 CACHE_ENV = {"UV_CACHE_DIR": "uv", "UV_PYTHON_INSTALL_DIR": "uv-python", "UV_TOOL_DIR": "uv-tools",
              "PIP_CACHE_DIR": "pip", "npm_config_cache": "npm", "COREPACK_HOME": "corepack"}
 # credential locations every sandbox is denied whatever {settings} says (docs/design/capabilities.md, 11-08 A1 point 2);
-# a runtime's own login is declared by its adapter (runtime_ports.credential_paths)
-# (~/.codex stays here whichever runtimes are installed: it holds every project's Codex conversations too. The Codex
-# adapter's credential_paths adds $CODEX_HOME only where the process computing the policy has it set, and the scheduler's
-# environment doesn't: a home moved elsewhere needs {settings} credentials.dirs, which doctor says (credential_override))
-CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube", "~/.codex"],
+# a coding agent's own login is declared by its adapter, for every protected runtime whether or not it is installed
+# (runtime_ports.credential_paths, protected_runtimes): an agent's home that holds every project's conversations is
+# denied whole that way. A home a shell variable moves elsewhere reaches the policy only where the process computing it
+# has the variable, and the scheduler's environment doesn't: {settings} credentials.dirs then names it, which doctor
+# says (credential_override)
+CREDENTIALS = {"dirs": ["~/.ssh", "~/.config/gh", "~/.aws", "~/.config/gcloud", "~/.kube"],
                "files": ["~/.docker/config.json", "~/.netrc", "~/.npmrc", "~/.git-credentials"]}
 # what the user's shell and git run outside any sandbox (11-08 A1 point 3)
 SHELL_FILES = ["~/.zshenv", "~/.zshrc", "~/.zprofile", "~/.zlogin", "~/.zlogout", "~/.bashrc", "~/.bash_profile",
@@ -210,16 +213,26 @@ def protect_roots() -> list[dict]:
     return out
 
 
+def is_control(path: str, controls) -> bool:
+    """A path (relative to a checkout) at or under one of these control names, at any depth."""
+    p = "/" + path
+    return any(p.endswith("/" + c) or f"/{c}/" in p + "/" for c in controls)
+
+
 def protected_changes(paths) -> list[str]:
-    """Of these paths (relative to a checkout), those in a runtime's own folder (protect_roots) outside the entries it
-    names writable: a sandboxed project's own processes change none of them (its services by the macOS rule, its
-    sessions by the denies on each entry present), so a merge or rebase that would change one stops halfway from inside
-    its sandbox. Said before anything moves (merge-branch)."""
+    """Of these paths (relative to a checkout), those a sandboxed project's own processes change none of, so a merge or
+    rebase that would change one stops halfway from inside its sandbox. Said before anything moves (merge-branch):
+    - in a runtime's own folder (protect_roots) outside the entries it names writable (its services by the macOS rule,
+      its sessions by the denies on each entry present);
+    - at or under a whole control name (protect, a tree entry) at any depth, nested ones included
+      (every sandbox denies those wherever they are; docs/design/runtime-codex.md, Step 4 r2, review S2)."""
     roots = protect_roots()
+    trees = [c["name"] for c in protect() if c["tree"]]
     out = []
     for p in paths:
         parts = pathlib.PurePosixPath(p).parts
-        if any(len(parts) > 1 and parts[0] == r["name"] and parts[1] not in r["writable"] for r in roots):
+        if any(len(parts) > 1 and parts[0] == r["name"] and parts[1] not in r["writable"] for r in roots) \
+                or is_control(p, trees):
             out.append(p)
     return out
 
@@ -397,6 +410,8 @@ def policy(name: str, doc: dict, index: dict) -> dict:
     others = [p for n, ps in project_paths(index).items() if n != name for p in ps]
     copies = hubconf.p("memory_copies", "~/.memory-copies")
     cred_dirs, cred_files = credentials()
+    import runtime_ports
+    user_dirs, user_files = runtime_ports.user_controls()   # what each agent loads for every session of the user's
     return {
         "workspace": d["workspace"],
         "write": ([tilde(d["runtime"])] if d["runtime"] else []) + ([] if outbox else [tilde(hubconf.BUS_DIR)])
@@ -407,8 +422,10 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "other_projects": others + others_memory(name, doc, index),
         "deny_write": _uniq([hubconf.ROOT, hubconf.p("git_origin"), copies, *instance_dirs(),
                              *([hubconf.BUS_DIR] if outbox else []), *platform_python(),
-                             *cli_dirs(), hubconf.nvm_dir(), *map(hubconf.path, GIT_USER_DIRS + SERVICE_DIRS)]),
-        "deny_write_files": _uniq([*uv_files(), *map(hubconf.path, SHELL_FILES + GIT_USER_FILES)]),
+                             *cli_dirs(), hubconf.nvm_dir(), *map(hubconf.path, GIT_USER_DIRS + SERVICE_DIRS),
+                             *map(pathlib.Path, user_dirs)]),
+        "deny_write_files": _uniq([*uv_files(), *map(hubconf.path, SHELL_FILES + GIT_USER_FILES),
+                                   *map(pathlib.Path, user_files)]),
         "deny_read": [copies / "*" / "memory", *secret_dirs(), *([hubconf.BUS_DIR] if outbox else [])],
         "credentials": cred_dirs,
         "credential_files": cred_files,

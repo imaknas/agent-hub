@@ -86,6 +86,37 @@ class Policy(Base):
         self.assertFalse(any(e.endswith("/.claude") or e.endswith("/.mcp.json") for e in dw),
                          "Claude's own are its sandbox's and its Edit rules', not this layer's")
 
+    def test_the_rules_hold_where_else_it_writes_and_in_every_spelling(self):
+        """review A-B2 (a tree staged in the temp area or its runtime folder and moved in) and A-C1 (the long s)"""
+        import runtime_codex
+        protect = PROTECT + [{"name": n, "tree": t} for n, t in runtime_codex.control_paths()]
+        pol = {"other_projects": [], "deny_write": [], "deny_read": [], "platform_commands": [],
+               "write": [str(self.tmp / "runtime")], "network": [], "workspace": self.ws, "protect": protect}
+        _sandbox, deny, _allow = runtime_claude.settings(pol)
+        for root in (self.tmp / "runtime", "/private/tmp", "/private/var/folders"):
+            self.assertIn(f"Edit(/{root}/**/.codex/**)", deny)
+        self.assertIn(f"Edit(/{self.ws}/**/.agentſ/**)", deny)
+        self.assertIn(f"Edit(/{self.ws}/**/.claude/ſettings.json)", deny)
+
+    def test_a_change_under_a_control_name_anywhere_is_held_before_a_merge(self):
+        """review S2: merge-branch says it before anything moves"""
+        import policy
+        got = policy.protected_changes([".agents/skills/x/SKILL.md", "sub/.codex/config.toml", "src/a.py",
+                                        ".claude/worktrees/w/a.py", "docs/agents.md"])
+        self.assertEqual(got, [".agents/skills/x/SKILL.md", "sub/.codex/config.toml"])
+
+    def test_the_tracked_op_lists_files_under_control_names_at_any_depth(self):
+        repo = self.tmp / "repo"
+        for p in (".agents/skills/x/SKILL.md", "sub/.codex/config.toml", "src/a.py", "docs/agents.md"):
+            (repo / p).parent.mkdir(parents=True, exist_ok=True)
+            (repo / p).write_text("x")
+        env = {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "PATH": "/usr/bin:/bin"}
+        subprocess.run(["git", "init", "-q", str(repo)], check=True, env=env)
+        subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, env=env)
+        r = subprocess.run([sys.executable, str(BIN / "project-git-job.py"), "tracked", str(repo), ".codex", ".agents"],
+                           capture_output=True, text=True, env=env)
+        self.assertEqual(json.loads(r.stdout), [".agents/skills/x/SKILL.md", "sub/.codex/config.toml"], r.stderr)
+
     def test_no_other_agent_means_no_second_layer(self):
         pol = {"other_projects": [], "deny_write": [], "deny_read": [], "platform_commands": [], "write": [],
                "network": [], "workspace": self.ws, "protect": PROTECT}
@@ -139,6 +170,26 @@ echo ok > code.py && echo code-written
         self.assertEqual(r.stdout.split(), ["root-blocked", "nested-blocked", "worktree-blocked", "agents-blocked",
                                             "rename-blocked", "code-written"], r.stderr)
         self.assertFalse((self.ws / ".codex" / "config.toml").exists())
+
+    def test_a_tree_staged_elsewhere_and_moved_in_carries_no_control_name(self):
+        """review A-B2: Seatbelt checks a rename at its two ends only, so a control name made in the temp area and moved
+        in nested would land; it can't be made there in the first place (the denies hold anywhere)."""
+        import runtime_codex
+        protect = PROTECT + [{"name": n, "tree": t} for n, t in runtime_codex.control_paths()]
+        stage = self.tmp / "stage"
+        stage.mkdir()
+        r = self.run_in(f"""
+mkdir -p {stage}/a/.codex 2>/dev/null && echo x > {stage}/a/.codex/config.toml 2>/dev/null || echo codex-stage-blocked
+mkdir -p {stage}/b/.agents/skills/x 2>/dev/null || echo agents-stage-blocked
+mkdir -p {stage}/c/.claude 2>/dev/null || echo claude-stage-blocked
+mkdir -p {stage}/d && echo ok > {stage}/d/file && echo plain-staged
+mv {stage}/a {self.ws}/sub2 2>/dev/null; mv {stage}/b {self.ws}/sub3 2>/dev/null; mv {stage}/c {self.ws}/sub4 2>/dev/null
+mv {stage}/d {self.ws}/.claude/worktrees/w2 2>/dev/null && echo plain-moved
+""", protect=protect)
+        self.assertEqual(r.stdout.split(), ["codex-stage-blocked", "agents-stage-blocked", "claude-stage-blocked",
+                                            "plain-staged", "plain-moved"], r.stderr)
+        for p in ("sub2/.codex", "sub3/.agents", "sub4/.claude"):
+            self.assertFalse((self.ws / p).exists(), p)
 
     def test_the_tool_folder_is_one_rule_but_its_worktrees(self):
         """V-M9: nothing new or changed under the tool's folder (a name no list knows included), its worktrees

@@ -129,10 +129,7 @@ def project_of(main: pathlib.Path) -> tuple[str, dict]:
     raise SetupError(_("this repo ({path}) is not a registered project's", path=main))
 
 
-def is_control(path: str, controls: list[str]) -> bool:
-    """A tracked path at or under one of the runtime's control files (policy.protect names), at any depth."""
-    p = "/" + path
-    return any(p.endswith("/" + c) or f"/{c}/" in p + "/" for c in controls)
+is_control = policy.is_control   # a tracked path at or under one of the control names, at any depth
 
 
 def export(top: pathlib.Path, source: str, rev: str | None, run: pathlib.Path, skip: list[str] = ()) -> str:

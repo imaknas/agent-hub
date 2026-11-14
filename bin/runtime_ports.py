@@ -202,6 +202,7 @@ from __future__ import annotations
 import datetime
 import importlib
 import os
+import sys
 from typing import NamedTuple
 
 import i18n
@@ -278,9 +279,27 @@ def protected_runtimes() -> list[str]:
         try:
             if getattr(_module(name), "ALWAYS_PROTECTED", False):
                 out.append(name)
-        except ImportError:
+        except Exception as e:   # one adapter that can't be loaded must not take every sandbox's policy with it: said
+            sys.stderr.write(f"runtime_ports: the {name} adapter can't be loaded ({type(e).__name__}); its control "
+                             "files and login are left out of the sandboxes until it can\n")
             continue
     return list(dict.fromkeys(out))
+
+
+def user_controls() -> tuple[list[str], list[str]]:
+    """(folders, files) in the user's home that a protected runtime loads settings, hooks, tools or instructions from for
+    every session (the optional user_control_paths() → [(path, tree)] of each adapter in protected_runtimes): no sandbox
+    writes them (policy.py deny_write; docs/design/runtime-codex.md, Step 4 r2, review S1)."""
+    dirs, files = [], []
+    for name in protected_runtimes():
+        try:
+            fn = getattr(_module(name), "user_control_paths", None)
+            got = list(fn()) if callable(fn) else []
+        except Exception:
+            continue
+        for p, tree in got:
+            (dirs if tree else files).append(str(p))
+    return list(dict.fromkeys(dirs)), list(dict.fromkeys(files))
 
 
 def throwaway_only(name: str | None = None) -> bool:
@@ -785,11 +804,12 @@ def rules_file_names() -> list[str]:
 
 
 def credential_paths() -> tuple[list[str], list[str]]:
-    """(dirs, files): where the runtimes the user opens sessions with (the default one and runtime.installed) keep their
-    login, from each one's credential_paths() ({"dirs": [...], "files": [...]}, absolute paths, asked now): unreadable in
-    every sandbox (policy.py credentials). A runtime that declares none adds nothing."""
+    """(dirs, files): where the protected runtimes (protected_runtimes: the default one, runtime.installed, and those
+    protected whatever is installed) keep their login, from each one's credential_paths() ({"dirs": [...], "files":
+    [...]}, absolute paths, asked now): unreadable in every sandbox (policy.py credentials). A runtime that declares none
+    adds nothing."""
     dirs, files = [], []
-    for name in dict.fromkeys([default_name(), *installed()]):
+    for name in protected_runtimes():   # an adapter that can't be loaded is left out there, and said
         fn = getattr(_module(name), "credential_paths", None)
         decl = (fn() if callable(fn) else None) or {}
         dirs += [str(d) for d in decl.get("dirs") or () if str(d) not in dirs]

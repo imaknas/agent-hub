@@ -119,16 +119,17 @@ def read_denies(pol: dict) -> list[str]:
 
 
 def protect_denies(pol: dict) -> list[str]:
-    """What its sessions load settings, hooks and tools from (policy protect), at any depth under the workspace (its
-    worktrees included): never written, after the allows (later rules win). A tree entry covers everything below it;
-    the others only the folder entry itself (it can't be moved away, replaced or created)."""
+    """What its sessions load settings, hooks and tools from (policy protect): never written, after the allows (later
+    rules win). A tree entry covers everything below it; the others only the folder entry itself (it can't be moved
+    away, replaced or created). Anywhere, not only under the workspace: Seatbelt checks a rename at its two ends only,
+    so a tree holding one of these names, built where the process may write (the temp area, its runtime folder) and
+    moved into the workspace, would plant it at any depth there (docs/design/runtime-codex.md, Step 4 r2, review A-B2).
+    The platform's own folders of these names are written by the platform, never from inside a project's sandbox."""
     import re
-    ws = pol.get("workspace")
-    if not ws or not pol.get("protect"):
+    if not pol.get("workspace") or not pol.get("protect"):
         return []
-    root = re.escape(str(pathlib.Path(ws).resolve()))
-    pats = [f'#"^{root}/(.*/)?{re.escape(c["name"])}' + ('(/|$)"' if c["tree"] else '$"') for c in pol["protect"]]
-    return ["; the files its sessions load settings and hooks from: never written",
+    pats = [f'#"/{re.escape(c["name"])}' + ('(/|$)"' if c["tree"] else '$"') for c in pol["protect"]]
+    return ["; the files its sessions load settings and hooks from: never written, wherever they are made",
             "(deny file-write* " + " ".join(f"(regex {p})" for p in pats) + ")"]
 
 

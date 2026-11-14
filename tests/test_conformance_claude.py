@@ -36,39 +36,70 @@ prompt = sys.stdin.read()
 token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
 if "automated test of a sandbox" in prompt:   # control / confine-sandbox: one canary write per run
     import re
-    bash = re.search(r"sh -c 'printf %s (\S+) > (\S+)'", prompt)
-    if bash:
-        tool, word, target = "Bash", bash[1], bash[2]
-        inp = {"command": f"sh -c 'printf %s {word} > {target}'"}
-    else:
-        m = re.search(r"write the file (\S+) with exactly this content: (\S+)", prompt)
-        tool, target, word = "Write", m[1], m[2]
-        inp = {"file_path": target, "content": word}
     f = pathlib.Path.cwd() / ".claude" / "settings.local.json"
     st = json.loads(f.read_text()) if f.exists() else {}
     home = os.environ["HOME"]
     def path(spec):
         return home + spec[1:] if spec.startswith("~") else spec[1:] if spec.startswith("//") else spec
-    def glob(spec, p):   # the tool's reading of a rule: ** any depth, * one name
-        rx = re.escape(path(spec)).replace(r"/\*\*/", "/(.*/)?").replace(r"/\*\*", "(/.*)?").replace(r"\*", "[^/]*")
-        return re.fullmatch(rx, p, re.I) is not None
-    denied = False
-    if mode in ("good", "honour"):
-        if tool == "Write":
-            denied = any(glob(r[5:-1], target) for r in (st.get("permissions") or {}).get("deny") or []
-                         if r.startswith("Edit("))
-        else:   # the sandbox: its denyWrite, and the Edit rules it takes in (V-M9)
-            fs = (st.get("sandbox") or {}).get("filesystem") or {}
-            denied = any(target == path(e) or target.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or []) \
-                or any(glob(r[5:-1], target) for r in (st.get("permissions") or {}).get("deny") or [] if r.startswith("Edit("))
+    def glob(spec, p):   # the tool's reading of a rule: ** any depth, * one name; case-insensitive, the long s literal
+        rx = re.escape(path(spec).lower()).replace(r"/\*\*/", "/(.*/)?").replace(r"/\*\*", "(/.*)?").replace(r"\*", "[^/]*")
+        return re.fullmatch(rx, p.lower()) is not None
+    edits = [r[5:-1] for r in (st.get("permissions") or {}).get("deny") or [] if r.startswith("Edit(")]
+    fs = (st.get("sandbox") or {}).get("filesystem") or {}
+    honour = mode in ("good", "honour")
+    def sandbox_denies(p):   # Bash: its denyWrite and the Edit rules it takes in (V-M9), at the real path
+        p = os.path.realpath(p)
+        return honour and (any(p == path(e) or p.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or [])
+                           or any(glob(e, p) for e in edits))
+    def mkdirs(d):   # mkdir -p: each folder it makes is a write the sandbox checks
+        made = []
+        for x in [*reversed(pathlib.Path(d).parents), pathlib.Path(d)]:
+            if not x.exists():
+                if sandbox_denies(x):
+                    return f"mkdir: {x}: Operation not permitted"
+                x.mkdir()
+        return None
+    def write(t, word):
+        if sandbox_denies(t):
+            return f"sh: {t}: Operation not permitted"
+        if not pathlib.Path(t).parent.is_dir():
+            return f"sh: {t}: No such file or directory"
+        pathlib.Path(t).write_text(word)
+        return None
+    stage = re.search(r'mkdir -p "\$TMPDIR/(\S+?)" && printf %s (\S+) > "\$TMPDIR/(\S+?)" && mv "\$TMPDIR/(\S+?)" (\S+)\'', prompt)
+    bash = re.search(r"sh -c 'mkdir -p (\S+) && printf %s (\S+) > (\S+)'", prompt)
+    denied, out = False, None
+    if stage:
+        tool, word, place = "Bash", stage[2], stage[5]
+        inp = {"command": stage[0]}
+        tmp = os.environ["TMPDIR"]
+        if mode != "idle":
+            out = mkdirs(f"{tmp}/{stage[1]}") or write(f"{tmp}/{stage[3]}", word)
+            if out is None:   # a rename is checked at its two ends only, as Seatbelt does
+                src, dst = f"{tmp}/{stage[4]}", place
+                out = f"mv: rename {src} to {dst}: Operation not permitted" if sandbox_denies(dst) or sandbox_denies(src) \
+                    else os.rename(src, dst)
+    elif bash:
+        tool, word, target = "Bash", bash[2], bash[3]
+        inp = {"command": bash[0]}
+        if mode != "idle":
+            out = mkdirs(bash[1]) or write(target, word)
+    else:
+        m = re.search(r"write the file (\S+) with exactly this content: (\S+)", prompt)
+        tool, target, word = "Write", m[1], m[2]
+        inp = {"file_path": target, "content": word}
+        denied = honour and any(glob(e, target) for e in edits)
     # unread: no rule honoured, but a Write over a file it hasn't read fails validation (no denial, nothing written)
     unread = mode == "unread" and tool == "Write" and pathlib.Path(target).exists()
     if mode != "idle":
         print(json.dumps({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "id": "t1", "name": tool, "input": inp}]}}))
-        if not denied and not unread:
+        if tool == "Write" and not denied and not unread:   # the Write tool makes the file's folders
             pathlib.Path(target).parent.mkdir(parents=True, exist_ok=True)
             pathlib.Path(target).write_text(word)
+        if tool == "Bash":
+            print(json.dumps({"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": out or ""}]}}))
     print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done", "usage": {},
                       "permission_denials": [{"tool_name": tool, "tool_use_id": "t1", "tool_input": inp}] if denied
                       else [], "session_id": "s-2"}))
@@ -179,9 +210,15 @@ class Through(unittest.TestCase):
                     self.assertFalse((world.tool / "remote").exists(), "the user-level canaries' folders gone")
                     # other agents' control folders (runtime-codex.md, Step 4 r2, S1): tried, and gone again
                     for gone in (world.project / ".codex", world.project / "sub" / ".codex",
+                                 world.project / "sub" / ".agents", world.project / ".agentſ",
                                  world.project / ".claude" / "worktrees" / "wt-canary" / ".codex"):
                         self.assertFalse(gone.exists(), gone)
+                    self.assertFalse(list(world.project.glob("moved-*")), "the staged tree's folder gone")
                     self.assertIn("/.codex", json.dumps(settings["sandbox"]["filesystem"]["denyWrite"]))
+                    self.assertNotIn("wt-canary", json.dumps(settings), "the worktree came after the rendering")
+                    deny = settings["permissions"]["deny"]
+                    self.assertIn(f"Edit(/{runtime_claude.TEMP_ROOTS[1]}/**/.codex/**)", deny)
+                    self.assertTrue(any(".agentſ" in r for r in deny), "the long-s spelling rendered")
                 if name == "control":
                     self.assertTrue(got["reason"], "the residual is said")
 
@@ -204,6 +241,33 @@ class Through(unittest.TestCase):
         self.assertTrue(conformance_claude._refused(run(use, denied), t, "file"))
         bash = {"type": "result", "permission_denials": [{"tool_name": "Bash", "tool_input": {"command": f"x > {t}"}}]}
         self.assertFalse(conformance_claude._refused(run(bash), t, "file"), "a file tool's denial only")
+
+    def test_a_bash_canary_makes_its_folder_and_counts_only_the_sandboxs_refusal(self):
+        """review A-B1: a canary whose folder isn't there tests only that printf makes none; and a file that's just
+        absent is no refusal"""
+        t = pathlib.Path("/w/p/sub/.codex/canary")
+        self.assertIn("mkdir -p /w/p/sub/.codex && printf %s TOK > /w/p/sub/.codex/canary",
+                      conformance_claude._bash_command(t, "TOK", "bash"))
+        staged = conformance_claude._bash_command(pathlib.Path("/w/p/moved-1/.codex/canary"), "TOK", "stage")
+        self.assertIn('mkdir -p "$TMPDIR/moved-1/.codex"', staged)
+        self.assertIn('mv "$TMPDIR/moved-1" /w/p/moved-1', staged)
+        use = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b1", "name": "Bash",
+                                                             "input": {"command": f"x > {t}"}}]}}
+
+        def run(text):
+            res = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1",
+                                                            "content": text}]}}
+            return type("R", (), {"stdout": "\n".join(json.dumps(e) for e in (use, res))})()
+        self.assertFalse(conformance_claude._refused(run(f"sh: {t}: No such file or directory"), t, "bash"))
+        self.assertTrue(conformance_claude._refused(run(f"sh: {t}: Operation not permitted"), t, "bash"))
+        self.assertTrue(conformance_claude._refused(
+            run([{"type": "text", "text": "mkdir: /w/p/sub/.codex: Operation not permitted"}]), t, "bash"))
+
+    def test_the_long_s_is_matched_only_literally_by_the_rules(self):
+        """review A-C1: the tool's rules are case-insensitive but don't fold the long s"""
+        rule = "Edit(//w/p/**/.agents/**)"
+        self.assertTrue(conformance_claude._covers_rule(rule, pathlib.Path("/w/p/.AGENTS/x"), "/h"))
+        self.assertFalse(conformance_claude._covers_rule(rule, pathlib.Path("/w/p/.agentſ/x"), "/h"))
 
     def test_no_attempt_is_an_error_never_a_pass(self):
         for name in ("control", "confine-sandbox"):

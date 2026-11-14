@@ -221,6 +221,11 @@ def user_control() -> list[tuple[pathlib.Path, bool]]:
     return [(_home() / n, t) for n, t in USER_CONTROL] + [(_user_config_file(), False)]
 
 
+def user_control_paths() -> list[tuple[pathlib.Path, bool]]:
+    """runtime_ports.user_controls: the same, for every sandbox (another agent's sessions included)."""
+    return user_control()
+
+
 def _not_home(paths) -> list:
     """Credential folders, less any that is or holds its own home: its sessions' Bash and file tools use the home (the
     settings' ~/.claude stays denied whole to the platform's own sandboxes; finer rules inside it are A2)."""
@@ -241,10 +246,10 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     secret = _spelled(pol["deny_read"])
     deny += [f"Read({_rule_path(p)}/**)" for p in secret]
     # the files its sessions load settings and hooks from, at any depth (worktrees included): never written by the
-    # session's file tools (its Bash is kept off them by the sandbox itself)
+    # session's file tools, nor by its Bash (the sandbox takes these rules in, V-M9); in every spelling the volume opens
+    # as them, and where else the session may write (_protect_rules)
     ws = pol.get("workspace")
-    deny += [r for c in pol.get("protect") or [] if c["tree"] and ws
-             for r in (f"Edit(/{ws}/**/{c['name']})", f"Edit(/{ws}/**/{c['name']}/**)")]
+    deny += _protect_rules(pol)
     # and every other entry present in its tool folder, the workspace's and each worktree's (V-M9: the folder can't be
     # one rule for sessions), for the file tools and Bash both
     present = present_controls(ws).paths if ws else []
@@ -282,16 +287,48 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     return sandbox, deny, allow
 
 
+# Where its sandbox may let a session's Bash write outside the project's folders: the temp area, as given and as it
+# resolves
+TEMP_ROOTS = ("/tmp", "/private/tmp", "/var/folders", "/private/var/folders")
+
+
+def temp_roots() -> list[str]:
+    """TEMP_ROOTS, and the temp folder of the process rendering the settings (the user's, for the platform's applier; a
+    throwaway world's, for a conformance check), as given and resolved."""
+    import tempfile
+    t = tempfile.gettempdir()
+    return list(dict.fromkeys([*TEMP_ROOTS, t.rstrip("/"), os.path.realpath(t)]))
+
+
+def _protect_rules(pol: dict) -> list[str]:
+    """Edit denies on every control name the policy protects (each a whole tree), at any depth:
+    - under the workspace (its worktrees included);
+    - under each other place the session may write (its runtime folder, the registry's allow_write, the temp area): a
+      tree holding one, built there and moved in, would plant it nested in the project (docs/design/runtime-codex.md,
+      Step 4 r2, review A-B2);
+    - in every spelling the volume opens as the name (_folds: `.agentſ` is `.agents` to the volume, but not to the rules;
+      review A-C1)."""
+    ws = pol.get("workspace")
+    if not ws:
+        return []
+    roots = list(dict.fromkeys([str(ws), *(os.path.expanduser(str(w)) for w in pol.get("write") or []),
+                                *temp_roots()]))
+    return list(dict.fromkeys(r for c in pol.get("protect") or [] if c["tree"] for name in _folds(c["name"])
+                              for root in roots
+                              for r in (f"Edit(/{root}/**/{name})", f"Edit(/{root}/**/{name}/**)")))
+
+
 def _other_controls(pol: dict) -> list[pathlib.Path]:
     """Other agents' control folders (the policy's protect entries that aren't Claude's own, a whole folder at the top of
-    the project) under each session folder, whether they exist or not: a second layer under their Edit denies, which the
-    sandbox takes in too and which hold at any depth (docs/design/runtime-codex.md, Step 4 r2, S1)."""
+    the project) under each session folder, in every spelling the volume folds to them, whether they exist or not: a
+    second layer under their Edit denies, which the sandbox takes in too and which hold at any depth
+    (docs/design/runtime-codex.md, Step 4 r2, S1)."""
     ws = pol.get("workspace")
     if not ws:
         return []
     own = {n for n, _t in CONTROL}
-    names = [c["name"] for c in pol.get("protect") or [] if c.get("tree") and c["name"] not in own
-             and "/" not in c["name"] and RULE_NAME.fullmatch(c["name"])]
+    names = [f for c in pol.get("protect") or [] if c.get("tree") and c["name"] not in own and "/" not in c["name"]
+             and RULE_NAME.fullmatch(c["name"]) for f in _folds(c["name"])]
     return [pathlib.Path(f) / n for f in session_folders(ws) for n in names]
 
 

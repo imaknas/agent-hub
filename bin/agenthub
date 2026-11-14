@@ -1443,6 +1443,27 @@ def doctor_confined(add, installed) -> None:
             else "")
 
 
+def doctor_tracked_controls(add, sandboxed, names) -> None:
+    """A sandboxed project that tracks files under a control name (at any depth): every sandbox keeps its
+    own processes off them, so they change only outside its sandbox, and merge-branch refuses a merge that would change
+    one (docs/design/runtime-codex.md, Step 4 r2, review S3). Read through project_git, as the project."""
+    import project_git
+    for project, ws in sandboxed:
+        if not ws or not os.path.lexists(ws / ".git") or not names:   # no repo: nothing tracked
+            continue
+        try:
+            got = project_git.strs(project_git.data(project, ws, "tracked", ws, *names))
+        except project_git.Unavailable as e:
+            add("warn", _("{project} (sandboxed): could not list the files it tracks under control names ({why})",
+                          project=project, why=e))
+            continue
+        if got:
+            add("warn", _("{project} (sandboxed) tracks {n} {n:file|files} under control names, which nothing of its own "
+                          "can change any more (e.g. {example}); merge-branch refuses a merge that would change one",
+                          project=project, n=len(got), example=", ".join(got[:3])),
+                _("change them outside the project's sandbox, or stop tracking them"))
+
+
 def doctor_control(add, why_no_sandbox, installed) -> None:
     """What keeps sandboxed projects off what their sessions load settings, hooks and tools from
     (docs/design/runtime-versions.md section 7): the macOS profile's one rule over the coding agent's folder and what it
@@ -1464,6 +1485,7 @@ def doctor_control(add, why_no_sandbox, installed) -> None:
                       "write from the settings it renders)"))
     sandboxed = [(n, hubconf.path((d.get("paths") or {}).get("workspace"))) for n, d in sorted(hubconf.projects().items())
                  if (d.get("enforce") or {}).get("sandbox") is True]
+    doctor_tracked_controls(add, sandboxed, [c["name"] for c in policy.protect() if c["tree"]])
     for name in installed:
         fn = getattr(runtime_ports._module(name), "control_notes", None)
         for _project, ws in sandboxed if callable(fn) else ():

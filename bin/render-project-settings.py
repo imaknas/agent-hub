@@ -120,6 +120,21 @@ def compose(name: str, doc: dict, index: dict) -> tuple[pathlib.Path, dict, dict
                                   "hooks": new["hooks"]}, unreadable
 
 
+def foreign_controls(ws) -> list[str]:
+    """What in the folder any protected runtime's sessions would load that the platform didn't put there (each adapter's
+    foreign_controls; runtime_ports.protected_runtimes, whether installed or not: one planted before the protection came
+    is found too; docs/design/runtime-codex.md, Step 4 r2, review S5)."""
+    import runtime_ports
+    out = []
+    for name in runtime_ports.protected_runtimes():
+        try:
+            rt = runtime_ports.load(name, ports=("control",))
+        except runtime_ports.Unsupported:
+            continue
+        out += [w for w in rt.foreign_controls(ws) if w not in out]
+    return out
+
+
 def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
     """Returns the drift (where the actual file differs from what it should be). report=True only computes, no
     writes."""
@@ -145,7 +160,7 @@ def write_project(name: str, doc: dict, index: dict, report: bool) -> list[str]:
         drift.append(_("hooks the platform didn't write were removed"))
     ws = registry.dirs(doc)["workspace"]
     drift += [_("its own files would make its sessions run something the platform didn't put there: {what}",
-                what=what) for what in runtime_claude.foreign_controls(ws)]
+                what=what) for what in foreign_controls(ws)]
     if report:
         print(_("{project}: would write sandbox (allowWrite {write}, denyRead {read}, {domains} {domains:domain|domains}), "
                 "{deny} deny {deny:rule|rules}, {allow} allow {allow:rule|rules} → {path}", project=name,

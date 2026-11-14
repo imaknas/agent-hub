@@ -41,6 +41,8 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   head <ws>                               JSON {branch, dirty}
   bundle-head <ws>                        stdout: a bundle of the checked-out branch
   set-origin <ws> <url> <branch>          origin = url, the branch tracking it
+  tracked <repo> <name>…                  JSON [the tracked paths at or under one of the names, at any depth] (at
+                                          most 200): what a sandboxed project tracks among the control names
   test-runs <repo> <since>                JSON [run log lines at or after <since> (ISO time)]: the test runner's
                                           measurements in the repo's git common dir (tiers.RunLog), newest MAX_RUNS
   memory-sync <memdir> <bare> <branch> [--lock] [--rules=<name>,…]
@@ -239,6 +241,18 @@ def op_changed(repo: str, base: str) -> int:
         paths |= {p for p in _z(git(repo, *listing, check=True, text=False))
                   if p not in tree and p not in gitlinks}
     return emit([[p, os.path.lexists(pathlib.Path(repo) / p)] for p in sorted(paths) if p])
+
+
+def op_tracked(repo: str, *names: str) -> int:
+    """JSON [the tracked paths at or under one of these names, at any depth] (policy.is_control's test), at most 200."""
+    out = []
+    for p in _z(git(repo, "ls-files", "-z", check=True, text=False)):
+        q = "/" + p
+        if p and any(q.endswith("/" + n) or f"/{n}/" in q + "/" for n in names):
+            out.append(p)
+            if len(out) >= 200:
+                break
+    return emit(out)
 
 
 def op_copy_back(src: str, dst: str, *rels: str) -> int:
@@ -484,7 +498,7 @@ OPS = {"test-runs": op_test_runs, "worktrees": op_worktrees, "ignored": op_ignor
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
        "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head, "first-look": op_first_look,
-       "bundle-head": op_bundle_head, "set-origin": op_set_origin}
+       "bundle-head": op_bundle_head, "set-origin": op_set_origin, "tracked": op_tracked}
 
 
 if __name__ == "__main__":

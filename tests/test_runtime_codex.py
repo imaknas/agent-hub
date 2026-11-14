@@ -340,12 +340,14 @@ class Sessions(unittest.TestCase):
             self.assertIsNone(runtime_codex.context_size("../x"))
 
     def test_its_home_is_a_credential_and_codex_stays_denied(self):
+        default = str(pathlib.Path.home() / ".codex")
         with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.tmp / "ch")}):
-            self.assertEqual(runtime_codex.credential_paths(), {"dirs": [str(self.tmp / "ch")], "files": []})
+            self.assertEqual(runtime_codex.credential_paths(), {"dirs": [default, str(self.tmp / "ch")], "files": []})
             with ti.hub_json(installed=["claude", "codex"]):
                 self.assertIn(str(self.tmp / "ch"), runtime_ports.credential_paths()[0])
-        import policy
-        self.assertIn("~/.codex", policy.CREDENTIALS["dirs"])
+        # ~/.codex denied whichever runtimes are installed: its adapter is protected always (review N3 moved it there)
+        with ti.hub_json(installed=["claude"]):
+            self.assertIn(default, runtime_ports.credential_paths()[0])
 
 
 class ThroughTheHook(ti.Bus):
@@ -879,6 +881,41 @@ class Control(Home):
         other.mkdir()
         (other / ".codex").symlink_to(ws / ".codex")
         self.assertEqual(len(runtime_codex.foreign_controls(other)), 1)
+
+    def test_nested_and_long_s_ones_are_found_but_not_past_the_skipped_folders(self):
+        """review S5: planted before the protection came, at any depth"""
+        ws = self.tmp / "ws3"
+        for d in ("sub/.codex", "a/b/.agents/skills/x", "c/.agentſ", "node_modules/p/.codex", ".git/x/.agents"):
+            (ws / d).mkdir(parents=True)
+        got = " ".join(runtime_codex.foreign_controls(ws))
+        for d in ("sub/.codex", "a/b/.agents", "c/.agentſ"):
+            self.assertIn(d, got)
+        self.assertNotIn("node_modules", got)
+        self.assertNotIn(".git/", got)
+
+    def test_its_user_level_skills_are_no_sandboxs_to_write(self):
+        """review S1: ~/.agents loads for every session of the user's"""
+        import policy
+        self.assertIn(str(pathlib.Path.home() / ".agents"), runtime_ports.user_controls()[0])
+        pol = policy.policy("p", {"name": "p", "paths": {"workspace": str(self.tmp / "p")}}, {"projects": {}})
+        self.assertIn(pathlib.Path.home() / ".agents", pol["deny_write"])
+        self.assertIn(str(pathlib.Path.home() / ".codex"), [str(p) for p in pol["credentials"]],
+                      "its home denied whole, declared by its adapter")
+
+    def test_a_broken_adapter_is_left_out_and_said(self):
+        import io
+        from contextlib import redirect_stderr
+        real = runtime_ports._module
+
+        def broken(name):
+            if name == "acp":
+                raise RuntimeError("boom")
+            return real(name)
+        err = io.StringIO()
+        with mock.patch.object(runtime_ports, "_module", broken), redirect_stderr(err):
+            got = runtime_ports.protected_runtimes()
+        self.assertIn("codex", got)
+        self.assertIn("acp", err.getvalue())
 
 
 if __name__ == "__main__":

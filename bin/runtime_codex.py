@@ -93,9 +93,10 @@ def codex_home() -> pathlib.Path:
 
 
 def credential_paths() -> dict:
-    """Its whole home: the login (auth.json), and every project's conversations (runtime_ports.credential_paths). policy.py
-    denies ~/.codex itself whichever runtimes are installed; this adds a $CODEX_HOME elsewhere."""
-    return {"dirs": [str(codex_home())], "files": []}
+    """Its whole home: the login (auth.json), and every project's conversations (runtime_ports.credential_paths, asked
+    whether or not Codex is installed: ALWAYS_PROTECTED). The default ~/.codex always, and a $CODEX_HOME elsewhere where
+    the process computing the policy has it."""
+    return {"dirs": list(dict.fromkeys([str(pathlib.Path.home() / ".codex"), str(codex_home())])), "files": []}
 
 
 def credential_override(env) -> tuple[str, list[str], list[str]] | None:
@@ -156,6 +157,12 @@ def control_paths() -> list[tuple[str, bool]]:
     return list(CONTROL)
 
 
+def user_control_paths() -> list[tuple[pathlib.Path, bool]]:
+    """What Codex loads for every session of the user's from the home folder, outside its own home (which every sandbox
+    denies whole as a credential): ~/.agents (its skills; runtime_ports.user_controls; Step 4 r2, review S1)."""
+    return [(pathlib.Path.home() / ".agents", True)]
+
+
 def control_root() -> tuple[str, tuple[str, ...]]:
     """(the tool's folder in a project, the entries in it that stay writable): none (nothing of the project's makes or
     changes anything under .codex)."""
@@ -168,17 +175,47 @@ def session_folders(workspace) -> list[pathlib.Path]:
     return [pathlib.Path(workspace)]
 
 
+FOREIGN_SKIP = (".git", "node_modules", ".venv", "venv", "__pycache__")   # not walked into when looking for planted ones
+FOREIGN_WALK_MAX = 50000   # folders looked through at most
+
+
 def foreign_controls(workspace) -> list[str]:
-    """What in the folder its sessions would load that the platform didn't put there: the platform writes nothing into
-    .codex/ yet, so every entry there (read without following links)."""
-    base = pathlib.Path(workspace) / TOOL_FOLDER
-    if base.is_symlink():
-        return [_("{file} is a link", file=TOOL_FOLDER)]
-    try:
-        names = sorted(os.listdir(base)) if base.is_dir() else []
-    except OSError as e:
-        return [_("{file} can't be listed ({why})", file=TOOL_FOLDER, why=e)]
-    return [_("{file} would be loaded by its Codex sessions", file=f"{TOOL_FOLDER}/{n}") for n in names]
+    """What in the folder its sessions would load that the platform didn't put there: the platform writes nothing into a
+    control folder yet, so every .codex and .agents folder at any depth (a nested one loads for a session started below
+    it), in every spelling the volume opens as it, the top .codex's entries named one by one. Walked without following
+    links (a link of the name is said as one), past FOREIGN_SKIP; planted before the protection came, or by hand
+    (render-project-settings reports them as drift; Step 4 r2, review S5)."""
+    ws = pathlib.Path(workspace)
+    names = {f for n, _t in CONTROL for f in _folds(n)}
+    out, seen = [], 0
+    for top, dirs, files in os.walk(ws):
+        seen += 1
+        if seen > FOREIGN_WALK_MAX:
+            out.append(_("{folder} has too many folders to look through for planted ones", folder=str(ws)))
+            break
+        here = pathlib.Path(top)
+        for n in sorted(set(dirs + files) & names):
+            rel = str((here / n).relative_to(ws))
+            if (here / n).is_symlink():
+                out.append(_("{file} is a link", file=rel))
+            elif rel == TOOL_FOLDER:
+                try:
+                    out += [_("{file} would be loaded by its Codex sessions", file=f"{rel}/{e}")
+                            for e in sorted(os.listdir(here / n))]
+                except OSError as e:
+                    out.append(_("{file} can't be listed ({why})", file=rel, why=e))
+            else:
+                out.append(_("{file} would be loaded by its Codex sessions", file=rel))
+        dirs[:] = [d for d in dirs if d not in names and d not in FOREIGN_SKIP]
+    return out
+
+
+def _folds(name: str) -> list[str]:
+    """name and every spelling the volume opens as it (the long s, U+017F, folds to s; as runtime_claude._folds)."""
+    out = [""]
+    for ch in name:
+        out = [x + c for x in out for c in ((ch, "ſ") if ch in "sS" else (ch,))]
+    return out
 
 
 def profile_control_entries(workspace) -> dict[str, str]:

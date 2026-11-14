@@ -1,5 +1,5 @@
-"""Neutral files may not contain the runtime's (Claude Code's) syntax or paths: translation happens only in
-runtime_claude.py (docs/design/capabilities.md).
+"""Neutral files may not contain a runtime's (Claude Code's, Codex's) syntax or paths: translation happens only in
+its adapter, runtime_<name>.py (docs/design/capabilities.md).
 
 What is checked is code and strings, not the word "Claude": explanatory text may say where the translation lives, but
 may not write out Claude's settings format itself.
@@ -44,7 +44,7 @@ class TestRuntimeBoundary(unittest.TestCase):
                 continue
             checked += 1
             for i, line in enumerate(f.read_text().splitlines(), 1):
-                for pat, what in PATTERNS:
+                for pat, what in PATTERNS + CODEX_PATTERNS:
                     self.assertIsNone(pat.search(line), f"{name}:{i} contains {what}: {line.strip()}")
         self.assertGreater(checked, 0)
 
@@ -128,7 +128,7 @@ class TestRuntimeRatchet(unittest.TestCase):
     def test_counts_only_go_down(self):
         base = json.loads(RUNTIME_BASELINE.read_text())
         worse = [f"{f}:{n} (baseline {base.get(f, 0)})" for f, n in ratchet_counts().items() if n > base.get(f, 0)]
-        self.assertEqual(worse, [], "runtime-specific (Claude) syntax went up: move it into runtime_claude.py, "
+        self.assertEqual(worse, [], "runtime-specific (Claude or Codex) syntax went up: move it into its adapter (runtime_<name>.py), "
                                     "or have the judgment point name a tier; edit "
                                     "tests/fixtures/runtime-baseline.json by hand only for a real reason")
 
