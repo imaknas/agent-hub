@@ -226,11 +226,279 @@ def control_globs(world) -> Outcome:
     return Outcome("pass", "")
 
 
+# ---------- the platform side (docs/design/runtime-codex.md, Step 1 and its r2) ----------
+# No login in any of these: what needs a model call is a login check (Check.login), not checkable until the owner's login
+# session (r2 (9)); a run that has to reach the request goes there unauthenticated (401), which carries only the check's
+# fixed prompt, and its rollout still says what it would have sent.
+
+LOGIN = ("needs a model call with the user's login: measured with the owner (runtime-codex.md, Step 1 r2, the login "
+         "list); the runner runs it last, under section 3a's rule")
+RC_FILES = (".zshenv", ".zprofile", ".zshrc", ".bash_profile", ".bashrc", ".profile")
+RC_VAR = "BRUNNA_RC_CANARY"
+
+
+def _prefix(exe) -> pathlib.Path | None:
+    """The npm prefix a native binary was installed into (<prefix>/node_modules/@openai/<pkg>/vendor/<triple>/bin/codex)."""
+    p = pathlib.Path(os.path.realpath(exe))
+    return p.parents[6] if len(p.parents) > 6 and p.parents[5].name == "node_modules" else None
+
+
+def distribution_integrity(world) -> Outcome:
+    """The binary is a copy npm installed with an integrity hash for every package it resolved, and its platform build
+    names this version and this machine's target."""
+    exe = rx.binary()
+    prefix = _prefix(exe)
+    if prefix is None:
+        return Outcome("error", _("{exe} isn't the native binary of an npm copy", exe=exe))
+    version = rx.version_of(exe, env=dict(os.environ))
+    if not version:
+        return Outcome("error", _("the binary doesn't say its version"))
+    bad = rx.copy_problems(prefix, version)
+    return Outcome("fail", bad[0]) if bad else Outcome("pass", "")
+
+
+def _prompt_input(exe, folder, home, args, base=None) -> list | None:
+    r = subprocess.run([exe, "debug", "prompt-input", *args, "x"], cwd=folder, env=base or rx.run_env(home),
+                       capture_output=True, text=True, timeout=RUN_S, stdin=subprocess.DEVNULL)
+    try:
+        got = json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        return None
+    return got if isinstance(got, list) else None
+
+
+def _plant_rc(home: pathlib.Path, marks: pathlib.Path) -> None:
+    for f in RC_FILES:
+        (home / f).write_text(f"touch {shlex.quote(str(marks / f))}\nexport {RC_VAR}=planted\n")
+
+
+def _snapshot_has(codex_home: pathlib.Path) -> bool:
+    for f in (codex_home / "shell_snapshots").glob("*") if (codex_home / "shell_snapshots").is_dir() else []:
+        try:
+            if RC_VAR in f.read_text(errors="replace"):
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def home_flags(world) -> Outcome:
+    """The run home (HOME_CONFIG) gives every model in MODELS the pinned shape, through the same arguments a run gets;
+    `exec --strict-config` takes it (to its unauthenticated request) and the rollout matches; the user's rc files don't
+    run and no shell snapshot keeps what they export (r2 B1). Positive controls: the shell on shows exec_command; sub-agents
+    on show collaboration on a v2 model; the rc files with the snapshot on and the user's HOME do run."""
+    exe = rx.binary()
+    folder = pathlib.Path(world.project).resolve()
+    marks = pathlib.Path(world.root) / "rc-ran"
+    marks.mkdir(exist_ok=True)
+    _plant_rc(pathlib.Path(world.home), marks)
+    homes = []
+
+    def fresh():
+        h = rx.run_home()
+        homes.append(h)
+        return h
+    try:
+        entries = rx.profile_entries(read=[folder], exe=exe)
+        for model in dict.fromkeys(rx.MODELS.values()):
+            items = _prompt_input(exe, folder, fresh(), rx.run_args(model, entries))
+            if items is None:
+                return Outcome("error", _("prompt-input gave nothing readable for {model}", model=model))
+            if (bad := rx.shape_problems(items)):
+                return Outcome("fail", _("{model}: {what}", model=model, what="; ".join(bad)))
+        model = rx.MODELS["fast"]
+        h = fresh()
+        got = rx._one_run("conformance", exe, folder, h, rx.run_args(model, entries), "Reply with ok.", RUN_S, False,
+                          entries, {"LANG": os.environ.get("LANG", "C")})
+        if got.get("refused"):
+            return Outcome("fail", got["error"])
+        if rx._rollout(h) is None:   # a run with no login still leaves one (measured): it never started
+            return Outcome("fail", _("the run with the run home's config didn't start: {error}", error=got.get("error")))
+        if any(marks.iterdir()) or _snapshot_has(h):
+            return Outcome("fail", _("the user's rc files ran for a platform run, or a snapshot kept what they export"))
+        # positive controls
+        shell = _prompt_input(exe, folder, fresh(), rx.run_args(model, entries, shell=True))
+        agents = _prompt_input(exe, folder, fresh(), rx.run_args(model, entries) + ["-c", "agents.enabled=true"])
+        if not shell or "exec_command" not in (rx.tools_shape(shell) or ({}, set()))[1]:
+            return Outcome("error", _("tests nothing: the shell turned on shows no exec_command"))
+        if not agents or "collaboration" not in (rx.tools_shape(agents) or ({}, set()))[0]:
+            return Outcome("error", _("tests nothing: sub-agents turned on show no collaboration namespace"))
+        h = fresh()
+        env = {**rx.run_env(h), "HOME": str(world.home)}
+        _prompt_input(exe, folder, h, rx.run_args(model, entries) + ["-c", "features.shell_snapshot=true"], base=env)
+        if not any(marks.iterdir()) and not _snapshot_has(h):
+            return Outcome("error", _("tests nothing: the rc files didn't run with the snapshot on and the user's HOME"))
+        return Outcome("pass", "")
+    except subprocess.TimeoutExpired:
+        return Outcome("error", _("no answer in {s} s", s=RUN_S))
+    finally:
+        for h in homes:
+            rx.end_run_home(h)
+
+
+# (what, the shell command, whether it may succeed under the run's profile); {c} the copy, {o} a sibling of it, {h} the
+# home's own file, {a} the run home's login link, {s} a file in the store
+PROFILE_PROBES = (
+    ("read the copy's STATE.md", "cat {c}/STATE.md", True),
+    ("write STATE.md", "printf y >> {c}/STATE.md", True),
+    ("write memory/reference", "printf y > {c}/memory/reference/x.md", True),
+    ("write AGENT.md", "printf y >> {c}/AGENT.md", False),
+    ("write RULES", "printf y >> {c}/RULES", False),
+    ("write .git/config", "printf y >> {c}/.git/config", False),
+    ("a new memory note", "printf y > {c}/memory/new.md", False),
+    ("a .gitattributes under memory/reference", "printf y > {c}/memory/reference/.gitattributes", False),
+    ("read a sibling of the copy", "cat {o}/secret.txt", False),
+    ("read the home's own file", "cat {h}", False),
+    ("read the run's login link", "cat {a}", False),
+    ("write the run's login link", "printf y > {a}", False),
+    ("read the store", "cat {s}", False),
+    ("write /tmp", "printf y > /tmp/brunna-profile-probe-$$", False),
+    ("rename AGENT.md", "mv {c}/AGENT.md {c}/memory/reference/moved", False),
+    ("link to the home's file", "ln -sf {h} {c}/memory/reference/l && cat {c}/memory/reference/l", False),
+)
+
+
+def agent_profile(world) -> Outcome:
+    """The per-run profile of an agent run in a memory copy (rx.profile_entries, as rx.run gets it) holds: the copy
+    readable, STATE.md and memory/reference/ writable, everything else refused, the store and the home whole (r2 S2,
+    S3: the copy under the world's home, so the check meets production's shape). Through `codex sandbox` with the same
+    -c entries; positive control: each refused probe lands under a :workspace profile."""
+    exe = rx.binary()
+    home = pathlib.Path(world.home).resolve()
+    copy, other = home / "memory-copies" / "box", home / "memory-copies" / "other"
+    (copy / "memory" / "reference").mkdir(parents=True)
+    (copy / ".git").mkdir()
+    other.mkdir(parents=True)
+    for f, text in (("STATE.md", "s"), ("AGENT.md", "a"), ("RULES", "r"), (".git/config", "[core]\n")):
+        (copy / f).write_text(text)
+    (other / "secret.txt").write_text("secret")
+    (home / "home-secret").write_text("secret")
+    pathlib.Path(world.tool).mkdir(parents=True, exist_ok=True)
+    (pathlib.Path(world.tool) / "auth.json").write_text("{}")   # a canary login for the run home to link
+    store_file = rx._store() / "canary"
+    store_file.parent.mkdir(parents=True, exist_ok=True)
+    store_file.write_text("store")
+    run_home = rx.run_home()
+    try:
+        entries = rx.profile_entries(read=[copy], write=[copy / "STATE.md", copy / "memory" / "reference"], exe=exe)
+        guarded = rx.run_args(None, entries)
+        opened = ["-c", "permissions.brunna-open.extends=\":workspace\"", "-c", "default_permissions=\"brunna-open\""]
+        names = {"c": copy, "o": other, "h": home / "home-secret", "a": run_home / "auth.json", "s": store_file}
+        wrong, untested = [], []
+        for what, cmd, may in PROFILE_PROBES:
+            line = cmd.format(**{k: shlex.quote(str(v)) for k, v in names.items()})
+            ok = _sandboxed(exe, copy, run_home, guarded, rx.PROFILE, line)
+            if ok != may:
+                wrong.append(what)
+            if not may and not _sandboxed(exe, copy, run_home, opened, "brunna-open", line) \
+                    and what != "write the run's login link":
+                untested.append(what)
+            for f in ("AGENT.md",):   # a probe that moved it puts it back
+                if not (copy / f).exists() and (copy / "memory" / "reference" / "moved").exists():
+                    (copy / "memory" / "reference" / "moved").rename(copy / f)
+        if wrong:
+            return Outcome("fail", _("the run's profile let through or refused the wrong things: {what}",
+                                     what=", ".join(wrong)))
+        if untested:
+            return Outcome("error", _("tests nothing: {what} refused even without the profile", what=", ".join(untested)))
+        return Outcome("pass", "")
+    except subprocess.TimeoutExpired:
+        return Outcome("error", _("no answer in {s} s", s=RUN_S))
+    finally:
+        rx.end_run_home(run_home)
+        for f in pathlib.Path("/tmp").glob("brunna-profile-probe-*"):
+            f.unlink(missing_ok=True)
+
+
+def _sandboxed(exe, cwd, home, args, profile, line) -> bool:
+    r = subprocess.run([exe, "sandbox", *args, "-P", profile, "--", "/bin/sh", "-c", line], cwd=cwd, env=rx.run_env(home),
+                       capture_output=True, text=True, timeout=RUN_S, stdin=subprocess.DEVNULL)
+    return r.returncode == 0
+
+
+def _login_key(exe, codex_home, key: str) -> int:
+    r = subprocess.run([exe, "login", "--with-api-key"], input=key, env={**rx.run_env(codex_home), "CODEX_HOME":
+                       str(codex_home)}, capture_output=True, text=True, timeout=RUN_S)
+    return r.returncode
+
+
+def auth_link_write(world) -> Outcome:
+    """M9 with dummy keys only: a login written through a run home's link lands in the user's file and keeps the link
+    (so a refresh by a platform run doesn't fork the login). Positive control: a home holding a copy leaves the user's
+    file alone."""
+    import hashlib
+    exe = rx.binary()
+    user = pathlib.Path(world.tool)
+    user.mkdir(parents=True, exist_ok=True)
+    (user / "config.toml").write_text('cli_auth_credentials_store = "file"\n')
+    if _login_key(exe, user, "sk-brunna-canary-0001") != 0 or not (user / "auth.json").is_file():
+        return Outcome("error", _("a dummy login couldn't be written into the world"))
+    digest = lambda: hashlib.sha256((user / "auth.json").read_bytes()).hexdigest()   # noqa: E731
+    homes = [rx.run_home(), rx.run_home()]
+    try:
+        linked, copied = homes
+        if not (linked / "auth.json").is_symlink():
+            return Outcome("error", _("the run home holds no link to the login"))
+        before = digest()
+        _login_key(exe, linked, "sk-brunna-canary-0002")
+        if not (linked / "auth.json").is_symlink():
+            return Outcome("fail", _("a write through the run home replaced its link with a file"))
+        if digest() == before:
+            return Outcome("fail", _("a write through the run home's link didn't reach the user's file"))
+        (copied / "auth.json").unlink()
+        (copied / "auth.json").write_bytes((user / "auth.json").read_bytes())
+        before = digest()
+        _login_key(exe, copied, "sk-brunna-canary-0003")
+        if digest() != before:
+            return Outcome("error", _("tests nothing: a home holding a copy changed the user's file too"))
+        return Outcome("pass", "")
+    except subprocess.TimeoutExpired:
+        return Outcome("error", _("no answer in {s} s", s=RUN_S))
+    finally:
+        for h in homes:
+            rx.end_run_home(h)
+
+
+def auth_login_error(world) -> Outcome:
+    """A run with no login fails as a login error (is_login_error), not as anything else."""
+    exe = rx.binary()
+    folder = pathlib.Path(world.project).resolve()
+    h = rx.run_home()   # the world's user home has no login: no link
+    try:
+        entries = rx.profile_entries(read=[folder], exe=exe)
+        got = rx._one_run("conformance", exe, folder, h, rx.run_args(rx.MODELS["fast"], entries), "Reply with ok.",
+                          RUN_S, False, entries, {"LANG": os.environ.get("LANG", "C")})
+    except subprocess.TimeoutExpired:
+        return Outcome("error", _("no answer in {s} s", s=RUN_S))
+    finally:
+        rx.end_run_home(h)
+    if got.get("ok"):
+        return Outcome("error", _("tests nothing: a run with no login answered"))
+    return Outcome("pass", "") if rx.is_login_error(got.get("error") or "") else \
+        Outcome("fail", _("a run with no login failed with something else: {error}", error=got.get("error")))
+
+
 CHECKS = [
-    # the session side: the per-version gate reads these (a sandboxed project's Codex session whose version failed one)
-    Check("session-folder-git", "sessions", "safety", session_folder_git, timeout_s=RUN_S + 60, side="session"),
+    # the platform side (Step 1): what its own runs rest on
+    Check("distribution-integrity", "distribution", "function", distribution_integrity, timeout_s=120),
+    Check("updater-off", "distribution", "safety", None,
+          "`codex exec` has no update path to switch off: 0.167.0 with 0.169.0 published wrote no version.json or "
+          "packages/ and left npm's sink empty (runtime-codex.md, Step 1); the store's digest check holds the copy"),
+    Check("home-flags", "completion", "safety", home_flags, timeout_s=8 * RUN_S + 60),
+    Check("agent-profile", "agent", "safety", agent_profile, timeout_s=2 * len(PROFILE_PROBES) * RUN_S + 60),
+    Check("auth-link-write", "auth", "safety", auth_link_write, timeout_s=4 * RUN_S + 60),
+    Check("auth-login-error", "auth", "function", auth_login_error, timeout_s=2 * RUN_S + 60),
+    Check("completion-no-tools", "completion", "safety", None, LOGIN, login=True),
+    Check("completion-schemas", "completion", "function", None, LOGIN, login=True),
+    Check("agent-result", "agent", "function", None, LOGIN, login=True),
+    Check("agent-models", "agent", "function", None, LOGIN, login=True),
+    # the session side: the per-version gate reads these (a sandboxed project's Codex session whose version failed one).
+    # session-folder-git holds the user's sessions only: the platform's runs never start where it matters
+    # (runtime_codex.folder_refusal)
+    Check("session-folder-git", "sessions", "safety", session_folder_git, timeout_s=RUN_S + 60, side="session",
+          holds="sessions"),
     Check("control-globs", "control", "safety", control_globs, timeout_s=2 * 6 * RUN_S + 60, side="session"),
     Check("lifecycle-hooks", "lifecycle", "function", None,
           "the hooks fire and their additionalContext reaches the model (measured by hand 11-14, runtime-codex.md): a "
-          "check needs a model call, so a login in the world (Step 1's login rule)", side="session"),
+          "check needs a model call, so a login in the world (Step 1's login rule)", side="session", login=True),
 ]

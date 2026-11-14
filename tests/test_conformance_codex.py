@@ -123,10 +123,16 @@ class Through(unittest.TestCase):
         key = '/w/a "b"\\c/**/.codex'
         self.assertEqual(tomllib.loads(f"{conformance_codex._toml_key(key)} = 1"), {key: 1})
 
-    def test_the_checks_are_the_session_side_and_codex_is_versioned_by_them(self):
-        self.assertTrue(all(c.side == "session" for c in conformance_codex.CHECKS))
+    def test_the_checks_both_sides_and_codex_is_versioned(self):
+        self.assertEqual([c.name for c in conformance_codex.CHECKS if c.side == "session"],
+                         ["session-folder-git", "control-globs", "lifecycle-hooks"])
         self.assertEqual([c.name for c in conformance_codex.CHECKS if c.run and c.kind == "safety"],
-                         ["session-folder-git", "control-globs"])
+                         ["home-flags", "agent-profile", "auth-link-write", "session-folder-git", "control-globs"])
+        self.assertEqual([c.name for c in conformance_codex.CHECKS if c.login],
+                         ["completion-no-tools", "completion-schemas", "agent-result", "agent-models", "lifecycle-hooks"],
+                         "every check that needs a model call is a login check")
+        self.assertTrue(all(c.run is None for c in conformance_codex.CHECKS if c.login), "not checkable without a login")
+        self.assertEqual([c.name for c in conformance_codex.CHECKS if c.holds], ["session-folder-git"])
         self.assertTrue(conformance.versioned("codex"))
         self.assertTrue(conformance.versioned("claude"))
         self.assertFalse(conformance.versioned("none"))
@@ -151,13 +157,13 @@ class Recorded(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_a_runtime_without_distribution_records_its_session_result(self):
+    def test_a_session_result_is_where_the_gate_reads_it(self):
         doc = {"runtime": "codex", "version": "0.170.0", "binary": "/x/codex", "digest": "d", "at": "now",
                "checks": {"session-folder-git": {"port": "sessions", "kind": "safety", "state": "fail", "reason": "B1",
                                                  "tries": 1}}}
         with mock.patch.object(runtime_ports, "session_result_file",
                                lambda r, v: self.tmp / "state" / "runtime-conformance" / r / f"{v}.session.json"):
-            f = conformance.record_any(doc)
+            f = conformance.record_session(doc, None)
             self.assertEqual(f.name, "0.170.0.session.json")
             self.assertEqual(runtime_ports.failed_checks(runtime_ports.session_result("codex", "0.170.0"), "safety"),
                              ["session-folder-git"])
