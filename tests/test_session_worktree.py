@@ -1,10 +1,10 @@
-"""The owner's checkout race (docs/design/git-broker.md, r3 B-1): any process of a sandboxed project could swap a tracked
-folder for a symbolic link while someone else's unsandboxed checkout writes there, and the checkout then wrote the
-project's files wherever the link pointed, as the owner. Two mitigations, built 11-14:
-- its services and jobs make no link in their checkouts (policy links, Seatbelt's link_rules), but in the tool folders
-  that need them (.venv, node_modules) and the platform's own test runs;
-- a coding agent's own worktree mode hands the worktree to the platform, which makes it as the project
-  (session_worktree.py, `hub-event worktree-make`; Claude Code's WorktreeCreate hook).
+"""The owner's checkout race (docs/design/git-broker.md, r3 B-1): any process of a sandboxed project can swap a tracked
+folder for a symbolic link while someone else's unsandboxed checkout writes there, and the checkout then writes the
+project's files wherever the link points, as the owner. What is built (mitigation 3, 11-14): a coding agent's own
+worktree mode hands the worktree to the platform, which makes it as the project (session_worktree.py, `hub-event
+worktree-make`; Claude Code's WorktreeCreate hook). The link rule for services and jobs (mitigation 2) was removed by
+the owner on 11-15: a folder holding a link could still be moved in, so it was friction, not a boundary. B1Open says
+what is true without it.
 
     bin/run-tests tests   (or: brunna test)
 """
@@ -47,11 +47,9 @@ class Base(unittest.TestCase):
         self.rt = self.tmp / "runtime"
         self.rt.mkdir()
 
-    def pol(self, links=True, allow=()):
-        lk = policy.links({"workspace": self.ws, "runtime": self.rt})
-        lk["allow"] = list(allow)
+    def pol(self):
         return {"workspace": self.ws, "write": [], "other_projects": [], "deny_read": [], "credentials": [],
-                "credential_files": [], "protect": [], "protect_roots": [], **({"links": lk} if links else {})}
+                "credential_files": [], "protect": [], "protect_roots": []}
 
     def run_in(self, script, pol=None, cwd=None, env=None):
         prof = seatbelt.service_profile(pol or self.pol(), [self.ws, self.rt])
@@ -59,149 +57,20 @@ class Base(unittest.TestCase):
                               capture_output=True, text=True, env=env or ENV)
 
 
-class Policy(Base):
-    def test_the_port_names_its_checkouts_the_tool_folders_and_the_test_runs(self):
-        lk = policy.links({"workspace": self.ws, "runtime": self.rt})
-        self.assertEqual(lk["roots"], [self.ws, self.rt])
-        self.assertEqual([f["name"] for f in lk["folders"]], [".venv", "node_modules"])
-        self.assertIn(self.ws / ".brunna" / "test", lk["inside"])
-        self.assertEqual(lk["allow"], [])
-        self.assertEqual(policy.links({"workspace": None, "runtime": None})["roots"], [])
-
-    def test_seatbelt_renders_the_deny_then_the_allows_and_nothing_outside_the_roots(self):
-        rules = seatbelt.link_rules(self.pol(allow=[self.ws / "wt" / "l", self.tmp / "elsewhere" / "l"]))
-        self.assertTrue(rules[1].startswith("(deny file-write-create (require-all (vnode-type SYMLINK)"))
-        self.assertIn(f'(literal "{self.ws}/wt/l")', rules[2])
-        self.assertNotIn("elsewhere", rules[2], "an allowance outside its own folders is dropped")
-        self.assertEqual(seatbelt.link_rules({"links": {"roots": []}}), [])
-        self.assertEqual(seatbelt.link_rules({}), [])
-
-    def test_they_come_before_the_control_rules_so_those_still_win(self):
-        prof = seatbelt.service_profile({**self.pol(), "protect": [{"name": ".ctl", "tree": True}]}, [self.ws])
-        self.assertLess(prof.index("vnode-type SYMLINK"), prof.index("the files its sessions load settings"))
-
-    def test_seatbelt_declares_it_and_landlock_does_not(self):
-        import landlock
-        self.assertIn("links-blocked", seatbelt.guarantees())
-        with mock.patch.object(landlock, "abi", lambda: 6):
-            self.assertNotIn("links-blocked", landlock.guarantees())
-
-
 @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
-class SeatbeltLinks(Base):
-    def test_no_link_in_its_checkouts_but_in_the_tool_folders(self):
-        (self.tmp / "stage").mkdir()
-        pol = self.pol()
-        pol["write"] = [str(self.tmp / "stage")]   # a folder it may write that isn't a checkout (allow_write)
-        r = self.run_in(pol=pol, script=f"""
-ln -s /etc l 2>/dev/null || echo ws-refused
-ln -s /etc {self.rt}/l 2>/dev/null || echo runtime-refused
-ln -s /etc {self.tmp}/stage/l && {{ mv {self.tmp}/stage/l moved 2>/dev/null || echo moved-in-refused; }}
-mkdir -p node_modules/.bin sub/node_modules .venv/bin sub/.venv d .brunna/test/run.1/tree
-ln -s /etc node_modules/.bin/x && echo node-modules-ok
-ln -s /etc sub/node_modules/x && echo nested-node-modules-ok
-ln -s /etc .venv/bin/python && echo venv-ok
-ln -s /etc sub/.venv/x 2>/dev/null || echo nested-venv-refused
-ln -s /etc .brunna/test/run.1/tree/l && echo test-run-ok
-ln -s /etc node_modules/y && rmdir d && {{ mv node_modules/y d 2>/dev/null || echo tool-link-onto-d-refused; }}
-rm -rf node_modules && {{ ln -s /etc node_modules 2>/dev/null || echo tool-folder-itself-refused; }}
-echo x > plain && echo files-ok
-""")
-        self.assertEqual(r.stdout.split(), ["ws-refused", "runtime-refused", "moved-in-refused", "node-modules-ok",
-                                            "nested-node-modules-ok", "venv-ok", "nested-venv-refused", "test-run-ok",
-                                            "tool-link-onto-d-refused", "tool-folder-itself-refused", "files-ok"],
-                         r.stderr)
+class B1Open(Base):
+    """What is true since the owner removed the link rule (11-15): a sandboxed project's services and jobs can put a link
+    at a tracked folder's place, directly or as a folder holding one, so B-1 is open for them as for sessions. When this
+    fails, something refuses links again: say so in docs/design/git-broker.md."""
 
-    def test_the_limit_a_folder_holding_a_link_can_still_be_moved_in(self):
-        """The cold review (11-14): a folder's rename is checked as a directory's creation, which mkdir is too, so a
-        folder holding a link made in a tool folder moves onto a tracked folder's place. This documents the limit: the
-        rule is friction, not a boundary. When this assertion fails, the limit is gone: say so in the design."""
+    def test_services_and_jobs_can_put_a_link_at_a_tracked_folders_place(self):
         (self.ws / "d").mkdir()
+        (self.ws / "e").mkdir()
         r = self.run_in(f"""
-mkdir -p h/node_modules && ln -s {self.tmp} h/node_modules/sub && mv d d.x && mv h/node_modules d && [ -L d/sub ] \
-  && echo folder-with-link-moved-in
+mv d d.x && ln -s {self.tmp} d && [ -L d ] && echo link-made
+mkdir -p h && ln -s {self.tmp} h/sub && mv e e.x && mv h e && [ -L e/sub ] && echo folder-with-link-moved-in
 """)
-        self.assertEqual(r.stdout.split(), ["folder-with-link-moved-in"], r.stderr)
-
-    def test_an_exact_allowance_for_one_job(self):
-        (self.ws / "wt").mkdir()
-        r = self.run_in("ln -s /etc wt/l && echo allowed; ln -s /etc wt/m 2>/dev/null || echo other-refused",
-                        pol=self.pol(allow=[self.ws / "wt" / "l"]))
-        self.assertEqual(r.stdout.split(), ["allowed", "other-refused"], r.stderr)
-
-    def test_the_positive_control_without_the_rule(self):
-        r = self.run_in("ln -s /etc l && echo made", pol=self.pol(links=False))
-        self.assertEqual(r.stdout.split(), ["made"], r.stderr)
-
-    def test_a_venv_still_works(self):
-        r = self.run_in(f"{sys.executable} -m venv --without-pip .venv && [ -L .venv/bin/python ] && echo venv-ok")
-        self.assertIn("venv-ok", r.stdout, r.stderr)
-
-    @unittest.skipUnless(shutil.which("uv"), "needs uv")
-    def test_uv_venv_still_works(self):
-        env = {**ENV, "UV_CACHE_DIR": str(self.tmp / "uvcache"), "UV_NO_CONFIG": "1", "UV_PYTHON_DOWNLOADS": "never",
-               "HOME": str(self.tmp)}
-        pol = self.pol()
-        pol["write"] = [str(self.tmp / "uvcache")]
-        r = self.run_in("uv venv -q .venv && [ -L .venv/bin/python ] && echo uv-ok", pol=pol, env=env)
-        self.assertIn("uv-ok", r.stdout, r.stderr)
-
-    @unittest.skipUnless(shutil.which("npm"), "needs npm")
-    def test_npm_bin_links_still_work(self):
-        pkg = self.ws / "vendor" / "pkg"   # in its own folder: the test's temp folder may be one no sandbox reads
-        (pkg / "bin").mkdir(parents=True)
-        (pkg / "package.json").write_text('{"name":"pkg","version":"1.0.0","bin":{"lp":"bin/lp.js"}}\n')
-        (pkg / "bin" / "lp.js").write_text("#!/usr/bin/env node\n")
-        (self.ws / "package.json").write_text('{"name":"w","version":"1.0.0"}\n')
-        env = {**ENV, "npm_config_cache": str(self.tmp / "npmcache"), "npm_config_update_notifier": "false",
-               "npm_config_audit": "false", "npm_config_fund": "false", "HOME": str(self.tmp)}
-        pol = self.pol()
-        pol["write"] = [str(self.tmp / "npmcache")]
-        r = self.run_in(f"npm install -s --no-save {pkg} && [ -L node_modules/.bin/lp ] && echo npm-ok", pol=pol,
-                        env=env)
-        self.assertIn("npm-ok", r.stdout, r.stderr)
-
-    def test_the_owner_race_writes_nothing_outside(self):
-        """The review's owner_race2: a project process swaps d/ for a link to a folder it can't write while the owner's
-        unsandboxed checkout writes d/. Without the rule, the first round wrote ~2,900 files there (measured 11-14);
-        with it, the swap itself fails."""
-        outside = self.tmp / "outside"
-        outside.mkdir()
-        (outside / "a0100").write_text("ORIGINAL\n")
-        git(self.ws, "init", "-q", "-b", "main")
-        (self.ws / "keep").write_text("k\n")
-        git(self.ws, "add", "keep")
-        git(self.ws, "commit", "-qm", "A")
-        (self.ws / "d").mkdir()
-        for i in range(800):
-            (self.ws / "d" / f"a{i:04d}").write_text(f"planted {i}\n")
-        git(self.ws, "add", "d")
-        git(self.ws, "commit", "-qm", "B")
-        git(self.ws, "checkout", "-q", "main~1")
-        pol = self.pol()
-        stop = self.tmp / "STOP"
-        swapped = self.tmp / "SWAPPED"
-        attacker = f"""
-end=$(( $(date +%s) + 20 ))
-while [ $(date +%s) -lt $end ]; do
-  if [ -d d ] && [ ! -L d ]; then mv d d.$$ 2>/dev/null && {{ ln -s {outside} d 2>/dev/null && touch {swapped}; }}; fi
-  [ -e {stop} ] && exit 0
-done
-"""
-        prof = seatbelt.service_profile(pol, [self.ws, self.rt]) + f'(deny file-write* (subpath "{outside}"))\n'
-        a = subprocess.Popen([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", attacker], cwd=self.ws,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            for _ in range(8):
-                subprocess.run(["git", "switch", "-q", "main"], cwd=self.ws, env=ENV, capture_output=True)
-                subprocess.run(["/bin/sh", "-c", "rm -rf d d.*"], cwd=self.ws)
-                subprocess.run(["git", "checkout", "-q", "-f", "main~1"], cwd=self.ws, env=ENV, capture_output=True)
-        finally:
-            stop.write_text("")
-            a.wait(timeout=30)
-        self.assertEqual(sorted(p.name for p in outside.iterdir()), ["a0100"])
-        self.assertEqual((outside / "a0100").read_text(), "ORIGINAL\n")
-        self.assertFalse(swapped.exists(), "the project made the link")
+        self.assertEqual(r.stdout.split(), ["link-made", "folder-with-link-moved-in"], r.stderr)
 
 
 class WorktreeHook(Base):
@@ -241,8 +110,8 @@ class WorktreeHook(Base):
 
 
 class SessionWorktree(Base):
-    """session_worktree.make / drop through project_git as the project. `wrap` is the real Seatbelt service profile with
-    the link rule (macOS), or a recorder that refuses like sandboxed-run where nothing can sandbox."""
+    """session_worktree.make / drop through project_git as the project. `wrap` is the real Seatbelt service profile
+    (macOS), or a recorder that refuses like sandboxed-run where nothing can sandbox."""
 
     def setUp(self):
         super().setUp()
@@ -267,11 +136,11 @@ class SessionWorktree(Base):
         p.start()
         self.addCleanup(p.stop)
 
-    def wrap(self, project, cwd, argv, port=None, links=()):
-        self.wrapped.append((project, list(argv), list(links)))
+    def wrap(self, project, cwd, argv, port=None):
+        self.wrapped.append((project, list(argv)))
         if not HAS_SEATBELT:
             return ["/bin/sh", "-c", "echo 'sandboxed-run: refused' >&2; exit 78"]
-        pol = {**self.pol(allow=links), "protect": [{"name": ".ctl", "tree": True}]}
+        pol = {**self.pol(), "protect": [{"name": ".ctl", "tree": True}]}
         return [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, [self.ws]), *argv]
 
     def test_it_is_made_as_the_project_never_as_the_user(self):
@@ -284,15 +153,14 @@ class SessionWorktree(Base):
         path, skipped = session_worktree.make(self.ws / "src", "w1", runtime_claude)
         self.assertEqual(path, self.ws / ".claude" / "worktrees" / "w1")
         self.assertTrue((path / "src" / "a").is_file())
-        self.assertTrue((path / "src" / "l").is_symlink(), "the tracked link, by the job's exact allowance")
+        self.assertTrue((path / "src" / "l").is_symlink(), "the tracked link, checked out as git does")
         self.assertEqual(skipped, [".ctl/settings"])
         self.assertFalse((path / ".ctl").exists(), "a control file its sandbox can't write is left out")
         self.assertEqual(git(path, "status", "--porcelain"), "", "left out as skip-worktree, not as deleted")
         self.assertEqual(git(path, "rev-parse", "--abbrev-ref", "HEAD").strip(), "worktree-w1")
-        ops = [a for _p, a, _l in self.wrapped]
+        ops = [a for _p, a in self.wrapped]
         self.assertTrue(any("session-worktree" in a for a in ops), ops)
-        self.assertTrue(all(p == "proj" for p, _a, _l in self.wrapped))
-        self.assertIn([path / "src" / "l"], [lk for _p, a, lk in self.wrapped if "session-worktree" in a])
+        self.assertTrue(all(p == "proj" for p, _a in self.wrapped))
         session_worktree.drop(self.ws, path)
         self.assertFalse(path.exists())
 
@@ -314,8 +182,8 @@ class SessionWorktree(Base):
         self.assertEqual(git(path, "rev-parse", "--abbrev-ref", "HEAD").strip(), "worktree-feat+x")
 
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
-    def test_an_existing_branchs_links_are_the_ones_allowed(self):
-        """The branch exists with a tracked link HEAD doesn't have: its links, not HEAD's, are allowed."""
+    def test_an_existing_branch_is_checked_out(self):
+        """The branch exists, with a tracked link HEAD doesn't have: that branch is what the worktree gets."""
         import session_worktree
         git(self.ws, "switch", "-q", "-c", "worktree-w5")
         (self.ws / "only").mkdir()
@@ -357,12 +225,6 @@ class SessionWorktree(Base):
             with self.assertRaises(session_worktree.Refused):
                 session_worktree.drop(self.ws, bad)
 
-    def test_tracked_links_are_allowed_only_under_the_new_worktree(self):
-        import session_worktree
-        wt = self.ws / ".claude" / "worktrees" / "w"
-        self.assertEqual(session_worktree.link_paths(wt, ["src/l", "/etc/x", "../out", "a/../../b", ""]),
-                         [wt / "src" / "l"])
-
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
     def test_a_failed_make_leaves_nothing_behind(self):
         """worktree add has registered the worktree and made the branch before the checkout: a checkout that fails
@@ -373,8 +235,8 @@ class SessionWorktree(Base):
         git(self.ws, "commit", "-qm", "f")
         real = self.wrap
 
-        def failing(project, cwd, argv, port=None, links=()):
-            got = real(project, cwd, argv, port, links)
+        def failing(project, cwd, argv, port=None):
+            got = real(project, cwd, argv, port)
             return [*got[:2], got[2] + '(deny file-write* (regex #"/fail-here$"))\n', *got[3:]]
         with mock.patch.object(isolation, "wrap", failing):
             with self.assertRaises(session_worktree.Refused):
@@ -406,8 +268,8 @@ while [ $(date +%s) -lt $end ]; do
   [ -e {stop} ] && exit 0
 done
 """
-        # the attacker as a session's own command: no agent's sandbox refuses links, so no link rule here
-        prof = seatbelt.service_profile(self.pol(links=False), [self.ws]) + f'(deny file-write* (subpath "{outside}"))\n'
+        # the attacker as any process of the project: nothing refuses its links
+        prof = seatbelt.service_profile(self.pol(), [self.ws]) + f'(deny file-write* (subpath "{outside}"))\n'
         a = subprocess.Popen([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", attacker], cwd=self.ws,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
@@ -427,34 +289,15 @@ done
         self.assertGreater(made, 0, "not vacuous: some makes went through while the attacker ran")
 
 
-class RunAs(unittest.TestCase):
-    def test_run_as_takes_exact_link_allowances_before_the_command(self):
-        import project_git
-        got = []
-        with mock.patch.object(project_git, "run_as_cli", lambda *a: got.append(a) or 0):
-            self.assertEqual(project_git.main(["run-as", "p", "/d", "--allow-link", "/d/a", "--allow-link", "/d/b",
-                                               "--", "bash", "x"]), 0)
-            self.assertEqual(project_git.main(["run-as", "p", "/d", "--", "bash", "x"]), 0)
-        self.assertEqual(got, [("p", "/d", ["bash", "x"], ["/d/a", "/d/b"]), ("p", "/d", ["bash", "x"], [])])
-
-    def test_wrap_passes_them_to_sandboxed_run(self):
-        argv = isolation.wrap("p", "/d", ["x"], links=["/d/a"])
-        i = argv.index("--allow-link")
-        self.assertEqual(argv[i:i + 2], ["--allow-link", "/d/a"])
-        self.assertNotIn("--allow-link", isolation.wrap("p", "/d", ["x"]))
-
-
 class Doctor(Base):
-    def rows(self, guarantees, tracked=(), settings=None, adapter=("seatbelt", None)):
+    def rows(self, settings=None):
         import importlib.machinery
         import importlib.util
-        import project_git
         import runtime_ports
         loader = importlib.machinery.SourceFileLoader("agenthub_t", str(BIN / "agenthub"))
         spec = importlib.util.spec_from_loader("agenthub_t", loader)
         ah = importlib.util.module_from_spec(spec)
         loader.exec_module(ah)
-        (self.ws / ".git").mkdir()
         if settings is not None:
             p = runtime_claude.settings_path(self.ws)
             p.parent.mkdir(parents=True)
@@ -463,25 +306,17 @@ class Doctor(Base):
                 "open": {"name": "open", "paths": {"workspace": str(self.tmp / "o")}}}
         out = []
         with mock.patch.object(hubconf, "projects", lambda: docs), \
-                mock.patch.object(isolation, "guarantees", lambda: list(guarantees)), \
-                mock.patch.object(isolation, "adapter", lambda: adapter), \
-                mock.patch.object(project_git, "data", lambda *a, **k: list(tracked)), \
                 mock.patch.object(runtime_ports, "load", lambda name, ports=(): runtime_claude):
             ah.doctor_checkout_race(lambda level, what, fix="": out.append((level, what)), None, ["claude"])
         return out
 
-    def test_macos_rows(self):
-        rows = self.rows(["links-blocked"], settings={"hooks": runtime_claude.worktree_maker_hooks()})
-        self.assertEqual([r[0] for r in rows], ["warn", "warn"], "friction, not a boundary: a warning too")
-        self.assertIn("proj", rows[1][1])
-        self.assertTrue(rows[1][1].endswith("claude"), rows[1][1])
-
-    def test_linux_and_tracked_tool_folders(self):
-        rows = self.rows([], tracked=["node_modules/x/a"], adapter=("landlock", None))
-        self.assertEqual([r[0] for r in rows], ["warn", "warn", "warn"])
-        self.assertIn("landlock", rows[0][1])
-        self.assertTrue(rows[1][1].endswith("-"), "no worktree hand-over without the hooks")
-        self.assertIn("node_modules/x/a", rows[2][1])
+    def test_one_warning_per_sandboxed_project_with_its_worktree_makers(self):
+        [(_level, what)] = self.rows()
+        self.assertTrue(what.endswith("-"), "no worktree hand-over without the hooks")
+        [(level, what)] = self.rows(settings={"hooks": runtime_claude.worktree_maker_hooks()})
+        self.assertEqual(level, "warn")
+        self.assertIn("proj", what)
+        self.assertTrue(what.endswith("claude"), what)
 
 
 class HubEvent(Base):

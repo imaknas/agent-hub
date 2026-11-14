@@ -7,9 +7,7 @@ other projects, no platform state or bus; writes only to its own folders (its le
 repo's git dir: policy.py env).
 Design: docs/design/capabilities.md.
 
-  sandboxed-run --project <name> --cwd <dir> [--port <n>] [--allow-link <path>]… -- <argv…>
-                         --allow-link: an exact path in its own folders where this command may make a symbolic link
-                         (policy links; the platform's own jobs that check out tracked links)
+  sandboxed-run --project <name> --cwd <dir> [--port <n>] -- <argv…>
 
 The rules are computed fresh on every run (registry changes take effect on the next start). Fails closed: where the
 platform can't sandbox (no adapter for this OS, the adapter can't work here, the project unknown) it prints why and
@@ -39,7 +37,6 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--project", required=True)
     ap.add_argument("--cwd", required=True)
     ap.add_argument("--port", type=int)
-    ap.add_argument("--allow-link", action="append", default=[])
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
@@ -55,8 +52,6 @@ def main(argv: list[str]) -> int:
     if not doc:
         return refuse(f"{a.project} is not in the registry")
     pol = policy.policy(a.project, doc, {"projects": projects})
-    if a.allow_link and pol.get("links"):
-        pol["links"]["allow"] = [pathlib.Path(p) for p in a.allow_link]
     d = registry.dirs(doc)
     dirs = [p for p in (d["runtime"], d["workspace"]) if p]
     os.chdir(a.cwd)

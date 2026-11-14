@@ -18,9 +18,8 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   ignored <worktree>                      JSON [ignored entries] (git status --ignored)
   worktree-add <repo> <path>              a detached worktree of HEAD at <path>; prints its HEAD
   worktree-remove <repo> <path> [--force]
-  worktree-plan <repo> <branch>           JSON {exists: whether refs/heads/<branch> exists, links: the paths that
-                                          branch (else HEAD) tracks as symbolic links}: what session-worktree will check
-                                          out, asked first so its link allowances are known
+  worktree-plan <repo> <branch>           JSON {exists: whether refs/heads/<branch> exists}: asked before
+                                          session-worktree, so an undo knows whether the branch is the make's to delete
   session-worktree <repo> <path> <branch> <rules>
                                           a coding agent's worktree, made by the platform as the project (its tool's
                                           own worktree mode would make it as the owner: docs/design/git-broker.md r3
@@ -159,14 +158,7 @@ def op_worktree_plan(repo: str, branch: str) -> int:
     if git(repo, "check-ref-format", "--branch", branch).returncode != 0:
         sys.stderr.write(f"not a branch name: {branch}\n")
         return 2
-    exists = git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0
-    links = []
-    for entry in _z(git(repo, "ls-tree", "-r", "-z", "--full-tree", f"refs/heads/{branch}" if exists else "HEAD",
-                        check=True, text=False)):
-        meta, _, path = entry.partition("\t")
-        if meta.split(" ")[0] == "120000":
-            links.append(path)
-    return emit({"exists": exists, "links": links})
+    return emit({"exists": git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0})
 
 
 def op_session_worktree_undo(repo: str, path: str, branch: str, new: str) -> int:

@@ -22,9 +22,6 @@ The base is "allow everything, then block the dangerous parts" (a deny-list; tri
   network  fully off (127.0.0.1 and unix sockets included); Seatbelt can't filter by domain
   other    blocks the Keychain system services (the hole the runtime's sandbox can't close), opening apps, Apple Events,
            launchctl/crontab/at, inspecting or signalling other processes
-  links    no symbolic link created directly in its workspace or runtime folder, but inside the tool folders that need
-           them (policy.links; link_rules below): both kinds, so cap-run, services, command jobs and the test runner's
-           wrap. Friction, not a boundary: a folder holding a link can still be moved in (link_rules)
 Capability fragments follow the base (later rules win); the gpu fragment is empty: here a capability's role is
 authorization.
 
@@ -33,7 +30,6 @@ authorization.
 """
 from __future__ import annotations
 
-import os
 import pathlib
 import sys
 
@@ -63,7 +59,7 @@ def can_sandbox() -> str | None:
 def guarantees() -> set[str]:
     """isolation.py's backend interface: what service_profile enforces (capabilities.md, "What each OS enforces")."""
     return {"own-writes-only", "isolated-reads", "declared-port-only", "localhost-inbound-only", "keychain-blocked",
-            "signals-blocked", "runtime-files-locked", "links-blocked"}
+            "signals-blocked", "runtime-files-locked"}
 
 
 def confined_now(marked: bool = False) -> bool:
@@ -179,44 +175,6 @@ def root_denies(pol: dict) -> list[str]:
     return out
 
 
-def link_rules(pol: dict) -> list[str]:
-    """policy links (docs/design/git-broker.md, r3 B-1): no symbolic link created under its roots, but inside the tool
-    folders that need them, inside the platform's own folders where tracked links are written, and at the exact paths
-    one platform job may make. A link itself moved in counts too: a rename's destination is checked as the link's
-    creation. **But a folder holding a link is not**: its rename is checked as a directory's creation, the same check as
-    mkdir, so `mv d d.x; mv X d` with a link at X/sub (made in a tool folder, the temp area, or earlier by a session)
-    puts the link at a tracked path, and an owner's checkout racing it wrote 660 to 717 files outside the project
-    (the cold review, 11-14). No filter separates that rename from mkdir (denying directory creation in the roots
-    refuses mkdir too; denying directory removal outside them refuses rmdir in the temp area and leaves links made in
-    the roots). So this is friction, not a boundary; docs/design/git-broker.md, "B-1 as built, after its cold review".
-    The allows come before protect_denies and root_denies (later rules win), so they reopen nothing those close; each
-    allow is limited to the roots, so none reaches outside the project's own folders."""
-    import re
-    lk = pol.get("links") or {}
-    roots = [pathlib.Path(r).resolve() for r in lk.get("roots") or []]
-    if not roots:
-        return []
-    out = ["; no symbolic link made in its own checkouts: someone else's checkout there could be raced into writing "
-           "through it",
-           "(deny file-write-create (require-all (vnode-type SYMLINK) (require-any "
-           + " ".join(f"(subpath {q(r)})" for r in roots) + ")))"]
-    pats = []
-    for r in roots:
-        base = re.escape(str(r))
-        for f in lk.get("folders") or []:
-            mid = "/" if f.get("where") == "top" else "/(.*/)?"
-            pats.append(f'(regex #"^{base}{mid}{re.escape(f["name"])}/")')
-    for p in lk.get("inside") or []:
-        pats.append(f'(regex #"^{re.escape(str(pathlib.Path(p).resolve()))}/")')
-    for p in lk.get("allow") or []:
-        real = pathlib.Path(os.path.realpath(p))
-        if any(real.is_relative_to(r) and real != r for r in roots):
-            pats.append(f"(literal {q(real)})")
-    if pats:
-        out.append("(allow file-write-create (require-all (vnode-type SYMLINK) (require-any " + " ".join(pats) + ")))")
-    return out
-
-
 def ancestors(paths) -> list[str]:
     """The folders above each path, as literals: what a process must be able to stat to resolve the path to a folder
     it may use (realpath, `git -C`), when one of them is in a denied tree (the workspace root, the platform state).
@@ -242,7 +200,6 @@ def _isolation(pol: dict, writable: list[pathlib.Path], writable_extra: list[pat
         '(deny file-write* (subpath "/"))',
         "(allow file-write* " + " ".join([*own, *[f"(subpath {q(t)})" for t in TMP],
                                           *[f"(literal {q(d)})" for d in DEVICES]]) + ")",
-        *link_rules(pol),
         *protect_denies(pol),
         *root_denies(pol),
         "; reads: other projects, services, platform state, credentials, Keychain files; its own folders allowed again",

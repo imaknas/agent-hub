@@ -30,10 +30,7 @@ What it enforces:
 Can't enforce (the adapter's limits): policy.protect and protect_roots (what the project's sessions load settings and
 hooks from, and the runtime's own folder in the project, inside
 its own writable folder: Landlock can only allow, and a write right on a folder covers everything under it, so it
-doesn't declare runtime-files-locked; there the platform's renderer removes hooks it didn't write), policy.links (no
-symbolic link in its own checkouts: Landlock has a make-symlink right, but it is granted per folder that exists when
-the rules are made, so the tool folders made later (a new node_modules, .venv) could get no links; not built, so it
-doesn't declare links-blocked, docs/design/git-broker.md r3 B-1), the listening address (a service may bind 0.0.0.0:<its port>; macOS accepts
+doesn't declare runtime-files-locked; there the platform's renderer removes hooks it didn't write), the listening address (a service may bind 0.0.0.0:<its port>; macOS accepts
 only localhost), UDP binds, the network allowlist (policy.network), signals to the owner's other processes below ABI 6.
 
   can_sandbox() → None | why not       guarantees() → set[str]       plan(pol, dirs, port) → {read, write, bind}

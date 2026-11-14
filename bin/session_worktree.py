@@ -66,17 +66,6 @@ def rules() -> dict:
     return {"names": [c["name"] for c in policy.protect()], "roots": policy.protect_roots()}
 
 
-def link_paths(path: pathlib.Path, links: list[str]) -> list[pathlib.Path]:
-    """The exact places the job may make a link: the tracked links' paths, which come from the project's own repo (its
-    word, read as the project), so only relative ones without a `..` that stay under the new worktree."""
-    out = []
-    for p in links:
-        rel = pathlib.PurePosixPath(p)
-        if p and not rel.is_absolute() and ".." not in rel.parts and "" not in rel.parts:
-            out.append(path / rel)
-    return out
-
-
 def valid_name(name: str) -> bool:
     parts = (name or "").split("/")
     return 0 < len(name) <= 100 and all(SEGMENT.match(p) for p in parts) and ".." not in parts
@@ -112,14 +101,13 @@ def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
     try:
         plan = project_git.data(project, ws, "worktree-plan", ws, branch, timeout=PLAN_TIMEOUT_S)
     except project_git.Unavailable as e:
-        raise Refused(_("couldn't list {project}'s tracked links ({why})", project=project, why=e)) from None
+        raise Refused(_("couldn't look at {project}'s branches ({why})", project=project, why=e)) from None
     if not isinstance(plan, dict):
-        raise Refused(_("couldn't list {project}'s tracked links ({why})", project=project, why=plan))
+        raise Refused(_("couldn't look at {project}'s branches ({why})", project=project, why=plan))
     rec = {"path": str(path), "branch": branch, "new": not plan.get("exists")}
     rec_file.parent.mkdir(parents=True, exist_ok=True)
     rec_file.write_text(json.dumps(rec))
-    r = project_git.job(project, ws, "session-worktree", ws, path, branch, json.dumps(rules()),
-                        links=link_paths(path, project_git.strs(plan.get("links"))), timeout=JOB_TIMEOUT_S)
+    r = project_git.job(project, ws, "session-worktree", ws, path, branch, json.dumps(rules()), timeout=JOB_TIMEOUT_S)
     try:
         got = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:

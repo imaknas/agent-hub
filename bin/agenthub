@@ -1492,29 +1492,14 @@ def doctor_git_fence(add) -> None:
 
 
 def doctor_checkout_race(add, why_no_sandbox, installed) -> None:
-    """The owner's checkout race (docs/design/git-broker.md, r3 B-1): while any process of a sandboxed project runs, an
-    unsandboxed checkout in its folder can be raced into writing its files anywhere the owner can write. What holds here:
-    its services and jobs make no link in their checkouts (policy links; the macOS profile, not Landlock), and a coding
-    agent's worktree mode is handed to the platform (runtime_ports' worktree_maker). The owner's own checkouts aren't
-    covered: said per project."""
-    import isolation
-    import policy
+    """The owner's checkout race (docs/design/git-broker.md, r3 B-1): while any process of a sandboxed project runs (its
+    sessions' commands, services, jobs), an unsandboxed checkout in its folder can be raced into writing its files
+    anywhere the owner can write. Nothing refuses the links it takes (the owner removed the link rule, 11-15); a coding
+    agent's worktree mode is handed to the platform where the agent can (runtime_ports' worktree_maker). Said per
+    project."""
     import runtime_ports
     sandboxed = [(n, hubconf.path((d.get("paths") or {}).get("workspace"))) for n, d in sorted(hubconf.projects().items())
                  if (d.get("enforce") or {}).get("sandbox") is True]
-    if not sandboxed:
-        return
-    if why_no_sandbox:
-        pass   # the sandbox row says why nothing of theirs runs here at all
-    elif "links-blocked" in isolation.guarantees():
-        add("warn", _("sandboxed projects' own services and jobs can't make a symbolic link directly in their "
-                      "checkouts (except inside {folders} folders), but they can still move in a folder that holds one, "
-                      "so while they run they can redirect a checkout of yours there: this is friction, not a boundary",
-                      folders=", ".join(f["name"] for f in policy.LINK_FOLDERS)))
-    else:
-        add("warn", _("on this machine ({adapter}) sandboxed projects' own services and jobs can make symbolic links in "
-                      "their checkouts, so while they run they can redirect a checkout of yours there to write anywhere "
-                      "you can: the platform doesn't refuse links on this OS (not built)", adapter=isolation.adapter()[0]))
     makers = []
     for name in installed:
         try:
@@ -1528,20 +1513,6 @@ def doctor_checkout_race(add, why_no_sandbox, installed) -> None:
                       "write its files anywhere you can write. Worktrees the platform makes as the project: {handed}",
                       project=project, handed=", ".join(handed) or "-"),
             _("stop its sessions and services before you check out there"))
-    import project_git
-    names_ = [f["name"] for f in policy.LINK_FOLDERS]
-    for project, ws in sandboxed:
-        if not ws or not os.path.lexists(ws / ".git"):
-            continue
-        try:
-            got = project_git.strs(project_git.data(project, ws, "tracked", ws, *names_))
-        except project_git.Unavailable:
-            continue   # the control rows say when its files can't be listed
-        if got:
-            add("warn", _("{project} (sandboxed) tracks {n} {n:file|files} in folders where its services and jobs may "
-                          "make links (e.g. {example}): a checkout of yours writing there can still be redirected",
-                          project=project, n=len(got), example=", ".join(got[:3])),
-                _("stop tracking them"))
 
 
 def doctor_control(add, why_no_sandbox, installed) -> None:
