@@ -27,7 +27,7 @@ for a write outside the project's own job.
 CLI (git-sync-memory.sh, sync-all-memory.sh):
   project_git.py sandboxed-project <name>   exit 0 when this registered project is sandboxed, 3 when not (any
                                       other exit: it couldn't tell)
-  project_git.py run-as <name> <dir> -- <argv…>
+  project_git.py run-as <name> <dir> [--allow-link <path>]… -- <argv…>
                                       a shell hook's work as the project <dir> belongs to (HUB_AS_PROJECT=1 set, stdin
                                       and output passed through); exit 3 when it isn't sandboxed
   project_git.py sync-memory [--lock] <name>
@@ -88,11 +88,12 @@ def job(project: str | None, cwd, op: str, *args, **kw) -> Result:
 
 
 def run(project: str | None, cwd, argv: list[str], input: str | bytes | None = None, out=None, timeout: float = TIMEOUT_S,
-        cap: int | None = None, env: dict | None = None) -> Result:
+        cap: int | None = None, env: dict | None = None, links=()) -> Result:
     """Run argv as the project. Over `timeout` seconds or `cap` bytes of stdout (default MAX_JSON), the whole process
-    group is killed (returncode TIMED_OUT / TOO_BIG); stdout goes into the binary file `out` when given."""
+    group is killed (returncode TIMED_OUT / TOO_BIG); stdout goes into the binary file `out` when given. links: exact
+    paths in its own folders where this run may make a symbolic link (isolation.wrap)."""
     cap = MAX_JSON if cap is None else cap
-    argv = isolation.as_project(project, cwd, argv)
+    argv = isolation.as_project(project, cwd, argv, links=links)
     p = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
                          env={**os.environ, **env} if env else None)
@@ -351,17 +352,18 @@ def by_name(project: str) -> tuple[str, dict] | None:
     return (project, {**doc, "name": project}) if doc else None
 
 
-def run_as_cli(project: str, d: str, argv: list[str]) -> int:
+def run_as_cli(project: str, d: str, argv: list[str], links=()) -> int:
     """A shell hook's work as this project in the folder d, by the name the hook already has, never asked again of a folder that can
     have changed: stdin passed in, its stdout and stderr passed out. Exit 3 when it isn't sandboxed (the caller goes on itself), and
-    COULD_NOT_TELL for a name the index doesn't have (the caller goes no further)."""
+    COULD_NOT_TELL for a name the index doesn't have (the caller goes no further). links: the exact paths where the work may
+    make a symbolic link (worktree-memory.sh's links into a worktree; the sandbox refuses every other)."""
     found = by_name(project)
     if not found:
         return _not_in_index(project)
     if not isolation.sandboxed(found[1]):
         return NOT_SANDBOXED
     stdin = "" if sys.stdin.isatty() else sys.stdin.read()
-    r = run(found[0], d, argv, input=stdin, env={"HUB_AS_PROJECT": "1"})
+    r = run(found[0], d, argv, input=stdin, env={"HUB_AS_PROJECT": "1"}, links=links)
     sys.stdout.buffer.write(r.stdout)
     sys.stderr.write(r.stderr)
     return r.returncode
@@ -397,8 +399,13 @@ def _not_in_index(name: str) -> int:
 
 
 def main(argv: list[str]) -> int:
-    if argv[:1] == ["run-as"] and len(argv) >= 5 and argv[3] == "--":
-        return run_as_cli(argv[1], argv[2], argv[4:])
+    if argv[:1] == ["run-as"] and len(argv) >= 5:
+        rest, links = argv[3:], []
+        while rest[:1] == ["--allow-link"] and len(rest) >= 2:
+            links.append(rest[1])
+            rest = rest[2:]
+        if rest[:1] == ["--"]:
+            return run_as_cli(argv[1], argv[2], rest[1:], links)
     lock = "--lock" in argv
     argv = [a for a in argv if a != "--lock"]
     if len(argv) != 2 or argv[0] not in ("sandboxed-project", "sync-memory"):

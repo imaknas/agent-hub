@@ -74,7 +74,10 @@ if [ -z "${HUB_AS_PROJECT:-}" ]; then
        # a folder swapped for a link elsewhere isn't this project's to run in, nor another's to print from into this session
        case "$top/" in "$owner/"*) ;; *) exit 0 ;; esac
        "$HUB/bin/py" "$HUB/bin/render-project-settings.py" --worktree "$top" 2>/dev/null
-       AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$project" "$top" -- \
+       # its sandbox makes no symbolic link in its checkouts (policy links): only the ones below, by exact path
+       links=(--allow-link "$top/.agent-memory")
+       for f in $("$HUB/bin/py" "$HUB/bin/hub-runtime" local-ignores 2>/dev/null); do links+=(--allow-link "$top/$f"); done
+       AGENT_HUB_OFFLINE=1 "$HUB/bin/py" "$HUB/bin/project_git.py" run-as "$project" "$top" "${links[@]}" -- \
          bash "$HUB/bin/worktree-memory.sh" "$event" </dev/null
        exit 0 ;;
     3) ;;

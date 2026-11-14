@@ -224,6 +224,8 @@ touch "$TOP/outside" 2>/dev/null || echo outside-write-blocked
 [ -d "$ROOT" ] && echo root-stat
 ls "$ROOT" >/dev/null 2>&1 || echo root-list-blocked
 mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
+ln -s /etc "$WS/l" 2>/dev/null || echo link-blocked
+mkdir -p "$WS/node_modules" && ln -s /etc "$WS/node_modules/l" && echo tool-link-ok
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
 cat "$SECRETS_LINK/key" >/dev/null 2>&1 || echo linked-secrets-blocked
@@ -253,14 +255,15 @@ PY
 # what a sandboxed service must still be able to do, whatever the adapter; root-stat: the folder above its own (the
 # workspace root, whose contents it can't read) can be stat'ed, or a program resolving the path to its own folder fails
 # (git 2.56 resolves every component of `git -C <dir>`: "Invalid path '<workspace root>': Operation not permitted")
-WORKS = {"rt-write", "ws-write", "linked-write", "system-read", "bind-declared-ok", "socketpair-ok", "root-stat"}
+WORKS = {"rt-write", "ws-write", "linked-write", "system-read", "bind-declared-ok", "socketpair-ok", "root-stat",
+         "tool-link-ok"}
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
 PROBES = {"own-writes-only": {"outside-write-blocked", "bus-write-blocked"},
           "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked", "root-list-blocked",
                              "linked-secrets-blocked", "linked-secrets-target-blocked"},
           "declared-port-only": {"bind-other-blocked"}, "unix-sockets-blocked": {"unix-blocked"},
           "keychain-blocked": {"keychain-blocked"}, "signals-blocked": {"signal-blocked"},
-          "runtime-files-locked": {"control-blocked"}}
+          "runtime-files-locked": {"control-blocked"}, "links-blocked": {"link-blocked"}}
 # guarantees no probe here can show, with why (checked by hand when an adapter declares them)
 UNPROBED = {"localhost-inbound-only": "needs a second address to connect from (macOS checked live 10-31)"}
 

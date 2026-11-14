@@ -54,6 +54,7 @@ GUARANTEES = {
     "unix-sockets-blocked": "unix-domain sockets can't be created (no D-Bus, no systemd user manager)",
     "signals-blocked": "the owner's other processes can't be signalled",
     "runtime-files-locked": "what its sessions load settings, hooks and tools from can't be written (policy protect)",
+    "links-blocked": "no symbolic link can be made in its own checkouts but in the tool folders that need them (policy links)",
 }
 # what a sandboxed service or job must never get past, whatever the backend
 REQUIRED = ("own-writes-only", "isolated-reads", "declared-port-only")
@@ -105,21 +106,24 @@ def sandboxed(doc: dict) -> bool:
         and doc.get("name") not in hubconf.get("service_sandbox_exempt", [])
 
 
-def wrap(project: str, cwd, argv: list[str], port: int | None = None) -> list[str]:
-    """argv → the same command through bin/sandboxed-run."""
+def wrap(project: str, cwd, argv: list[str], port: int | None = None, links=()) -> list[str]:
+    """argv → the same command through bin/sandboxed-run. links: exact paths where this one command may make a
+    symbolic link (policy links' allow; a platform job that checks out tracked links, docs/design/git-broker.md r3)."""
     return [*hubconf.launch(hubconf.ROOT / "bin" / "sandboxed-run"), "--project", project, "--cwd", str(cwd),
-            *(["--port", str(int(port))] if port else []), "--", *argv]
+            *(["--port", str(int(port))] if port else []), *[a for p in links for a in ("--allow-link", str(p))],
+            "--", *argv]
 
 
-def as_project(project: str | None, cwd, argv: list[str]) -> list[str]:
+def as_project(project: str | None, cwd, argv: list[str], links=()) -> list[str]:
     """argv with the project's authority: through bin/sandboxed-run when the project is sandboxed (which refuses, exit
     78, where this machine can't sandbox), unchanged otherwise (an unsandboxed project, an unregistered folder or the
     platform itself (None) has the user's authority already). A name the registry has and its index doesn't (a stale index) may be
     sandboxed: it goes through bin/sandboxed-run too, which refuses a project it doesn't know."""
     doc = hubconf.projects().get(project) if project else None
+    kw = {"links": list(links)} if links else {}
     if project and doc is None and project in hubconf.roster():
-        return wrap(project, cwd, argv)
-    return wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv
+        return wrap(project, cwd, argv, **kw)
+    return wrap(project, cwd, argv, **kw) if doc and sandboxed({**doc, "name": project}) else argv
 
 
 def reads_blocked() -> bool:

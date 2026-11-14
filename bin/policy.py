@@ -25,6 +25,10 @@ policy(name, doc, index) → {
   protect_roots:      each runtime's own folder in the project with the entries in it that stay writable
                       ([{name, writable}], the control port's control_root): its services and jobs create or change
                       nothing else there (the macOS profile; sessions keep protect plus each entry present)
+  links:              where its services and jobs create no symbolic link (links(): its workspace and runtime folder,
+                      but inside LINK_FOLDERS and the platform's test runs; plus exact paths one platform job may
+                      make): the owner's checkout race (docs/design/git-broker.md r3 B-1). The macOS profile enforces
+                      it; Landlock doesn't (doctor says so)
   other_projects:     other projects' workspace/runtime, and every memory repo that isn't its own: other projects'
                       bare repos and memory copies, the mirrors, anything else under git_origin / memory_copies (no
                       reading or writing; Path)
@@ -237,6 +241,29 @@ def protected_changes(paths) -> list[str]:
     return out
 
 
+# Folders a sandboxed project's services and jobs may make symbolic links in although its own folders refuse them
+# (links(), below): the tool folders that can't work without links, each measured (docs/design/git-broker.md, r3 B-1 as
+# built): a venv's interpreter (`python -m venv`, `uv venv`) and npm's node_modules/.bin and file: dependencies.
+# "top": <root>/<name>/ only; "any": a folder of that name at any depth. Inside the folder only, never its own entry
+# (a link named node_modules would be the swap itself). A name is added only after measuring the tool that needs it.
+LINK_FOLDERS = ({"name": ".venv", "where": "top"}, {"name": "node_modules", "where": "any"})
+
+
+def links(d: dict) -> dict:
+    """Where a sandboxed project's own processes may not create a symbolic link (docs/design/git-broker.md, r3 B-1): its
+    checkouts, the workspace and the runtime folder. Any process of the project can otherwise swap a tracked folder for a
+    link while someone else's unsandboxed checkout writes there (the owner's terminal or editor, a coding agent's own
+    worktree mode, a deploy's pull), and that checkout then writes the project's files wherever the link points, as the
+    owner. {roots: [Path], folders: LINK_FOLDERS, inside: [Path] (the platform's own folders where tracked links are
+    written for the project: the test runner's runs, both spellings), allow: [Path] (exact link paths one platform job
+    may make; empty here, the caller adds them)}."""
+    roots = [p for p in (d.get("workspace"), d.get("runtime")) if p]
+    ws = d.get("workspace")
+    return {"roots": roots, "folders": [dict(f) for f in LINK_FOLDERS],
+            "inside": [ws / f".{n}" / "test" for n in dict.fromkeys(names.all("product"))] if ws else [],
+            "allow": []}
+
+
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
     return {k: str(names.repo_dir(ws / ".git") / "cache" / v) for k, v in CACHE_ENV.items()} if ws else {}
 
@@ -419,6 +446,7 @@ def policy(name: str, doc: dict, index: dict) -> dict:
         "env": cache_env(d["workspace"]),
         "protect": protect(),
         "protect_roots": protect_roots(),
+        "links": links(d),
         "other_projects": others + others_memory(name, doc, index),
         "deny_write": _uniq([hubconf.ROOT, hubconf.p("git_origin"), copies, *instance_dirs(),
                              *([hubconf.BUS_DIR] if outbox else []), *platform_python(),
