@@ -214,5 +214,30 @@ class CapRunner(unittest.TestCase):
         self.assertEqual(list((self.a / ".hub-run" / "requests").glob("*.json")), [])
 
 
+class SwappedRequest(unittest.TestCase):
+    """A request file in the project's folder can be swapped between the runner's check and its read: a FIFO there must
+    not hold the shared service (docs/design/git-config-fence.md, r2 S5)."""
+
+    def test_a_fifo_is_refused_without_blocking(self):
+        d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        os.mkfifo(d / "request.json")
+        fd = os.open(d, os.O_RDONLY)
+        self.addCleanup(os.close, fd)
+        done = []
+        t = threading.Thread(target=lambda: done.append(self._read(fd)), daemon=True)
+        t.start()
+        t.join(5)
+        self.assertEqual(done, ["refused"], "the read returns at once and refuses it")
+
+    @staticmethod
+    def _read(fd):
+        try:
+            cr.read_json(fd, "request.json")
+        except ValueError:
+            return "refused"
+        return "read"
+
+
 if __name__ == "__main__":
     unittest.main()

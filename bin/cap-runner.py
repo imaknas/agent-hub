@@ -158,8 +158,12 @@ def write_state(job_fd: int, **data) -> None:
 
 
 def read_json(dir_fd: int, name: str):
-    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dir_fd)
+    """A file in a folder the project writes: what was checked a moment ago may have been swapped since, so it is opened
+    without blocking (a FIFO put there would otherwise hold the shared service), and only a regular file is read."""
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError(f"{name} is not a regular file")
         return json.loads(f.read(MAX_REQ + 1).decode())
 
 
