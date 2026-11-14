@@ -2102,23 +2102,58 @@ def foreign_controls(workspace, owned=None) -> list[str]:
             rel = f.relative_to(ws)
             if kind == "skills" and owned and len(rel.parts) > 3 and owned("/".join(rel.parts[:3])):
                 continue
-            if not f.is_symlink() and HOOKS_DECLARED.search(f.read_text(errors="replace")[:4000]):
+            if not f.is_symlink() and "hooks" in frontmatter_keys(f.read_text(errors="replace")[:FRONTMATTER_MAX]):
                 out.append(_("{file} declares hooks", file=str(rel)))
     return out
 
 
-# A skill or agent file that declares hooks: its sessions run them (outside the sandbox) while it is in use
-HOOKS_DECLARED = re.compile(r"(?m)^hooks:")
+# What a skill's or agent's frontmatter may declare that the owner must see first: hooks (its sessions run them,
+# outside the sandbox, while it is in use) and allowed-tools (tools it may use without asking)
+FLAGGED_KEYS = ("hooks", "allowed-tools")
+FRONTMATTER_MAX = 1 << 20
+# a line that looks like one of those keys, however it is quoted or spaced: counted even where YAML can't read it
+FLAGGED_LINE = re.compile(r"""(?mi)^[ \t]*["']?(hooks|allowed-tools)["']?[ \t]*:""")
+
+
+def frontmatter_keys(text: str) -> set[str]:
+    """The flagged keys a file's frontmatter declares (the block between the first two `---` lines, read as YAML), plus
+    any line in it that looks like one of them; with no closing line, the whole text is looked at. Never fewer than a
+    reader that misses a spelling would find: a file that can't be parsed counts by its lines."""
+    t = text.lstrip("\ufeff")
+    lines = t.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return set()
+    end = next((i for i, line in enumerate(lines[1:], 1) if line.strip() in ("---", "...")), None)
+    block = "\n".join(lines[1:end] if end else lines[1:])
+    found = {m.group(1).lower() for m in FLAGGED_LINE.finditer(block)}
+    try:
+        import yaml
+        doc = yaml.safe_load(block)
+    except Exception:
+        doc = None
+    if isinstance(doc, dict):
+        found |= {str(k).strip().lower() for k in doc if str(k).strip().lower() in FLAGGED_KEYS}
+    return found
 # Where it loads a project's skills from, in each session folder (its docs, "skills": .claude/skills/<name>/SKILL.md;
 # docs/design/skills-sync.md)
 SKILL_DIRS = (".claude/skills",)
 
 
 def skill_notes(files: dict) -> list[str]:
-    """What the owner sees first about a skill before `brunna skills sync` installs it: the files that declare hooks."""
-    return [_("{file} declares hooks, which its sessions run outside the sandbox while the skill is in use", file=rel)
-            for rel, data in sorted(files.items()) if rel.endswith(".md") and
-            HOOKS_DECLARED.search(data[:4000].decode("utf-8", "replace"))]
+    """What the owner sees first about a skill before `brunna skills sync` installs it: the files whose frontmatter
+    declares hooks or allowed-tools."""
+    out = []
+    for rel, data in sorted(files.items()):
+        if not rel.lower().endswith(".md"):
+            continue
+        keys = frontmatter_keys(data[:FRONTMATTER_MAX].decode("utf-8", "replace"))
+        if "hooks" in keys:
+            out.append(_("{file} declares hooks, which its sessions run outside the sandbox while the skill is in use",
+                         file=rel))
+        if "allowed-tools" in keys:
+            out.append(_("{file} declares allowed-tools: tools its sessions may use without asking while the skill is "
+                         "in use", file=rel))
+    return out
 
 
 def platform_hooks() -> dict:

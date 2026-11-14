@@ -70,10 +70,10 @@ config:
 owner(你本人;不是專案 session 的指令):
   brunna owner list | done/drop/already-done <key> | answer <問題 id> "回答"
                         = bin/owner.py:內建的 owner 端(hub.json owner_side: builtin;有助理的話只能 list)
-  brunna skills sync <專案> [--yes] [--adopt] | status [<專案>]
-                        專案的 skills(在它的 skills/ 資料夾開發):列出改了什麼(diff),你打 yes 之後才裝進
-                        它的 agent 載入 skills 的資料夾(bin/skills_sync.py,docs/design/skills-sync.md);
-                        有改動等你審時平台會提醒你
+  brunna skills sync <專案> [--adopt] [--yes=<代碼>] | status [<專案>]
+                        專案的 skills(在它的 skills/ 資料夾開發):列出改了什麼(diff),你打 yes 或給審查印出的
+                        核准代碼之後才裝進它的 agent 載入 skills 的資料夾(bin/skills_sync.py,
+                        docs/design/skills-sync.md);有改動等你審時平台會提醒你
 專案的 session 用的(規則檔裡寫的就是這些;權限規則只放行這幾個,不放行上面的管理指令):
   brunna send | inbox | show | ack | pass | done | thread | open-questions …   = 專案信箱(bin/hubbus 同名的子指令)
   brunna merge-branch …    = bin/merge-branch(平行 session 的合併閘門)

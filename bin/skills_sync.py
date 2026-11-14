@@ -6,11 +6,13 @@ Every sandbox keeps a sandboxed project's own processes off the coding agents' c
 skill there is instructions its sessions load by themselves, so nothing inside the sandbox may plant one. The project
 writes `skills/<name>/` (each with a SKILL.md) like any other file; the owner runs
 
-  brunna skills sync <project> [--yes] [--adopt]
-                        shows what would change per skill (added / changed / removed, a unified diff of text files, the
-                        executables and anything an adapter flags listed first) and installs it after a typed `yes`;
-                        --yes skips the question (and is the only way without a terminal); --adopt lets it replace
-                        a same-named entry it didn't install (a project's old copy, a link)
+  brunna skills sync <project> [--adopt] [--yes=<code>]
+                        shows what would change per skill (added / changed / removed, a unified diff of every file but
+                        media, against what the owner approved before or in full; the executables, media files and
+                        anything an adapter flags listed first) and installs it after a typed `yes`; --yes=<code>
+                        approves exactly the review that printed that code (the only way without a terminal); --adopt
+                        lets it replace a same-named entry it didn't install (a project's old copy, a link), shown in
+                        full. Refused in a sandbox and in a coding agent's session
   brunna skills status [<project>]
                         what is waiting for review, per project (reads only)
   skills_sync.py remind the platform job brunna/skills-pending (every 15 minutes): a status-page row and one owner to-do
@@ -35,7 +37,9 @@ link at any moment; on Linux nothing keeps them off the control folders either):
 - the manifest (what was approved, and what was installed where, file by file with hashes and modes) is in the
   platform's state, never in the project. render-project-settings' foreign check counts an installed skill as the
   platform's only while its tree is exactly that.
-Refused inside a sandbox (isolation.confined_now) and from a linked worktree of the hub (it writes the live state).
+Refused inside a sandbox (confined_now, or the platform's state unreadable), in a coding agent's session, and from a
+linked worktree of the hub (it writes the live state). What a diff is against is the manifest, never what is on disk:
+only a copy still exactly as sync installed it is a base; anything else is shown in full.
 """
 from __future__ import annotations
 
@@ -65,7 +69,12 @@ SOURCE = "skills"
 FILE_MAX = 2 << 20          # one file
 TOTAL_MAX = 64 << 20        # all of a project's skills
 FILES_MAX = 4000            # files in all of them
+ENTRIES_MAX = 20000         # folder entries looked at in all of them (a folder of a million names isn't listed on)
 DEPTH_MAX = 12              # folders below a skill's own
+FOLDERS_MAX = 64            # session folders a sync installs into
+DROP_AFTER = datetime.timedelta(hours=1)   # skills/ back to the approved set this long before its to-do is withdrawn
+# shown as a size and a hash, not as text, when they aren't valid UTF-8 (and aren't executable): media a skill carries
+MEDIA = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp", ".pdf", ".woff", ".woff2", ".ttf", ".otf")
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")   # a skill's folder name
 DIR = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 NEW, OLD = ".sync-new", ".sync-old"   # the in-between names next to a skill's place: .<name>.sync-new-<pid>
@@ -101,24 +110,24 @@ def _open_dirs(base, rel: str, create: bool) -> int:
 
 
 def printable(s: str) -> str:
-    """s as it can be shown on a terminal: control characters, the bidirectional overrides and what isn't text escaped
-    (a file of the project's must not hide lines from the owner reading the diff)."""
+    """s as it can be shown on a terminal: every character Python doesn't count as printable (controls, format
+    characters such as the bidirectional overrides, zero-width ones and tags, separators, surrogates) escaped, a tab
+    kept: a file of the project's must not hide anything from the owner reading the diff."""
     out = []
     for ch in s:
         o = ord(ch)
-        if ch == "\t":
+        if ch == "\t" or ch.isprintable():
             out.append(ch)
-        elif o < 0x20 or 0x7f <= o < 0xa0 or 0x202a <= o <= 0x202e or 0x2066 <= o <= 0x2069 or 0xd800 <= o <= 0xdfff:
-            out.append(f"\\x{o:02x}" if o < 0x100 else f"\\u{o:04x}")
         else:
-            out.append(ch)
+            out.append(f"\\x{o:02x}" if o < 0x100 else f"\\u{o:04x}" if o < 0x10000 else f"\\U{o:08x}")
     return "".join(out)
 
 
 def _control_tops() -> set[str]:
-    """The first part of every control name (policy.protect): never a folder or file inside a skill."""
+    """The first part of every control name (policy.protect), case-folded (a case-insensitive volume opens a name in
+    any case, and the long s folds to s): never a folder or file inside a skill."""
     import policy
-    return {pathlib.PurePosixPath(c["name"]).parts[0] for c in policy.protect()}
+    return {pathlib.PurePosixPath(c["name"]).parts[0].casefold() for c in policy.protect()}
 
 
 class Tree:
@@ -169,12 +178,17 @@ def _walk(fd: int, prefix: str, tree: Tree, budget: list[int], depth: int, tops:
     """Every entry under the open folder fd into tree (rel names under prefix). tops (a source, _control_tops): a
     control name or a name that can't be printed is odd too."""
     strict = tops is not None
-    for name in sorted(os.listdir(fd)):
+    names = os.listdir(fd)
+    budget[2] -= len(names)
+    if budget[2] < 0:
+        raise Refused(_("{folder} holds more than {n} entries; nothing was read further", folder=prefix or ".",
+                        n=ENTRIES_MAX))
+    for name in sorted(names):
         rel = f"{prefix}/{name}" if prefix else name
         if strict and (printable(name) != name or not name.isprintable()):
             tree.odd.append(_("{file}: a name that can't be shown as it is", file=ascii(rel)))
             continue
-        if strict and name in tops:
+        if strict and name.casefold() in tops:
             tree.odd.append(_("{file}: a coding agent's control name inside a skill", file=rel))
             continue
         try:
@@ -222,9 +236,13 @@ def snapshot(ws) -> Snapshot:
     except OSError as e:
         snap.problems.append(_("{folder} can't be opened as a folder ({why})", folder=SOURCE, why=e.strerror or e))
         return snap
-    budget, tops = [TOTAL_MAX, FILES_MAX], _control_tops()
+    budget, tops = [TOTAL_MAX, FILES_MAX, ENTRIES_MAX], _control_tops()
     try:
-        for name in sorted(os.listdir(fd)):
+        top = os.listdir(fd)
+        if len(top) > ENTRIES_MAX:
+            raise Refused(_("{folder} holds more than {n} entries; nothing was read further", folder=SOURCE,
+                            n=ENTRIES_MAX))
+        for name in sorted(top):
             try:
                 st = os.stat(name, dir_fd=fd, follow_symlinks=False)
             except OSError as e:
@@ -288,7 +306,7 @@ def installed_tree(ws, rel: str) -> Tree | None:
             return tree
         sub = os.open(name, DIR, dir_fd=fd)
         try:
-            _walk(sub, "", tree, [TOTAL_MAX, FILES_MAX], 0, None)
+            _walk(sub, "", tree, [TOTAL_MAX, FILES_MAX, ENTRIES_MAX], 0, None)
         except Refused as e:
             tree.odd.append(str(e))
         finally:
@@ -339,11 +357,17 @@ def save(project: str, doc: dict) -> None:
 
 
 @contextlib.contextmanager
-def locked(project: str):
+def locked(project: str, wait: bool = True):
+    """One writer of a project's manifest at a time; yields whether it got the lock (wait=False: never waits, so a
+    review left open at its question doesn't hold the scheduler up)."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with open(STATE_DIR / f"{project}.lock", "w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        yield
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+        except BlockingIOError:
+            yield False
+            return
+        yield True
 
 
 def matches(ws, rel: str, files_meta: dict) -> bool:
@@ -355,18 +379,25 @@ def matches(ws, rel: str, files_meta: dict) -> bool:
 
 def owned(project: str, ws):
     """For the foreign-control check (render-project-settings): rel → whether that entry is a skill sync installed and
-    still exactly as it installed it."""
+    still exactly as it installed it (each answered once per call of this function)."""
     installed = load(project).get("installed") or {}
     flat = {f"{d}/{n}": m.get("files") or {} for d, skills in installed.items() if isinstance(skills, dict)
             for n, m in skills.items() if isinstance(m, dict)}
-    return lambda rel: rel in flat and matches(ws, rel, flat[rel])
+    seen: dict[str, bool] = {}
+
+    def check(rel: str) -> bool:
+        if rel not in seen:
+            seen[rel] = rel in flat and matches(ws, rel, flat[rel])
+        return seen[rel]
+    return check
 
 
 # ---------- where skills go ----------
 
 def destinations(ws) -> list[str]:
     """Each folder (relative to the workspace) an installed runtime loads project skills from, in each of its session
-    folders: the adapters' SKILL_DIRS (runtime_ports.skill_dirs)."""
+    folders: the adapters' SKILL_DIRS (runtime_ports.skill_dirs). A session folder other than the workspace counts
+    only as a checkout (it has a .git entry), and at most FOLDERS_MAX of them."""
     import runtime_ports
     ws = pathlib.Path(ws)
     out = []
@@ -378,7 +409,8 @@ def destinations(ws) -> list[str]:
             folders = runtime_ports.load(rname, ports=("control",)).session_folders(ws)
         except runtime_ports.Unsupported:
             folders = [ws]
-        for folder in folders:
+        folders = [f for f in folders if pathlib.Path(f) == ws or os.path.lexists(pathlib.Path(f) / ".git")]
+        for folder in sorted(folders, key=lambda f: (pathlib.Path(f) != ws, str(f)))[:FOLDERS_MAX]:
             try:
                 base = pathlib.PurePosixPath(pathlib.Path(folder).relative_to(ws))
             except ValueError:
@@ -400,13 +432,22 @@ def workspace(project: str) -> pathlib.Path:
 # ---------- the plan ----------
 
 class Step:
-    """One skill in one destination: add / change / remove / same, or blocked (an entry sync didn't install)."""
+    """One skill in one destination: add / change / remove / same, or blocked (an entry sync didn't install). base is
+    what the review shows it against: what the owner approved before (sync's own copy, still exactly as installed), or
+    None, when the new tree is shown in full (new here, adopted, or changed since sync installed it). replaces: the
+    name sync installed it under, when only its case differs."""
 
-    def __init__(self, dest: str, name: str, kind: str, current: Tree | None, new: Tree | None, adopt: bool = False):
-        self.dest, self.name, self.kind, self.current, self.new, self.adopt = dest, name, kind, current, new, adopt
+    def __init__(self, dest: str, name: str, kind: str, current: Tree | None, new: Tree | None,
+                 base: Tree | None = None, why: str | None = None, replaces: str | None = None):
+        self.dest, self.name, self.kind, self.current, self.new = dest, name, kind, current, new
+        self.base, self.why, self.replaces = base, why, replaces
 
 
 def plan(project: str, ws, snap: Snapshot, adopt: bool) -> list[Step]:
+    """What a sync would do, per destination. Only the manifest says what the owner approved: a skill is "same" only
+    when what is there equals both what sync installed and the new tree; a copy changed since sync installed it, and an
+    entry sync didn't install, are shown in full, whatever is there now. Names match case-folded (a case-insensitive
+    volume)."""
     man = load(project)
     installed = man.get("installed") or {}
     dests = destinations(ws)
@@ -416,43 +457,56 @@ def plan(project: str, ws, snap: Snapshot, adopt: bool) -> list[Step]:
         parent = pathlib.PurePosixPath(d).parent
         if d not in dests and (str(parent) == "." or (pathlib.Path(ws) / parent).is_dir()):
             dests.append(d)
+    source = {n.casefold() for n in snap.skills}
     steps = []
     for dest in dests:
         mine = installed.get(dest) or {}
-        for name in sorted(set(snap.skills) | set(mine)):
-            rel = f"{dest}/{name}"
-            cur = installed_tree(ws, rel)
-            if name not in snap.skills:
-                if cur is not None:   # in the manifest: sync installed it
-                    steps.append(Step(dest, name, "remove", cur, None))
+        mine_cf = {n.casefold(): n for n in mine}
+        for old in sorted(mine):   # removals first: a case-only rename then never removes what it just installed
+            if old.casefold() not in source and (cur := installed_tree(ws, f"{dest}/{old}")) is not None:
+                steps.append(Step(dest, old, "remove", cur, None, base=cur))
+        for name in sorted(snap.skills):
+            new, old = snap.skills[name], mine_cf.get(name.casefold())
+            cur = installed_tree(ws, f"{dest}/{old or name}")
+            replaces = old if old and old != name else None
+            if old is None:
+                if cur is None:
+                    steps.append(Step(dest, name, "add", None, new))
+                else:
+                    steps.append(Step(dest, name, "change" if adopt else "blocked", cur, new,
+                                      why=_("replaces an entry sync didn't install (--adopt)")))
                 continue
-            new = snap.skills[name]
+            recorded = (mine[old] or {}).get("files") or {}
             if cur is None:
-                steps.append(Step(dest, name, "add", None, new))
-            elif name not in mine:
-                steps.append(Step(dest, name, "change" if adopt else "blocked", cur, new, adopt=True))
-            elif cur.odd or meta(cur) != meta(new):
-                steps.append(Step(dest, name, "change", cur, new))
+                steps.append(Step(dest, name, "add", None, new, replaces=replaces))
+            elif cur.odd or meta(cur) != recorded:
+                steps.append(Step(dest, name, "change", cur, new, replaces=replaces,
+                                  why=_("changed since sync installed it: shown in full, installed again")))
+            elif recorded != meta(new) or replaces:
+                steps.append(Step(dest, name, "change", cur, new, base=cur, replaces=replaces))
             else:
-                steps.append(Step(dest, name, "same", cur, new))
+                steps.append(Step(dest, name, "same", cur, new, base=cur))
     return steps
 
 
-def _text(data: bytes) -> list[str] | None:
-    if b"\0" in data:
-        return None
+def _text(data: bytes) -> tuple[list[str], bool]:
+    """The lines of a file as the review shows them, and whether it is valid UTF-8: anything else is decoded with
+    escapes (a NUL or a stray byte never makes a file "binary" and unseen)."""
     try:
-        return data.decode("utf-8").splitlines(keepends=True)
+        return data.decode("utf-8").splitlines(keepends=True), b"\0" not in data
     except UnicodeDecodeError:
-        return None
+        return data.decode("utf-8", "backslashreplace").splitlines(keepends=True), False
 
 
-def diff_lines(name: str, cur: Tree | None, new: Tree | None) -> list[str]:
-    """The unified diff of one skill, current → new, every line printable."""
+def media(rel: str, f: tuple[bool, bytes] | None) -> bool:
+    """A file shown as a size and a hash: a media file by its name, not valid UTF-8, not executable."""
+    return bool(f) and not f[0] and rel.lower().endswith(MEDIA) and not _text(f[1])[1]
+
+
+def diff_lines(name: str, base: Tree | None, new: Tree | None) -> list[str]:
+    """The unified diff of one skill, base → new (base None: every file of new in full), every line printable."""
     out = []
-    a, b = (cur.files if cur else {}), (new.files if new else {})
-    for o in (cur.odd if cur else []):
-        out.append(_("  (now) {what}", what=printable(o)))
+    a, b = (base.files if base else {}), (new.files if new else {})
     for rel in sorted(set(a) | set(b)):
         x, y = a.get(rel), b.get(rel)
         if x == y:
@@ -461,11 +515,15 @@ def diff_lines(name: str, cur: Tree | None, new: Tree | None) -> list[str]:
         if x and y and x[1] == y[1]:
             out.append(_("  {file}: executable {old} → {new}", file=path, old=x[0], new=y[0]))
             continue
-        tx, ty = _text(x[1]) if x else [], _text(y[1]) if y else []
-        if tx is None or ty is None:
-            out.append(_("  {file}: binary, {old} → {new} bytes", file=path, old=len(x[1]) if x else 0,
-                         new=len(y[1]) if y else 0))
+        if media(rel, x) or media(rel, y):
+            out.append(_("  {file}: a media file, not shown ({old} → {new} bytes, sha256 {sha})", file=path,
+                         old=len(x[1]) if x else 0, new=len(y[1]) if y else 0,
+                         sha=hashlib.sha256(y[1]).hexdigest()[:16] if y else "-"))
             continue
+        (tx, okx), (ty, oky) = _text(x[1]) if x else ([], True), _text(y[1]) if y else ([], True)
+        if not (okx and oky):
+            out.append(_("  {file}: not plain UTF-8 text (a NUL or bytes that aren't UTF-8): shown with escapes",
+                         file=path))
         for line in difflib.unified_diff(tx, ty, f"a/{path}" if x else "/dev/null", f"b/{path}" if y else "/dev/null"):
             out.append(printable(line.rstrip("\n")))
     return out
@@ -487,8 +545,9 @@ def adapter_notes(tree: Tree) -> list[str]:
 
 
 def show(project: str, snap: Snapshot, steps: list[Step]) -> list[str]:
-    """What the owner reads before answering: a summary per skill, then the executables and the adapters' notes, then
-    one diff per distinct current content of each skill."""
+    """What the owner reads before answering: a summary per skill, then the executables, the media files not shown and
+    the adapters' notes, then one diff per distinct base of each skill (against what the owner approved before, or the
+    whole new tree), then the approval code."""
     out = [_("{project}: {source}/ → {dests}", project=project, source=SOURCE,
              dests=", ".join(dict.fromkeys(printable(s.dest) for s in steps)) or "-")]
     sign = {"add": "+", "change": "~", "remove": "-", "blocked": "!"}
@@ -498,32 +557,50 @@ def show(project: str, snap: Snapshot, steps: list[Step]) -> list[str]:
         what = {"add": _("added"), "change": _("changed"), "remove": _("removed (sync installed it; it is no longer in "
                                                                       "{source}/)", source=SOURCE),
                 "blocked": _("not installed by sync: left alone (--adopt replaces it)")}[s.kind]
-        if s.kind == "change" and s.adopt:
-            what = _("replaces an entry sync didn't install (--adopt)")
+        if s.kind == "change" and s.why:
+            what = s.why
         out.append(f"  {sign[s.kind]} {printable(s.dest)}/{s.name}: {what}")
     news = {s.name: s.new for s in steps if s.kind in ("add", "change") and s.new}
     exe = [f"{n}/{rel}" for n, t in sorted(news.items()) for rel, (x, _d) in sorted(t.files.items()) if x]
     if exe:
         out.append(_("⚠️ executables (a skill can tell the agent to run them): {files}",
                      files=", ".join(printable(e) for e in exe)))
+    hidden = [f"{n}/{rel}" for n, t in sorted(news.items()) for rel, f in sorted(t.files.items()) if media(rel, f)]
+    if hidden:
+        out.append(_("⚠️ media files shown only as a size and a hash: {files}",
+                     files=", ".join(printable(h) for h in hidden)))
     for n, t in sorted(news.items()):
         for note in adapter_notes(t):
-            out.append(_("⚠️ {skill}: {note}", skill=n, note=note))
+            out.append(_("⚠️ {skill}: {note}", skill=n, note=printable(note)))
     for note in snap.notes:
         out.append(printable(note))
-    shown: set[tuple[str, str]] = set()
+    shown: set[tuple[str, str, str]] = set()
     for s in steps:
         if s.kind in ("same", "blocked"):
             continue
-        key = (s.name, tree_hash(meta(s.current)) + repr(s.current.odd) if s.current else "-")
+        key = (s.name, s.kind == "remove" and "-" or "+", _base_key(s.base))
         if key in shown:
             continue
         shown.add(key)
-        where = [x.dest for x in steps if x.name == s.name and x.kind == s.kind and
-                 (tree_hash(meta(x.current)) + repr(x.current.odd) if x.current else "-") == key[1]]
+        where = [x.dest for x in steps if x.name == s.name and (x.kind == "remove" and "-" or "+") == key[1]
+                 and x.kind not in ("same", "blocked") and _base_key(x.base) == key[2]]
         out.append(_("--- {skill} ({where})", skill=s.name, where=", ".join(printable(w) for w in where)))
-        out += diff_lines(s.name, s.current, s.new)
+        if s.current and s.current.odd and s.base is None:
+            out += [_("  (now) {what}", what=printable(o)) for o in s.current.odd]
+        out += diff_lines(s.name, s.base, s.new)
     return out
+
+
+def _base_key(base: Tree | None) -> str:
+    return tree_hash(meta(base)) + repr(base.odd) if base else "-"
+
+
+def review_code(steps: list[Step]) -> str:
+    """The code a review prints and `--yes=<code>` must give back: it names exactly this review (each step's place,
+    kind, base and new tree), so an approval can't carry over to anything else."""
+    doc = [(s.dest, s.name, s.kind, s.replaces or "", _base_key(s.base), tree_hash(meta(s.new)) if s.new else "-")
+           for s in steps if s.kind != "same"]
+    return hashlib.sha256(json.dumps(doc, separators=(",", ":")).encode()).hexdigest()[:12]
 
 
 # ---------- writing ----------
@@ -603,11 +680,17 @@ def install(ws, dest: str, name: str, tree: Tree | None) -> None:
 # ---------- the owner's command ----------
 
 def refuse_here() -> str | None:
-    """Why this process may not install skills: inside a sandbox (a project's session or job), or a linked worktree
-    of the hub (the state it writes is the live one)."""
+    """Why this process may not install skills: inside a sandbox (a project's session or job: confined_now, or simply
+    the platform's state unreadable, which is what any project sandbox does, on Linux too without sandboxed-run's
+    mark), inside a coding agent's session (an agent must not be able to approve), or a linked worktree of the hub (the
+    state it writes is the live one)."""
     import isolation
-    if isolation.confined_now():
+    import runtime_ports
+    if isolation.confined_now() or isolation.reads_blocked():
         return _("brunna skills sync runs only in your own terminal, never inside a project's sandbox")
+    if runtime_ports.current_session():
+        return _("brunna skills sync runs only in your own terminal, not in a coding agent's session: the review is "
+                 "yours to answer")
     if hubconf.worktree_lookup():
         return _("{root} is a linked worktree of the hub; run brunna skills from the main checkout ({main})",
                  root=hubconf.ROOT, main=hubconf.MAIN)
@@ -665,12 +748,18 @@ def owner_notify(*args: str) -> None:
 
 
 def close_reminder(man: dict, kind: str, text: str) -> None:
-    rem = man.pop("reminder", None)
-    if rem and rem.get("key"):
-        try:
-            owner_notify("--type", kind, "--task", rem["key"], "--text", text, "--context", "skills-sync")
-        except OSError as e:
-            print(_("⚠️ the owner to-do {key} could not be closed ({why})", key=rem["key"], why=e), file=sys.stderr)
+    """The owner to-do closed (done) or withdrawn (drop); kept in the manifest when the letter couldn't be sent, so a
+    later run sends it again."""
+    rem = man.get("reminder")
+    if not rem or not rem.get("key"):
+        man.pop("reminder", None)
+        return
+    try:
+        owner_notify("--type", kind, "--task", rem["key"], "--text", text, "--context", "skills-sync")
+    except OSError as e:
+        print(_("⚠️ the owner to-do {key} could not be closed ({why})", key=rem["key"], why=e), file=sys.stderr)
+        return
+    man.pop("reminder", None)
 
 
 def prune(man: dict, ws, snap: Snapshot) -> bool:
@@ -685,15 +774,14 @@ def prune(man: dict, ws, snap: Snapshot) -> bool:
     return dropped
 
 
-def sync(project: str, yes: bool, adopt: bool, ask=input, tty=None) -> int:
+def sync(project: str, adopt: bool = False, code: str | None = None, ask=input, tty=None) -> int:
+    """The owner's review and install. On a terminal it asks for a typed yes; code (--yes=<code>) approves exactly the
+    review that printed it, and is the only way without a terminal."""
     why = refuse_here()
     if why:
         print(why, file=sys.stderr)
         return 2
     tty = sys.stdin.isatty() if tty is None else tty
-    if not yes and not tty:
-        print(_("brunna skills sync asks you to type yes; without a terminal it needs --yes"), file=sys.stderr)
-        return 2
     try:
         ws = workspace(project)
         with locked(project):
@@ -731,18 +819,25 @@ def sync(project: str, yes: bool, adopt: bool, ask=input, tty=None) -> int:
                 return 1
             man = load(project)
             approved = set_hash(snap)
-            if not todo:
+            if not todo:   # every skill is where sync put it, exactly as the owner approved it then
                 print(_("{project}: the skills are installed as they are in {source}/", project=project, source=SOURCE))
-                dropped = prune(man, ws, snap)
-                if man.get("approved", {}).get("set") != approved or dropped:
-                    if man.get("approved", {}).get("set") != approved:
-                        man["approved"] = {"set": approved, "at": _now()}
-                        close_reminder(man, "done", _c("the skills in {source}/ were reviewed (brunna skills sync)",
-                                                       source=SOURCE))
+                if prune(man, ws, snap):
                     save(project, man)
                 drop_pending(project)
                 return 0
-            if not yes and ask(_("Type yes to install: ")).strip() != "yes":
+            mine = review_code(steps)
+            print(_("approval code: {code} (brunna skills sync {project}{adopt} --yes={code} installs exactly this "
+                    "review)", code=mine, project=project, adopt=" --adopt" if adopt else ""))
+            if code is not None:
+                if code != mine:
+                    print(_("the review is not the one that code was given for (its code is {code}); nothing was "
+                            "installed", code=mine), file=sys.stderr)
+                    return 1
+            elif not tty:
+                print(_("nothing was installed: without a terminal, run it again with --yes={code} after reading the "
+                        "review", code=mine), file=sys.stderr)
+                return 1
+            elif ask(_("Type yes to install: ")).strip() != "yes":
                 print(_("nothing was installed"))
                 return 1
             exclude(project, ws, [s.dest for s in steps])
@@ -750,6 +845,9 @@ def sync(project: str, yes: bool, adopt: bool, ask=input, tty=None) -> int:
             inst = man.setdefault("installed", {})
             for s in todo:
                 try:
+                    if s.replaces:   # the same skill under another case: the old name goes first
+                        install(ws, s.dest, s.replaces, None)
+                        inst.get(s.dest, {}).pop(s.replaces, None)
                     install(ws, s.dest, s.name, s.new)
                 except OSError as e:
                     failed.append(_("{dest}/{skill}: {why}", dest=printable(s.dest), skill=s.name,
@@ -817,27 +915,42 @@ def key_for(project: str) -> str:
 
 
 def remind() -> int:
-    """The platform job: per watched project, the pending row for the status page, and one owner to-do per change set
-    (the same key amended while it waits; done/drop'd when it no longer does)."""
+    """The platform job: per watched project, the pending row for the status page, and one owner to-do per review
+    period (re-sent under its key when the change set changes; done by a sync; withdrawn only once skills/ has been
+    back at the approved set for DROP_AFTER, so a revert and redo doesn't churn the owner's list). A project whose
+    lock is held (a review waiting at its question) keeps its last row and is looked at next time."""
     if hubconf.worktree_lookup():
         print(_("{root} is a linked worktree of the hub; run brunna skills from the main checkout ({main})",
                 root=hubconf.ROOT, main=hubconf.MAIN), file=sys.stderr)
         return 1
-    rows, bad = {}, 0
+    last, rows, bad = dict(pending_rows()), {}, 0
     for project, ws in watched():
         try:
-            with locked(project):
+            with locked(project, wait=False) as got:
+                if not got:
+                    if project in last:
+                        rows[project] = last[project]
+                    continue
                 p = pending(project, ws)
                 man = load(project)
                 rem = man.get("reminder") or {}
                 if p is None:
                     if rem:
-                        close_reminder(man, "drop", _c("{source}/ is back to what was reviewed", source=SOURCE))
-                        save(project, man)
+                        clean = rem.get("clean_since")
+                        if not clean:
+                            rem["clean_since"] = _now()
+                            save(project, man)
+                        elif datetime.datetime.now().astimezone() - datetime.datetime.fromisoformat(clean) >= DROP_AFTER:
+                            close_reminder(man, "drop", _c("{source}/ is back to what was reviewed", source=SOURCE))
+                            save(project, man)
                     continue
+                rem.pop("clean_since", None)
                 rows[project] = {"changed": p["changed"], "problems": p["problems"],
                                  "since": rem.get("since") or _now()}
                 if rem.get("set") == p["set"]:
+                    if rem:
+                        man["reminder"] = rem
+                        save(project, man)
                     continue
                 key = rem.get("key") or key_for(project)
                 text = _c("{project}: changes to its skills wait for your review ({n} {n:skill|skills}{problems}); run "
@@ -846,7 +959,7 @@ def remind() -> int:
                 owner_notify("--type", "task", "--id", key, "--text", text, "--context", "skills-sync")
                 man["reminder"] = {"key": key, "set": p["set"], "since": rows[project]["since"], "sent": _now()}
                 save(project, man)
-        except (OSError, Refused) as e:
+        except (OSError, Refused, ValueError) as e:
             bad += 1
             print(_("⚠️ {project}: its skills could not be checked ({why})", project=project, why=e), file=sys.stderr)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -901,7 +1014,7 @@ def status(project: str | None) -> int:
 
 
 def usage() -> str:
-    return _("usage: brunna skills sync <project> [--yes] [--adopt]\n"
+    return _("usage: brunna skills sync <project> [--adopt] [--yes=<code>]\n"
              "       brunna skills status [<project>]")
 
 
@@ -911,9 +1024,13 @@ def main(argv: list[str]) -> int:
     if argv[:1] == ["status"] and len(argv) <= 2:
         return status(argv[1] if len(argv) == 2 else None)
     if argv[:1] == ["sync"]:
-        rest = [a for a in argv[1:] if a not in ("--yes", "--adopt")]
-        if len(rest) == 1 and not rest[0].startswith("-"):
-            return sync(rest[0], "--yes" in argv, "--adopt" in argv)
+        if "--yes" in argv:
+            print(_("--yes takes the approval code the review prints: --yes=<code>"), file=sys.stderr)
+            return 2
+        codes = [a.split("=", 1)[1] for a in argv[1:] if a.startswith("--yes=")]
+        rest = [a for a in argv[1:] if a != "--adopt" and not a.startswith("--yes=")]
+        if len(rest) == 1 and not rest[0].startswith("-") and len(codes) <= 1:
+            return sync(rest[0], "--adopt" in argv, codes[0] if codes else None)
     print(usage(), file=sys.stderr)
     return 0 if argv in ([], ["-h"], ["--help"]) else 2
 

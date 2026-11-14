@@ -1,7 +1,7 @@
 # A project's skills, reviewed by the owner
 
-Status: built 11-15 (`bin/skills_sync.py`, `brunna skills`, the platform job `brunna/skills-pending`). Not yet run on a
-real project; see "Not verified".
+Status: built 11-15 (`bin/skills_sync.py`, `brunna skills`, the platform job `brunna/skills-pending`), and fixed the
+same day after a cold review ("After its cold review" below). Not yet run on a real project; see "Not verified".
 
 ## Why
 
@@ -19,21 +19,33 @@ protection, so there is none: what is installed is always what the owner said ye
 
 ## What is built
 
-**`brunna skills sync <project> [--yes] [--adopt]`** (owner-only; not a session command, so no permission rule allows it
-in a project session):
+**`brunna skills sync <project> [--adopt] [--yes=<code>]`** (owner-only; not a session command, so no permission rule
+allows it in a project session):
 
 - Source: `<workspace>/skills/<name>/`, each with a `SKILL.md`. A folder without one is left out (said); a file beside
   the skill folders is ignored.
 - Destinations: each installed runtime's optional `SKILL_DIRS` (its adapter), in each of its session folders: for Claude
   Code `.claude/skills` in the workspace and in each `.claude/worktrees/<name>`, for Codex `.agents/skills` in the
   workspace. A destination sync installed into before keeps being kept while its folder is there.
-- It shows, per destination, each skill added / changed / removed, then the executables and what an adapter flags (a
-  Claude skill that declares `hooks:`, which its sessions run outside the sandbox), then one unified diff per distinct
-  current content of each skill (binary files as sizes). Control characters and bidirectional overrides are escaped, so
-  a file can't hide lines from the owner. Then it asks for a typed `yes`; `--yes` skips that and is the only way without
-  a terminal.
-- Refused inside a sandbox (`isolation.confined_now`: a project's sessions and jobs can't read the platform's state) and
-  from a linked worktree of the hub (it writes the live state).
+- It shows, per destination, each skill added / changed / removed, then the executables, the media files it shows only
+  as a size and a hash, and what an adapter flags (a Claude skill whose frontmatter declares `hooks`, which its sessions
+  run outside the sandbox, or `allowed-tools`; the frontmatter read as YAML and line by line, however a key is quoted
+  or spaced), then the diffs.
+- **What a diff is against.** Only the manifest says what the owner approved. A skill sync installed and that is still
+  exactly as installed is diffed against that copy; when it also equals the new tree it is "same" and nothing is asked.
+  Anything else is shown in full, whatever is on disk now: a new skill, an entry sync didn't install (`--adopt`), and a
+  copy changed since sync installed it (said, then installed again), even when it already equals the source. Every file
+  is shown as text: one that isn't valid UTF-8 or holds a NUL is decoded with escapes and said; only media files (by
+  name, not UTF-8, not executable) are a size and a hash. Every character Python doesn't count as printable is escaped
+  (controls, bidirectional and zero-width marks, tags, separators), so a file can't hide anything from the owner.
+- Then it asks for a typed `yes` on a terminal. It also prints an approval code naming exactly that review (each step's
+  place, kind, base and new tree); `--yes=<code>` approves that review and nothing else, and is the only way without a
+  terminal. A bare `--yes` is refused.
+- Refused inside a sandbox (`isolation.confined_now`, or the platform's state unreadable, which every project sandbox
+  does, Linux's without sandboxed-run's mark too), inside a coding agent's session (`runtime_ports.current_session`: an
+  agent must not be able to approve), and from a linked worktree of the hub (it writes the live state).
+- Session folders other than the workspace count only when they are checkouts (a `.git` entry), at most 64. Skill names
+  match case-folded, and removals go first, so a case-only rename on a case-insensitive volume ends with the new name.
 - Refused while the project's git still tracks files in the destination folders (read as the project, `project_git`'s
   `tracked`): the install would leave its checkout changed. Each destination goes into the repo's `info/exclude` (as
   the project, shared by its worktrees), so an installed skill never shows as a change.
@@ -43,8 +55,8 @@ folder for a link at any moment (B-1, `git-broker.md`), and on Linux nothing kee
 
 - The source is read once into memory: every folder opened from the one above it with `O_NOFOLLOW`, every file opened
   without following a link or blocking on a FIFO, a regular file with one link only, under caps (2 MiB a file, 64 MiB
-  and 4000 files in all, 12 levels). A link, a hard link, a special file, a control name inside a skill (`.claude`,
-  `.agents`…: it would load for a session started below it), or a name that can't be printed refuses the whole sync,
+  and 4000 files in all, 20000 folder entries, 12 levels). A link, a hard link, a special file, a control name inside a skill (`.claude`,
+  `.agents`…, case-folded: it would load for a session started below it), or a name that can't be printed refuses the whole sync,
   listed. The diff, the hashes, the question and the install all use that snapshot: a change to `skills/` after the
   review waits for its own review.
 - Each skill is written into a new folder next to its place, through descriptors held from the workspace down (new files
@@ -62,8 +74,10 @@ any sync has installed into, `skills/` read the same way and hashed (its problem
 the approved set: a "notify" row on the status page and doctor, and one owner to-do through the bus (`--type task` from
 the platform, one key per review period); a later change set while it waits re-sends the same key (the owner
 side takes it as new only when its text changed: the count of skills), so there is one to-do; a sync closes it
-(`done`); `skills/` going back to what was approved withdraws it (`drop`). It never installs anything, and a pending
-review never fails the job.
+(`done`); `skills/` back at what was approved for an hour withdraws it (`drop`), and a change within that hour keeps
+the same to-do, so a revert and redo doesn't churn the owner's list. A to-do whose letter couldn't be sent stays in the
+manifest and is sent again. It never installs anything, a pending review never fails the job, and a project whose
+lock is held (a review waiting at its question) keeps its last row and is looked at the next time, never waited on.
 
 **Foreign control files.** `render-project-settings` passes `skills_sync.owned(project, ws)` to each adapter's
 `foreign_controls(ws, owned)`: an installed skill is the platform's only while its tree is exactly the manifest's (the
@@ -96,8 +110,10 @@ sandbox its services and jobs run in, with the real protect list), not a session
    edit of them.
 2. `brunna merge-branch` refuses this commit (step 1b: it changes tracked files in a control folder, deletions
    included). The session asks the owner to land it.
-3. The owner, in a terminal, with the project's sessions and services stopped (doctor's checkout-race warning): in the
-   main checkout, `git merge --ff-only <branch>`. As the owner the old tracked copies are removed from the checkout.
+3. The owner, in a terminal, with the project's sessions and services stopped (doctor's checkout-race warning, B-1 in
+   `git-broker.md`: any of its running processes can race a checkout into writing anywhere the owner can) and doctor's
+   git config fence row green for the project (its repo holds nothing that makes the owner's git run code,
+   `git-config-fence.md`): in the main checkout, `git merge --ff-only <branch>`. As the owner the old tracked copies are removed from the checkout.
    (Measured: the same fast-forward from inside the sandbox goes through but leaves the old copies in place, untracked
    and ignored, since the sandbox can't delete them.)
 4. The owner: `brunna skills sync <project>`. Old copies left in place (the migration's own worktree keeps them, untracked
@@ -117,6 +133,18 @@ review.
 
 doctor says, for a sandboxed project that tracks files in a skill folder, that skills move to `skills/` and points
 here.
+
+## After its cold review (11-15)
+
+A blind review found the core claim, "what is installed is always what the owner said yes to", broken twice, and both
+are fixed: a file with a stray non-UTF-8 byte or a NUL was shown only as "binary" (B1), and the diff and the "same"
+check used what was on disk instead of the manifest, so `--adopt` over an entry identical to the source installed it
+unseen, and an installed copy changed to match a changed source was recorded as approved without a question (B2).
+Also from it: the printable check (S1), the frontmatter read as YAML and `allowed-tools` (S2), the session refusal and
+the approval code (S3), the reminder's non-blocking lock (S4) and its hour before a drop (S5), the fence precondition of
+migration step 3 (S6), the case-only rename, the entry and folder caps, a cached `owned`, and a to-do kept until its
+close is sent. The reviewer's two mutations (folders opened following links, all of them or all but the last) each fail
+a swap test now.
 
 ## Limits
 
