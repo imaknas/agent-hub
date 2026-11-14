@@ -101,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/imaknas/brunna/main/install.sh | sh
 
 | 項目 | 可以用 |
 |---|---|
-| 你的 AI agent | Claude Code:全部功能。Codex:背景工作和判斷;它的對話透過 brunna 的工具(MCP)用信箱。任何有 headless 模式的 CLI agent,或支援 [Agent Client Protocol](https://agentclientprotocol.com/) 的 agent,透過轉接層接上 |
+| 你的 AI agent | Claude Code:全部功能。Codex:它的 session 開始時會收到信件和寫筆記提醒,也透過 brunna 的工具(MCP)用信箱;brunna 只需回答的判斷和記憶副本的整理,可以在平台自己保管、檢查過的 Codex 副本上跑(先用你的登入檢查過一次之後),其他的用別的 agent 或模型 provider。任何有 headless 模式的 CLI agent,或支援 [Agent Client Protocol](https://agentclientprotocol.com/) 的 agent,透過轉接層接上 |
 | brunna 做判斷用的模型 | 你的 agent 自己的登入、Anthropic、任何相容 OpenAI 的 API,或本機的 Ollama(`brunna llm setup`) |
 | 電腦 | macOS 或 Linux。一直開著的機器最好，筆電也可以 |
 

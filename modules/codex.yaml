@@ -1,16 +1,16 @@
-# Codex (docs/design/newcomer-path.md B4). What works today: its sessions reach the mailbox through brunna's MCP server
-# (docs/mcp.md, registered by init), and the weekly statistics read its session files. The platform's own work doesn't run
-# on Codex yet: the command template (bin/runtime_command.py) can't be held to a judgment point's limits, so it runs only
-# mailbox-propose in the platform's throwaway worktree, and never as runtime.default (config check refuses it;
-# docs/design/runtime-codex.md, step 0). So the preset leaves runtime.default at none and keeps the template, for pinning
-# mailbox-propose on it beside a default with session state; brunna's decisions need an LLM provider meanwhile (init offers
-# brunna llm setup). Its own runtime (bin/runtime_codex.py, docs/design/runtime-codex.md step 1) is the next step: session
-# hooks, its login, confined runs.
+# Codex (docs/design/newcomer-path.md B4; docs/design/runtime-codex.md). What works: its sessions are served by the
+# platform's user-level hooks (Step 2: letters at a session's start, notes reminders, the platform's rules), and reach the
+# mailbox through brunna's MCP server (docs/mcp.md, registered by init); the weekly statistics read its session files. The
+# platform's own runs (Step 1) use a copy of Codex in the platform's store, checked and promoted by brunna/update-runtimes,
+# never your own: the judgment points that only answer (completions), then those that work in a copy of a memory branch;
+# the rest stay on another runtime or an LLM provider, and doctor says which. A sandboxed project's Codex sessions get
+# nothing from the platform until Codex's own git is fenced (Step 4, git-config-fence.md). The first copy is promoted only
+# after the checks that need your login have run (with you: runtime-codex.md, Step 1 r2, the login list).
 # `agenthub init` offers it in its agent step and turns this module on when it is picked.
 v: 1
 name: codex
 type: module
-description: "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)"
+description: "Codex: your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider"
 runtime_preset:
   label: Codex
   find: codex
@@ -27,11 +27,22 @@ runtime_preset:
   mcp_unregister: [codex, mcp, remove, "{server}"]
   settings:
     runtime:
-      # not command: it can't be held to a point's limits, so it is no default (docs/design/runtime-codex.md, step 0)
-      default: none
-      command:
-        run: [codex, exec, --sandbox, workspace-write, --skip-git-repo-check, --ephemeral, --color, never,
-              -o, "{output_file}", "-"]
-        output_file: true
+      # an instance that picks Codex at init runs the platform on it; on one that already has another default, that stays
+      # the owner's choice (D3), and single points can be pinned to Codex instead (llm.points.<point>.runtime: codex)
+      default: codex
+      installed: [codex]
     modules:
       codex: true
+jobs:
+# does the login the platform's Codex runs share still work (no model call): the login file, the file store, `codex
+# login status` through a run home on the checked copy. Nothing is checked, and nothing alerts, while the platform runs no
+# work on Codex (runtime_ports.platform_work)
+- name: codex-login
+  every: 1h
+  run: bin/py bin/check-runtime-login.py --runtime codex
+secrets:
+- name: codex-login
+  path: ~/.codex/auth.json
+  backup: false
+  why: "Codex's login (codex login); the platform's Codex runs link to it, never copy it (runtime-codex.md, M9). Lost: log in again"
+  rotate: "run codex login in a terminal"

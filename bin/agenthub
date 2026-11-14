@@ -1379,6 +1379,13 @@ def doctor_user_settings_of(add, name, mod) -> None:
         add("warn", _("{runtime}: {why}", runtime=name, why=why),
             _("brunna user-settings --install --runtime {runtime} (a setting for your user: only you run it)",
               runtime=name))
+    notes = getattr(mod, "doctor_notes", None)   # the runtime's own rows (Codex: an administrator's layer, its login store)
+    try:
+        rows = notes() if callable(notes) else []
+    except Exception as e:   # never a traceback in doctor
+        rows = [("warn", _("{runtime}: its own checks broke: {error}", runtime=name, error=type(e).__name__), "")]
+    for level, what, fix in rows:
+        add(level, _("{runtime}: {why}", runtime=name, why=what), fix)
     unrecorded = getattr(mod, "unrecorded", None)
     try:
         ids = unrecorded() if callable(unrecorded) else []

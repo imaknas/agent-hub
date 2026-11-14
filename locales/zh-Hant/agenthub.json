@@ -288,5 +288,6 @@
  "{runtime}: the platform's entries in your settings can't be checked ({error})": "{runtime}:你的設定裡平台的項目檢查不了({error})",
  "{project} (sandboxed) tracks {n} {n:file|files} under control names, which nothing of its own can change any more (e.g. {example}); merge-branch refuses a merge that would change one": "{project}(沙盒化)在控制名稱底下追蹤 {n} 個檔案,它自己的任何東西都改不了它們了(例如 {example});會改到其中之一的合併,merge-branch 會拒絕",
  "change them outside the project's sandbox, or stop tracking them": "在專案的沙盒之外修改它們,或不再追蹤它們",
- "{project} (sandboxed): could not list the files it tracks under control names ({why})": "{project}(沙盒化):無法列出它在控制名稱底下追蹤的檔案({why})"
+ "{project} (sandboxed): could not list the files it tracks under control names ({why})": "{project}(沙盒化):無法列出它在控制名稱底下追蹤的檔案({why})",
+ "{runtime}: its own checks broke: {error}": "{runtime}:它自己的檢查壞了:{error}"
 }

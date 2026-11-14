@@ -9,6 +9,7 @@
  "issue a new application key in the Backblaze console and write it into .secrets/b2-env": "Backblaze 後台重發 application key,寫進 .secrets/b2-env",
  "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old": "每晚:移除標了 org.testcontainers、超過一天的 Docker 容器",
  "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token",
- "your Codex chats reach the mailbox by asking brunna's tools (no letters shown in the chat by themselves yet); brunna's own background work and decisions don't run on Codex yet (they need an LLM provider meanwhile)": "你的 Codex 對話要透過 brunna 的工具去看信箱(信還不會自己出現在對話裡);brunna 自己的背景工作和判斷還不在 Codex 上跑(這段期間要設一家 LLM provider)",
- "Claude Code login check, headless token expiry reminders": "Claude Code 的登入檢查、headless token 到期提醒"
+ "Claude Code login check, headless token expiry reminders": "Claude Code 的登入檢查、headless token 到期提醒",
+ "Codex: your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider": "Codex:你的 Codex 對話會收到平台的信件和寫筆記提醒,brunna 只需回答的判斷在它自己檢查過的 Codex 副本上跑(先用你的登入檢查過一次之後);其他的需要別的 agent 或 LLM provider",
+ "run codex login in a terminal": "在終端機跑 codex login"
 }
