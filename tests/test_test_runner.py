@@ -98,7 +98,8 @@ class Runner(unittest.TestCase):
 
     def tier_tmpdir(self, env=None, **doc):
         """The run, and the TMPDIR its tier saw (None: no tier ran)."""
-        out = self.tmp / "tmpdir-was"
+        out = self.ws / ".git" / "tmpdir-was"   # where a sandboxed tier may write (not the test's temp folder: under
+        # `brunna test` that is the private one, which no sandbox reaches), and outside the tested tree
         self.declare(v=2, inputs=["env:OUT"], tests=[{"tier": "t", "when": ["merge"], "run": 'echo "$TMPDIR" > "$OUT" && echo x > "$TMPDIR/f"'}], **doc)
         out.unlink(missing_ok=True)
         r = self.run_("--tier", "t", "--force", OUT=str(out), **(env or {}))
@@ -138,7 +139,7 @@ class Runner(unittest.TestCase):
         the owner can read it)."""
         canary = self.tmp / "state" / "canary.txt"
         canary.write_text("platform state\n")
-        out = self.tmp / "probe-out"
+        out = self.ws / ".git" / "probe-out"   # as tier_tmpdir's
         self.declare(v=2, enforce={"sandbox": True}, inputs=["env:OUT", "env:CANARY"],
                      tests=[{"tier": "t", "when": list(tier_when),
                              "run": 'if cat "$CANARY" >/dev/null 2>&1; then echo as-starter; else echo sandboxed; fi > "$OUT"'}])
