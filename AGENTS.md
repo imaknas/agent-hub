@@ -427,6 +427,9 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   adapter per OS: `seatbelt.service_profile` on macOS, `bin/landlock.py` (Landlock + seccomp) on Linux; never
   unsandboxed: no working adapter means not run; each adapter declares its guarantees, `isolation.REQUIRED` must be
   among them, and the `Conformance` tests run one probe through whichever adapter the machine has; `brunna.json` `service_sandbox_exempt` holds a project back temporarily).
+  `brunna test` runs such a project's tiers the same way whoever starts it, the owner's commit through the commit gate
+  included (`isolation.run_as_project`: by folder, in a fixed environment; refused where it can't sandbox), so
+  `service_sandbox_exempt` also means its tiers run as whoever commits.
   Every model call goes through `bin/llm.py` (judgment points declared in `contracts/llm-points.yaml`, linted
   nightly); an unattended agent job that declares `allow:` in the registry does not stop to ask
 - **User-level tool settings** (e.g. Claude Code's `~/.claude/settings.json`) **get nothing new unless the owner confirms

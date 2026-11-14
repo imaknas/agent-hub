@@ -62,11 +62,11 @@ def guarantees() -> set[str]:
             "signals-blocked", "runtime-files-locked"}
 
 
-def confined_now() -> bool:
-    """isolation.py's backend interface: whether this process already runs under some Seatbelt profile (sandbox_check
-    on itself; a runtime's session sandbox counts). A second profile can't be applied inside a runtime's sandbox, so a
-    caller already in one runs as it is; anything that can't be checked counts as not confined (the caller then wraps,
-    or refuses)."""
+def confined_now(marked: bool = False) -> bool:
+    """isolation.py's backend interface: whether this process runs under some Seatbelt profile (sandbox_check on
+    itself; a runtime's session sandbox counts, the mark isn't needed). Only half the answer: any profile passes, a
+    permissive one too, so isolation.confined_now also probes that the platform's state can't be read. Anything that
+    can't be checked counts as not confined (the caller then wraps, or refuses)."""
     import ctypes
     import os
     try:

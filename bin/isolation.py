@@ -12,8 +12,8 @@ The backend interface (what a module needs to be an adapter here):
   guarantees() → set[str]                     which of GUARANTEES it enforces on this machine
   exec_service(pol, dirs, port, argv)         replace this process with argv under the policy (raises OSError when it
                                               can't; nothing was run)
-  confined_now() → bool                       optional: whether this process already runs inside an OS sandbox (a
-                                              session's, or sandboxed-run's); missing or unsure = no
+  confined_now(marked) → bool                 optional: whether this process runs inside this adapter's kind of
+                                              sandbox (marked: started through sandboxed-run); missing or unsure = no
 An adapter that doesn't guarantee every one of REQUIRED, or names a guarantee not in GUARANTEES, is refused like one
 that can't work here. tests/test_sandboxed_services.py runs the same probe through every adapter on its own OS and
 checks each guarantee it declares (Conformance): a new backend is added by passing that, not by review alone.
@@ -23,10 +23,11 @@ checks each guarantee it declares (Conformance): a new backend is added by passi
   as_project(project, cwd, argv) → argv       argv as the project: wrapped when it is sandboxed, as is otherwise (the
                                               platform's git in project repos goes only through this: project_git.py,
                                               with a timeout and an output cap)
-  confined_now() → bool                       whether this process already runs inside an OS sandbox (the adapter's check)
+  confined_now(marked) → bool                 whether this process runs in a sandbox that holds: the adapter's check
+                                              and the platform's state and secrets unreadable (reads_blocked)
   run_as_project(project, doc, argv, guard)   for a platform command that runs a sandboxed project's own commands
-                                              (brunna test): None when it may go on here (already confined, or the
-                                              project isn't sandboxed), else the argv to exec instead, or SandboxRefused
+                                              (brunna test): None when it may go on here (confined, or the project
+                                              isn't sandboxed), else (argv, env) to run instead, or SandboxRefused
   adapter() → (name, module) | None           this machine's adapter
   can_sandbox() → None | why not              the adapter's own reason, or a missing/unknown guarantee
   guarantees() → list[str]                    what this machine's adapter guarantees (empty when it can't sandbox)
@@ -121,31 +122,68 @@ def as_project(project: str | None, cwd, argv: list[str]) -> list[str]:
     return wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv
 
 
-def confined_now() -> bool:
+def reads_blocked() -> bool:
+    """The REQUIRED isolated-reads guarantee, probed from inside: the platform's state and its secrets folder can't be
+    opened. True only when at least one of them exists and neither opens (one missing tells nothing)."""
+    blocked = False
+    for p in (hubconf.STATE, hubconf.secrets_dir()):
+        try:
+            fd = os.open(p, os.O_RDONLY | os.O_DIRECTORY)
+        except PermissionError:
+            blocked = True
+            continue
+        except OSError:
+            continue
+        os.close(fd)
+        return False
+    return blocked
+
+
+def confined_now(marked: bool = False) -> bool:
+    """Whether this process already runs inside a sandbox that holds a project's isolation, not merely inside some
+    sandbox (a permissive profile, a desktop app's, a container): the adapter sees its own kind of sandbox, and the
+    platform's state and secrets can't be read from here (reads_blocked). marked: this process was started through
+    sandboxed-run (its mark is set); an adapter whose own check can't tell its sandbox from others' (Landlock) says yes
+    only then."""
     a = adapter()
     fn = getattr(a[1], "confined_now", None) if a else None
-    return bool(fn and fn())
+    return bool(fn and fn(marked)) and reads_blocked()
+
+
+# what a wrapped run keeps of its starter's environment (git's own for a hook, the platform's settings); nothing else of
+# the starter's, so a token in the owner's shell never reaches a project's tier (r2 B3, review F2)
+KEEP_ENV = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "HOME", "TERM", "GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE",
+            "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")
+
+
+def kept_env(environ=None) -> dict[str, str]:
+    import names
+    environ = os.environ if environ is None else environ
+    prefixes = tuple({names.env_names(x)[i][:-len(x)] for x in ("STATE", "TEST_CALLER") for i in (0, 1)})
+    return {k: v for k, v in environ.items() if k in KEEP_ENV or k.startswith(prefixes)}
 
 
 class SandboxRefused(Exception):
     """A sandboxed project's commands can't be run in its sandbox here; they are not run at all."""
 
 
-def run_as_project(project: str, doc: dict, argv: list[str], guard: str) -> list[str] | None:
+def run_as_project(project: str, doc: dict, argv: list[str], guard: str) -> tuple[list[str], dict] | None:
     """A platform command whoever starts it (the owner's commit hook, the owner's terminal, a session) that runs a
     sandboxed project's own commands (its test tiers, its `cmd:` inputs, its lockfile installs) never runs them with the
     starter's authority (docs/design/git-config-fence.md, r2 B3). None: go on in this process (the project isn't
-    sandboxed, or this process is already inside an OS sandbox). Otherwise the argv to exec: the same command through
-    sandboxed-run, with guard set in its environment so the inner run knows it was wrapped. Raises SandboxRefused when
-    this machine can't sandbox, or when a wrapped run still can't see its sandbox (never a loop, never unsandboxed)."""
-    if not sandboxed({**doc, "name": project}) or confined_now():
+    sandboxed, or this process already runs in a sandbox that holds: confined_now). Otherwise (argv, env) to run
+    instead: the same command through sandboxed-run, in a fixed environment (kept_env) carrying guard, the mark the
+    inner run is known by. Raises SandboxRefused when this machine can't sandbox, or when a marked run still can't see
+    its sandbox (never a loop, never unsandboxed). A run inside some other sandbox is wrapped too; on macOS that fails
+    in sandboxed-run (a profile can't be applied inside another), which the caller reports as a refusal."""
+    marked = bool(os.environ.get(guard))
+    if not sandboxed({**doc, "name": project}) or confined_now(marked):
         return None
-    if os.environ.get(guard):
-        raise SandboxRefused("it was started through sandboxed-run but this process can't confirm its sandbox")
+    if marked:
+        raise SandboxRefused("it was started through sandboxed-run but its sandbox can't be confirmed from inside")
     if (why := can_sandbox()):
         raise SandboxRefused(why)
-    os.environ[guard] = "1"
-    return wrap(project, os.getcwd(), argv)
+    return wrap(project, os.getcwd(), argv), {**kept_env(), guard: "1"}
 
 
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):

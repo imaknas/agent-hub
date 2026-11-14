@@ -408,7 +408,8 @@ class Profile(Fixture):
 
 class RunAsProject(unittest.TestCase):
     """isolation.run_as_project (docs/design/git-config-fence.md, r2 B3): a platform command that runs a sandboxed
-    project's own commands goes on only inside a sandbox; outside one it is wrapped, or refused, never run as is."""
+    project's own commands goes on only inside a sandbox that holds; outside one it is wrapped in a fixed environment,
+    or refused, never run as is."""
     DOC = {"enforce": {"sandbox": True}}
     GUARD = "TEST_RUN_AS_PROJECT_GUARD"
 
@@ -418,33 +419,50 @@ class RunAsProject(unittest.TestCase):
         self.addCleanup(p.stop)
         os.environ.pop(self.GUARD, None)
 
-    def test_not_sandboxed_or_already_confined_goes_on(self):
+    def test_not_sandboxed_or_confined_goes_on(self):
         self.assertIsNone(isolation.run_as_project("p", {}, ["x"], self.GUARD))
-        with mock.patch.object(isolation, "confined_now", lambda: True):
+        with mock.patch.object(isolation, "confined_now", lambda marked=False: True):
             self.assertIsNone(isolation.run_as_project("p", self.DOC, ["x"], self.GUARD))
 
-    def test_outside_a_sandbox_it_is_wrapped_with_the_mark(self):
-        with mock.patch.object(isolation, "confined_now", lambda: False), \
+    def test_outside_a_sandbox_it_is_wrapped_in_a_fixed_environment(self):
+        os.environ.update(OWNER_TOKEN="s3cret", GIT_INDEX_FILE="/x/index", AGENT_HUB_STATE="/s", PATH="/usr/bin")
+        with mock.patch.object(isolation, "confined_now", lambda marked=False: False), \
                 mock.patch.object(isolation, "can_sandbox", lambda: None):
-            argv = isolation.run_as_project("p", self.DOC, ["x", "y"], self.GUARD)
+            argv, env = isolation.run_as_project("p", self.DOC, ["x", "y"], self.GUARD)
         self.assertIn("--project", argv)
         self.assertEqual(argv[-3:], ["--", "x", "y"])
-        self.assertEqual(os.environ.get(self.GUARD), "1")
+        self.assertEqual(env[self.GUARD], "1")
+        self.assertNotIn("OWNER_TOKEN", env, "nothing of the starter's beyond the kept names")
+        self.assertEqual((env["GIT_INDEX_FILE"], env["AGENT_HUB_STATE"], env["PATH"]), ("/x/index", "/s", "/usr/bin"))
+        self.assertNotIn(self.GUARD, os.environ, "this process's own environment is left as it was")
 
     def test_no_sandbox_here_or_a_mark_outside_one_refuses(self):
-        with mock.patch.object(isolation, "confined_now", lambda: False), \
+        with mock.patch.object(isolation, "confined_now", lambda marked=False: False), \
                 mock.patch.object(isolation, "can_sandbox", lambda: "no adapter"):
             with self.assertRaises(isolation.SandboxRefused):
                 isolation.run_as_project("p", self.DOC, ["x"], self.GUARD)
         os.environ[self.GUARD] = "1"
-        with mock.patch.object(isolation, "confined_now", lambda: False), \
+        with mock.patch.object(isolation, "confined_now", lambda marked=False: False), \
                 mock.patch.object(isolation, "can_sandbox", lambda: None):
             with self.assertRaises(isolation.SandboxRefused):
                 isolation.run_as_project("p", self.DOC, ["x"], self.GUARD)
 
-    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
+    def test_some_sandbox_is_not_enough(self):
+        """Review F4: the adapter's own check passes inside any profile; confined needs the platform's state unreadable
+        too, and Landlock's check needs the mark."""
+        fake = type("A", (), {"confined_now": staticmethod(lambda marked=False: True)})
+        with mock.patch.object(isolation, "adapter", lambda: ("seatbelt", fake)):
+            with mock.patch.object(isolation, "reads_blocked", lambda: False):
+                self.assertFalse(isolation.confined_now())
+            with mock.patch.object(isolation, "reads_blocked", lambda: True):
+                self.assertTrue(isolation.confined_now())
+        self.assertFalse(landlock.confined_now(False), "without the mark, never")
+
+    def test_reads_blocked_is_a_probe(self):
+        self.assertFalse(isolation.reads_blocked(), "this test process can read the platform's state")
+
+    @unittest.skipUnless(seatbelt.can_sandbox() is None and not seatbelt.confined_now(), "needs Seatbelt, outside a profile")
     def test_seatbelt_sees_its_own_profile(self):
-        self.assertFalse(seatbelt.confined_now(), "this test process runs outside any profile")
         r = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", "(version 1)(allow default)", sys.executable, "-c",
                             "import sys; sys.path.insert(0, sys.argv[1]); import seatbelt; print(seatbelt.confined_now())",
                             str(pathlib.Path(seatbelt.__file__).parent)], capture_output=True, text=True)

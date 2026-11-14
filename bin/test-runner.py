@@ -130,6 +130,70 @@ def project_of(main: pathlib.Path) -> tuple[str, dict]:
     raise SetupError(_("this repo ({path}) is not a registered project's", path=main))
 
 
+def roots(doc: dict) -> list[pathlib.Path]:
+    """A project's own folders, resolved: its workspace, its runtime folder and what the owner let it write."""
+    import registry
+    d = registry.dirs(doc)
+    extra = [hubconf.path(w) for w in doc.get("allow_write") or []]
+    return [pathlib.Path(os.path.realpath(p)) for p in (d.get("workspace"), d.get("runtime"), *extra) if p]
+
+
+def claimant(path: pathlib.Path) -> tuple[str, dict] | None:
+    """The sandboxed project whose folders hold this path (the deepest root when they nest), by path alone: never what
+    git in it says, since a sandboxed project writes its repo's pointers (commondir, a worktree's .git file)."""
+    real = pathlib.Path(os.path.realpath(path))
+    best = None
+    for name, doc in hubconf.projects().items():
+        if (doc.get("enforce") or {}).get("sandbox") is not True:
+            continue
+        for r in roots({**doc, "name": name}):
+            if (real == r or r in real.parents) and (best is None or len(r.parts) > len(best[2].parts)):
+                best = (name, doc, r)
+    return (best[0], best[1]) if best else None
+
+
+def same_project(claimed, found: tuple[str, dict], top: pathlib.Path, common: pathlib.Path) -> tuple[str, dict]:
+    """The project the run is, once git has named the repo: a sandboxed project's run happens only inside its own
+    folders, and its repo is its own (git's common dir inside them), or nothing runs."""
+    name, doc = found
+    for p in (top, common):
+        if (c := claimant(p)) and c[0] != (claimed or found)[0]:
+            raise SetupError(_("this checkout's repo ({path}) is {other}'s, not {project}'s; nothing was run",
+                               path=common, other=c[0], project=(claimed or found)[0]))
+    if claimed:
+        own = roots({**claimed[1], "name": claimed[0]})
+        real = pathlib.Path(os.path.realpath(common))
+        if name != claimed[0] or not any(real == r or r in real.parents for r in own):
+            raise SetupError(_("this checkout is in {project}'s folders, but its repo ({path}) is not {project}'s; "
+                               "nothing was run", project=claimed[0], path=common))
+        return claimed
+    if (doc.get("enforce") or {}).get("sandbox") is True:
+        raise SetupError(_("{project} is sandboxed, and this checkout ({path}) is outside its folders, where its "
+                           "sandbox can't reach (a tool's own worktree folder, say): test or commit from a worktree "
+                           "inside the project; nothing was run", project=name, path=top))
+    return name, doc
+
+
+def refused(name, why) -> str:
+    return _("{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't "
+             "be done here ({why}); nothing was run", cli=names.current("cli"), project=name, why=why)
+
+
+def run_wrapped(name: str, argv: list[str], env: dict) -> int:
+    """The same run through sandboxed-run, in the fixed environment run_as_project gave: its output as it comes, its
+    exit code. The runner itself exits 0, 1 or 2; anything else is the sandbox not starting (sandboxed-run's refusal,
+    78; sandbox-exec unable to apply a profile inside another sandbox, 71, measured), reported as the runner's own
+    refusal with exit 2, not as a service's."""
+    sys.stdout.flush()
+    r = subprocess.run(argv, env=env, stderr=subprocess.PIPE, text=True, errors="replace")
+    if r.returncode not in (0, 1, 2):
+        why = r.stderr.strip().splitlines()[-1:] or [f"exit {r.returncode}"]
+        print(refused(name, why[0].removeprefix("sandboxed-run: ").split("; not run")[0]), file=sys.stderr)
+        return 2
+    sys.stderr.write(r.stderr)
+    return r.returncode
+
+
 is_control = policy.is_control   # a tracked path at or under one of the control names, at any depth
 
 
@@ -236,12 +300,18 @@ def base_env(main: pathlib.Path, run: pathlib.Path, hub: bool, doc: dict) -> tup
     return env, {"PATH": path, "runner": str(RUNNER_VERSION)}
 
 
-def inputs(doc: dict, tree: pathlib.Path, env: dict) -> tuple[list[list[str]], dict]:
-    """Each input's value as a digest, and the variables it adds to the tier's environment."""
+def inputs(doc: dict, tree: pathlib.Path, env: dict, sandboxed: bool = False) -> tuple[list[list[str]], dict]:
+    """Each input's value as a digest, and the variables it adds to the tier's environment. A sandboxed project's
+    `env:` inputs pass nothing: the names are the project's to choose, so they would hand its tiers whatever the
+    starter's environment holds (review F2), and no owner-only field names the ones it may have."""
     listed = {f.name: (var, f) for var, f in hubconf.test_config_inputs()}
-    values, extra = [], {}
+    values, extra, dropped = [], {}, []
     for item in doc.get("inputs") or []:
         kind, _sep, value = item.partition(":")
+        if kind == "env" and sandboxed:
+            dropped.append(value)
+            values.append([item, "not passed"])
+            continue
         if kind == "file":
             f = tree / value
             digest = hashlib.sha256(f.read_bytes()).hexdigest() if f.is_file() and not f.is_symlink() else "absent"
@@ -264,6 +334,9 @@ def inputs(doc: dict, tree: pathlib.Path, env: dict) -> tuple[list[list[str]], d
                                stdin=subprocess.DEVNULL, timeout=120)
             digest = hashlib.sha256(f"{r.returncode}\n{r.stdout}".encode()).hexdigest()
         values.append([item, digest])
+    if dropped:
+        print(_("{names}: env inputs aren't passed to a sandboxed project's tiers (the starter's environment stays out of "
+                "its sandbox)", names=", ".join(dropped)))
     return values, extra
 
 
@@ -399,22 +472,26 @@ def main(argv: list[str]) -> int:
     src.add_argument("--index", action="store_true")
     a = ap.parse_args(argv)
     started = time.monotonic()
+    name = None
     try:
-        top, git_dir, common = repo_dirs(pathlib.Path.cwd())
-        main_dir = common.parent if common.name == ".git" else top
-        name, doc = project_of(main_dir)
         # a sandboxed project's tiers, inputs and installs are its own code: they run in its sandbox whoever starts
         # this (the owner's commit through the commit gate's hook, the owner's terminal), never as the starter; the
-        # export too, since git runs the repo's filters (docs/design/git-config-fence.md, r2 B3)
-        inner = isolation.run_as_project(name, doc, [*hubconf.launch(BIN / "test-runner.py"), *argv],
-                                         names.env_names("TEST_WRAPPED")[1])
-        if inner:
-            sys.stdout.flush()
-            os.execv(inner[0], inner)
+        # export too, since git runs the repo's filters (docs/design/git-config-fence.md, r2 B3). Which project it is
+        # is decided by the folder, before any git: the repo's own pointers are the project's to write (review F1)
+        cwd = pathlib.Path.cwd()
+        claimed = claimant(cwd)
+        if claimed:
+            name = claimed[0]
+            inner = isolation.run_as_project(*claimed, [*hubconf.launch(BIN / "test-runner.py"), *argv],
+                                             names.env_names("TEST_WRAPPED")[1])
+            if inner:
+                return run_wrapped(name, *inner)
+        top, git_dir, common = repo_dirs(cwd)
+        main_dir = common.parent if common.name == ".git" else top
+        name, doc = same_project(claimed, project_of(main_dir), top, common)
         run = pathlib.Path(tempfile.mkdtemp(prefix="run.", dir=runs_dir(main_dir, common)))
     except isolation.SandboxRefused as e:
-        print(_("{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't "
-                "be done here ({why}); nothing was run", cli=names.current("cli"), project=name, why=e), file=sys.stderr)
+        print(refused(name, e), file=sys.stderr)
         return 2
     except SetupError as e:
         print(f"{names.current('cli')} test: {e}", file=sys.stderr)
@@ -446,7 +523,7 @@ def main(argv: list[str]) -> int:
                     project=name, when=a.when))
             return 0
         env, identity = base_env(main_dir, run, name == hubconf.hub_project(), {**doc, "name": name})
-        values, extra = inputs(decl, tree, env)
+        values, extra = inputs(decl, tree, env, isolation.sandboxed({**doc, "name": name}))
         store = tiers.Store(common)
         runlog = tiers.RunLog(common)
         measured = {"run": f"{stamp}-{os.getpid()}", "moment": a.when, "caller": caller(a),

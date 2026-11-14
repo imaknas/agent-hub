@@ -109,11 +109,14 @@ def can_sandbox() -> str | None:
     return None
 
 
-def confined_now() -> bool:
-    """isolation.py's backend interface: whether this process already runs under this adapter's rules, as far as the
-    kernel shows it: no_new_privs and a seccomp filter, both of which sandboxed-run sets before it execs (Landlock
-    itself can't be queried). A process the owner starts has neither; a container may have the filter, rarely both.
-    Landlock stacks, so a wrong "no" only nests a second sandbox."""
+def confined_now(marked: bool = False) -> bool:
+    """isolation.py's backend interface: whether this process runs under this adapter's rules, as far as the kernel
+    shows it: no_new_privs and a seccomp filter, both of which sandboxed-run sets before it execs (Landlock itself
+    can't be queried). Flatpak, bubblewrap and hardened systemd units show the same, so it counts only when the process
+    was also started through sandboxed-run (marked); isolation.confined_now then probes the reads too. Landlock stacks,
+    so a "no" only nests a second sandbox."""
+    if not marked:
+        return False
     try:
         status = pathlib.Path("/proc/self/status").read_text()
     except OSError:

@@ -14,5 +14,9 @@
  "✗ {tier} failed in {secs}s; complete output: {path}": "✗ {tier} 沒過,{secs} 秒;完整輸出:{path}",
  "no private temp folder for the tests ({error}); they don't run in the system's, which every sandboxed project can write. A hub in the old layout moves with {command}": "測試沒有私有暫存資料夾({error});不會改在系統的暫存資料夾跑,那裡每個沙盒專案都寫得到。舊配置的 hub 用 {command} 搬過去",
  "{n} {n:file|files} the sandbox may not create left out of the tested copy ({names})": "沙盒不准建立的 {n} 個檔案沒有放進測試副本({names})",
- "{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't be done here ({why}); nothing was run": "{cli} test:{project} 是沙盒專案,它的測試指令只在它的沙盒裡跑,而這裡做不到({why});什麼都沒跑"
+ "{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't be done here ({why}); nothing was run": "{cli} test:{project} 是沙盒專案,它的測試指令只在它的沙盒裡跑,而這裡做不到({why});什麼都沒跑",
+ "this checkout's repo ({path}) is {other}'s, not {project}'s; nothing was run": "這個 checkout 的 repo({path})是 {other} 的,不是 {project} 的;什麼都沒跑",
+ "this checkout is in {project}'s folders, but its repo ({path}) is not {project}'s; nothing was run": "這個 checkout 在 {project} 的資料夾裡,但它的 repo({path})不是 {project} 的;什麼都沒跑",
+ "{project} is sandboxed, and this checkout ({path}) is outside its folders, where its sandbox can't reach (a tool's own worktree folder, say): test or commit from a worktree inside the project; nothing was run": "{project} 是沙盒專案,而這個 checkout({path})在它的資料夾外,它的沙盒碰不到(例如工具自己的 worktree 資料夾):請在專案裡的 worktree 測試或 commit;什麼都沒跑",
+ "{names}: env inputs aren't passed to a sandboxed project's tiers (the starter's environment stays out of its sandbox)": "{names}:沙盒專案的測試層不會收到 env 輸入(啟動者的環境不進它的沙盒)"
 }

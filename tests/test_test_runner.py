@@ -20,6 +20,11 @@ RUNNER = ROOT / "bin" / "test-runner.py"
 sys.path.insert(0, str(ROOT / "bin"))
 import names  # noqa: E402
 PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sys.executable
+import isolation  # noqa: E402
+_ADAPTER = isolation.adapter()
+# this test process inside some sandbox already (a session's): the wrap tests can't show anything here
+ALREADY_CONFINED = bool(_ADAPTER and getattr(_ADAPTER[1], "confined_now", lambda m=False: False)(True))
+SANDBOX_HERE = isolation.can_sandbox() is None and not ALREADY_CONFINED
 
 
 class Runner(unittest.TestCase):
@@ -100,9 +105,10 @@ class Runner(unittest.TestCase):
         """The run, and the TMPDIR its tier saw (None: no tier ran)."""
         out = self.ws / ".git" / "tmpdir-was"   # where a sandboxed tier may write (not the test's temp folder: under
         # `brunna test` that is the private one, which no sandbox reaches), and outside the tested tree
-        self.declare(v=2, inputs=["env:OUT"], tests=[{"tier": "t", "when": ["merge"], "run": 'echo "$TMPDIR" > "$OUT" && echo x > "$TMPDIR/f"'}], **doc)
+        # the path is in the command, not an env: input (a sandboxed project's aren't passed)
+        self.declare(v=2, tests=[{"tier": "t", "when": ["merge"], "run": f'echo "$TMPDIR" > "{out}" && echo x > "$TMPDIR/f"'}], **doc)
         out.unlink(missing_ok=True)
-        r = self.run_("--tier", "t", "--force", OUT=str(out), **(env or {}))
+        r = self.run_("--tier", "t", "--force", **(env or {}))
         return r, pathlib.Path(out.read_text().strip()) if out.exists() else None
 
     def test_a_tiers_temp_folder_is_private_and_goes_with_the_run(self):
@@ -134,22 +140,23 @@ class Runner(unittest.TestCase):
         self.assertFalse(tmp.exists(), "removed with the run")
         self.assertFalse((self.tmp / "secrets").exists(), "the private folder isn't asked for")
 
-    def sandbox_probe(self, tier_when=("merge",)):
+    PROBE = 'if cat "{canary}" >/dev/null 2>&1; then echo as-starter; else echo sandboxed; fi > "{out}"'
+
+    def sandbox_probe(self, tier_when=("merge",), **doc):
         """A sandboxed project whose tier reports whether it could read the platform's state (every sandbox denies it;
-        the owner can read it)."""
+        the owner can read it). Paths in the command: a sandboxed project's env: inputs aren't passed."""
         canary = self.tmp / "state" / "canary.txt"
         canary.write_text("platform state\n")
         out = self.ws / ".git" / "probe-out"   # as tier_tmpdir's
-        self.declare(v=2, enforce={"sandbox": True}, inputs=["env:OUT", "env:CANARY"],
-                     tests=[{"tier": "t", "when": list(tier_when),
-                             "run": 'if cat "$CANARY" >/dev/null 2>&1; then echo as-starter; else echo sandboxed; fi > "$OUT"'}])
-        return out, {"OUT": str(out), "CANARY": str(canary)}
+        self.declare(v=2, enforce={"sandbox": True},
+                     tests=[{"tier": "t", "when": list(tier_when), "run": self.PROBE.format(canary=canary, out=out)}], **doc)
+        return out
 
-    @unittest.skipUnless(__import__("isolation").can_sandbox() is None, "needs this machine's sandbox adapter")
+    @unittest.skipUnless(SANDBOX_HERE, "needs this machine's sandbox adapter, outside any sandbox")
     def test_a_sandboxed_projects_tiers_run_in_its_sandbox_whoever_starts_them(self):
         """r2 B3 (docs/design/git-config-fence.md): the project's own commands never run with the starter's authority."""
-        out, env = self.sandbox_probe()
-        r = self.run_("--tier", "t", "--force", **env)
+        out = self.sandbox_probe()
+        r = self.run_("--tier", "t", "--force")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(out.read_text().strip(), "sandboxed")
         # the positive control: the same tier of a project that isn't sandboxed runs as the starter and reads it
@@ -157,30 +164,89 @@ class Runner(unittest.TestCase):
         doc = json.loads(idx.read_text())
         doc["projects"]["demo"].pop("enforce")
         idx.write_text(json.dumps(doc))
-        r = self.run_("--tier", "t", "--force", **env)
+        r = self.run_("--tier", "t", "--force")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(out.read_text().strip(), "as-starter")
 
-    @unittest.skipUnless(__import__("isolation").can_sandbox() is None, "needs this machine's sandbox adapter")
+    @unittest.skipUnless(SANDBOX_HERE, "needs this machine's sandbox adapter, outside any sandbox")
     def test_the_owners_commit_runs_a_sandboxed_projects_tiers_in_its_sandbox(self):
         """The commit gate's hook, as the owner's own `git commit` starts it from a terminal or an editor."""
-        out, env = self.sandbox_probe(("commit",))
+        out = self.sandbox_probe(("commit",))
         hook = self.ws / ".git" / "hooks" / "pre-commit"
         hook.write_text(f"#!/bin/sh\nexec '{PY}' '{RUNNER}' --index --when commit\n")
         hook.chmod(0o755)
         (self.ws / "more.txt").write_text("x")
         self.git(self.ws, "add", "more.txt")
-        r = subprocess.run(["git", "-C", str(self.ws), "commit", "-q", "-m", "b"], env={**self.env, **env},
+        r = subprocess.run(["git", "-C", str(self.ws), "commit", "-q", "-m", "b"], env=self.env,
                            capture_output=True, text=True, timeout=120)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(out.read_text().strip(), "sandboxed")
 
+    @unittest.skipUnless(SANDBOX_HERE, "needs this machine's sandbox adapter, outside any sandbox")
+    def test_the_starters_environment_stays_out(self):
+        """Review F2: neither an env: input nor the environment sandboxed-run is started with hands the tier a token
+        from the owner's shell."""
+        out = self.ws / ".git" / "leak"
+        self.declare(v=2, enforce={"sandbox": True}, inputs=["env:OWNER_TOKEN"],
+                     tests=[{"tier": "t", "when": ["merge"], "run": f'echo "tok=$OWNER_TOKEN" > "{out}"'}])
+        r = self.run_("--tier", "t", "--force", OWNER_TOKEN="s3cret-from-owner-shell")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(out.read_text().strip(), "tok=")
+        self.assertIn("OWNER_TOKEN: env inputs aren't passed", r.stdout)
+
+    def test_the_repos_own_pointers_dont_decide_which_project_it_is(self):
+        """Review F1: a sandboxed project points its .git/commondir at another project's git dir; the run is still
+        its own (by folder), and it refuses rather than run the other project's tiers or as the starter."""
+        ws2 = self.tmp / "ws2"
+        self.git(self.tmp, "init", "-q", "-b", "main", str(ws2))
+        (ws2 / "x").write_text("x")
+        self.git(ws2, "add", "-A")
+        self.git(ws2, "commit", "-q", "-m", "b")
+        canary = self.tmp / "state" / "canary.txt"
+        canary.write_text("platform state\n")
+        out = self.ws / "probe-out"
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": {
+            "demo": {"v": 2, "name": "demo", "paths": {"workspace": str(self.ws)}, "enforce": {"sandbox": True},
+                     "tests": [{"tier": "t", "when": ["merge"], "run": "true"}]},
+            "other": {"v": 2, "name": "other", "paths": {"workspace": str(ws2)},
+                      "tests": [{"tier": "t", "when": ["merge"], "run": self.PROBE.format(canary=canary, out=out)}]}}}))
+        (self.ws / ".git" / "commondir").write_text(str(ws2 / ".git") + "\n")
+        r = self.run_("--tier", "t", "--force")
+        # refused either way: inside the sandbox git can't reach the other repo, or it can and the repo isn't its own
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertFalse(out.exists(), "the other project's tier didn't run")
+
+    def test_a_checkout_outside_the_projects_folders_is_refused(self):
+        """A worktree a tool keeps in its own folder (Codex's app does) is out of the project's sandbox's reach: said
+        plainly, nothing run, rather than a failure inside the sandbox."""
+        out = self.sandbox_probe()
+        wt = self.tmp / "toolhome" / "worktrees" / "w1"
+        self.git(self.ws, "worktree", "add", "-q", "--detach", str(wt))
+        r = self.run_("--tier", "t", "--force", cwd=wt)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("outside its folders", r.stderr)
+        self.assertFalse(out.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin" and SANDBOX_HERE, "a permissive Seatbelt profile: macOS")
+    def test_some_other_sandbox_is_not_the_projects(self):
+        """Review F4: under a permissive profile the platform's state is readable, so the run is wrapped; inside a
+        profile sandboxed-run can't apply its own here or can, but the tier never runs as the starter."""
+        out = self.sandbox_probe()
+        r = subprocess.run(["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)", PY, str(RUNNER), "--tier", "t",
+                            "--force"], cwd=self.ws, env=self.env, capture_output=True, text=True, timeout=120)
+        if r.returncode == 0:
+            self.assertEqual(out.read_text().strip(), "sandboxed")
+        else:   # measured: sandbox-exec can't apply a profile inside this one
+            self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+            self.assertIn("nothing was run", r.stderr)
+            self.assertNotIn("service or job", r.stderr)
+            self.assertFalse(out.exists())
+
+    @unittest.skipIf(ALREADY_CONFINED, "this process already runs in a sandbox")
     def test_a_forged_wrapped_mark_is_refused_not_trusted(self):
         """The inner run's mark only stops a loop: outside a sandbox it refuses, it never skips the wrap."""
-        out, env = self.sandbox_probe()
-        r = self.run_("--tier", "t", "--force", **env, **{names.env_names("TEST_WRAPPED")[1]: "1"})
-        if __import__("isolation").confined_now():
-            self.skipTest("this process already runs in a sandbox")
+        out = self.sandbox_probe()
+        r = self.run_("--tier", "t", "--force", **{names.env_names("TEST_WRAPPED")[1]: "1"})
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("nothing was run", r.stderr)
         self.assertFalse(out.exists())
