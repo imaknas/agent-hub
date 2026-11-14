@@ -74,6 +74,9 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
      in the session's folder, and a filter in the repo's config ran from it. r2's steps 1–2 are built (11-14): `.codex`
      and `.agents` are protected in every sandbox, and a per-version probe (`conformance_codex.py`) runs, whose B1 check
      fails on 0.167. The path to "confined" is D9.
+   - **D9, the git config fence** (`git-config-fence.md`, planned 11-14 on measurements): nothing in a sandboxed
+     project's sandbox writes git configuration; the platform writes what is needed, and "the fence holds" becomes
+     Codex's confined condition.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
