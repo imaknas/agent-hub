@@ -1,6 +1,7 @@
 # The git config fence: nothing in a sandboxed project writes what makes git run code
 
-Status: plan, 11-14; r2 after a blind review (below, it holds where the text above disagrees). Built: r2 B3
+Status: plan, 11-14; r2 after a blind review, and r3 on what the scan can claim (both below; they hold where the text
+above disagrees). Built: r2 B3
 (the commit gate's tiers in the project's sandbox), cap-runner's FIFO fix (S5) and step 1, the scan (report only;
 "Step 1 as built" at the end); the rest not built. Measured the same day in scratch repos (git 2.50.1, macOS on a case-insensitive APFS
 volume), with the platform's real Seatbelt profile (`seatbelt.service_profile`) standing in for a sandboxed writer and a
@@ -176,7 +177,8 @@ The fence is by path, so it binds only what is still at the fenced names. Measur
 - a main checkout whose `.git` is a gitfile pointing at a git dir not named `.git` (`git config` succeeded);
 - `core.hooksPath` pointing at a tracked folder (a husky-style setup): a hook written there.
 
-So putting the fence on starts with the scan (below), and a project counts as fenced only once the scan has passed.
+So putting the fence on starts with the one-time install (every fenced file rewritten as a fresh inode, links
+replaced: below); the scan reports what it finds but proves nothing (r3).
 
 ### The policy port and each adapter
 
@@ -238,7 +240,7 @@ checks apply), and the runner does it outside the sandbox. Ops:
 - `submodule init|update [<path>]` (the project's `.gitmodules`), if the owner wants submodules at all (question below).
 
 **When the runner may write at all:** only for a project whose every writer is fenced (its services, jobs and the
-sessions of each runtime it has, each canary passed) and whose scan passed. Before that, and always on Linux, nothing
+sessions of each runtime it has, each canary passed) and whose one-time install is done. Before that, and always on Linux, nothing
 keeps `.git` still between the runner's check and its write, and a write as the owner would go wherever a planted link
 leads: measured, `git config` wrote through a `.git/config` that was a symlink to a tracked file, and
 `projects-and-repos.md` already records the hook installer writing through a planted `.git/hooks`. So until then
@@ -329,8 +331,8 @@ one-time install does this for every fenced file whether or not it looks hostile
 cut). Whether neutralising is automatic or waits for the owner is a question below; until then, a finding marks the
 project "fence not holding" and says what was found.
 
-**Status and doctor:** a row per sandboxed project (fenced and scanned clean at <time> / not holding: <finding> / not
-supported on this OS), a row for the owner's global drivers that tracked attributes can select, and the uv check (the
+**Status and doctor:** a row per sandboxed project (no known problem found, a best-effort check, at <time> /
+problems found: <finding> / not supported on this OS), a row for the owner's global drivers that tracked attributes can select, and the uv check (the
 marker's bucket name matches the installed uv's).
 
 ## Linux
@@ -348,7 +350,8 @@ OS", and a sandboxed project's sessions of any runtime whose git runs as the use
 `runtime-codex.md` Step 4 r2's confined check returns "not confined" for B1 today. With the fence it gains a condition
 instead: **the fence holds**, which is
 
-1. the project is sandboxed and its scan passed (recently, and after the last finding was resolved);
+1. the project is sandboxed and its one-time install is done; a finding of the scan keeps it unconfined, but the
+   scan finding nothing proves nothing and is not a condition (r3);
 2. every writer the project has fences: its services and jobs (Seatbelt), its Claude sessions (settings), its Codex
    sessions (the rendered profile), each runtime's canary passed for the version running;
 3. macOS (Linux: not confined);
@@ -571,12 +574,20 @@ neutralising changed, from `.state/git-fence/<project>/`, and reports what it re
 `nlink > 1` anywhere in git dirs (B2), git-dir-shaped folders in the temp roots (S1) and the commit gate's status
 (B3). The rest as planned above.
 
-### Step 1 as built (11-14): the scan, report only
+### Step 1 as built (11-14): the scan, report only, a best-effort check
 
-`bin/git_fence.py`, the platform job `brunna/git-fence`. Revised the same day after a blind code review that found four
-places where it said "holds" while the owner's git ran a planted canary (a folder it couldn't list, a gitfile into a
-pointer it didn't check, git-dir shapes it didn't recognise, an index read differently from git); all four are covered
-below and by tests. It changes no project file and neutralises nothing.
+`bin/git_fence.py`, the platform job `brunna/git-fence`. Revised the same day after two blind code reviews, each of which
+found places where it said "holds" while the owner's git ran a planted canary: the first a folder it couldn't list, a
+gitfile into a pointer it didn't check, git-dir shapes it didn't recognise, an index read differently from git; the
+second pointer files with whitespace git keeps, index entries outside the `.git` names, a split index under another
+spelling, a worktree index read with the wrong hash length, a hard link under a branch named `objects`, credentials cut
+before they were stripped. All are covered below and by tests. It changes no project file and neutralises nothing.
+
+**What it can claim (r3).** The scan re-implements the parts of git it reads, and each review found more ways that
+re-reading can differ from git's own. So it claims no guarantee: its rows say "no known problem found (a best-effort
+check)" or "problems found", never "holds", and nothing (the Codex confined check included) takes "no known problem" as
+proof. A finding is a known problem and is acted on; its absence proves nothing. The guarantee has to come from the
+fence preventing the writes (the Seatbelt rules, each runtime's canary, the one-time install), not from detection.
 
 - **When:** every 15 minutes (r2 B1's window: an index can be written between two scans), in the background; the temp
   area at most once a day, its last result kept in between. The status page section and doctor say the window ("a
@@ -584,11 +595,13 @@ below and by tests. It changes no project file and neutralises nothing.
   `--temp-root` are refused), so a partial scan never ends findings it didn't look at.
 - **Where:** per sandboxed project, its workspace, runtime folder, `allow_write` and the memory clone its workspace
   links to, walked without following a link, each root itself tested too. **A folder it can't list is a finding**
-  ("can't be listed"), in the walk and in every git dir, never skipped. The time limit (five minutes per project) and the
+  ("can't be listed"), in the walk and in every git dir, never skipped. The walk is breadth first; what it found
+  is still inspected when it stops, with a budget of its own. The time limit (five minutes per project) and the
   entry count (400,000) are checked at every folder entry, a stop said as "incomplete"; at most 300 findings are kept per
   project, the rest counted.
-- **`.git` entries:** the repo's own git dir at a folder's top; a gitfile is accepted **only when it leads exactly to a
-  git dir this scan inspected** (a worktree's admin dir, a module's git dir); anything else is a finding (a nested repo,
+- **`.git` entries:** the repo's own git dir at a folder's top; a gitfile is accepted **only when git reads it as a pointer
+  (`gitdir: ` with its space, only trailing CR and LF trimmed, a NUL ending it; any other whitespace, a NUL, or no
+  prefix is a finding) and it leads exactly to a git dir this scan inspected** (a worktree's admin dir, a module's git dir); anything else is a finding (a nested repo,
   a gitfile elsewhere, a link named `.git`). **Git-dir shapes** follow git's own test, loosened to what can be planted:
   HEAD (any kind of entry) with objects and refs of any kind (a link, an executable file), or HEAD with a commondir.
 - **Each git dir** (a repo's own; each `worktrees/<n>`; every folder under `modules/`, a worktree's `modules/` too, a
@@ -605,25 +618,30 @@ below and by tests. It changes no project file and neutralises nothing.
   - hooks other than git's samples and the platform's own text **in any UI language** (a hook's message is in the
     language the platform had when it wrote it);
   - `info/attributes`, alternates, a `commondir` (in a repo's or a module's git dir: any; in a worktree's: anything but
-    `../..`, a missing one included), a worktree `gitdir` that doesn't lead back (a relative one, from
+    `../..` read as git reads it, a missing one included), a worktree `gitdir` that doesn't lead back (a relative one, from
     `worktree.useRelativePaths`, resolved against the admin dir), every entry of `remotes/` and `branches/` (files there
     are remotes git reads);
   - every symbolic link and every file with more than one name in the whole git dir (worktrees' and modules' included),
-    except under the platform's own folder (`.git/brunna/`, its caches) and the files under any `objects/`, which git
-    links between local clones and checks by their hash;
-  - the index entries the scan reports (r2 B1): every index (a worktree's, a module's, a split index's shared parts in
-    any of them), each read once (by device and inode), read as git's own reader reads it (the name length as git reads
-    it, the extended flags wherever set, the entries ending where the extensions begin, the checksum verified); one git
-    couldn't read is "can't be checked";
+    except under the platform's own folder (`.git/brunna/`, its caches) and the files under the `objects/` of a repo's
+    or a module's git dir (that folder itself, not any folder of that name), which git links between local clones and
+    checks by their hash;
+  - the index entries the scan reports (r2 B1): every index (a worktree's, a module's), each read once (by device and
+    inode), read as git's own reader reads it (the name length as git reads it, the extended flags wherever set, the
+    entries ending where the extensions begin, the checksum verified, with the hash length of the repo's common dir
+    config, which a worktree's index shares; with an entry-offset table, each block read again as git's threads would
+    and the union kept); a split index's shared part opened as git opens it (the name its `link` extension gives),
+    and any `sharedindex.*` in any case; an entry git's own path check would refuse is reported, whatever its name;
+    one git couldn't read is "can't be checked";
   - rebase state with exec lines, said as a note.
 - **The commit gate** (B3): on or off, the platform's pre-commit in place, exempt or not, and whether this machine can
   sandbox, in each project's row.
 - **The temp area** (S1): the user's own temp folder and the shared one (macOS: the user's folder under
-  `/private/var/folders` and `/private/tmp`; Linux: `/tmp`, `/var/tmp`): a `.git` of any kind at each root and in each
-  folder just below it (it makes every folder below it a checkout), and folders shaped like a git dir to eight levels and
-  a million entries, each cut said. One row and one alert for the area, however many: a test run can leave thousands.
-  They don't make a project's row "not holding": the fence's `HEAD` rule (S1) isn't built, so nothing in a project can
-  stop them yet.
+  `/private/var/folders` and `/private/tmp`; Linux: `/tmp`, `/var/tmp`), breadth first to eight levels, a million
+  entries and the time limit, each cut said. A `.git` at a root is a finding whatever it holds (it makes the whole area a
+  checkout); every other repo there is inspected as a project's is (config, hooks, pointers, index), so a clean one left
+  by a test isn't a finding and one that would run something is; folders shaped like a git dir; a folder of the owner's it
+  can't list (another user's is skipped). The temp area is on the status page only, with no alert and no doctor row,
+  until the fence's `HEAD` rule (S1) exists: nothing in a project can stop it yet.
 - **How it reads:** every file opened without following a link and without blocking, a regular file only (fstat), at
   most 1 MB (256 MB for an index); a config source is copied into a folder of its own in `hubconf.private_tmp()` and read
   with `git config --file <copy> --null --list` from there, with no system or global config and a timeout (git's error
@@ -633,17 +651,20 @@ below and by tests. It changes no project file and neutralises nothing.
   one made between two steps can make the scan read a file the owner can read (only parsed, and named in the report).
 - **Output:** `.state/git-fence/scan.json` (no URL credentials kept: a value's `user:token@` is left out); a status page
   section and a doctor row per project and one for the temp area; an alert through `alert.once` (one stable id per
-  finding, one for the temp area). Every value from a project's files is shown with control and invisible characters
+  project finding; the temp area has none). Every value from a project's files is shown with control and invisible characters
   escaped and an `@` broken by a zero-width space (no terminal escape, no chat mention), in `--report`, doctor, the
   status page and alerts. `bin/git_fence.py --report [--project P] [--json] [--no-temp] [--temp-root D]` scans and
   prints without writing anything.
 - **Tests** (`tests/test_git_fence.py`, a throwaway instance, the scan as its own process): a clean repo with a linked
-  worktree holds; a hostile one is reported in full and its planted canary doesn't run (the positive control: it runs on
+  worktree has no known problem; a hostile one is reported in full and its planted canary doesn't run (the positive control: it runs on
   a plain `git status`); nothing in the project changes (every entry's mode, size, mtime and inode before and after);
   folders it can't list (a git dir's hooks, a folder holding a nested repo); `remotes/` and `branches/` files; gitfiles
   into a module whose commondir points away and into a folder deeper than a worktree's admin dir, and a folder under
   `modules/` that isn't shaped; shape variants (folders, files, links, commondir) and a root that is itself shaped; a
-  `.git` at a temp root and just below it; the index entries the scan reports, an index git couldn't read, the name
+  the temp area (a `.git` at a root, a clean repo below it not a finding and one with a key the allowlist lacks one, a
+  folder of the owner's it can't list, no alert); pointers git reads differently (a gitfile's and a worktree commondir's
+  whitespace, a NUL, a missing prefix); a split index opened by its `link` under another spelling; a sha256 repo's
+  worktree index; a hard link under a branch named `objects`; credentials stripped before a cut; the index entries the scan reports, an index git couldn't read, the name
   length as git reads it, extended flags, the checksum, extensions that don't end where they should, against what git
   itself writes in versions 2 to 4 (a long name included); a FIFO where a hook or config belongs; the deadline
   ("incomplete"); the commit gate with the platform's hook in each language and a changed one; rebase notes; the job's
