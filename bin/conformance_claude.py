@@ -560,26 +560,30 @@ def _spelled(target) -> set[str]:
     return {str(target), os.path.realpath(target)}
 
 
-def _covers_rule(rule: str, target, home: str) -> bool:
+def _covers_rule(rule: str, target, home: str, fold: bool = False) -> bool:
     """A file tools' or Read deny on target, or on a folder above it (a deny on the folder entry alone keeps it from being
-    made, and so the file in it: `.claude/hooks`)."""
+    made, and so the file in it: `.claude/hooks`). fold: as the sandbox reads the rule (it is merged into the sandbox's
+    filesystem keys, which fold the long s: `Edit(…/.agentſ)` refuses a Bash write to `.agents`, measured 11-14 on
+    2.1.323), not as the file tools do; what a positive control leaves out."""
     m = re.fullmatch(r"(\w+)\((.*)\)", rule)
     if not m or m[1] not in (*FILE_TOOLS, "Read"):   # a Read deny refuses a write too (2.1.323)
         return False
-    rx = _rule_regex(m[2], home)
+    rx = _rule_regex(m[2].casefold() if fold else m[2], home.casefold() if fold else home)
     places = {str(p) for s in _spelled(target) for p in (pathlib.Path(s), *pathlib.Path(s).parents)}
-    return bool(rx) and any(rx.fullmatch(s.lower()) for s in places)
+    return bool(rx) and any(rx.fullmatch(s.casefold() if fold else s.lower()) for s in places)
 
 
 def _covers_entry(entry: str, target, home: str) -> bool:
-    e = (home + entry[1:] if entry.startswith("~") else entry).rstrip("/")
-    return any(s == e or s.startswith(e + "/") for s in _spelled(target))
+    """Compared case-folded: the sandbox matches an entry case-insensitively and folds the long s (`.agentſ` refuses
+    `.agents`, measured 11-14 on 2.1.323), so a positive control that kept a folded spelling would test nothing."""
+    e = (home + entry[1:] if entry.startswith("~") else entry).rstrip("/").casefold()
+    return any(s == e or s.startswith(e + "/") for s in (x.casefold() for x in _spelled(target)))
 
 
 def _covered(settings: dict, target) -> bool:
     home = str(pathlib.Path.home())
     fs = (settings.get("sandbox") or {}).get("filesystem") or {}
-    return any(_covers_rule(r, target, home) for r in (settings.get("permissions") or {}).get("deny") or []) or \
+    return any(_covers_rule(r, target, home, fold=True) for r in (settings.get("permissions") or {}).get("deny") or []) or \
         any(_covers_entry(e, target, home) for k in ("denyWrite", "denyRead") for e in fs.get(k) or [])
 
 
@@ -590,7 +594,7 @@ def _without(settings: dict, target, also=()) -> dict:
     out = json.loads(json.dumps(settings))
     spots = [target, *also]
     perms = out.get("permissions") or {}
-    perms["deny"] = [r for r in perms.get("deny") or [] if not any(_covers_rule(r, t, home) for t in spots)]
+    perms["deny"] = [r for r in perms.get("deny") or [] if not any(_covers_rule(r, t, home, fold=True) for t in spots)]
     fs = (out.get("sandbox") or {}).get("filesystem") or {}
     for k in ("denyWrite", "denyRead"):
         if k in fs:
