@@ -12,6 +12,7 @@ calls first on PATH, so a check can tell "Codex ran no git" from "its git ran no
 """
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import shlex
@@ -26,7 +27,20 @@ from runtime_ports import Check, Outcome  # noqa: E402
 
 _ = i18n.domain(__file__)
 RUN_S = 120
-FILTER = "brunna-canary"   # the filter driver the folder-git canary names in the repo's config
+# the folder-git canary's drivers, one per config source git reads in a repo's folder: the repo's config, a file it
+# includes, the worktree's own config (extensions.worktreeConfig) and a long-running process driver; each file a driver
+# is chosen for is staged, then its stat moved, so `git status` hashes it through the driver
+DRIVERS = {"brunna-c1": "config", "brunna-c2": "include", "brunna-c3": "worktree", "brunna-c4": "process"}
+
+WRAPPER = """#!{python}
+# a git that logs each call (folder, arguments, exit code, done) and runs the real one, not replacing itself: the log
+# says whether the call completed
+import json, os, subprocess, sys
+r = subprocess.run([{real!r}, *sys.argv[1:]])
+with open({log!r}, "a") as f:
+    f.write(json.dumps({{"cwd": os.getcwd(), "argv": sys.argv[1:], "exit": r.returncode, "done": True}}) + "\\n")
+sys.exit(r.returncode)
+"""
 
 
 # ---------- the world ----------
@@ -39,8 +53,7 @@ def enter(world) -> None:
     bindir = pathlib.Path(world.root) / "bin"
     bindir.mkdir(mode=0o700, exist_ok=True)
     log = pathlib.Path(world.root) / "git-calls"
-    (bindir / "git").write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {shlex.quote(str(log))}\n"
-                                f"exec {shlex.quote(real)} \"$@\"\n")
+    (bindir / "git").write_text(WRAPPER.format(python=sys.executable, real=real, log=str(log)))
     (bindir / "git").chmod(0o700)
     os.environ.update({"CODEX_HOME": str(world.tool), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
                        "PATH": f"{bindir}:{os.environ.get('PATH', '')}"})
@@ -57,93 +70,166 @@ def _git(*args, cwd) -> None:
                         "GIT_COMMITTER_EMAIL": "c@c"})
 
 
+def subcommand(argv: list[str]) -> str | None:
+    """git's subcommand in a call's arguments: the first word that isn't a global option or its value."""
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("-c", "-C", "--git-dir", "--work-tree", "--namespace", "--exec-path"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a
+    return None
+
+
+def _calls(log: pathlib.Path) -> list[dict]:
+    out = []
+    for line in log.read_text(errors="replace").splitlines() if log.exists() else []:
+        try:
+            got = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(got, dict) and isinstance(got.get("argv"), list):
+            out.append(got)
+    return out
+
+
+def _in_folder(call: dict, project: pathlib.Path) -> bool:
+    """The call ran in the project's folder (its working directory, or the -C it names)."""
+    argv, where = call["argv"], call.get("cwd") or ""
+    for i, a in enumerate(argv[:-1]):
+        if a == "-C":
+            where = os.path.join(where, argv[i + 1])
+    return os.path.realpath(where) == str(project)
+
+
 # ---------- the checks ----------
 
-def session_folder_git(world) -> Outcome:
-    """B1: Codex runs git itself in a session's folder, outside its tool sandbox, as the user. A clean filter named in
-    the repo's config (a sandboxed project can write its own .git) must not run from it. A tracked file whose stat
-    changed with its content as staged makes `git status` hash it, which runs the filter. `codex debug prompt-input`
-    builds a session's first context without a model call, and that runs Codex's git (measured 11-14 on 0.167)."""
-    project, root = pathlib.Path(world.project).resolve(), pathlib.Path(world.root).resolve()
-    marker = root / "filter-ran"
+def _plant(project: pathlib.Path, root: pathlib.Path) -> dict[str, pathlib.Path]:
+    """The repo with one canary driver per config source (DRIVERS), each touching its own marker: {driver: marker}."""
     _git("init", "-q", cwd=project)
-    (project / "a.txt").write_text("canary\n")
-    _git("add", "a.txt", cwd=project)
-    with open(project / ".git" / "config", "a") as f:
-        f.write(f'[filter "{FILTER}"]\n\tclean = "touch {marker}; cat"\n')
-    (project / ".gitattributes").write_text(f"*.txt filter={FILTER}\n")
-    st = (project / "a.txt").stat()
-    os.utime(project / "a.txt", (st.st_atime + 5, st.st_mtime + 5))
-    calls = root / "git-calls"
-    calls.unlink(missing_ok=True)
-    marker.unlink(missing_ok=True)
+    markers = {d: root / f"ran-{d}" for d in DRIVERS}
+    # hashed in this order: the process driver last (one that does not speak its protocol makes git stop)
+    files = {d: f"{i}-{kind}.txt" for i, (d, kind) in enumerate(DRIVERS.items(), 1)}
+    for f in files.values():
+        (project / f).write_text("canary\n")
+    _git("add", *files.values(), cwd=project)
+    git = project / ".git"
+    run = {d: f"touch {shlex.quote(str(m))}; cat" for d, m in markers.items()}
+    (git / "included.cfg").write_text(f'[filter "brunna-c2"]\n\tclean = {json.dumps(run["brunna-c2"])}\n')
+    (git / "config.worktree").write_text(f'[filter "brunna-c3"]\n\tclean = {json.dumps(run["brunna-c3"])}\n')
+    with open(git / "config", "a") as f:
+        f.write("[core]\n\trepositoryformatversion = 1\n[extensions]\n\tworktreeConfig = true\n"
+                f'[include]\n\tpath = {json.dumps(str(git / "included.cfg"))}\n'
+                f'[filter "brunna-c1"]\n\tclean = {json.dumps(run["brunna-c1"])}\n'
+                f'[filter "brunna-c4"]\n\tprocess = {json.dumps(f"touch {shlex.quote(str(markers["brunna-c4"]))}")}\n')
+    (project / ".gitattributes").write_text("".join(f"{f} filter={d}\n" for d, f in files.items()))
+    for f in files.values():
+        st = (project / f).stat()
+        os.utime(project / f, (st.st_atime + 5, st.st_mtime + 5))
+    return markers
+
+
+def session_folder_git(world) -> Outcome:
+    """B1: Codex runs git itself in a session's folder, outside its tool sandbox, as the user. No driver a sandboxed
+    project can name (it writes its own .git) may run from it: one per config source git reads there (DRIVERS). Each
+    file a driver is chosen for has its stat moved with its content as staged, so `git status` hashes it through the
+    driver. `codex debug prompt-input` builds a session's first context without a model call, and that runs Codex's git
+    (measured 11-14 on 0.167; it also opens an unauthenticated connection to the model provider, which carries nothing).
+    It passes only when a `status` ran to the end in the folder and no driver ran."""
+    project, root = pathlib.Path(world.project).resolve(), pathlib.Path(world.root).resolve()
+    markers = _plant(project, root)
+    log = root / "git-calls"
+    log.unlink(missing_ok=True)
     try:
         _codex(["debug", "prompt-input", "hi"], cwd=project)
     except subprocess.TimeoutExpired:
         return Outcome("error", _("no answer in {s} s", s=RUN_S))
-    if marker.exists():
-        return Outcome("fail", _("Codex's own git ran the folder's git filter, outside its sandbox (runtime-codex.md, "
-                                 "B1)"))
-    ran = calls.read_text(errors="replace").splitlines() if calls.exists() else []
-    if not any(" status" in f" {line}" for line in ran):
-        return Outcome("error", _("tests nothing: Codex ran no git status in the folder"))
-    return Outcome("pass", _("Codex's own git ran in the folder and the filter didn't run"))
+    ran = [DRIVERS[d] for d, m in markers.items() if m.exists()]
+    if ran:
+        return Outcome("fail", _("Codex's own git ran the folder's git drivers outside its sandbox: {kinds} "
+                                 "(runtime-codex.md, B1)", kinds=", ".join(ran)))
+    statuses = [c for c in _calls(log) if subcommand(c["argv"]) == "status" and _in_folder(c, project)]
+    if not any(c.get("done") for c in statuses):
+        return Outcome("error", _("tests nothing: no git status of Codex's ran to the end in the folder"))
+    return Outcome("pass", _("Codex's own git status ran in the folder, and none of its drivers ran ({kinds})",
+                             kinds=", ".join(DRIVERS.values())))
 
 
-PROBES = (".codex/config.toml", "sub/.codex/config.toml", ".agents/skills/c/SKILL.md")
+# (what it tries, the shell command, the path that is there when it landed): every way a session's tools could make a
+# control folder (CONTROL: .codex, .agents), each run on its own, its folders made by the command itself
+PROBES = (
+    ("a top .codex", "mkdir -p .codex && printf x > .codex/config.toml", ".codex/config.toml"),
+    ("a nested .codex", "mkdir -p sub/.codex && printf x > sub/.codex/config.toml", "sub/.codex/config.toml"),
+    ("a top .agents skill", "mkdir -p .agents/skills/c && printf x > .agents/skills/c/SKILL.md",
+     ".agents/skills/c/SKILL.md"),
+    ("a folder moved to the top .codex", "mkdir -p m && printf x > m/config.toml && mv m .codex", ".codex/config.toml"),
+    ("a folder moved to a nested .agents", "mkdir -p sub m && printf x > m/f && mv m sub/.agents", "sub/.agents/f"),
+    ("a link named .codex", "mkdir -p real sub && printf x > real/config.toml && ln -s ../real sub/.codex",
+     "sub/.codex"),
+)
+RAN = "ran"   # an allowed write each probe makes last: the command ran under the profile
 
 
-def _try_writes(project: pathlib.Path, profile: str) -> tuple[list[str], subprocess.CompletedProcess]:
-    """Each probe written under this profile through `codex sandbox` (no model): the ones that landed."""
-    script = "; ".join(f"mkdir -p {shlex.quote(str(pathlib.Path(p).parent))} 2>/dev/null; "
-                       f"printf x > {shlex.quote(p)} 2>/dev/null" for p in PROBES)
-    script += "; mkdir -p moved 2>/dev/null; mv moved sub/.agents 2>/dev/null; printf x > ran 2>/dev/null"
-    r = _codex(["sandbox", "-P", profile, "--", "/bin/sh", "-c", script], cwd=project)
-    landed = [p for p in PROBES if (project / p).exists()] + (["sub/.agents"] if (project / "sub" / ".agents").exists()
-                                                             else [])
-    if (project / "ran").exists():   # the command ran under the profile (an allowed write landed)
-        landed.append("ran")
-    for p in [*PROBES, "sub/.agents", "moved", "ran"]:
-        shutil.rmtree(project / p, ignore_errors=True) if (project / p).is_dir() else (project / p).unlink(missing_ok=True)
-    for d in (".codex", "sub/.codex", ".agents/skills/c", ".agents/skills", ".agents", "sub"):
-        try:
-            (project / d).rmdir()
-        except OSError:
-            pass
-    return landed, r
+def _empty(project: pathlib.Path) -> None:
+    for p in list(project.iterdir()):
+        shutil.rmtree(p) if p.is_dir() and not p.is_symlink() else p.unlink()
+
+
+def _try_writes(project: pathlib.Path, profile: str) -> tuple[list[str], list[str]]:
+    """Each probe run alone under this profile through `codex sandbox` (no model): (the ones that landed, the ones
+    whose command didn't run under it)."""
+    landed, unrun = [], []
+    for what, command, there in PROBES:
+        _empty(project)
+        _codex(["sandbox", "-P", profile, "--", "/bin/sh", "-c", f"{command} 2>/dev/null; printf x > {RAN}"],
+               cwd=project)
+        if os.path.lexists(project / there):
+            landed.append(what)
+        if not (project / RAN).exists():
+            unrun.append(what)
+    _empty(project)
+    return landed, unrun
+
+
+def _toml_key(k: str) -> str:
+    return json.dumps(k, ensure_ascii=False)   # a TOML basic string: JSON's escapes are TOML's
 
 
 def control_globs(world) -> Outcome:
     """A permission profile with runtime_codex.profile_control_entries keeps a session's tools off every control path:
-    making .codex/ and .agents/ at the top and nested, and moving a folder into place, are refused; with those entries
-    left out they land (the positive control)."""
+    each of PROBES (made at the top or nested, moved into place, a link of the name) is refused; with those entries left
+    out each lands (the positive control)."""
     project = pathlib.Path(world.project).resolve()
     entries = rx.profile_control_entries(project)
     lines = ["[permissions.brunna-guarded]", 'extends = ":workspace"', "", "[permissions.brunna-guarded.filesystem]"]
-    lines += [f'"{k}" = "{v}"' for k, v in entries.items()]
+    lines += [f"{_toml_key(k)} = {_toml_key(v)}" for k, v in entries.items()]
     lines += ["", "[permissions.brunna-open]", 'extends = ":workspace"', ""]
     (pathlib.Path(world.tool) / "config.toml").write_text("\n".join(lines) + "\n")
     try:
-        landed, r = _try_writes(project, "brunna-guarded")
-        if "ran" not in landed:
-            return Outcome("error", _("codex sandbox didn't run the probe under the profile (exit {code})",
-                                      code=r.returncode))
-        if (wrote := [p for p in landed if p != "ran"]):
-            return Outcome("fail", _("written under the profile: {paths}", paths=", ".join(wrote)))
-        opened, _r = _try_writes(project, "brunna-open")
+        landed, unrun = _try_writes(project, "brunna-guarded")
+        if unrun:
+            return Outcome("error", _("codex sandbox didn't run the probe under the profile: {paths}",
+                                      paths=", ".join(unrun)))
+        if landed:
+            return Outcome("fail", _("written under the profile: {paths}", paths=", ".join(landed)))
+        opened, unrun = _try_writes(project, "brunna-open")
     except subprocess.TimeoutExpired:
         return Outcome("error", _("no answer in {s} s", s=RUN_S))
-    missing = [p for p in [*PROBES, "sub/.agents", "ran"] if p not in opened]
-    if missing:
+    missing = [what for what, _c, _t in PROBES if what not in opened]
+    if missing or unrun:
         return Outcome("error", _("tests nothing: {paths} not written without the entries either",
-                                  paths=", ".join(missing)))
+                                  paths=", ".join(dict.fromkeys(missing + unrun))))
     return Outcome("pass", "")
 
 
 CHECKS = [
     # the session side: the per-version gate reads these (a sandboxed project's Codex session whose version failed one)
     Check("session-folder-git", "sessions", "safety", session_folder_git, timeout_s=RUN_S + 60, side="session"),
-    Check("control-globs", "control", "safety", control_globs, timeout_s=2 * RUN_S + 60, side="session"),
+    Check("control-globs", "control", "safety", control_globs, timeout_s=2 * 6 * RUN_S + 60, side="session"),
     Check("lifecycle-hooks", "lifecycle", "function", None,
           "the hooks fire and their additionalContext reaches the model (measured by hand 11-14, runtime-codex.md): a "
           "check needs a model call, so a login in the world (Step 1's login rule)", side="session"),

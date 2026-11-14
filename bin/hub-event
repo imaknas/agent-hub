@@ -575,9 +575,10 @@ def worktree(what: str, raw: str, name: str | None = None) -> int:
     """A session in a linked worktree (worktree-memory.sh): what session_record, mail and session_end do for the others, run
     outside any sandbox. A runtime that may not hold a sandboxed project's sessions gets no mail there, as in handle.
     name: whose hooks (--runtime); none = runtime_ports.UNNAMED_HOOKS, as hooks written before they named it."""
-    global _RT, _RT_NAME
+    global _RT, _RT_NAME, _RAW
     if what not in WORKTREE_EVENTS:
         return 0
+    _RAW = raw   # a runtime's person_session and session_version may read what it names, as in handle
     _RT_NAME = name or runtime_ports.UNNAMED_HOOKS
     rt = _RT = runtime_ports.load(_RT_NAME, ports=("lifecycle",))
     if getattr(rt, "PLATFORM_RUNS_FIRE_HOOKS", False) and os.environ.get("HUB_LLM_POINT"):

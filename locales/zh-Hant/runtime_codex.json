@@ -26,6 +26,8 @@
  "{hooks} was written, but {config} wasn't ({error}): the hooks are there untrusted, and doctor says so until this runs again": "{hooks} 寫好了,但 {config} 沒寫成({error}):hook 在那裡但未被信任,在再跑一次之前 doctor 都會提醒",
  "{file} can't be listed ({why})": "{file} 無法列出({why})",
  "{file} would be loaded by its Codex sessions": "{file} 會被這個專案的 Codex session 載入",
- "Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs from it as you (runtime-codex.md, B1)": "Codex 會在 session 的資料夾裡、自己的沙盒之外跑 git,repo 設定裡的 filter 會因此以你的身分執行(runtime-codex.md,B1)",
- "{folder} has too many folders to look through for planted ones": "{folder} 的資料夾太多,沒辦法逐一檢查有沒有被放進去的控制資料夾"
+ "{folder} has too many folders to look through for planted ones": "{folder} 的資料夾太多,沒辦法逐一檢查有沒有被放進去的控制資料夾",
+ "Codex {version} runs git in the session's folder outside its own sandbox, and a filter in the repo's config ran from it as you (the {check} check; runtime-codex.md, B1)": "Codex {version} 會在 session 的資料夾裡、自己的沙盒之外跑 git,repo 設定裡的 filter 因此以你的身分執行了({check} 檢查;runtime-codex.md,B1)",
+ "Codex {version}'s own git ran none of the folder's filters (the {check} check), but its sessions get no profile from the platform yet (runtime-codex.md, Step 4 steps 3-5)": "Codex {version} 自己的 git 沒有執行資料夾的任何 filter({check} 檢查),但它的 session 還沒有從平台拿到 profile(runtime-codex.md,Step 4 第 3–5 步)",
+ "Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs from it as you (runtime-codex.md, B1; measured on 0.167, no probe recorded here yet)": "Codex 會在 session 的資料夾裡、自己的沙盒之外跑 git,repo 設定裡的 filter 會因此以你的身分執行(runtime-codex.md,B1;在 0.167 上量到,這裡還沒有探測紀錄)"
 }

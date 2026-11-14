@@ -259,16 +259,41 @@ def version_of(exe, env: dict | None = None) -> str | None:
                            env=dict(os.environ if env is None else env))
     except (OSError, subprocess.SubprocessError):
         return None
+    import runtime_ports
     m = _VERSION_LINE.match(r.stdout.strip())
-    return m.group(1) if r.returncode == 0 and m else None
+    # the platform's one version grammar (runtime_ports.checkable_version): a pre-release isn't one it records
+    return m.group(1) if r.returncode == 0 and m and runtime_ports.checkable_version(m.group(1)) else None
+
+
+FOLDER_GIT_CHECK = "session-folder-git"   # conformance_codex's check of B1
 
 
 def unconfined() -> str:
     """Why a Codex session in a sandboxed project isn't confined, whatever is rendered (docs/design/runtime-codex.md,
     r2 B1): Codex runs git itself in the session's folder, outside its tool sandbox, and the repo's filters run from it.
-    conformance_codex's session-folder-git check tests it per version."""
+    From the newest recorded probe (conformance_codex's session-folder-git, per version) once there is one (review N4);
+    until then, what was measured by hand."""
+    import hubconf
+    newest = None
+    folder = hubconf.STATE / "runtime-conformance" / NAME
+    for f in sorted(folder.glob("*.session.json")) if folder.is_dir() else []:
+        try:
+            doc = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and str(doc.get("at", "")) > str((newest or {}).get("at", "")):
+            newest = doc
+    state = (((newest or {}).get("checks") or {}).get(FOLDER_GIT_CHECK) or {}).get("state")
+    if state == "fail":
+        return _("Codex {version} runs git in the session's folder outside its own sandbox, and a filter in the repo's "
+                 "config ran from it as you (the {check} check; runtime-codex.md, B1)", version=newest.get("version"),
+                 check=FOLDER_GIT_CHECK)
+    if state == "pass":
+        return _("Codex {version}'s own git ran none of the folder's filters (the {check} check), but its sessions get "
+                 "no profile from the platform yet (runtime-codex.md, Step 4 steps 3-5)", version=newest.get("version"),
+                 check=FOLDER_GIT_CHECK)
     return _("Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs "
-             "from it as you (runtime-codex.md, B1)")
+             "from it as you (runtime-codex.md, B1; measured on 0.167, no probe recorded here yet)")
 
 
 # ---------- lifecycle ----------
@@ -372,33 +397,83 @@ def session_pid(env, ancestors=None) -> int | None:
 EXEC_ORIGINATOR = "codex_exec"   # session_meta.originator of a `codex exec` run (M4; sessions_codex.NOT_A_PERSON)
 
 
+META_LINE_MAX = 16 << 20   # a session_meta line carries the base instructions; longer than this isn't read
+
+
 def _session_meta(raw: str | None) -> dict | None:
-    """The session_meta payload of the rollout the hook input's transcript_path names, only when that file is a rollout
-    in this user's Codex home (sessions/ or archived_sessions/, resolved; every sandbox denies the home): a file elsewhere
-    is a transcript anyone may have written. None when it can't be read."""
+    """The session_meta payload of the rollout the hook input's transcript_path names, only when:
+    - that file is a rollout in this user's Codex home (sessions/ or archived_sessions/, both sides resolved, so a
+      linked sessions folder works and `sessions/../..` doesn't; every sandbox denies the home), a file elsewhere being a
+      transcript anyone may have written;
+    - its session id is the hook's (session_id).
+    None when it can't be read."""
     try:
-        path = (json.loads(raw or "{}") or {}).get("transcript_path")
+        hook = json.loads(raw or "{}") or {}
+        path, sid = hook.get("transcript_path"), hook.get("session_id")
         if not isinstance(path, str) or not re.fullmatch(r"rollout-[^/]*\.jsonl", os.path.basename(path)):
             return None
-        real, home = pathlib.Path(os.path.realpath(path)), pathlib.Path(os.path.realpath(codex_home()))
-        if not any(real.is_relative_to(home / d) for d in ("sessions", "archived_sessions")):
+        real, home = pathlib.Path(os.path.realpath(path)), codex_home()
+        if not any(real.is_relative_to(os.path.realpath(home / d)) for d in ("sessions", "archived_sessions")):
             return None
         with open(real, errors="replace") as fh:
-            meta = (json.loads(fh.readline(1 << 20) or "null") or {}).get("payload") or {}
+            line = fh.readline(META_LINE_MAX)
+        meta = (json.loads(line or "null") or {}).get("payload") or {}
     except (OSError, ValueError, AttributeError, TypeError):
         return None
-    return meta if isinstance(meta, dict) else None
+    if not isinstance(meta, dict) or not isinstance(sid, str) or sid not in (meta.get("session_id"), meta.get("id")):
+        return None
+    return meta
 
 
-_CLI_VERSION = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?")
+DAEMON_RELEASE = re.compile(r"(\d+\.\d+\.\d+)-[^/]+")   # packages/<pkg>/releases/<version>-<target>/
+PACKAGE = "@openai/codex"
 
 
-def session_version(pid, raw: str | None = None) -> tuple[str, None] | None:
-    """(version, None) of the Codex that runs this session: its rollout's session_meta.cli_version (raw: the hook's
-    input). A thread runs in the shared daemon, which updates itself, so the version is the daemon's, not the client's
-    (measured 11-14: 0.169.0 threads behind a 0.167.0 TUI); its process (pid) can't tell it."""
+def version_at(exe: pathlib.Path) -> tuple:
+    """(version, build) from the real path of the codex a session's process runs, read as files, never by running it:
+    - the app-server daemon's copy, <codex home>/packages/<pkg>/releases/<version>-<target>/…: the folder's name (the
+      daemon updates itself; measured 11-14);
+    - nvm's global copy, …/lib/node_modules/@openai/codex/…: that package's package.json.
+    Anything else is (UNREADABLE, None)."""
+    import hubconf
+    import runtime_ports
+    no = (runtime_ports.UNREADABLE, None)
+    try:
+        home = pathlib.Path(os.path.realpath(codex_home()))
+        if (home / "packages") in exe.parents:
+            parts = exe.relative_to(home / "packages").parts
+            if len(parts) > 3 and parts[1] == "releases" and (m := DAEMON_RELEASE.fullmatch(parts[2])) \
+                    and runtime_ports.checkable_version(m[1]):
+                return m[1], None
+            return no
+        versions = pathlib.Path(os.path.realpath(hubconf.nvm_dir() / "versions" / "node"))
+        if versions in exe.parents:
+            parts = exe.relative_to(versions).parts
+            tail = ("lib", "node_modules", *PACKAGE.split("/"))
+            if len(parts) > 1 + len(tail) and parts[1:1 + len(tail)] == tail:
+                pkg = json.loads(versions.joinpath(parts[0], *tail, "package.json").read_text())
+                v = pkg.get("version") if isinstance(pkg, dict) and pkg.get("name") == PACKAGE else None
+                return (v, None) if runtime_ports.checkable_version(v) else no
+    except (OSError, ValueError):
+        return no
+    return no
+
+
+ROLLOUT_BUILD = "rollout"   # the build field of a version read from the rollout, not from the running process
+
+
+def session_version(pid, raw: str | None = None) -> tuple | None:
+    """(version, build) of the Codex that runs this session: the running process's (session_pid: the daemon under the
+    Desktop app and the TUIs, the native codex under exec; version_at), which a daemon that updated itself under a
+    resumed thread changes (review B1). When that can't be read, the rollout's session_meta.cli_version (raw: the hook's
+    input), marked build "rollout": the version that created the thread, which a resumed one keeps."""
+    import runtime_ports
+    real = runtime_ports.process_path(pid)
+    got = version_at(pathlib.Path(real)) if real else (runtime_ports.UNREADABLE, None)
+    if runtime_ports.checkable_version(got[0]):
+        return got
     v = (_session_meta(raw) or {}).get("cli_version")
-    return (v, None) if isinstance(v, str) and _CLI_VERSION.fullmatch(v) else None
+    return (v, ROLLOUT_BUILD) if runtime_ports.checkable_version(v) else got
 
 
 def _originator(raw: str | None) -> str | None:

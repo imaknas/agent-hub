@@ -382,7 +382,11 @@ def main(argv: list[str]) -> int:
         return 1
     print(show(doc))
     if not report:
-        print(_("recorded: {file}", file=record_any(doc)))
+        try:
+            print(_("recorded: {file}", file=record_any(doc)))
+        except (RuntimeError, OSError) as e:   # a version the store can't name, a folder it can't write: said
+            print(f"conformance: {e}", file=sys.stderr)
+            return 1
     return 0 if verdict(doc) == "pass" else 1
 
 
