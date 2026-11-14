@@ -416,10 +416,10 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   `capabilities/<name>.sb`): a program the sandbox blocks runs with `bin/hub-run --cap <capability> -- …`, executed by
   the platform's runner service `bin/cap-runner.py` under the platform's own Seatbelt profile (`bin/seatbelt.py`, which
   can block the Keychain; macOS only). Design in `docs/design/capabilities.md`.
-  **The owner's checkout race** (`docs/design/git-broker.md` r3 B-1, still open): a sandboxed project's services and jobs
-  can't make a symbolic link directly in their checkouts (friction only: a folder holding one can be moved in) but inside `.venv`/`node_modules` and the tool caches (`policy.links`, macOS only; a platform job that
-  must make one gets that exact path: `--allow-link`), and its Claude Code worktrees are made by the platform as the
-  project (the `WorktreeCreate` hook → `hub-event worktree-make` → `bin/session_worktree.py`), never as the user.
+  **The owner's checkout race** (`docs/design/git-broker.md` r3 B-1, still open): a sandboxed project's Claude Code
+  worktrees are made by the platform as the project (the `WorktreeCreate` hook → `hub-event worktree-make` →
+  `bin/session_worktree.py`), never as the user. Nothing refuses its processes' symbolic links (a link rule for its
+  services and jobs was removed by the owner on 11-15: a folder holding a link could still be moved in).
   `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models`/`paths` are security fields that `manifest.update` cannot
   change.
   **The platform runs git only in repos it owns** (memory bare repos, memory copies, its own checkout): in a

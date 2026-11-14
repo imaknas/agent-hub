@@ -4,7 +4,7 @@ Status: design, 11-14, on measurements made the same day; r2 after a blind revie
 where the text above disagrees: chiefly, no process writes both the worktree and the git dir, and
 `safe.bareRepository=explicit` is a precondition again); r3 after a second blind review (at the very end; it holds
 over both: an unsandboxed checkout can be raced into writing anywhere the owner can write, and how far to go against
-that is the owner's choice; B-1's mitigations 2 and 3 built 11-14, "B-1 as built" at the very end); the broker
+that is the owner's choice; B-1's mitigation 3 built 11-14, mitigation 2 built and removed 11-15, the last sections); the broker
 itself is not built. It takes over the prevention half of
 `git-config-fence.md` (the per-name fence, the narrow `brunna git` runner and the one-time install). That doc's scan stays
 as a second layer, and so do its config allowlist and its presets. Measured in scratch repos (git 2.50.1, macOS on a
@@ -1057,7 +1057,7 @@ command, a service, a job), the project can make that checkout write its files a
   - A venv elsewhere (`venv2`) was still refused.
   - **A link made inside a carve-out can't be renamed onto `d`** (refused). The rename's destination counts as a link
     creation outside the carve-out. **But a folder holding a link can** (the cold review of the build, 11-14): see "B-1
-    as built, after its cold review".
+    as built, after its cold review". The rule was removed on 11-15 (the last section).
   - **The broker refuses tracked paths at or under a carve-out name** (`.venv`, `node_modules`), so no checkout ever
     writes into a folder where links may exist.
   - More carve-outs (other languages' tool folders) are added one at a time with that same refusal, from the refusal
@@ -1090,7 +1090,7 @@ command, a service, a job), the project can make that checkout write its files a
 | option | what it gives | what it costs |
 |---|---|---|
 | **1. Accept and document** | nothing new; the status page and doctor say it plainly | while any process of a sandboxed project runs, the owner's and the agent tools' checkouts can be made to write anywhere as the owner; "confined" can't be claimed for checkouts; the principle isn't met for them |
-| **2. Partial mitigation for services and jobs** (the symlink rule, the carve-outs, P2's allowance, the broker's refusals) | services and jobs can't make a link directly in their checkouts; **they can still move in a folder holding one**, so it is friction, not a boundary (the build's cold review, 11-14) | venvs and tool folders outside the carve-outs break for services and jobs, loudly; the carve-out list needs maintaining; **sessions stay open**, so it doesn't close B-1 alone |
+| **2. Partial mitigation for services and jobs** (**built, then removed by the owner on 11-15**; the symlink rule, the carve-outs, P2's allowance, the broker's refusals) | services and jobs can't make a link directly in their checkouts; **they can still move in a folder holding one**, so it is friction, not a boundary (the build's cold review, 11-14) | venvs and tool folders outside the carve-outs break for services and jobs, loudly; the carve-out list needs maintaining; **sessions stay open**, so it doesn't close B-1 alone |
 | **3. The platform makes worktrees for sandboxed projects** (Claude's `WorktreeCreate` hook → the broker, with P2 under the rule's allowance), and doctor warns about the owner's own checkouts | an agent tool's worktree mode stops being the no-owner-action trigger, for Claude; the owner is told when their checkout is exposed (a project process is running) | Codex has no such hook found; the owner's own checkouts are only warned about, not protected; a hook to build and maintain |
 | **4. Never "confined" while any process of the project can run during a checkout** | the confined check stops overclaiming | in practice a sandboxed project's sessions are never "confined" (their commands can always run during a checkout), so D9's goal of a confined Codex session isn't reached by this design |
 
@@ -1415,3 +1415,31 @@ list`):
 - for a name with `/`: the folder `a+b` and the branch `worktree-a+b`;
 - no `.state/session-worktree/<project>/*.json` left after a successful make;
 - whether the hook's own `timeout` (540) is honoured: a slow checkout past 10 minutes is cut either way.
+
+### B-1: mitigation 2 removed (11-15)
+
+**The owner's decision (11-15):** remove mitigation 2, the link rule for sandboxed projects' services and jobs; keep
+mitigation 3.
+
+**Why:** the build's cold review showed it isn't a boundary. A folder holding a link can be moved onto a tracked
+folder's place, because Seatbelt checks that rename as a directory's creation, the same check as mkdir. No direct rule
+was found that closes this without refusing mkdir or rmdir (measured, previous section). A rule that only adds friction
+costs every sandboxed project its links outside the carve-outs, and a carve-out list to maintain, while protecting
+nothing.
+
+**What went:**
+- the policy port `policy.links` and its carve-outs (`.venv/`, `node_modules/`, the test runs, the tool caches);
+- Seatbelt's `link_rules` and the `links-blocked` guarantee, with its Conformance probe;
+- `--allow-link` (`sandboxed-run`, `isolation.wrap`, `project_git.py run-as`) and its use in `worktree-memory.sh`;
+- the link allowances in mitigation 3's job: with nothing refusing links, the worktree job checks tracked links out as
+  git does. `worktree-plan` now says only whether the branch exists, for the undo;
+- doctor's machine row about links, and its row about files tracked in tool folders.
+
+**What stays:**
+- Mitigation 3 whole: the hooks, `session_worktree`, the record and undo, the timeouts, names with `/`.
+- Doctor's per-project warning.
+- The measurements above, as the record of why.
+
+**What is true now** (`tests/test_session_worktree.py`, `B1Open`): a sandboxed project's services and jobs can put a
+link at a tracked folder's place, directly or as a folder holding one. **B-1 is open for them as for sessions.** If that
+test ever fails, something refuses links again, and this doc should say so.

@@ -91,9 +91,10 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
      otherwise plants files in `.git`), and `safe.bareRepository=explicit` in the owner's git config is a checked
      precondition (set 11-14). r3 after a second blind review (11-14): an unsandboxed checkout (the owner's, or an
      agent tool's worktree mode) can be raced by any running project process into writing anywhere the owner can
-     write. This is true today, with or without the broker; a symlink-creation deny closes it for services and jobs
-     only. The broker isn't built; B-1's options 2 and 3 are (11-14, the owner's "2+3"). Open for the owner: option 4,
-     push policy, signing, Codex app worktrees, submodules, who switches a project on.
+     write. This is true today, with or without the broker. The broker isn't built. B-1's option 3 is built (11-14);
+     option 2 was built and then removed by the owner (11-15): a folder holding a link could still be moved in, so it
+     was friction, not a boundary. Open for the owner: option 4, push policy, signing, Codex app worktrees, submodules,
+     who switches a project on.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
@@ -129,12 +130,11 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - The git-filter protection in `mailbox-session-first.md` step 3 rests on one tool's environment variable.
    - **Open (11-14, `git-broker.md` r3 B-1, "as built" and "after its cold review"):** any process of a sandboxed
      project can race an unsandboxed checkout (the owner's, or an agent tool's worktree mode) into writing its files
-     anywhere the owner can write. Built on the owner's "2+3": Claude Code's worktrees there are made by the platform as
-     the project (its `WorktreeCreate` hook; holds). Its services and jobs can't make a link directly in their checkouts
-     (macOS), but the build's cold review moved in a folder holding one, so that is friction, not a boundary, and
-     whether to keep it is the owner's. Still open: services and jobs, sessions' own commands, the owner's own
-     checkouts (doctor warns), Codex app worktrees (owner question 4), option 4. Needs a real Claude run to confirm the
-     hook fires in worktree mode.
+     anywhere the owner can write. Built: Claude Code's worktrees there are made by the platform as the project (its
+     `WorktreeCreate` hook; holds). The link rule for services and jobs was built, found to be friction only (a folder
+     holding a link moved in), and removed by the owner on 11-15. Still open: services and jobs, sessions' own commands,
+     the owner's own checkouts (doctor warns), Codex app worktrees (owner question 4), option 4. Needs a real Claude run
+     to confirm the hook fires in worktree mode.
 4. **Not enforced on either OS:**
    - the outbound domain allowlist (`policy.network`);
    - on Linux, inbound connections limited to localhost, and signals on kernels older than 6.12.
