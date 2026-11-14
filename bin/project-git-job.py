@@ -18,7 +18,9 @@ readable. Nothing here decides anything for the platform; the caller treats the 
   ignored <worktree>                      JSON [ignored entries] (git status --ignored)
   worktree-add <repo> <path>              a detached worktree of HEAD at <path>; prints its HEAD
   worktree-remove <repo> <path> [--force]
-  tracked-links <repo> <rev>              JSON [the paths <rev> tracks as symbolic links]
+  worktree-plan <repo> <branch>           JSON {exists: whether refs/heads/<branch> exists, links: the paths that
+                                          branch (else HEAD) tracks as symbolic links}: what session-worktree will check
+                                          out, asked first so its link allowances are known
   session-worktree <repo> <path> <branch> <rules>
                                           a coding agent's worktree, made by the platform as the project (its tool's
                                           own worktree mode would make it as the owner: docs/design/git-broker.md r3
@@ -27,6 +29,9 @@ readable. Nothing here decides anything for the platform; the caller treats the 
                                           writable}]}: the tracked paths the sandbox may not write are left out of the
                                           checkout (skip-worktree, so git doesn't see them as deleted). JSON {path,
                                           branch, skipped (at most 50), n_skipped}
+  session-worktree-undo <repo> <path> <branch> <new>
+                                          what a session-worktree that didn't finish left: the worktree at <path>
+                                          (forced), the admin entries, and <branch> when <new> is 1 (it made it)
   branch-delete <repo> <branch>           git branch -d (merged branches only)
   remove-dep <worktree> <dep> <marker> <line>
                                           delete a dependency folder (never through a symlink) and append <line> to
@@ -150,13 +155,26 @@ def op_worktree_remove(repo: str, path: str, *flags: str) -> int:
     return r.returncode
 
 
-def op_tracked_links(repo: str, rev: str) -> int:
+def op_worktree_plan(repo: str, branch: str) -> int:
+    if git(repo, "check-ref-format", "--branch", branch).returncode != 0:
+        sys.stderr.write(f"not a branch name: {branch}\n")
+        return 2
+    exists = git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0
     links = []
-    for entry in _z(git(repo, "ls-tree", "-r", "-z", "--full-tree", rev, check=True, text=False)):
+    for entry in _z(git(repo, "ls-tree", "-r", "-z", "--full-tree", f"refs/heads/{branch}" if exists else "HEAD",
+                        check=True, text=False)):
         meta, _, path = entry.partition("\t")
         if meta.split(" ")[0] == "120000":
             links.append(path)
-    return emit(links)
+    return emit({"exists": exists, "links": links})
+
+
+def op_session_worktree_undo(repo: str, path: str, branch: str, new: str) -> int:
+    git(repo, "worktree", "remove", "--force", path)
+    git(repo, "worktree", "prune")
+    if new == "1" and git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
+        git(repo, "branch", "-D", branch)
+    return 0
 
 
 def _not_writable(path: str, rules: dict) -> bool:
@@ -553,7 +571,8 @@ def op_test_runs(repo: str, since: str) -> int:
 
 
 OPS = {"test-runs": op_test_runs, "worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
-       "worktree-remove": op_worktree_remove, "tracked-links": op_tracked_links, "session-worktree": op_session_worktree, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
+       "worktree-remove": op_worktree_remove, "worktree-plan": op_worktree_plan, "session-worktree": op_session_worktree,
+       "session-worktree-undo": op_session_worktree_undo, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
        "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head, "first-look": op_first_look,

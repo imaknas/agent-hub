@@ -112,6 +112,17 @@ echo x > plain && echo files-ok
                                             "tool-link-onto-d-refused", "tool-folder-itself-refused", "files-ok"],
                          r.stderr)
 
+    def test_the_limit_a_folder_holding_a_link_can_still_be_moved_in(self):
+        """The cold review (11-14): a folder's rename is checked as a directory's creation, which mkdir is too, so a
+        folder holding a link made in a tool folder moves onto a tracked folder's place. This documents the limit: the
+        rule is friction, not a boundary. When this assertion fails, the limit is gone: say so in the design."""
+        (self.ws / "d").mkdir()
+        r = self.run_in(f"""
+mkdir -p h/node_modules && ln -s {self.tmp} h/node_modules/sub && mv d d.x && mv h/node_modules d && [ -L d/sub ] \
+  && echo folder-with-link-moved-in
+""")
+        self.assertEqual(r.stdout.split(), ["folder-with-link-moved-in"], r.stderr)
+
     def test_an_exact_allowance_for_one_job(self):
         (self.ws / "wt").mkdir()
         r = self.run_in("ln -s /etc wt/l && echo allowed; ln -s /etc wt/m 2>/dev/null || echo other-refused",
@@ -251,6 +262,10 @@ class SessionWorktree(Base):
                   mock.patch.object(policy, "protect_roots", lambda: [])):
             p.start()
             self.addCleanup(p.stop)
+        import session_worktree
+        p = mock.patch.object(session_worktree, "PENDING", self.tmp / "pending")
+        p.start()
+        self.addCleanup(p.stop)
 
     def wrap(self, project, cwd, argv, port=None, links=()):
         self.wrapped.append((project, list(argv), list(links)))
@@ -283,13 +298,58 @@ class SessionWorktree(Base):
 
     def test_refusals(self):
         import session_worktree
-        for bad in ("", "../x", "a/b", ".hidden", "x" * 80):
+        for bad in ("", "../x", "a/../b", ".hidden", "a/.b", "/a", "a//b", "a b", "x" * 101):
             with self.assertRaises(session_worktree.Refused):
                 session_worktree.make(self.ws, bad, runtime_claude)
         self.docs["proj"]["enforce"] = {}
         with self.assertRaises(session_worktree.Refused):
             session_worktree.make(self.ws, "w2", runtime_claude)
         self.assertEqual(self.wrapped, [], "nothing ran for a project that isn't sandboxed, nor for a bad name")
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_a_name_with_slashes_maps_as_the_tool_does(self):
+        import session_worktree
+        path, _s = session_worktree.make(self.ws, "feat/x", runtime_claude)
+        self.assertEqual(path, self.ws / ".claude" / "worktrees" / "feat+x")
+        self.assertEqual(git(path, "rev-parse", "--abbrev-ref", "HEAD").strip(), "worktree-feat+x")
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_an_existing_branchs_links_are_the_ones_allowed(self):
+        """The branch exists with a tracked link HEAD doesn't have: its links, not HEAD's, are allowed."""
+        import session_worktree
+        git(self.ws, "switch", "-q", "-c", "worktree-w5")
+        (self.ws / "only").mkdir()
+        os.symlink("../src/a", self.ws / "only" / "l")
+        git(self.ws, "add", "only")
+        git(self.ws, "commit", "-qm", "a link only here")
+        git(self.ws, "switch", "-q", "main")
+        path, _s = session_worktree.make(self.ws, "w5", runtime_claude)
+        self.assertTrue((path / "only" / "l").is_symlink())
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_a_make_that_didnt_finish_is_undone_by_the_next(self):
+        """Its hook killed (the job's own cleanup never ran): the record it left makes the next make of that name undo
+        the worktree and the branch first."""
+        import session_worktree
+        path = self.ws / ".claude" / "worktrees" / "w6"
+        git(self.ws, "worktree", "add", "-q", "--no-checkout", "-b", "worktree-w6", str(path), "HEAD")
+        rec = session_worktree._pending("proj", path)
+        rec.parent.mkdir(parents=True)
+        rec.write_text(json.dumps({"path": str(path), "branch": "worktree-w6", "new": True}))
+        got, _s = session_worktree.make(self.ws, "w6", runtime_claude)
+        self.assertEqual(got, path)
+        self.assertFalse(rec.exists())
+        with self.assertRaises(session_worktree.Refused):   # a folder there that no record names is never undone
+            session_worktree.make(self.ws, "w6", runtime_claude)
+
+    def test_the_hook_timeout_covers_the_work_and_stays_under_the_tools_default(self):
+        import session_worktree
+        t = session_worktree.HOOK_TIMEOUT_S
+        self.assertGreater(t, session_worktree.PLAN_TIMEOUT_S + session_worktree.JOB_TIMEOUT_S
+                           + session_worktree.UNDO_TIMEOUT_S)
+        self.assertLess(t, 600, "Claude Code's default hook timeout (600 s, read from its binary)")
+        for entries in runtime_claude.worktree_maker_hooks().values():
+            self.assertEqual(entries[0]["hooks"][0]["timeout"], t)
 
     def test_drop_only_inside_the_workspace(self):
         import session_worktree
@@ -342,7 +402,7 @@ class SessionWorktree(Base):
         attacker = f"""
 end=$(( $(date +%s) + 20 ))
 while [ $(date +%s) -lt $end ]; do
-  for w in {wt}/*/d; do [ -d "$w" ] && [ ! -L "$w" ] && mv "$w" "$w.x" 2>/dev/null && ln -s {outside} "$w" 2>/dev/null; done
+  for w in {wt}/r[024]/d; do [ -d "$w" ] && [ ! -L "$w" ] && mv "$w" "$w.x" 2>/dev/null && ln -s {outside} "$w" 2>/dev/null; done
   [ -e {stop} ] && exit 0
 done
 """
@@ -351,9 +411,11 @@ done
         a = subprocess.Popen([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", attacker], cwd=self.ws,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
-            for i in range(4):
+            made = 0
+            for i in range(6):
                 try:
                     p, _s = session_worktree.make(self.ws, f"r{i}", runtime_claude)
+                    made += 1
                     session_worktree.drop(self.ws, p)
                 except session_worktree.Refused:
                     pass
@@ -361,6 +423,8 @@ done
             stop.write_text("")
             a.wait(timeout=30)
         self.assertEqual(list(outside.iterdir()), [])
+        # the attacker goes after r0, r2 and r4 only: the others show makes go through while it runs (not vacuous)
+        self.assertGreater(made, 0, "not vacuous: some makes went through while the attacker ran")
 
 
 class RunAs(unittest.TestCase):
@@ -408,7 +472,7 @@ class Doctor(Base):
 
     def test_macos_rows(self):
         rows = self.rows(["links-blocked"], settings={"hooks": runtime_claude.worktree_maker_hooks()})
-        self.assertEqual([r[0] for r in rows], ["info", "warn"])
+        self.assertEqual([r[0] for r in rows], ["warn", "warn"], "friction, not a boundary: a warning too")
         self.assertIn("proj", rows[1][1])
         self.assertTrue(rows[1][1].endswith("claude"), rows[1][1])
 

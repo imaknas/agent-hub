@@ -2123,7 +2123,6 @@ def platform_hooks() -> dict:
 WORKTREE_EVENTS = (("WorktreeCreate", "worktree-make"), ("WorktreeRemove", "worktree-drop"))
 WORKTREES = pathlib.PurePosixPath(".claude") / "worktrees"   # where its worktree mode puts them, and its branch prefix
 WORKTREE_BRANCH = "worktree-"
-WORKTREE_TIMEOUT_S = 1800   # the checkout runs as the project with project_git's bundle timeout; the hook outlasts it
 
 
 def worktree_command(what: str) -> str:
@@ -2134,7 +2133,9 @@ def worktree_command(what: str) -> str:
 
 
 def worktree_maker_hooks() -> dict:
-    return {event: [{"hooks": [{"type": "command", "command": worktree_command(what), "timeout": WORKTREE_TIMEOUT_S}]}]
+    import session_worktree   # its timeout covers the plan, the job and the undo (session_worktree.HOOK_TIMEOUT_S)
+    return {event: [{"hooks": [{"type": "command", "command": worktree_command(what),
+                                "timeout": session_worktree.HOOK_TIMEOUT_S}]}]
             for event, what in WORKTREE_EVENTS}
 
 
@@ -2153,7 +2154,9 @@ def worktree_request(raw: str) -> dict | None:
 
 
 def worktree_location(workspace, name: str) -> tuple[pathlib.Path, str]:
-    return pathlib.Path(workspace) / WORKTREES / name, WORKTREE_BRANCH + name
+    """As its own worktree mode does (read from the binary): `/` in the name becomes `+`, in the folder and the branch."""
+    flat = name.replace("/", "+")
+    return pathlib.Path(workspace) / WORKTREES / flat, WORKTREE_BRANCH + flat
 
 
 def worktree_reply(path) -> str:

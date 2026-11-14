@@ -13,7 +13,12 @@ done, the worktree fails.
   make(cwd, name, rt) → (path, skipped)   the project the session's folder belongs to (sandboxed only), the worktree at
                                           the tool's place in its workspace (rt.worktree_location), its branch new from
                                           HEAD or the existing one; skipped: tracked paths its sandbox may not write
-                                          (control names), left out of the checkout and marked skip-worktree
+                                          (control names), left out of the checkout and marked skip-worktree. A make
+                                          that didn't finish (failed, timed out, or its hook killed) is recorded in the
+                                          platform's state until it is undone: the next make of that name undoes it
+                                          first, so no worktree or branch it made is left behind
+  HOOK_TIMEOUT_S                          what a tool's hook must allow: the plan, the job and the undo, plus a margin
+                                          (under Claude Code's 10-minute default for hooks)
   drop(cwd, path)                         `git worktree remove --force` of that worktree, as the project; only one inside
                                           that project's workspace
 Both raise Refused with a reason a person can act on.
@@ -34,7 +39,10 @@ import project_git  # noqa: E402
 
 _ = i18n.domain(__file__)
 
-NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+SEGMENT = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]*$")   # each `/`-separated part of a name: no leading dot
+PLAN_TIMEOUT_S, JOB_TIMEOUT_S, UNDO_TIMEOUT_S = 60, 360, 60
+HOOK_TIMEOUT_S = PLAN_TIMEOUT_S + JOB_TIMEOUT_S + UNDO_TIMEOUT_S + 60
+PENDING = hubconf.STATE / "session-worktree"   # {project}/{folder}.json while a make is under way or wasn't undone
 
 
 class Refused(Exception):
@@ -69,27 +77,59 @@ def link_paths(path: pathlib.Path, links: list[str]) -> list[pathlib.Path]:
     return out
 
 
+def valid_name(name: str) -> bool:
+    parts = (name or "").split("/")
+    return 0 < len(name) <= 100 and all(SEGMENT.match(p) for p in parts) and ".." not in parts
+
+
+def _pending(project: str, path: pathlib.Path) -> pathlib.Path:
+    return PENDING / project / f"{path.name}.json"
+
+
+def _undo(project: str, ws: pathlib.Path, rec: dict) -> None:
+    project_git.job(project, ws, "session-worktree-undo", ws, rec["path"], rec["branch"], "1" if rec.get("new") else "0",
+                    timeout=UNDO_TIMEOUT_S)
+
+
 def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
     project, _doc, ws = _project(cwd)
-    if not NAME.match(name or "") or ".." in name:
+    if not valid_name(name):
         raise Refused(_("not a worktree name the platform makes: {name}", name=name))
     path, branch = rt.worktree_location(ws, name)
     path = pathlib.Path(path)
-    if not path.is_relative_to(ws) or os.path.lexists(path):
+    if not path.is_relative_to(ws) or path == ws:
+        raise Refused(_("{path} is already there or isn't in {project}'s workspace", path=path, project=project))
+    rec_file = _pending(project, path)
+    try:
+        left = json.loads(rec_file.read_text())
+    except (OSError, ValueError):
+        left = None
+    if isinstance(left, dict) and left.get("path") == str(path):   # a make of this name that didn't finish
+        _undo(project, ws, left)
+        rec_file.unlink(missing_ok=True)
+    if os.path.lexists(path):
         raise Refused(_("{path} is already there or isn't in {project}'s workspace", path=path, project=project))
     try:
-        links = project_git.strs(project_git.data(project, ws, "tracked-links", ws, "HEAD"))
+        plan = project_git.data(project, ws, "worktree-plan", ws, branch, timeout=PLAN_TIMEOUT_S)
     except project_git.Unavailable as e:
         raise Refused(_("couldn't list {project}'s tracked links ({why})", project=project, why=e)) from None
+    if not isinstance(plan, dict):
+        raise Refused(_("couldn't list {project}'s tracked links ({why})", project=project, why=plan))
+    rec = {"path": str(path), "branch": branch, "new": not plan.get("exists")}
+    rec_file.parent.mkdir(parents=True, exist_ok=True)
+    rec_file.write_text(json.dumps(rec))
     r = project_git.job(project, ws, "session-worktree", ws, path, branch, json.dumps(rules()),
-                        links=link_paths(path, links), timeout=project_git.BUNDLE_TIMEOUT_S)
+                        links=link_paths(path, project_git.strs(plan.get("links"))), timeout=JOB_TIMEOUT_S)
     try:
         got = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:
         got = None
     if not isinstance(got, dict) or got.get("path") != str(path):
+        _undo(project, ws, rec)   # the job's own cleanup doesn't run when it was killed (its timeout)
+        rec_file.unlink(missing_ok=True)
         raise Refused(_("making the worktree as {project} failed ({why}); nothing was made as you", project=project,
                         why=(r.stderr.strip()[-300:] or f"exit {r.returncode}")))
+    rec_file.unlink(missing_ok=True)
     return path, project_git.strs(got.get("skipped"))
 
 
