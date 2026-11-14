@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,6 +56,7 @@ class Consolidate(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, True)   # each run left one behind: 749 by 11-14, flagged by the git fence's scan
         for d in ("bare", "copies", "hub/.state", "hub/.logs", "bin", "data", "private"):
             (self.tmp / d).mkdir(parents=True)
         sys.path.insert(0, str(ROOT / "bin"))
