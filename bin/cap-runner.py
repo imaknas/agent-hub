@@ -126,15 +126,46 @@ def eligible() -> dict[str, dict]:
 
 
 def each_job():
-    """(project, job id, path of the jobs directory): only walks directories that aren't symlinks."""
+    """(project, job id, the jobs folder's fd, the job folder's fd), walked as one chain of directory fds from the
+    workspace down (.hub-run, jobs, the job), each opened without following a link: a folder the project swaps for a link
+    after a look is never followed, since nothing is resolved by path again. Both fds are the caller's only until it asks
+    for the next job (they are closed then)."""
     for project, e in eligible().items():
         for ws in e["dirs"]:
-            jobs = ws / ".hub-run" / "jobs"
-            if any(p.is_symlink() for p in (ws / ".hub-run", jobs)) or not jobs.is_dir():
+            try:
+                ws_fd = os.open(ws, DIRFLAGS)
+            except OSError:
                 continue
-            for d in jobs.iterdir():
-                if d.is_dir() and not d.is_symlink():
-                    yield project, d.name, d
+            try:
+                yield from _jobs_under(project, ws_fd)
+            finally:
+                os.close(ws_fd)
+
+
+def _jobs_under(project: str, ws_fd: int):
+    try:
+        hr_fd = subdir(ws_fd, ".hub-run")
+    except OSError:
+        return
+    try:
+        try:
+            jobs_fd = subdir(hr_fd, "jobs")
+        except OSError:
+            return
+        try:
+            for name in sorted(os.listdir(jobs_fd)):
+                try:
+                    job_fd = subdir(jobs_fd, name)
+                except OSError:   # a link, a file, gone: not a job folder
+                    continue
+                try:
+                    yield project, name, jobs_fd, job_fd
+                finally:
+                    os.close(job_fd)
+        finally:
+            os.close(jobs_fd)
+    finally:
+        os.close(hr_fd)
 
 
 def subdir(parent_fd: int, name: str, create: bool = False) -> int:
@@ -171,13 +202,19 @@ def job_state(d: pathlib.Path, older_than: float | None = None):
     except OSError:
         return None
     try:
+        return job_state_at(fd, older_than)
+    finally:
+        os.close(fd)
+
+
+def job_state_at(fd: int, older_than: float | None = None):
+    """job_state of a job folder already open (each_job's fd)."""
+    try:
         if older_than is not None and os.stat("state.json", dir_fd=fd, follow_symlinks=False).st_mtime >= older_than:
             return None
         return read_json(fd, "state.json")
     except (OSError, ValueError):
         return None
-    finally:
-        os.close(fd)
 
 
 def read_json(dir_fd: int, name: str):
@@ -454,8 +491,10 @@ class Runner:
         if not reason and clean.get("kind") == "agent":
             reason = self.admit_agent(project, stem, clean, per_day)
         if reason:
-            write_state(job_fd, state="rejected", reason=reason)
-            os.close(job_fd)
+            try:
+                write_state(job_fd, state="rejected", reason=reason)
+            finally:
+                os.close(job_fd)
             log(project=project, id=stem, event="rejected", detail=reason)
             return
         try:
@@ -633,17 +672,13 @@ class Runner:
                 continue
             if (began := process_started(pgid)) is not None and abs(began - at) < 3:
                 self.kill(pgid, signal.SIGKILL)
-        for project, job_id, d in self.each_job():
-            st = job_state(d)
+        for project, job_id, _jobs_fd, job_fd in self.each_job():
+            st = job_state_at(job_fd)
             if not isinstance(st, dict) or st.get("state") not in ("queued", "running"):
                 continue
-            try:
-                fd = os.open(d, DIRFLAGS)
-                try:
-                    write_state(fd, state="lost", reason=_("The platform runner restarted and this job did not finish "
+            try:   # through the fd the state was read from: never the path again
+                write_state(job_fd, state="lost", reason=_("The platform runner restarted and this job did not finish "
                                                            "(result unknown); run it again"))
-                finally:
-                    os.close(fd)
             except OSError as e:   # the project's folder: whatever is there, go on
                 log(project=project, id=job_id, event="recover_error", detail=str(e)[:300])
                 continue
@@ -651,10 +686,12 @@ class Runner:
 
     def prune(self) -> None:
         cutoff = time.time() - KEEP_S
-        for _project, _job_id, d in self.each_job():
-            st = job_state(d, older_than=cutoff)
+        for _project, job_id, jobs_fd, job_fd in self.each_job():
+            st = job_state_at(job_fd, older_than=cutoff)
             if isinstance(st, dict) and st.get("state") in TERMINAL:
-                shutil.rmtree(d, ignore_errors=True)
+                # by name under the jobs folder's fd, which shutil walks with fds and O_NOFOLLOW (a job folder swapped
+                # for a link is removed as the link, its target left alone)
+                shutil.rmtree(job_id, dir_fd=jobs_fd, ignore_errors=True)
         for p in [*DIR.glob("*/*.sb"), *DIR.glob("*/*.in.json")]:
             if p.stat().st_mtime < cutoff:
                 p.unlink(missing_ok=True)

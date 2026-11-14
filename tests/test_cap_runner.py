@@ -278,5 +278,60 @@ class SwappedRequest(unittest.TestCase):
         self.assertIsNone(cr.job_state(self.d, older_than=0), "newer than the cut-off")
 
 
+class SwappedJobs(unittest.TestCase):
+    """prune() and recover() walk the job folders as one chain of fds: a jobs folder or a job folder the project swaps for
+    a link after the look is never followed (a review reproduced prune deleting outside the project that way)."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.ws = self.tmp / "ws"
+        self.jobs = self.ws / ".hub-run" / "jobs"
+        (self.jobs / "victim").mkdir(parents=True)
+        st = self.jobs / "victim" / "state.json"
+        st.write_text(json.dumps({"state": "done"}))
+        os.utime(st, (0, 0))
+        self.outside = self.tmp / "outside" / "victim"
+        self.outside.mkdir(parents=True)
+        (self.outside / "precious.txt").write_text("keep me")
+        (self.outside / "state.json").write_text(json.dumps({"state": "running"}))
+        (self.tmp / "state").mkdir()
+        for p in (mock.patch.object(cr, "eligible", lambda: {"p": {"dirs": [self.ws], "caps": [], "models": {}}}),
+                  mock.patch.object(cr, "DIR", self.tmp / "state")):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def swap_after_the_read(self):
+        real = cr.job_state_at
+
+        def racing(fd, older_than=None):
+            got = real(fd, older_than)
+            os.rename(self.jobs, self.ws / ".hub-run" / "jobs.real")
+            os.symlink(self.tmp / "outside", self.jobs)
+            return got
+        return mock.patch.object(cr, "job_state_at", racing)
+
+    def test_prune_never_deletes_through_a_link_swapped_in(self):
+        with self.swap_after_the_read():
+            cr.Runner.prune(object.__new__(cr.Runner))
+        self.assertTrue((self.outside / "precious.txt").exists())
+        self.assertFalse((self.ws / ".hub-run" / "jobs.real" / "victim").exists(), "the real job folder went")
+
+    def test_a_linked_jobs_folder_isnt_walked(self):
+        shutil.rmtree(self.jobs)
+        os.symlink(self.tmp / "outside", self.jobs)
+        self.assertEqual(list(cr.each_job()), [])
+
+    def test_recover_writes_through_the_fd_it_read(self):
+        (self.jobs / "victim" / "state.json").write_text(json.dumps({"state": "running"}))
+        runner = object.__new__(cr.Runner)
+        runner.minutes = mock.Mock()
+        with mock.patch.object(cr, "ACTIVE", self.tmp / "state" / "active.json"), self.swap_after_the_read():
+            runner.recover()
+        self.assertEqual(json.loads((self.outside / "state.json").read_text())["state"], "running", "outside untouched")
+        self.assertEqual(json.loads((self.ws / ".hub-run" / "jobs.real" / "victim" / "state.json").read_text())["state"],
+                         "lost")
+
+
 if __name__ == "__main__":
     unittest.main()
