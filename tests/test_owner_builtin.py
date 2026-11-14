@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,7 @@ BIN = ROOT / "bin"
 class Builtin(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets", "bus"):
             (self.tmp / d).mkdir(parents=True)
         self.cfg = {"owner": {"name": "alex", "tag": "Alex", "principal_id": "person:alex"}, "owner_side": "builtin",
@@ -158,6 +160,7 @@ class Notify(unittest.TestCase):
         spec.loader.exec_module(owner)
         import alert
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         sent, failed = [], []
         items = [{"kind": "task", "project": "p", "key": "k1", "text": "Do A"}]
         import contextlib
@@ -188,6 +191,7 @@ class Notify(unittest.TestCase):
         spec.loader.exec_module(owner)
         import alert
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         failed = []
         items = [{"kind": "task", "project": "p", "key": "k1", "text": "Do A"}]
         import contextlib

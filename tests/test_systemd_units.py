@@ -7,6 +7,7 @@ Verification on a real systemd is in docs/design/tool-agnostic.md step 6.
 import importlib.util
 import pathlib
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -78,6 +79,7 @@ def load_render_services():
 class RenderServicesOnSystemd(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.m = load_render_services()
         self.calls = []
         self.saved = (systemd_units.UNIT_DIR, systemd_units.systemctl, self.m.hubconf.service_manager, self.m.RENDERED)

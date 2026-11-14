@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,7 @@ class Files(unittest.TestCase):
     def setUp(self):
         if not getattr(self, "tmp", None):   # the dispatch harness has made one, with the state folder in it
             self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+            self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         (self.tmp / "state").mkdir(exist_ok=True)
         for name, value in (("secrets_dir", lambda: self.tmp / "secrets"), ("STATE", self.tmp / "state")):
             p = mock.patch.object(mr.hubconf, name, value)

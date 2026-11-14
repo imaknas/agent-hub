@@ -8,6 +8,7 @@ Sending to the phone (ask_owner) and reporting to the runner (tell_runner) are b
 import importlib.util
 import os
 import pathlib
+import shutil
 import tempfile
 import unittest
 
@@ -24,6 +25,7 @@ def load_relay():
 class WorkMode(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.ws = os.path.realpath(os.path.join(self.tmp, "idea-1"))
         os.makedirs(self.ws)
         self.m = load_relay()

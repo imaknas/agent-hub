@@ -8,6 +8,7 @@ Isolated config / bus / project (with .agent-memory); speaks MCP's JSON-RPC dire
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,7 @@ def sh(*cmd, cwd=None):
 class Server(unittest.TestCase):
     def setUp(self):
         t = self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, t, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets", "bus"):
             (t / d).mkdir(parents=True)
         ws = self.ws = t / "ws" / "demo"

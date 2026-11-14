@@ -8,6 +8,7 @@ of an ACP agent (e.g. '["npx", "-y", "<acp agent package>@<version>"]').
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import time
@@ -37,6 +38,7 @@ class AcpCase(unittest.TestCase):
     def setUp(self):
         self._secrets = hubconf.secrets_dir
         secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, secrets, ignore_errors=True)
         hubconf.secrets_dir = lambda: secrets
         self.ws = hubconf.throwaway_copy("test")   # where propose_apply makes its copy
         self.ws.mkdir()
@@ -267,6 +269,7 @@ class Confinement(AcpCase):
     def test_refuses_the_same_shape_in_the_system_temp_folder(self):
         """It's every sandboxed project's to write: a copy there would be one a project made."""
         other = pathlib.Path(tempfile.mkdtemp(prefix="hub-propose-test-")) / "ws"
+        self.addCleanup(shutil.rmtree, other.parent, ignore_errors=True)
         other.mkdir()
         res = self.m.run(runtime_ports.Task(point="mailbox-propose", prompt="hi", spec={}, cwd=str(other), timeout_s=30,
                                             env={**os.environ, "HUB_THROWAWAY_COPY": str(other)}))
@@ -275,6 +278,7 @@ class Confinement(AcpCase):
 
     def test_refuses_a_marked_directory_that_is_not_the_platforms_copy(self):
         other = pathlib.Path(tempfile.mkdtemp()) / "ws"
+        self.addCleanup(shutil.rmtree, other.parent, ignore_errors=True)
         other.mkdir()
         self.ws = other
         res = self.run_mode("ok")
@@ -312,6 +316,7 @@ class Config(AcpCase):
     def test_an_empty_key_file_is_missing_for_doctor_and_runs_alike(self):
         import tempfile as tf
         d = pathlib.Path(tf.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         (d / "k").write_text("\n")
         self.conf["agents"]["fake"]["credential"] = {"env": "K", "file": "k"}
         saved = hubconf.secrets_dir
@@ -344,6 +349,7 @@ class Permission(unittest.TestCase):
     def decide(self, call: dict) -> str:
         import runtime_acp
         ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
         t = runtime_acp._Turn(ws)
         t.update({"update": {"sessionUpdate": "tool_call", "toolCallId": "t", **call(ws)}})
         return t.permission({"toolCall": {"toolCallId": "t"}, "options": self.OPTS})["outcome"].get("optionId")
@@ -382,7 +388,9 @@ class Permission(unittest.TestCase):
 
     def test_a_refusal_may_be_for_good_an_allow_never_is(self):
         import runtime_acp
-        t = runtime_acp._Turn(tempfile.mkdtemp())
+        ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
+        t = runtime_acp._Turn(ws)
         t.update({"update": {"sessionUpdate": "tool_call", "toolCallId": "t", "kind": "fetch"}})
         out = t.permission({"toolCall": {"toolCallId": "t"}, "options": [{"optionId": "ra", "kind": "reject_always"}]})
         self.assertEqual(out["outcome"].get("optionId"), "ra")
@@ -563,6 +571,7 @@ class Live(unittest.TestCase):
         saved, saved_secrets = hubconf.get, hubconf.secrets_dir
         hubconf.get = lambda k, default=None: conf if k == "runtime.acp" else saved(k, default)
         secrets = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, secrets, ignore_errors=True)
         hubconf.secrets_dir = lambda: secrets
         try:
             import runtime_acp

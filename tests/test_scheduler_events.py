@@ -9,12 +9,13 @@ The tick runs in-process (tests/test_scheduler_tick.py's harness) against a real
 import datetime
 import io
 import json
-import types
 import os
 import pathlib
+import shutil
 import sqlite3
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -28,6 +29,13 @@ LOCAL = datetime.datetime.now().astimezone().tzinfo
 
 # the assertions read the English texts: pin the UI language (an instance's hub.json may set another)
 _LANG = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "en"})
+
+
+def run_dir(test) -> str:
+    """A run folder of the test's own, removed after it."""
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d, ignore_errors=True)
+    return d
 
 
 def setUpModule():
@@ -65,7 +73,7 @@ def ejob(name="p/react", **kw):
 
 class EventTick(unittest.TestCase):
     def setUp(self):
-        self.t = Tick()
+        self.t = Tick(self)
         self.bus = Bus(self.t.tmp)
         self.addCleanup(lambda: self.bus.c.close())
         p = mock.patch.object(hubconf, "BUS_DIR", self.t.tmp)
@@ -332,6 +340,7 @@ class Publish(unittest.TestCase):
         hb = importlib.util.module_from_spec(spec)
         loader.exec_module(hb)
         hb.DB = pathlib.Path(tempfile.mkdtemp()) / "bus.db"
+        self.addCleanup(shutil.rmtree, hb.DB.parent, ignore_errors=True)
         c = hb.db()
         self.addCleanup(c.close)
         gen = c.execute("SELECT value FROM meta WHERE key='generation'").fetchone()[0]
@@ -404,13 +413,14 @@ class PlatformSettings(unittest.TestCase):
                "platform_cli": ["agenthub send"], "write": ["/w/p"], "network": [], "credential_files": [],
                "credentials": []}
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         for enforced in (False, True):
             doc = {"name": "p", "enforce": {"sandbox": enforced}}
             # the services-only exemption must not take the sandbox away from an agent anyone can start
             with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", tmp), \
                     mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}), \
                     mock.patch.object(hubconf, "get", lambda k, d=None: ["p"] if k == "service_sandbox_exempt" else d):
-                d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
+                d = json.loads(runtime_claude.platform_settings("p", {}, run_dir(self)).read_text())
             self.assertIn("Read(//w/q/**)", d["permissions"]["deny"])
             self.assertNotIn("allow", d["permissions"], "no command is allowed by the settings: the run's rules decide")
             self.assertEqual("sandbox" in d, enforced)

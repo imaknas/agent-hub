@@ -8,6 +8,7 @@ The merge-branch part runs with an isolated config + a real git repo / worktree.
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -128,6 +129,7 @@ class PrivateNames(unittest.TestCase):
 class MergeGate(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets", "bus"):
             (self.tmp / d).mkdir(parents=True)
         (self.tmp / "config" / "hub.json").write_text(json.dumps({"bus_dir": str(self.tmp / "bus"),

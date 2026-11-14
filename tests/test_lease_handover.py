@@ -16,6 +16,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -48,6 +49,7 @@ class Handover(unittest.TestCase):
     def setUp(self):
         self.m = m = load_runner()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DIR = self.tmp
         self.delivered = []
         for name, value in [("deny_settings", lambda project: self.tmp / "deny.json"), ("env_for", lambda lease: {}),
@@ -124,6 +126,7 @@ class HandoverIds(unittest.TestCase):
     def setUp(self):
         self.m = load_runner()
         self.m.DIR = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.m.DIR, ignore_errors=True)
         self.sent = []
         p = mock.patch.object(self.m, "hubbus", lambda *a: (self.sent.append(a), types.SimpleNamespace(returncode=0))[1])
         p.start()
@@ -222,6 +225,7 @@ class RestartOnCodeChange(unittest.TestCase):
     def setUp(self):
         self.m = load_runner()
         self.m.DIR = pathlib.Path(tempfile.mkdtemp())  # log() writes in DIR: must not write into the real runner.log
+        self.addCleanup(shutil.rmtree, self.m.DIR, ignore_errors=True)
         self.m.CODE_AT_START = 100.0
         self.exited = []
         p = mock.patch.object(self.m.os, "_exit", lambda code: self.exited.append(code))
@@ -270,6 +274,7 @@ class CodeStamp(unittest.TestCase):
     def test_changes_when_a_bin_file_changes(self):
         import hubconf
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / "bin").mkdir()
         f = tmp / "bin" / "x.py"
         f.write_text("1")

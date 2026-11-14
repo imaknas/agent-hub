@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -33,6 +34,7 @@ class Questions(unittest.TestCase):
     def setUp(self):
         m = self.m = load_hubbus()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda msg: None
         m.RECORDS = False   # v1 letters (an install without mailbox.records); the records side is QuestionRecords

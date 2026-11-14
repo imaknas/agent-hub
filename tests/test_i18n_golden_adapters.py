@@ -9,6 +9,7 @@ In-process; the command runtime runs real tiny commands (true, sleep), the provi
 """
 import os
 import pathlib
+import shutil
 import sys
 import types
 import unittest
@@ -51,6 +52,7 @@ def setUpModule():
     """The runtimes' temp folders, away from the tree's own."""
     import tempfile
     d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    unittest.addModuleCleanup(shutil.rmtree, d, ignore_errors=True)
     p = mock.patch.object(hubconf, "secrets_dir", lambda: d)
     p.start()
     unittest.addModuleCleanup(p.stop)

@@ -17,6 +17,7 @@ import importlib.util
 import io
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -38,6 +39,7 @@ class MailHook(unittest.TestCase):
     def setUp(self):
         m = self.m = load("hubbus_hl", ROOT / "bin" / "hubbus")
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.project_of = lambda cwd: "proj"
@@ -77,6 +79,7 @@ class LlmMarksItsProcesses(unittest.TestCase):
         self.addCleanup(runtime_fake.reset)
         llm = load("llm_hl", ROOT / "bin" / "llm.py")
         prompt = pathlib.Path(tempfile.mkdtemp()) / "p.txt"
+        self.addCleanup(shutil.rmtree, prompt.parent, ignore_errors=True)
         prompt.write_text("x")
         a = argparse.Namespace(cmd="run", point="login-check", cwd=None, model=None, prompt_file=str(prompt),
                                dry_run=False, extra=[])

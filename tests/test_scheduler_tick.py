@@ -11,6 +11,7 @@ import datetime
 import importlib.util
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,9 +36,10 @@ def load():
 class Tick:
     """One scheduler module pointed at a temp directory; tick(jobs, now) runs main() once."""
 
-    def __init__(self):
+    def __init__(self, test: unittest.TestCase):
         self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        test.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         st = self.tmp / "state"
         st.mkdir()
         m = self.m
@@ -93,7 +95,7 @@ DAY = datetime.datetime(2026, 10, 30, 12, 0)   # a Friday
 
 class ClockJobs(unittest.TestCase):
     def setUp(self):
-        self.t = Tick()
+        self.t = Tick(self)
 
     def test_due_job_runs_once_a_day(self):
         jobs = [{"name": "a", "time": "06:00", "command": "echo a"},
@@ -159,7 +161,7 @@ class ClockJobs(unittest.TestCase):
 
 class IntervalJobs(unittest.TestCase):
     def setUp(self):
-        self.t = Tick()
+        self.t = Tick(self)
 
     def test_runs_again_after_the_interval_with_a_minute_of_grace(self):
         jobs = [{"name": "i", "every_minutes": 30, "command": "echo i"}]
@@ -186,7 +188,7 @@ class IntervalJobs(unittest.TestCase):
 
 class After(unittest.TestCase):
     def setUp(self):
-        self.t = Tick()
+        self.t = Tick(self)
 
     def test_waits_for_a_job_not_yet_due_then_runs_after_it(self):
         jobs = [{"name": "dep", "time": "13:00", "command": "echo dep"},
@@ -226,7 +228,7 @@ class After(unittest.TestCase):
 
 class Background(unittest.TestCase):
     def setUp(self):
-        self.t = Tick()
+        self.t = Tick(self)
 
     def run_file(self, name, rec):
         (self.t.m.RUNS_DIR / f"{name}.json").write_text(json.dumps(rec))

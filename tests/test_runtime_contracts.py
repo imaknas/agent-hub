@@ -12,6 +12,7 @@ import datetime
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import types
@@ -62,6 +63,7 @@ def _iso(t):
 def setUpModule():
     """The runtimes' temp folders, away from the tree's own."""
     d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    unittest.addModuleCleanup(shutil.rmtree, d, ignore_errors=True)
     p = mock.patch.object(_hubconf, "secrets_dir", lambda: d)
     p.start()
     unittest.addModuleCleanup(p.stop)
@@ -816,6 +818,7 @@ class CommandTemplate(unittest.TestCase):
         import runtime_command as m
         import hubconf
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         script = tmp / "agent.py"
         script.write_text("import sys\nprint(repr(sys.stdin.read()), sys.argv[1])\n")
         saved = hubconf.get
@@ -836,6 +839,7 @@ class CommandTemplate(unittest.TestCase):
         import runtime_command as m
         import hubconf
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         script = tmp / "agent.py"
         script.write_text("import sys\nprint('a tool was auto-denied', file=sys.stderr)\n")
         saved = hubconf.get
@@ -861,6 +865,7 @@ class CommandRuntimeFailsClosed(unittest.TestCase):
     def setUp(self):
         import hubconf
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.ran = self.tmp / "ran"
         script = self.tmp / "agent.py"
         script.write_text(f"open({str(self.ran)!r}, 'w').write('x')\nprint('done')\n")

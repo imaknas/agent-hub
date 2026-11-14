@@ -20,6 +20,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -68,6 +69,7 @@ class Bus(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "reused": self.tmp, "other": self.tmp}

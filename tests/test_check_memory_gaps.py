@@ -7,6 +7,7 @@ import datetime
 import importlib.util
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,7 @@ class NoteCommits(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.ws = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.ws, ignore_errors=True)
         self.repo = self.ws / ".agent-memory"
         (self.repo / "memory").mkdir(parents=True)
         self.git("init", "-q", "-b", "agent-memory")
@@ -71,6 +73,7 @@ class TodoBlock(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.todo = pathlib.Path(tempfile.mkdtemp()) / "todo.md"
+        self.addCleanup(shutil.rmtree, self.todo.parent, ignore_errors=True)
         self.todo.write_text("# todo\n\n- [ ] [agent] x\n")
 
     def test_block_added_replaced_removed(self):
@@ -100,6 +103,7 @@ class DigestSections(unittest.TestCase):
         self._data = os.environ.get("AGENT_HUB_DATA")
         # the digest is written in the data directory (hubconf.data_dir()); never the real one
         os.environ["AGENT_HUB_DATA"] = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, os.environ["AGENT_HUB_DATA"], ignore_errors=True)
 
     def tearDown(self):
         if self._data is None:

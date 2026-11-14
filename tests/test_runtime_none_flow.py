@@ -7,6 +7,7 @@ Runs the real commands in an isolated HOME / config / data.
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ import i18n  # noqa: E402
 class RuntimeNone(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for d in ("home", "config", "data", "secrets", "bus", "ws"):
             (self.tmp / d).mkdir()
         (self.tmp / "config" / "hub.json").write_text(json.dumps({

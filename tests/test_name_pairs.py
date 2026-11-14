@@ -11,6 +11,7 @@ tests/fixtures/name-pairs-baseline.json and may only go down: moving a read onto
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -69,6 +70,7 @@ class Table(unittest.TestCase):
 
     def test_resolve(self):
         base = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
         self.assertEqual(names.resolve(base, "repo_dir").name, names.current("repo_dir"), "neither exists: the current one")
         (base / names.other("repo_dir")).mkdir()
         self.assertEqual(names.resolve(base, "repo_dir").name, names.other("repo_dir"), "an existing one is used as it is")
@@ -109,6 +111,7 @@ class Markers(unittest.TestCase):
         un = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(un)
         f = pathlib.Path(tempfile.mkdtemp()) / "CLAUDE.local.md"
+        self.addCleanup(shutil.rmtree, f.parent, ignore_errors=True)
         old_b, old_e = names.block(names.other("marker"))
         f.write_text(f"mine\n{old_b}\nx\n{old_e}\n")
         self.assertTrue(un.strip_block(f, True))
@@ -160,6 +163,7 @@ class HubNames(unittest.TestCase):
         spec.loader.exec_module(cc)
         schema = "contracts/hubbus.v1.schema.json"
         ws = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
         (ws / "contracts").mkdir()
         shutil.copy(ROOT / schema, ws / schema)
         platform = {"name": "whatever-stem", "type": "platform",
@@ -184,6 +188,7 @@ class HubNames(unittest.TestCase):
         old, new = names.all("unit")
         p_old, p_new = names.all("product")
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         hub, home, stub = tmp / "hub", tmp / "home", tmp / "stub"
         for d in (hub / "bin", hub / "launchd", home / "Library" / "LaunchAgents", stub):
             d.mkdir(parents=True)
@@ -217,6 +222,7 @@ class HubNames(unittest.TestCase):
         tr = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tr)
         tree = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tree, ignore_errors=True)
         (tree / "projects").mkdir()
         (tree / "bin").symlink_to(ROOT / "bin")   # what the entry's run: lines name
         entry = names.resolve(ROOT / "projects", "project", "{}.yaml").read_text().replace(
@@ -239,6 +245,7 @@ class SchedulerState(unittest.TestCase):
         state = {f"{other}/librarian": "2026-11-02", f"{other}/librarian.attempts": {"date": "2026-11-02", "count": 1},
                  f"{hub}/librarian": "2026-11-01"}
         failing = pathlib.Path(tempfile.mkdtemp()) / "failing.json"
+        self.addCleanup(shutil.rmtree, failing.parent, ignore_errors=True)
         failing.write_text(json.dumps({f"{other}/librarian": {"since": "x"}}))
         with mock.patch.object(sch, "FAILING_FILE", failing):
             sch.adopt_state({"name": f"{hub}/librarian", "project": hub}, state)
@@ -256,6 +263,7 @@ class Wrapper(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "bin"))
         import upgrade
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         for name in names.all("cli"):
             with self.subTest(name=name):
                 for f in d.iterdir():
@@ -283,6 +291,7 @@ class ConfigPath(unittest.TestCase):
 
     def test_whichever_exists(self):
         cfg = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, cfg, ignore_errors=True)
         cur, oth = names.current("config_file"), names.other("config_file")
         read = "import hubconf; print(hubconf.config_path().name, hubconf.get('owner.tag'), hubconf.config_conflict())"
         self.assertEqual(self.run_py(cfg, read), f"{cur} None None", "neither: this release's own name")
@@ -300,6 +309,7 @@ class ConfigPath(unittest.TestCase):
 
     def test_shell_finds_whichever_exists(self):
         cfg = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, cfg, ignore_errors=True)
         cur, oth = names.current("config_file"), names.other("config_file")
         env = {**names.env_strip(__import__("os").environ), "BRUNNA_CONFIG": str(cfg)}
         sh = f'source "{ROOT}/bin/hubpaths.sh"; printf "%s|" "$HUB_JSON"; hub_json_get owner.tag'
@@ -317,6 +327,7 @@ class LettersUnderTheOtherName(unittest.TestCase):
     def test_in_the_mailbox(self):
         import os
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets", "bus", "state"):
             (tmp / d).mkdir(parents=True)
         (tmp / "config" / "hub.json").write_text(json.dumps({"owner": {"tag": "Alex"}, "bus_dir": str(tmp / "bus"),

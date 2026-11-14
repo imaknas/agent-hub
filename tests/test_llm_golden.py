@@ -19,6 +19,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -57,6 +58,7 @@ class Golden(unittest.TestCase):
         # credentials go in a fake HOME (no patching of module variables: wherever login moves, this test needs
         # no change)
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / ".claude").mkdir()
         self.token_file = tmp / ".claude" / "headless-oauth-token"
         self.token_file.write_text("not-a-real-token\n")

@@ -10,6 +10,7 @@ import http.server
 import json
 import os
 import pathlib
+import shutil
 import string
 import sys
 import tempfile
@@ -53,6 +54,7 @@ def setUpModule():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.llm = {"providers": {"f": {"impl": "fake", "models": {"fast": {"name": "m1", "context": 1000},
                                                                     "standard": "m2"}}},
                     "use": {"fast": "f", "standard": "f"}}

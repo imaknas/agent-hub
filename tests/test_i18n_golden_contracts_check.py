@@ -11,6 +11,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -99,6 +100,7 @@ class Golden(unittest.TestCase):
     def scenario(self) -> str:
         m = self.load()
         tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         out = []
         with mock.patch.dict(os.environ, ZH):
             out.append(("cross_copies", "\n".join(self.copies(m, tmp))))

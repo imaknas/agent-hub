@@ -38,6 +38,13 @@ CONFINED = ("agent-job-event", "agent-job-confined", *MAILBOX)
 SAVED = ["Bash(*)", "Bash(npm:*)", "Bash(git push:*)", "WebFetch", "Edit(**)"]
 
 
+def run_dir(test) -> str:
+    """A run folder of the test's own, removed after it."""
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d, ignore_errors=True)
+    return d
+
+
 def points() -> dict:
     return yaml.safe_load((ROOT / "contracts" / "llm-points.yaml").read_text())["points"]
 
@@ -189,7 +196,7 @@ class PlatformSettingsFile(unittest.TestCase):
         doc = {"name": "p", "paths": {"workspace": str(ws)}, "enforce": {"sandbox": True}}
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", state), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
-            d = json.loads(runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()).read_text())
+            d = json.loads(runtime_claude.platform_settings("p", {}, run_dir(self)).read_text())
         self.assertNotIn("allow", d["permissions"], "the run's own rules are its whole boundary")
         self.assertFalse(set(SAVED) & set(d["permissions"]["deny"]))
         self.assertIs(d["sandbox"]["autoAllowBashIfSandboxed"], False)
@@ -242,8 +249,8 @@ class JobStateFolder(unittest.TestCase):
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch.object(hubconf, "STATE", self.state), \
                 mock.patch.object(hubconf, "MAIN", self.hub), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
-            whole, own = (runtime_claude.platform_settings("p", {}, tempfile.mkdtemp()),
-                         runtime_claude.platform_settings("p", {}, tempfile.mkdtemp(), self.job))
+            whole, own = (runtime_claude.platform_settings("p", {}, run_dir(self)),
+                         runtime_claude.platform_settings("p", {}, run_dir(self), self.job))
         self.assertNotEqual(whole, own)
         deny_whole = json.loads(whole.read_text())["permissions"]["deny"]
         deny_own = json.loads(own.read_text())["permissions"]["deny"]
@@ -270,6 +277,7 @@ class JobStateFolder(unittest.TestCase):
                 mock.patch.object(hubconf, "MAIN", self.hub), \
                 mock.patch("registry.refresh", lambda: {"projects": {"p": doc}}):
             run_dir = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, run_dir, ignore_errors=True)
             f = runtime_claude.platform_settings("p", {}, run_dir, None, self.job)
         self.assertEqual(f.parent, pathlib.Path(run_dir), "in the run's own folder")
         deny = json.loads(f.read_text())["permissions"]["deny"]

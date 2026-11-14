@@ -10,6 +10,7 @@ import datetime
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -84,6 +85,7 @@ class Home(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.home = self.tmp / "codex-home"
         self.home.mkdir()
         self.hub = self.tmp / "hub"
@@ -270,6 +272,7 @@ class NothingInstallsItForTheOwner(unittest.TestCase):
 class Sessions(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
         p.start()
         self.addCleanup(p.stop)
@@ -477,6 +480,7 @@ class Handlers(unittest.TestCase):
         self.he = ti.load_file("hub_event_codex", BIN / "hub-event")
         self.he._RT, self.he._RT_NAME = runtime_codex, "codex"
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def ev(self, event, cwd):
         return runtime_ports.HubEvent(event, f"codex:{SID}", str(cwd))
@@ -545,6 +549,7 @@ class Handlers(unittest.TestCase):
 class Config(unittest.TestCase):
     def test_runtime_installed_may_name_codex(self):
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / "hub.json").write_text(json.dumps({"runtime": {"installed": ["claude", "codex"]}}))
         r = subprocess.run([sys.executable, str(BIN / "config-check")], cwd=tmp, capture_output=True, text=True,
                            env={**os.environ, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(tmp)})
@@ -727,6 +732,7 @@ class Recorded(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.home = self.tmp / "codex-home"
         self.ws = self.tmp / "proj"
         self.ws.mkdir()

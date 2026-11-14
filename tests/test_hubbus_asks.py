@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,7 @@ class Asks(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "other": self.tmp}
@@ -173,6 +175,7 @@ class RenamedProjects(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         self.logs = []
         m.log = self.logs.append

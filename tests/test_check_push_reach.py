@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -43,6 +44,7 @@ class Check(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         (self.tmp / "token").write_text("secret-token\n")
         self.alerts = []
         self.requests = []

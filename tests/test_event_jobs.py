@@ -7,6 +7,7 @@ import datetime
 import json
 import pathlib
 import re
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -87,6 +88,7 @@ class Prompt(unittest.TestCase):
         with self.assertRaises(ValueError):
             ej.prompt_with_events("x", {"AGENT_HUB_EVENTS": '{"count": 1}'})
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         (d / "p.md").write_text("x")
         import io
         import contextlib
@@ -154,6 +156,7 @@ class Batch(unittest.TestCase):
 class ReadBus(unittest.TestCase):
     def setUp(self):
         self.db = pathlib.Path(tempfile.mkdtemp()) / "bus.db"
+        self.addCleanup(shutil.rmtree, self.db.parent, ignore_errors=True)
         c = sqlite3.connect(self.db, isolation_level=None)
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("CREATE TABLE events(seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, ts TEXT NOT NULL,"

@@ -14,6 +14,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -33,10 +34,12 @@ def load_llm():
 class ModelFor(unittest.TestCase):
     def setUp(self):
         self.cfg = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.cfg, ignore_errors=True)
         self.prompt = self.cfg / "p.txt"
         self.prompt.write_text("x")
         # login: a fake token in a fake HOME (never this machine's real credentials; the gate uses a fake HOME too)
         self.home = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
         (self.home / ".claude").mkdir()
         (self.home / ".claude" / "headless-oauth-token").write_text("not-a-real-token\n")
 

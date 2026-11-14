@@ -6,6 +6,7 @@ a channel set up in hub.json alerts.
 import importlib.util
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -26,6 +27,7 @@ class Channels(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for name in ("SENT", "FAILED"):
             p = mock.patch.object(self.m, name, self.tmp / f"{name}.json")
             p.start()
@@ -60,6 +62,7 @@ class AssistantChannel(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for name in ("SENT", "FAILED"):
             p = mock.patch.object(self.m, name, self.tmp / f"{name}.json")
             p.start()
@@ -152,6 +155,7 @@ class Adapters(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for name in ("SENT", "FAILED"):
             p = mock.patch.object(self.m, name, self.tmp / f"{name}.json")
             p.start()
@@ -421,6 +425,7 @@ class RealChannelsUnderTest(unittest.TestCase):
         import io
         m = load()
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         token = tmp / "token"
         token.write_text("t")
         calls = []

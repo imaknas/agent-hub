@@ -7,6 +7,7 @@ import importlib.machinery
 import importlib.util
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -29,6 +30,7 @@ class HubEvent(unittest.TestCase):
     def setUp(self):
         self.m = load_hub_event()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.m.LOG = self.tmp / "hub-event.log"
         self.m._workspace = lambda cwd: self.tmp
         # these handlers are stand-ins: the rule has tests/test_worktree_pointer.py
@@ -144,6 +146,7 @@ class WorktreeHooksNameTheirRuntime(unittest.TestCase):
     def setUp(self):
         self.m = load_hub_event()
         self.m.LOG = pathlib.Path(tempfile.mkdtemp()) / "hub-event.log"
+        self.addCleanup(shutil.rmtree, self.m.LOG.parent, ignore_errors=True)
         self.seen = []
 
         def load(name=None, ports=None):
@@ -200,6 +203,7 @@ class HubRuntimeNamesItsRuntime(unittest.TestCase):
         import io
         import runtime_claude
         ws = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
         out = io.StringIO()
         with mock.patch.object(hr.runtime_ports, "default_name", lambda: "fake"), mock.patch("sys.stdout", out):
             self.assertEqual(hr.main(["--runtime", "claude", "instructions-file", ws]), 0)

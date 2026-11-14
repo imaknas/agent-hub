@@ -8,6 +8,7 @@ the test hub runs with --no-launchd and the core-unit check is unit-tested on st
 import json
 import pathlib
 import plistlib
+import shutil
 import subprocess
 import sys
 import unittest
@@ -85,6 +86,7 @@ class Parts(unittest.TestCase):
     def test_settings_with_only_the_platforms_hooks_go(self):
         import tempfile
         ws = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
         (ws / ".claude").mkdir()
         f = ws / ".claude" / "settings.local.json"
         f.write_text(json.dumps(runtime_claude.install_hooks({})))
@@ -98,6 +100,7 @@ class Parts(unittest.TestCase):
         import importlib.util
         import tempfile
         home = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
         spec = importlib.util.spec_from_file_location("uninstall_t", ROOT / "bin" / "uninstall.py")
         un = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(un)

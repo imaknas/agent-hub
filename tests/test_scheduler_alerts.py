@@ -11,6 +11,7 @@ import datetime
 import importlib.util
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -30,6 +31,7 @@ class FailingJobs(unittest.TestCase):
     def setUp(self):
         self.m = load()
         self.m.FAILING_FILE = pathlib.Path(tempfile.mkdtemp()) / "failing.json"
+        self.addCleanup(shutil.rmtree, self.m.FAILING_FILE.parent, ignore_errors=True)
 
     def failing(self):
         return json.loads(self.m.FAILING_FILE.read_text()) if self.m.FAILING_FILE.exists() else {}

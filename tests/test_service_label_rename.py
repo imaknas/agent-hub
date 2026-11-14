@@ -7,6 +7,7 @@ import importlib.util
 import json
 import pathlib
 import plistlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,7 @@ class LabelRename(unittest.TestCase):
     def test_a_renamed_label_replaces_the_old_one(self):
         m = load()
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         new = "local.agent-hub.sync-all-memory"
         plist = {"Label": new, "ProgramArguments": ["/bin/true"], "StartInterval": 3600}
         (tmp / f"{OLD}.plist").write_bytes(plistlib.dumps({**plist, "Label": OLD}))

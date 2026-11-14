@@ -14,6 +14,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -47,6 +48,7 @@ class Resume(unittest.TestCase):
     def setUp(self):
         self.m = m = load_runner()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DIR = self.tmp
         m.deny_settings = lambda project: self.tmp / "deny.json"
         m.mcp_config = lambda lease: self.tmp / "mcp.json"
@@ -102,6 +104,7 @@ class Reader(unittest.TestCase):
     def setUp(self):
         self.m = m = load_runner()
         m.DIR = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, m.DIR, ignore_errors=True)
 
     def run_reader(self, lease, lines):
         proc = FakeProc(lines)
@@ -142,7 +145,9 @@ class Attachments(unittest.TestCase):
         self.b64 = lambda raw: base64.b64encode(raw).decode()
         self.m = m = load_runner()
         m.DIR = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, m.DIR, ignore_errors=True)
         self.ws = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.ws, ignore_errors=True)
         subprocess.run(["git", "init", "-q", str(self.ws)], check=True)
         self.lease = m.Lease({"lease_id": "33333333-3333-4333-8333-333333333333", "project": "p", "cwd": str(self.ws)})
         self.sent = []

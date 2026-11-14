@@ -21,6 +21,7 @@ import os
 import pathlib
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,7 @@ class Golden(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         env = mock.patch.dict(os.environ, ZH)
         env.start()
         self.addCleanup(env.stop)

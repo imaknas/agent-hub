@@ -6,6 +6,7 @@ installed or built: only `bin/setup --check`'s lines before the platform Python 
 """
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ class SetupHints(unittest.TestCase):
     def setup(self, system: str, *have: str, systemd: bool = False) -> str:
         """bin/setup --check on `system` (uname -s) with only `have` among the optional/required commands"""
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         stubs = tmp / "bin"
         stubs.mkdir()
 

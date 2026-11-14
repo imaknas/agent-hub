@@ -65,6 +65,7 @@ class Golden(unittest.TestCase):
         m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(m)
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         o, e = io.StringIO(), io.StringIO()
         with mock.patch.dict(os.environ, ZH), mock.patch.object(m, "OUT", tmp), redirect_stderr(e), \
                 mock.patch.object(m.sessions, "require", side_effect=m.sessions.NoSessions("no session records here")), \
@@ -85,6 +86,7 @@ class Golden(unittest.TestCase):
         out = []
         for label, weeks in (("weeks", json.loads((INPUTS / "reflect-weeks.json").read_text())), ("no weeks", [])):
             tmp = pathlib.Path(tempfile.mkdtemp())
+            self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
             for w in weeks:
                 (tmp / f"{w['week']}.json").write_text(json.dumps(w, ensure_ascii=False, indent=1))
             # the page names the configured assistant (hub.json assistant.name)

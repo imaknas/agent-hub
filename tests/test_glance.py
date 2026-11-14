@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -26,6 +27,7 @@ SCHEMA = ROOT / "contracts" / "glance.v1.schema.json"
 class Glance(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets", "bus", "state", "ws/app", "ws/box"):
             (self.tmp / d).mkdir(parents=True)
         self.env = {**names.env_strip(os.environ), "HOME": str(self.tmp / "home"),

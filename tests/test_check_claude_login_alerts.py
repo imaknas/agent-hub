@@ -15,6 +15,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import time
@@ -52,6 +53,7 @@ class AlertIds(unittest.TestCase):
     def setUp(self):
         self.a = load("alert_ids_t", ROOT / "bin" / "alert.py")
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for name in ("SENT", "FAILED"):
             p = mock.patch.object(self.a, name, self.tmp / f"{name}.json")
             p.start()
@@ -91,6 +93,7 @@ class AlertIds(unittest.TestCase):
 class Check(unittest.TestCase):
     def setUp(self):
         self.home = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
         (self.home / ".claude").mkdir()
         token = self.home / ".claude" / "headless-oauth-token"
         token.write_text("x")
@@ -235,6 +238,7 @@ class ConnectorJobs(unittest.TestCase):
     def setUp(self):
         self.m = load("check_login_jobs_t", ROOT / "bin" / "check-claude-login.py")
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def jobs(self, projects, modules=None, index=True, text=None):
         idx = self.tmp / "index.json"

@@ -4,6 +4,7 @@ instance directory move: secrets were only copied to the new location, the old o
     bin/py -m unittest discover -s tests
 """
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ import runtime_claude  # noqa: E402
 class SecretDirs(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.hub, self.new = self.tmp / "hub", self.tmp / "home" / "secrets"
         self.hub.mkdir()
         self.new.mkdir(parents=True)

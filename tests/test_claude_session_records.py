@@ -19,6 +19,7 @@ import calendar
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,7 @@ def ps(*lines):
 class SecretsDir(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
         p.start()
         self.addCleanup(p.stop)

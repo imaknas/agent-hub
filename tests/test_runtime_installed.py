@@ -9,11 +9,12 @@ bus is a temporary one; no agent, no hook, no session socket is ever touched; ps
     bin/py -m unittest tests.test_runtime_installed
 """
 import importlib.machinery
-import io
 import importlib.util
+import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,7 @@ class Bus(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.ws = self.tmp / "proj"
         self.ws.mkdir()
         hb = self.hb = load_file("hubbus_installed", BIN / "hubbus")
@@ -231,6 +233,7 @@ class Ids(unittest.TestCase):
                          base)
         self.assertNotEqual(minischema.errors(schema, {"runtime": {"installed": "claude"}}), base)
         tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         (tmp / "hub.json").write_text(json.dumps({"runtime": {"installed": ["claude", "nosuch"]}}))
         r = subprocess.run([sys.executable, str(BIN / "config-check")], cwd=tmp, capture_output=True, text=True,
                            env={**os.environ, "AGENT_HUB_ROOT": str(ROOT), "AGENT_HUB_CONFIG": str(tmp),
@@ -420,6 +423,7 @@ class Projects(WithHalf):
     def setUp(self):
         super().setUp()
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def test_the_protected_control_files_are_every_installed_runtimes(self):
         import policy

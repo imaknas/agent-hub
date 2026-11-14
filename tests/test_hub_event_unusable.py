@@ -5,6 +5,7 @@ runs and the output is empty."""
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ import test_mailbox_wake as tmw  # noqa: E402
 class Unusable(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.m = tmw.load_file("hub_event_unusable", BIN / "hub-event")
         self.m.LOG = self.tmp / "hub-event.log"
         p = mock.patch.dict(os.environ)   # no session process: its version is unreadable (Version below gives one)

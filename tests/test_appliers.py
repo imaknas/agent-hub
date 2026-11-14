@@ -10,6 +10,7 @@ real services are never touched.
     bin/py -m unittest discover -s tests
 """
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -150,7 +151,9 @@ class ServiceNotLoaded(unittest.TestCase):
 
     def test_planned_and_reloaded(self):
         m, fx = appliers.load("services"), ServicesFixture()
-        index = fx.setup(m, pathlib.Path(tempfile.mkdtemp()))
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        index = fx.setup(m, tmp)
         self.addCleanup(fx.teardown, m)
         m.apply(index)
         self.assertEqual(m.plan(index), [])
@@ -168,7 +171,9 @@ class ServiceManagerHome(unittest.TestCase):
     def test_another_home_has_no_service_manager_and_says_why(self):
         import hubconf
         from unittest import mock
-        for home, want in ((pathlib.Path(tempfile.mkdtemp()), None), (None, "launchd")):
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for home, want in ((tmp, None), (None, "launchd")):
             with self.subTest(home=home), mock.patch.object(hubconf, "_SERVICE_MANAGER", []), \
                     mock.patch.object(hubconf.sys, "platform", "darwin"):
                 real = pathlib.Path(__import__("pwd").getpwuid(__import__("os").getuid()).pw_dir)

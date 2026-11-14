@@ -29,6 +29,13 @@ EVENT_JOB = {"HUB_LLM_POINT": "agent-job-event", **CONFINED}
 CLOCK_JOB = {"HUB_LLM_POINT": "agent-job-confined", **CONFINED}
 
 
+def run_dir(test) -> str:
+    """A run folder of the test's own, removed after it."""
+    d = tempfile.mkdtemp()
+    test.addCleanup(shutil.rmtree, d, ignore_errors=True)
+    return d
+
+
 def with_letters(env, *ids):
     return {**env, "MAILBOX_LETTERS": json.dumps(ids)}
 
@@ -1113,7 +1120,7 @@ class Settings(unittest.TestCase):
                "workspace": str(ws)}
         doc = {"name": project, "paths": {"workspace": str(ws)}}
         with mock.patch("policy.policy", lambda name, d, i: pol), mock.patch("registry.refresh", lambda: {"projects": {project: doc}}):
-            return json.loads(runtime_claude.platform_settings(project, {}, tempfile.mkdtemp(), keep).read_text())["permissions"]["deny"]
+            return json.loads(runtime_claude.platform_settings(project, {}, run_dir(self), keep).read_text())["permissions"]["deny"]
 
     def tilde(self, p):
         import runtime_claude

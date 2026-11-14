@@ -12,6 +12,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import time
@@ -42,6 +43,7 @@ NOT_FOUND = rt("claude not found")   # what llm.py reports in zh-Hant; is_login_
 class Check(unittest.TestCase):
     def setUp(self):
         self.home = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
         (self.home / ".claude").mkdir()
         self.token = self.home / ".claude" / "headless-oauth-token"
         self.creds = self.home / ".claude" / ".credentials.json"

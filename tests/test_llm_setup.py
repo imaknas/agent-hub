@@ -9,6 +9,7 @@ import http.server
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -64,6 +65,7 @@ class Setup(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for d in ("home", "config/projects", "data", "secrets"):
             (self.tmp / d).mkdir(parents=True)
         self.cfg = {"owner": {"name": "alex", "tag": "Alex"}, "registry_dir": "projects", "runtime": {"default": "none"},

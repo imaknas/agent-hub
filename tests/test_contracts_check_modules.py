@@ -7,6 +7,7 @@ from the start.
 import importlib.util
 import os
 import pathlib
+import shutil
 import string
 import sys
 import tempfile
@@ -42,6 +43,7 @@ class ModuleConsumes(unittest.TestCase):
         zh.start()
         self.addCleanup(zh.stop)
         self.ws = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.ws, ignore_errors=True)
         (self.ws / "c.json").write_text('{"type": "object"}\n')
         self.producer = {"name": "helper", "paths": {"workspace": str(self.ws)},
                          "provides": [{"contract": "helper-x", "v": 1, "schema": "c.json"}]}

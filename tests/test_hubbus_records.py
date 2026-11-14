@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -44,6 +45,7 @@ class Records(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "other": self.tmp}
@@ -212,6 +214,7 @@ class ReusedIds(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp}
         self.owner = m.hubconf.owner_address()

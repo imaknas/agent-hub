@@ -12,6 +12,7 @@ import datetime
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,6 +48,7 @@ class Instance(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         for target, value in ((hubconf, {"STATE": self.tmp / "state", "LOGS": self.tmp / "logs"}),):
             for k, v in value.items():
                 p = mock.patch.object(target, k, v)
@@ -85,6 +87,7 @@ class Layouts(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         home = self.tmp / "home"
         for patch in (mock.patch.object(pathlib.Path, "home", lambda: home),
                       mock.patch.object(runtime_claude, "_home", lambda: home / ".claude"),

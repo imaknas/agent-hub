@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,7 @@ class Golden(unittest.TestCase):
                 code = m._mailbox("demo", ["m-1"])
             out.append(("no letters", f"exit {code}\nstderr: {e.getvalue()!r}"))
             ws = pathlib.Path(tempfile.mkdtemp())
+            self.addCleanup(shutil.rmtree, ws, ignore_errors=True)
             row = {"id": "m-1", "to_project": "demo", "ref": None, "source": "other"}
             published = []
             res = {"ok": True, "output": {"done": [{"id": "m-1"}]}, "applied": [], "refused": [], "error": ""}

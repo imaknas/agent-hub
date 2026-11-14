@@ -12,6 +12,7 @@ import importlib.machinery
 import importlib.util
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -52,6 +53,7 @@ class FakeRuntime:
 class Dispatch(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m = self.m = load_hubbus()
         m.DB = self.tmp / "bus.db"
         # nothing a test runs reaches the live files: the bus log, and what log_once and a fork keep in the state folder
@@ -662,6 +664,7 @@ class McpProcess(unittest.TestCase):
     def test_an_old_bus_gets_the_new_presence_columns(self):
         import sqlite3
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         old = sqlite3.connect(d / "bus.db")
         old.execute("CREATE TABLE presence(session TEXT PRIMARY KEY, project TEXT NOT NULL, cwd TEXT, seen TEXT NOT NULL)")
         old.execute("INSERT INTO presence VALUES('S1', 'proj', '/x', '2026-11-01T10:00:00+08:00')")

@@ -16,6 +16,7 @@ import importlib.machinery
 import importlib.util
 import json
 import pathlib
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -86,6 +87,7 @@ class BridgeV2(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         self.logs = []
         m.log = self.logs.append
@@ -310,6 +312,7 @@ class Coexistence(unittest.TestCase):
     def setUp(self):
         m = self.m = load()
         self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         m.DB = self.tmp / "bus.db"
         m.log = lambda s: None
         m.projects = lambda: {"proj": self.tmp, "other": self.tmp}

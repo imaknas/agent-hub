@@ -45,11 +45,12 @@ def conversation(turns: list[list[str]]) -> str:
 
 
 def _runner(src: str, name: str):
-    f = pathlib.Path(tempfile.mkdtemp(prefix="e2-handover-")) / "lease_runner.py"
-    f.write_text(src)
-    spec = importlib.util.spec_from_file_location(name, f)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    with tempfile.TemporaryDirectory(prefix="e2-handover-") as d:   # only read while it loads
+        f = pathlib.Path(d) / "lease_runner.py"
+        f.write_text(src)
+        spec = importlib.util.spec_from_file_location(name, f)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
     return mod
 
 

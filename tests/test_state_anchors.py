@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -98,6 +99,7 @@ class RepoCase(unittest.TestCase):
 
     def setUp(self):
         self.repo = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
         self.git("init", "-q", "-b", "main")
         self.write("src/job.py", "def run_job():\n    return 1\n\nclass Order:\n    def total(self): ...\n")
         self.write("src/old.py", "x = 1\n")
@@ -209,6 +211,7 @@ class Resolve(RepoCase):
         self.assertEqual(sa.Repo.open(None), (None, "no-workspace"))
         self.assertEqual(sa.Repo.open(self.repo / "nope"), (None, "no-directory"))
         plain = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, plain, ignore_errors=True)
         self.assertEqual(sa.Repo.open(plain), (None, "not-git"))
         self.git("branch", "-m", "main", "trunk")
         self.assertEqual(sa.Repo.open(self.repo), (None, "no-base-branch"))
@@ -234,6 +237,7 @@ class TodoBlock(unittest.TestCase):
     def test_block(self):
         m = load("check_state_anchors_t", "check-state-anchors.py")
         todo = pathlib.Path(tempfile.mkdtemp()) / "todo.md"
+        self.addCleanup(shutil.rmtree, todo.parent, ignore_errors=True)
         gaps = "<!-- memory-gaps:begin -->\n## gaps\n\n- [ ] **g**\n<!-- memory-gaps:end -->\n"
         todo.write_text("# todo\n\n- [ ] x\n\n" + gaps)
         m.write_todo_block(todo, ["- [ ] **a**: one"])
@@ -254,6 +258,7 @@ class Librarian(RepoCase):
     def test_stale_note(self):
         lib = load("librarian_anchors_t", "librarian.py")
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         (d / "STATE.md").write_text("- Runs ⚓`src/job.py#run_job`.\n- Exports ⚓`src/gone.py`.\n"
                                     "- Parses ⚓`src/feature.py`.\n- Settings ⚓`src/old.py`.\n")
         with mock.patch.object(lib.hubconf, "roster", return_value={"demo": {"workspace": str(self.repo)}}):
@@ -272,6 +277,7 @@ class Librarian(RepoCase):
     def test_admit_only_what_resolves(self):
         lib = load("librarian_admit_t", "librarian.py")
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         before = "- Old ⚓`nowhere/old.py` stays (it is the stale note's business).\n"
         (d / "STATE.md").write_text(before + "- Job ⚓`src/job.py#run_job`, parser ⚓`src/feature.py`,\n"
                                     "  core ⚓`core/job.py`, cache ⚓`data/`, bad ⚓`src/job.py:3`.\n\n"
@@ -292,6 +298,7 @@ class EvalScores(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "bin" / "evals"))
         import e2
         case = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, case, ignore_errors=True)
         (case / "args.json").write_text(json.dumps({
             "owner": OWNER, "project": "nowhere", "diff": "+ moved the job to src/run.py",
             "anchors": [{"raw": "src/gone.py", "statement": "Export ⚓`src/gone.py`."}]}))

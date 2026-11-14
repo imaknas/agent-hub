@@ -14,6 +14,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import threading
@@ -36,11 +37,12 @@ RUNTIME_WORDS = ("Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch", "AskUs
                  "auth\"")
 
 
-def load_runner():
+def load_runner(test):
     spec = importlib.util.spec_from_file_location("lease_runner_v2", ROOT / "bin" / "lease-runner.py")
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     m.DIR = pathlib.Path(tempfile.mkdtemp())
+    test.addCleanup(shutil.rmtree, m.DIR, ignore_errors=True)
     return m
 
 
@@ -77,7 +79,7 @@ class Events(unittest.TestCase):
         env = mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the summaries asserted are the zh-Hant ones
         env.start()
         self.addCleanup(env.stop)
-        self.m = load_runner()
+        self.m = load_runner(self)
         self.all = run_reader(self.m, (FIX / "claude-stream.jsonl").read_text())
         self.stored = [e for e in self.all if "_detach" not in e]
         for stderr in ("Error: Invalid API key · Please run /login", "Segmentation fault"):
@@ -135,7 +137,7 @@ class Events(unittest.TestCase):
 
 class RelayEvents(unittest.TestCase):
     def test_relay_reports(self):
-        m = load_runner()
+        m = load_runner(self)
         for b in ({"phase": "start", "tool": "WebFetch", "summary": "https://a", "kind": "permission"},
                   {"phase": "start", "tool": "WebFetch", "summary": "https://a", "kind": "open_web", "target": "https://a"}):
             etype, data = m.relay_event(b)
@@ -149,7 +151,7 @@ class RelayEvents(unittest.TestCase):
 @mock.patch.dict(os.environ, {"AGENT_HUB_LANG_UI": "zh-Hant"})   # the assertions are the zh-Hant texts
 class ResumeTruthfully(unittest.TestCase):
     def test_cannot_resume_says_so(self):
-        m = load_runner()
+        m = load_runner(self)
         stored = []
         lease = m.Lease({"lease_id": "77777777-7777-4777-8777-777777777777", "project": "p", "cwd": "/tmp",
                          "started_once": True})
@@ -250,7 +252,7 @@ class StreamContract(unittest.TestCase):
 class Http(unittest.TestCase):
     def setUp(self):
         import http.server
-        self.m = m = load_runner()
+        self.m = m = load_runner(self)
         m.token = lambda: "t"
         m.STATUS.update(quota={"status": "ok", "windows": [], "at": "T"})
         lease = m.Lease({"lease_id": "88888888-8888-4888-8888-888888888888", "project": "p", "cwd": "/tmp"})

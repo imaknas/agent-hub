@@ -5,6 +5,7 @@
 """
 import importlib.util
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ spec.loader.exec_module(check_secrets)
 class Locate(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.secrets = self.tmp / "home" / "secrets"
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.secrets)
         p.start()

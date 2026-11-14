@@ -7,6 +7,7 @@ information, so this compares down to the words.
 import importlib.util
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -39,6 +40,7 @@ class Decide(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
         self.root = pathlib.Path(tempfile.mkdtemp()).resolve() / "proj"
+        self.addCleanup(shutil.rmtree, self.root.parent, ignore_errors=True)
         (self.root / ".claude" / "worktrees" / "wt1").mkdir(parents=True)
         self.m = load_guard()
         self.m.own_project = lambda cwd: ("proj", self.root)

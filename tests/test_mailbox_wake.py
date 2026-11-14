@@ -20,6 +20,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -103,6 +104,7 @@ class CharacterizeSecrets(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.secrets = self.tmp / "secrets"
         self.secrets.mkdir()
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.secrets)
@@ -285,6 +287,7 @@ class WakeAddresses(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.secrets = self.tmp / "secrets"
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.secrets)
         p.start()
@@ -385,6 +388,7 @@ class ClaudeSessionsDir(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         p = mock.patch.object(hubconf, "secrets_dir", lambda: self.tmp / "secrets")
         p.start()
         self.addCleanup(p.stop)

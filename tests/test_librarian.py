@@ -7,6 +7,7 @@ isolated environment with a stand-in llm.py.
 """
 import importlib.util
 import pathlib
+import shutil
 import tempfile
 import unittest
 
@@ -52,13 +53,15 @@ class Handoffs(unittest.TestCase):
 class Dangling(unittest.TestCase):
     def test_missing_refs_listed_with_leading_space(self):
         d = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         (d / "memory" / "reference").mkdir(parents=True)
         (d / "memory" / "reference" / "ok.md").write_text("x")
         (d / "STATE.md").write_text("See memory/reference/ok.md;memory/reference/gone.md, memory/YYYY-MM-DD.md, memory/reference/*.md\n")
         self.assertEqual(lib.dangling_refs(d), " memory/reference/gone.md")
 
     def test_no_state_md(self):
-        self.assertEqual(lib.dangling_refs(pathlib.Path(tempfile.mkdtemp())), "")
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(lib.dangling_refs(pathlib.Path(d)), "")
 
 
 class Prompts(unittest.TestCase):

@@ -14,6 +14,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -46,6 +47,7 @@ class RuntimeGolden(unittest.TestCase):
 
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         (self.tmp / "home").mkdir()
         (self.tmp / "secrets").mkdir()
         self.out: list[str] = []
@@ -315,6 +317,7 @@ def setUpModule():
     _unpin = golden_lang.pin_names()
     # the runtimes' temp folders, away from the tree's own
     d = pathlib.Path(tempfile.mkdtemp()).resolve()
+    unittest.addModuleCleanup(shutil.rmtree, d, ignore_errors=True)
     p = mock.patch.object(hubconf, "secrets_dir", lambda: d)
     p.start()
     unittest.addModuleCleanup(p.stop)
