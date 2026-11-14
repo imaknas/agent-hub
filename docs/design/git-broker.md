@@ -153,12 +153,25 @@ Of the broker path's extra ~27 ms, the wrapper's Python start is 9 ms and applyi
   - every canary stayed absent.
 
   The same guard let commit, merge, `rebase --continue`, cherry-pick, stash, gc and worktree add/commit/remove work.
+  For gc, the one warning came from the prototype denying all of `info/`.
+- **The guard stops a program from running under the broker. It doesn't stop git from writing the request into its
+  own state.** A `rebase --exe '<cmd>'` over two commits, run with the filter off:
+  - stopped at its first `exec` line, without running it;
+  - left `exec <cmd>` in `rebase-merge/done` and in `git-rebase-todo`.
+
+  The owner's own unsandboxed `rebase --continue` then **ran the canary**. So keeping `exec` lines out of state the owner
+  might continue rests on the allowlist (exact spellings, abbreviations off) and on the broker's check after a stop
+  (below), not on the guard.
 - **Git's own abbreviation knob works:**
   - `GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS=true` turned `rebase --exe` into "disallowed abbreviated or ambiguous
     option";
   - `log --outp=…` is "unrecognized" in any case (diff-style options don't abbreviate).
-- **Git's own path checks hold:** `update-index --cacheinfo` refused `.git/x`, `.GIT/x`, `sub/.git/config` and
-  `git~1/config`.
+- **Git's own path checks hold for the ways tried:**
+  - `update-index --cacheinfo` refused `.git/x`, `.GIT/x`, `sub/.git/config` and `git~1/config`;
+  - `update-index --index-info` ignored `.git/x` and `sub/.GIT/config` ("Ignoring path");
+  - `read-tree` of a hand-made tree holding `.git/config` or `.GIT/config` failed with "invalid path".
+
+  `mktree` does accept a `.git` entry: the object can exist, but it doesn't reach the index.
 - `update-ref CONFIG HEAD` doesn't reach `.git/config` on this case-insensitive volume. Unsandboxed, git refused it
   because the existing file isn't a ref. Through the broker, the writer profile refused `CONFIG.lock` first: its ASCII
   rule matched the folded name, as the fence doc found.
@@ -312,9 +325,35 @@ writes a `.git`, the gitfiles and `commondir` pointers it reads to find that dir
   - with `objects`, `objects/info`, `refs`, `logs` and `worktrees` pinned as entries;
   - **the exec guard:** no program runs but git's own binaries, and the platform's hook forwarder (below).
 
-  So whatever reaches git, whether a missed option, an alias or a planted todo line, can make git write only inert git
-  data. Nothing project-chosen runs with write access to a git dir. Worktree content (`.gitattributes`, `.gitmodules`,
-  symlinks) is read by git as the project, inside the project's own sandbox.
+  So nothing project-chosen runs with write access to a git dir, whatever reaches git: a missed option, an alias or a
+  todo line. **What git writes into its own state is a different matter**, and it isn't all inert: a rebase todo with
+  `exec` lines runs on the owner's `--continue` (measured). Three things keep such lines out:
+  - the allowlist (no `--exec` / `-x`, abbreviations off);
+  - the editor callback's check of a returned todo;
+  - **the check after a stop.** Whenever a broker-run rebase, cherry-pick or revert stops, the broker reads
+    `rebase-merge/git-rebase-todo`, `rebase-merge/done` and `sequencer/todo`. These are git's own line format, written
+    by git, not by the project. If any line is an `exec` or `x` command, the broker runs `--abort` under the writer
+    profile and says why.
+
+  Whether the sequencer of `cherry-pick` and `revert` accepts `exec` lines at all wasn't measured. Worktree content
+  (`.gitattributes`, `.gitmodules`, symlinks) is read by git as the project, inside the project's own sandbox.
+- **The broker's global config** (`GIT_CONFIG_GLOBAL`, a platform-written file; `GIT_CONFIG_NOSYSTEM=1`). It holds:
+  - the owner's `user.name` and `user.email`, unless the project's own config has them;
+  - `init.defaultBranch`;
+  - `safe.bareRepository=explicit`, `protocol.ext.allow=never`, `protocol.file.allow=user`;
+  - `core.hooksPath` (the forwarder's folder);
+  - `core.fsmonitor=false`, `core.pager=cat`, `submodule.recurse=false`.
+
+  It holds **no drivers** (`filter.*`, `diff.*.textconv|command`, `merge.*.driver`), **no aliases**, no
+  `credential.helper` and no `include*`. A `.gitattributes` in the worktree can therefore select only drivers that
+  don't exist, which git ignores (the fence doc measured this). An alias is a caller's shell habit: the wrapper expands
+  none, and `git <alias>` is refused as an unknown subcommand.
+- **Drivers defined in the owner's own global config** (git-lfs's filter, say) are the one place the two gits differ.
+  The owner's git applies such a driver to the files the attributes select, and the broker's git doesn't. So a file the
+  owner's git would store as an LFS pointer would be staged whole by an agent, and the two would show each other's
+  copies as modified. **Unmeasured** (no git-lfs here). The choices are question 10: copy named drivers from the
+  owner's global config into the broker's, where they run under the writer profile with the exec guard allowing that
+  one program; or leave them out and say so in doctor.
 - **Network operations** (`fetch`, `push`, `ls-remote`, and the fetch half of `pull`) to a remote the registry names run
   **as the owner, unsandboxed**:
   - fixed arguments: `GIT_DIR` set explicitly, the URL and refspec pinned with `-c` from the registry, no hooks,
@@ -520,7 +559,7 @@ todos (exec lines run on the owner's `--continue`).
 | the config allowlist table and URL rule (B4) | kept: the config op's rules |
 | the narrow `brunna git` runner and its "when it may write" condition | subsumed by the broker. A switched-on project is fenced by construction. |
 | the one-time install | becomes the rebuild (below) |
-| B1 (index entries) | prevented: only git writes the index, and git refuses those entries (measured) |
+| B1 (index entries) | prevented, as far as tried: only git writes the index, and the four ways tried (`update-index --cacheinfo` / `--index-info`, `read-tree` of a hand-made tree) refused or ignored the entries; any other way is git's own path check |
 | the scan | kept as a second layer; a finding is an alert |
 | S1 (`HEAD` shapes), S3 (scratch repos), S6 (worktree paths) | taken into the fence and the broker |
 | the uv marker exception | kept |
@@ -550,6 +589,8 @@ The scan finding nothing is not a condition (the fence doc's r3); a scan finding
      - the config from the allowlisted keys only;
      - the index from the old one's `ls-files --stage` through `update-index --index-info` (git checks every entry);
      - each stash entry through `stash store`, and `info/exclude` as text;
+     - the platform's own folder, `brunna/` (unsent outbox letters, the test runner's store, the tool caches), each
+       file copied as a fresh file, links not followed;
      - each linked worktree's admin dir through `worktree add --no-checkout` at its existing path, then
        `worktree repair`.
 
@@ -601,7 +642,8 @@ Linux section, unchanged).
   - identity: another project's socket refused by the socket rule; a forged header with no proof refused; a nonce
     aimed at another project's folder refused; a FIFO or a link at `.hub-run` or `git` refused without blocking;
   - the exec guard: `--exe`, `-x<cmd>`, `-O<cmd>`, `!` aliases and an `exec` todo line, each run with the argument
-    filter turned off. No canary runs.
+    filter turned off. No canary runs, either under the broker or in the owner's `rebase --continue` afterwards: the
+    check after a stop aborts a rebase whose state holds an `exec` line.
   - the allowlists: unknown subcommands and options, abbreviations, sticky shorts, `-c` keys and environment variables
     are each refused with the reason. Forms with a selecting environment run in place.
   - the config op's allowlist and install (from the fence doc);
@@ -656,6 +698,10 @@ A blind review of this design before step 1, and of the code before `merge-branc
 8. **Your global drivers** (git-lfs and the like) still run as you, in your own git, on project content (the fence doc's
    question 3). **Recommended:** listed and accepted.
 9. **Switching on.** **Recommended:** you flip it per project. The rebuild runs then, with nothing open.
+10. **Drivers from your global config inside the broker** (git-lfs and the like). **Recommended:** copy only drivers you
+    name, per project in the registry, so that an agent's staging matches yours. A named driver runs under the writer
+    profile, with the exec guard allowing that one program. Without one, doctor says the two gits differ for that
+    project.
 
 ## Risks
 
