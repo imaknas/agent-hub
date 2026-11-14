@@ -8,7 +8,7 @@ it), and each call is logged there too.
 
 Settings: answer (the last message), fail (a turn.failed message, exit 1), pre_extra / post_extra (a collaboration
 namespace in prompt-input's list / in the rollout), no_list (prompt-input shows no tool list), entries_extra (one more
-write entry in the rollout's profile), no_rollout.
+write entry in the rollout's profile), no_rollout, network (what the rollout says of it), model_seen (the model it says ran).
 """
 import json
 import pathlib
@@ -63,9 +63,10 @@ if args[:1] == ["exec"]:
              {{"type": "response_item", "payload": nested(conf.get("post_extra"))}},
              {{"type": "world_state", "payload": {{"state": {{"top_level_tools": {{"functions": "a", "functions.exec": "b",
                                                                           "functions.wait": "c"}}}}}}}},
-             {{"type": "turn_context", "payload": {{"model": cval("model"), "approval_policy": "never",
+             {{"type": "turn_context", "payload": {{"model": conf.get("model_seen") or cval("model"), "approval_policy": "never",
                "multi_agent_version": "disabled", "active_permission_profile": {{"id": profile, "extends": ":read-only"}},
-               "permission_profile": {{"type": "managed", "file_system": {{"type": "restricted", "entries": entries}}}}}}}}]
+               "permission_profile": {{"type": "managed", "network": conf.get("network", "restricted"),
+                                      "file_system": {{"type": "restricted", "entries": entries}}}}}}}}]
     if not conf.get("no_rollout"):
         day = home / "sessions" / "2026" / "11" / "14"
         day.mkdir(parents=True, exist_ok=True)

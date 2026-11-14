@@ -1084,14 +1084,15 @@ def _npm() -> str:
 
 
 def _npm_env(home=None) -> dict:
-    """npm's environment: nvm's node on PATH, none of the caller's npm settings or Codex/OpenAI credentials, the store's
-    cache; home: the HOME of an install (the candidate's own code may run in it)."""
+    """npm's environment, built from nothing of the caller's: nvm's node on PATH, the store's cache, the language, and a
+    HOME (home: the install's own folder, where the candidate's code may run; else the user's, for npm view and the
+    user's own copy)."""
     import hubconf
-    env = {k: v for k, v in os.environ.items() if not k.lower().startswith("npm_config_")
-           and not k.startswith(("CODEX_", "OPENAI_"))}
-    env.update(PATH=hubconf.LAUNCHD_PATH, npm_config_cache=str(hubconf.runtimes_dir() / ".npm-cache"))
-    if home is not None:
-        env["HOME"] = str(home)
+    env = {"PATH": hubconf.LAUNCHD_PATH, "npm_config_cache": str(hubconf.runtimes_dir() / ".npm-cache"),
+           "HOME": str(home if home is not None else pathlib.Path.home())}
+    for k in ("LANG", "LC_ALL", "USER", "LOGNAME", "TMPDIR"):
+        if os.environ.get(k):
+            env[k] = os.environ[k]
     return env
 
 
@@ -1181,7 +1182,7 @@ def install(version: str, folder) -> pathlib.Path:
     folder.mkdir(parents=True, exist_ok=True)
     try:
         r = subprocess.run([_npm(), "install", "--prefix", str(folder), f"{PACKAGE}@{version}", "--no-audit", "--no-fund",
-                            "--save-exact"], capture_output=True, text=True, timeout=900, env=_npm_env(folder),
+                            "--save-exact", "--ignore-scripts"], capture_output=True, text=True, timeout=900, env=_npm_env(folder),
                            stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e
@@ -1232,7 +1233,7 @@ def install_global(version: str) -> None:
     if not _SEMVER.match(version or ""):
         raise RuntimeError(_("not a version: {version!r}", version=version))
     try:
-        r = subprocess.run([_npm(), "install", "-g", f"{PACKAGE}@{version}", "--no-audit", "--no-fund"],
+        r = subprocess.run([_npm(), "install", "-g", f"{PACKAGE}@{version}", "--no-audit", "--no-fund", "--ignore-scripts"],
                            capture_output=True, text=True, timeout=900, env=_npm_env(), stdin=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError) as e:
         raise RuntimeError(_("npm install did not run: {error}", error=type(e).__name__)) from e
@@ -1347,32 +1348,46 @@ def _toml(s: str) -> str:
     return json.dumps(str(s), ensure_ascii=False)   # a TOML basic string: JSON's escapes are TOML's
 
 
-def profile_entries(read=(), write=(), exe: str | None = None) -> dict[str, str]:
-    """The run's permission profile's filesystem entries (r2 S2, S3): the user's home whole, the temp roots and the store's
-    Codex folder denied, with every credential place the policy knows as a second layer; the folders the run works in, and
-    the running version's own vendor folder (its code-mode host and rg) read back; each written path, with deny globs on
-    git's own files under it (a .gitattributes made mid-run would be read by Codex's git). Paths absolute and resolved."""
-    import runtime_ports
-    out = {str(pathlib.Path.home().resolve()): "deny", str(pathlib.Path(os.path.realpath(_store()))): "deny"}
-    for t in TEMP_ROOTS:
-        if os.path.isdir(t):
-            out[t] = "deny"
+# Folders denied whole whatever lives in them, the run's own folder and its version's vendor folder read back (r2 review
+# S5): where the user's other files, other volumes and other installed software are, beyond the home
+WIDE_DENIES = ("/Users", "/Volumes", "/opt", "/usr/local", "/home")
+
+
+def platform_denies() -> list[str]:
+    """What every run's profile denies, from the same sources the policy's sandboxes use (seatbelt.read_denies): the user's
+    home and the wide folders, the temp roots, the store's Codex folder, every credential place (policy.credentials: the
+    settings' credentials, policy.CREDENTIALS, each protected runtime's), every project root, the services, the bare
+    repos, the memory copies, the bus, the hub's state and logs, the evals, the instance with its secrets and data, the
+    keychains. Raises ValueError when any of it can't be computed: a run is refused then, never run with less."""
+    import hubconf
+    import policy
     try:
-        dirs, files = runtime_ports.credential_paths()
-    except Exception:
-        dirs, files = [], []
-    for p in (*dirs, *files):
-        out[os.path.realpath(os.path.expanduser(p))] = "deny"
-    # where the platform keeps its own and the projects' things, wherever they are configured (not only under the home):
-    # every project root, the hub's state, the instance with its secrets and data (r2 S2's second layer)
-    try:
-        import hubconf
-        places = [*hubconf.project_roots(), hubconf.STATE, hubconf.secrets_dir(), hubconf.data_dir(),
-                  *([hubconf.instance_home()] if hubconf.instance_home() else [])]
-    except Exception:
-        places = []
+        home = pathlib.Path.home()
+        dirs, files = policy.credentials()
+        places = [home, *(pathlib.Path(w) for w in WIDE_DENIES), *(pathlib.Path(t) for t in TEMP_ROOTS), _store(),
+                  *dirs, *files, *hubconf.project_roots(), hubconf.p("workspace_root"), hubconf.p("services_root"),
+                  hubconf.p("git_origin"), hubconf.p("memory_copies", "~/.memory-copies"), hubconf.BUS_DIR,
+                  hubconf.STATE, hubconf.LOGS, hubconf.evals_path(), hubconf.secrets_dir(), hubconf.data_dir(),
+                  hubconf.instance_home(), home / "Library" / "Keychains"]
+    except Exception as e:   # noqa: BLE001 (what fails is said, and the run refused)
+        raise ValueError(_("the places a Codex run is denied can't be computed ({error}): not run",
+                           error=type(e).__name__)) from None
+    out = []
     for p in places:
-        out.setdefault(os.path.realpath(p), "deny")
+        if p is None:
+            continue
+        for s in dict.fromkeys([str(p), os.path.realpath(p)]):   # as given and as it resolves (/tmp, /var: links)
+            if os.path.isabs(s) and os.path.exists(s) and s not in out:   # a profile names what is there
+                out.append(s)
+    return out
+
+
+def profile_entries(read=(), write=(), exe: str | None = None) -> dict[str, str]:
+    """The run's permission profile's filesystem entries (r2 S2, S3, S4, S5): platform_denies(); the folders the run works
+    in, and the running version's own vendor folder (its code-mode host and rg) read back; each written path, with deny
+    globs on git's own files under it (a .gitattributes made mid-run would be read by Codex's git). A more specific entry
+    wins over a deny around it (measured). ValueError when the denies can't be computed."""
+    out = {p: "deny" for p in platform_denies()}
     if exe:
         out[os.path.realpath(pathlib.Path(exe).parent.parent)] = "read"
     for p in read:
@@ -1388,7 +1403,7 @@ def profile_entries(read=(), write=(), exe: str | None = None) -> dict[str, str]
 def run_args(model: str | None, entries: dict[str, str], shell: bool = False, system: str | None = None) -> list[str]:
     """The -c list a run and its check before it both get (one function, so they can't differ). Not -m and not
     --strict-config: `debug prompt-input` takes neither (r2 nits)."""
-    args = []
+    args = ["-c", 'web_search="disabled"']   # also on the command line: the home's file isn't the only word (S3)
     if model:
         args += ["-c", f"model={_toml(model)}"]
     if system:
@@ -1413,20 +1428,23 @@ _DECLARED = re.compile(r"declare const tools: \{\s*([A-Za-z_][A-Za-z0-9_]*)\(")
 
 
 def tools_shape(items) -> tuple[dict, set] | None:
-    """({namespace: [its tools]}, the nested tools exec declares) of an additional_tools item, or None: there is none
-    (a model whose tools aren't sent as code mode: they can't be seen before the run, so it is never pinned)."""
+    """({namespace: [its tools]}, the nested tools exec declares) of every additional_tools item together (a second one
+    later in the run, or a namespace named twice, adds to the first), or None: there is none (a model whose tools aren't
+    sent as code mode: they can't be seen before the run, so it is never pinned)."""
+    spaces, nested, seen = {}, set(), False
     for it in items:
         if isinstance(it, dict) and it.get("type") == "additional_tools" and isinstance(it.get("tools"), list):
-            spaces, nested = {}, set()
+            seen = True
             for ns in it["tools"]:
                 if not isinstance(ns, dict):
+                    spaces.setdefault("?", []).append(repr(ns)[:40])
                     continue
                 subs = [s for s in ns.get("tools") or [] if isinstance(s, dict)]
-                spaces[str(ns.get("name") or ns.get("type"))] = sorted(str(s.get("name") or s.get("type")) for s in subs)
+                name = str(ns.get("name") or ns.get("type"))
+                spaces[name] = sorted({*spaces.get(name, []), *(str(s.get("name") or s.get("type")) for s in subs)})
                 for s in subs:
                     nested.update(_DECLARED.findall(str(s.get("description") or "")))
-            return spaces, nested
-    return None
+    return (spaces, nested) if seen else None
 
 
 def _texts(items) -> list[str]:
@@ -1450,7 +1468,7 @@ def shape_problems(items, shell: bool = False) -> list[str]:
     if (extra := sorted(nested - PINNED_NESTED - (SHELL_NESTED if shell else frozenset()))):
         out.append(_("nested tools beyond the pinned ones: {tools}", tools=", ".join(extra[:8])))
     for t in _texts(items):
-        if (hit := next((m for m in FORBIDDEN_CONTEXT if t.startswith(m)), None)):
+        if (hit := next((m for m in FORBIDDEN_CONTEXT if t.lstrip().startswith(m)), None)):
             out.append(_("context the run doesn't ask for: {what}", what=hit))
     return out
 
@@ -1464,11 +1482,12 @@ def _entries_of(profile) -> set:
     return out
 
 
-def rollout_problems(path, shell: bool, entries: dict[str, str], home) -> list[str]:
-    """What the rollout of a run says it was sent beyond the pinned shape: its additional_tools and context, its turn's
-    settings (approval never, sub-agents disabled, the run's own profile with exactly the rendered entries, beside the root
-    read and Codex's own read of its arg0 folder in the run's home), and world_state's top-level tools."""
-    items, turns, world = [], [], None
+def rollout_problems(path, shell: bool, entries: dict[str, str], home, model: str | None = None) -> list[str]:
+    """What the rollout of a run says it was sent beyond the pinned shape: its additional_tools and context, each turn's
+    settings (the model asked for, approval never, sub-agents disabled, the network restricted, the run's own profile with
+    exactly the rendered entries, beside the root read and Codex's own read of its arg0 folder in the run's home), and
+    every world_state's top-level tools."""
+    items, turns, worlds = [], [], []
     try:
         with open(path) as f:
             for line in f:
@@ -1483,8 +1502,8 @@ def rollout_problems(path, shell: bool, entries: dict[str, str], home) -> list[s
                     items.append(p)
                 elif e.get("type") == "turn_context":
                     turns.append(p)
-                elif e.get("type") == "world_state" and world is None:
-                    world = p.get("state") or {}
+                elif e.get("type") == "world_state":
+                    worlds.append(p.get("state") or {})
     except OSError as e:
         return [_("the run's rollout can't be read: {error}", error=e.strerror or e)]
     out = shape_problems(items, shell)
@@ -1493,6 +1512,13 @@ def rollout_problems(path, shell: bool, entries: dict[str, str], home) -> list[s
     want = {(k, v) for k, v in entries.items()} | {("special:root", "read")}
     arg0 = os.path.realpath(pathlib.Path(home) / "tmp" / "arg0")
     for t in turns:
+        if model and t.get("model") != model:
+            out.append(_("model {got}, asked for {want}", got=t.get("model"), want=model))
+        if (t.get("permission_profile") or {}).get("network") != "restricted":
+            out.append(_("network {got}", got=(t.get("permission_profile") or {}).get("network")))
+        sandbox = t.get("sandbox_policy")
+        if isinstance(sandbox, dict) and sandbox.get("network_access") not in (None, False):
+            out.append(_("network {got}", got=sandbox.get("network_access")))
         if t.get("approval_policy") != "never":
             out.append(_("approval policy {got}", got=t.get("approval_policy")))
         if t.get("multi_agent_version") != "disabled":
@@ -1504,8 +1530,9 @@ def rollout_problems(path, shell: bool, entries: dict[str, str], home) -> list[s
         if got != want:
             out.append(_("permission entries differ from the rendered ones: {extra}",
                          extra=", ".join(f"{a} {p}" for p, a in sorted(got ^ want))[:300]))
-    if world is not None and not set(world.get("top_level_tools") or {}) <= {"functions", "functions.exec", "functions.wait"}:
-        out.append(_("top-level tools {got}", got=", ".join(sorted(world.get("top_level_tools") or {}))))
+    for world in worlds:
+        if not set(world.get("top_level_tools") or {}) <= {"functions", "functions.exec", "functions.wait"}:
+            out.append(_("top-level tools {got}", got=", ".join(sorted(world.get("top_level_tools") or {}))))
     return list(dict.fromkeys(out))
 
 
@@ -1614,7 +1641,7 @@ SCHEMA_ASK = "Answer with only a JSON value that matches this JSON Schema, and n
 
 
 def _one_run(point: str, exe: str, folder, home, args: list, prompt: str, timeout_s: float, shell: bool,
-             entries: dict, base_env=None) -> dict:
+             entries: dict, base_env=None, model: str | None = None) -> dict:
     """prompt-input with args, then the run with them, then the rollout: {"ok", "text", "error", "tokens", "refused"}."""
     env = run_env(home, base_env)
     pre = subprocess.run([exe, "debug", "prompt-input", *args, "x"], cwd=folder, env=env, capture_output=True, text=True,
@@ -1637,7 +1664,7 @@ def _one_run(point: str, exe: str, folder, home, args: list, prompt: str, timeou
     events = _events(stdout)
     tokens = _usage(events)
     rollout = _rollout(home)
-    why = rollout_problems(rollout, shell, entries, home) if rollout else [_("the run left no single rollout to check")]
+    why = rollout_problems(rollout, shell, entries, home, model) if rollout else [_("the run left no single rollout to check")]
     # what the run was sent was more than pinned (whatever became of it), or can't be told of a run that answered: refused
     if (why and rollout) or (why and code == 0):
         refused = _("the run of {point} was sent more than its pinned tools ({what}): its result refused", point=point,
@@ -1689,7 +1716,9 @@ def complete(req, conf):
         args = run_args(req.model, entries, system=req.system)
         base = {**os.environ, "HUB_LLM_POINT": req.point}
         got = _one_run(req.point, exe, folder, home, args, _schema_prompt(req.prompt, req.schema), req.timeout_s,
-                       False, entries, base)
+                       False, entries, base, model=req.model)
+    except ValueError as e:   # the denies couldn't be computed: refused, said
+        return CompletionResult(False, stop="error", error=str(e), runtime_version=version)
     except (OSError, subprocess.SubprocessError) as e:
         return CompletionResult(False, stop="error", error=_("the run could not start: {error}", error=type(e).__name__),
                                 runtime_version=version)
@@ -1729,6 +1758,16 @@ ARGS_HELD = ("--strict-mcp-config", "--no-session-persistence")   # what the run
 _EDIT_RULE = re.compile(r"^Edit\(\./([^()*?\[\]{}\s]+?)(/\*\*)?\)$")
 
 
+def _edit_rule_ok(rule: str) -> bool:
+    """An Edit(./<path>) or Edit(./<dir>/**) rule naming something below the folder: never the folder itself (./.), a
+    parent, or anything of git's (a .git folder, .gitattributes, .gitmodules: Codex's own git reads them, B1)."""
+    m = _EDIT_RULE.match(rule)
+    if not m:
+        return False
+    parts = m[1].split("/")
+    return not any(part in ("", ".", "..") or part.lower().startswith(".git") for part in parts)
+
+
 def point_refusal(point: str, spec: dict) -> str | None:
     """Why this judgment point doesn't run on Codex (doctor, llm_ready, llm.py), or None. One table from the declaration
     to what Codex can hold (docs/design/runtime-codex.md, Step 1 (1d) and its r2)."""
@@ -1749,8 +1788,11 @@ def point_refusal(point: str, spec: dict) -> str | None:
         return _("{point}'s permission mode {mode} has no counterpart in Codex", point=point,
                  mode=spec.get("permission_mode"))
     rules = list(spec.get("allowed_tools") or [])
-    if (bad := [r for r in rules if not _EDIT_RULE.match(str(r)) or ".." in str(r).split("/")]):
+    if (bad := [r for r in rules if not _edit_rule_ok(str(r))]):
         return _("{point}'s rules {rules} have no counterpart in Codex's profile", point=point, rules=", ".join(map(str, bad)))
+    if rules and not tools & {"Write", "Edit"}:
+        return _("{point} has rules for writing but no tool that writes: Codex would give it the shell for nothing",
+                 point=point)
     if tools & {"Write", "Edit"} and not rules:
         return _("{point} writes with no rule saying where: Codex's profile would have nothing to hold it to", point=point)
     if (bad := [a for a in spec.get("extra_args") or [] if a not in ARGS_HELD]):
@@ -1806,6 +1848,12 @@ def folder_refusal(cwd) -> str | None:
     if not cwd:
         return _("a Codex run needs a folder")
     real = pathlib.Path(os.path.realpath(cwd))
+    import hubconf
+    roots = [pathlib.Path(os.path.realpath(r)) for r in (hubconf.p("memory_copies", "~/.memory-copies"),
+                                                         hubconf._private_tmp_path()) if r]
+    if not any(r in real.parents for r in roots):
+        return _("{folder} is neither under the memory copies nor in the platform's private temp folder: Codex runs only "
+                 "there (B1)", folder=real)
     if not _no_git_above(real):
         return _(FOLDER_GIT)
     git = real / ".git"
@@ -1814,7 +1862,15 @@ def folder_refusal(cwd) -> str | None:
                  folder=real)
     if not git.is_dir():
         return _("{folder} isn't a copy of a memory branch: Codex runs only there (B1)", folder=real)
-    if (bad := [n for n in ("config.worktree", "info/attributes", "commondir") if (git / n).exists()]):
+    bad = [n for n in ("config.worktree", "info/attributes", "commondir", "modules") if (git / n).exists()]
+    # a hook git would run (Codex's git sets core.hooksPath=/dev/null, but the platform's own git there doesn't): only
+    # the samples a clone makes
+    hooks = git / "hooks"
+    try:
+        bad += [f"hooks/{h.name}" for h in hooks.iterdir() if not h.name.endswith(".sample")] if hooks.is_dir() else []
+    except OSError:
+        bad.append("hooks")
+    if bad:
         return _("{folder}'s .git holds {files}, which the platform's own clone doesn't", folder=real, files=", ".join(bad))
     if (bad := _git_config_problems(git / "config")):
         return _("{folder}'s git config isn't a plain clone of a memory repo ({what}): Codex runs git as you there (B1)",
@@ -1878,7 +1934,7 @@ def run(task):
         cwd, args, entries, shell = _agent_plan(task, exe)
         home = run_home()
         got = _one_run(task.point, exe, cwd, home, args, _schema_prompt(task.prompt, task.output_schema), task.timeout_s,
-                       shell, entries, task.env)
+                       shell, entries, task.env, model=task.model)
     except (ValueError, runtime_ports.Unsupported) as e:
         return TaskResult(False, error=str(e), runtime_version=version)
     except (OSError, subprocess.SubprocessError) as e:
@@ -2018,18 +2074,19 @@ ADMIN_LAYERS = ("/etc/codex/config.toml", "/etc/codex/requirements.toml", "/etc/
 
 
 def doctor_notes() -> list[tuple[str, str, str]]:
-    """(level, what, fix) rows of Codex's own for doctor: an administrator's layer that can override the platform's run
-    homes, and a login store the runs can't share."""
+    """(level, what, fix) rows of Codex's own for doctor, about the platform's own Codex runs, so only while the platform
+    runs work on Codex (runtime_ports.platform_work): an administrator's layer that can override the run homes, the
+    account-delivered layers it can't see, a login store the runs can't share. A sessions-only Codex gets none."""
+    import runtime_ports
+    if NAME not in runtime_ports.platform_work():
+        return []
     out = []
     for f in ADMIN_LAYERS:
         if os.path.exists(f):
             out.append(("warn", _("{file} exists: an administrator's Codex settings apply to the platform's runs too, and "
                                   "can turn its updater or sandbox settings over", file=f), ""))
-    import runtime_ports
-    if NAME in runtime_ports.platform_work():
-        out.append(("info", _("Codex's account-delivered settings (cloud requirements and managed config) can't be seen "
-                              "without a login: the platform's runs check their tools before and after each run instead"),
-                    ""))
+    out.append(("info", _("Codex's account-delivered settings (cloud requirements and managed config) can't be seen "
+                          "without a login: the platform's runs check their tools before and after each run instead"), ""))
     store = _user_store()
     if store not in (None, "file"):
         out.append(("warn", _("your Codex config keeps the login in {store}: the platform's Codex runs need the file store "

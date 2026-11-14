@@ -15,7 +15,6 @@
  "tests nothing: a home holding a copy changed the user's file too": "什麼都沒測到:放副本的 home 也改了使用者的檔案",
  "tests nothing: a run with no login answered": "什麼都沒測到:沒登入的執行竟然有回答",
  "tests nothing: sub-agents turned on show no collaboration namespace": "什麼都沒測到:打開子代理後沒出現 collaboration 命名空間",
- "tests nothing: the rc files didn't run with the snapshot on and the user's HOME": "什麼都沒測到:打開 snapshot、用使用者的 HOME,rc 檔也沒跑",
  "tests nothing: the shell turned on shows no exec_command": "什麼都沒測到:打開 shell 後沒出現 exec_command",
  "tests nothing: {what} refused even without the profile": "什麼都沒測到:沒有 profile 時 {what} 一樣被擋",
  "the binary doesn't say its version": "執行檔說不出自己的版本",
@@ -24,5 +23,8 @@
  "the run's profile let through or refused the wrong things: {what}": "這次執行的 profile 放行或擋錯了:{what}",
  "the user's rc files ran for a platform run, or a snapshot kept what they export": "平台的執行跑了使用者的 rc 檔,或 snapshot 存下了它們匯出的變數",
  "{exe} isn't the native binary of an npm copy": "{exe} 不是 npm 安裝副本裡的原生執行檔",
- "{model}: {what}": "{model}:{what}"
+ "{model}: {what}": "{model}:{what}",
+ "tests nothing: the rc files didn't run with {what}": "什麼都沒測到:{what}時 rc 檔也沒跑",
+ "the snapshot on": "打開 snapshot",
+ "the snapshot on and the user's HOME": "打開 snapshot 並用使用者的 HOME"
 }

@@ -101,5 +101,10 @@
  "{point}'s permission mode {mode} has no counterpart in Codex": "{point} 的權限模式 {mode} 在 Codex 沒有對應",
  "{point}'s rules {rules} have no counterpart in Codex's profile": "{point} 的規則 {rules} 在 Codex 的 profile 沒有對應",
  "{point}: Codex's runs have only their pinned tools again": "{point}:Codex 的執行又只有釘住的工具了",
- "{rule} leaves the run's folder": "{rule} 超出了這次執行的資料夾"
+ "{rule} leaves the run's folder": "{rule} 超出了這次執行的資料夾",
+ "model {got}, asked for {want}": "模型是 {got},要的是 {want}",
+ "network {got}": "網路是 {got}",
+ "the places a Codex run is denied can't be computed ({error}): not run": "算不出 Codex 執行要擋哪些地方({error}):不執行",
+ "{folder} is neither under the memory copies nor in the platform's private temp folder: Codex runs only there (B1)": "{folder} 既不在記憶副本底下,也不在平台的私有暫存資料夾裡:Codex 只在那裡跑(B1)",
+ "{point} has rules for writing but no tool that writes: Codex would give it the shell for nothing": "{point} 有寫入規則卻沒有會寫入的工具:Codex 會白白給它 shell"
 }

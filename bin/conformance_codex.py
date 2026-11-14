@@ -323,11 +323,18 @@ def home_flags(world) -> Outcome:
             return Outcome("error", _("tests nothing: the shell turned on shows no exec_command"))
         if not agents or "collaboration" not in (rx.tools_shape(agents) or ({}, set()))[0]:
             return Outcome("error", _("tests nothing: sub-agents turned on show no collaboration namespace"))
-        h = fresh()
-        env = {**rx.run_env(h), "HOME": str(world.home)}
-        _prompt_input(exe, folder, h, rx.run_args(model, entries) + ["-c", "features.shell_snapshot=true"], base=env)
-        if not any(marks.iterdir()) and not _snapshot_has(h):
-            return Outcome("error", _("tests nothing: the rc files didn't run with the snapshot on and the user's HOME"))
+        # each guard alone (review nit): the snapshot on in the run's own HOME (rc files planted there) must run them,
+        # and with the user's HOME as well they must run the user's. Measured on 0.169: the user's HOME alone, the
+        # snapshot off, runs none (prompt-input sources the shell only for the snapshot), so that one proves nothing
+        for label, use_user_home in ((_("the snapshot on"), False), (_("the snapshot on and the user's HOME"), True)):
+            for m in marks.iterdir():
+                m.unlink()
+            h = fresh()
+            _plant_rc(h / "home", marks)
+            env = {**rx.run_env(h), **({"HOME": str(world.home)} if use_user_home else {})}
+            _prompt_input(exe, folder, h, rx.run_args(model, entries) + ["-c", "features.shell_snapshot=true"], base=env)
+            if not any(marks.iterdir()) and not _snapshot_has(h):
+                return Outcome("error", _("tests nothing: the rc files didn't run with {what}", what=label))
         return Outcome("pass", "")
     except subprocess.TimeoutExpired:
         return Outcome("error", _("no answer in {s} s", s=RUN_S))
@@ -337,7 +344,8 @@ def home_flags(world) -> Outcome:
 
 
 # (what, the shell command, whether it may succeed under the run's profile); {c} the copy, {o} a sibling of it, {h} the
-# home's own file, {a} the run home's login link, {s} a file in the store
+# home's own file, {a} the run home's login link, {s} a file in the store, {st} a file in the hub's state, {b} one in the
+# bus folder, {d} one in the data folder (the second layer: each outside the home in the world)
 PROFILE_PROBES = (
     ("read the copy's STATE.md", "cat {c}/STATE.md", True),
     ("write STATE.md", "printf y >> {c}/STATE.md", True),
@@ -355,14 +363,20 @@ PROFILE_PROBES = (
     ("write /tmp", "printf y > /tmp/brunna-profile-probe-$$", False),
     ("rename AGENT.md", "mv {c}/AGENT.md {c}/memory/reference/moved", False),
     ("link to the home's file", "ln -sf {h} {c}/memory/reference/l && cat {c}/memory/reference/l", False),
+    ("a hard link to the home's file", "ln -f {h} {c}/memory/reference/hl && cat {c}/memory/reference/hl", False),
+    ("read the hub's state", "cat {st}", False),
+    ("read the bus folder", "cat {b}", False),
+    ("read the data folder", "cat {d}", False),
+    ("the network", "/usr/bin/curl -s -m 8 -o /dev/null https://example.com", False),
 )
 
 
 def agent_profile(world) -> Outcome:
     """The per-run profile of an agent run in a memory copy (rx.profile_entries, as rx.run gets it) holds: the copy
     readable, STATE.md and memory/reference/ writable, everything else refused, the store and the home whole (r2 S2,
-    S3: the copy under the world's home, so the check meets production's shape). Through `codex sandbox` with the same
-    -c entries; positive control: each refused probe lands under a :workspace profile."""
+    S3: the copy under the world's home, so the check meets production's shape), the platform's places outside the home
+    (the second layer), the network and links. Through `codex sandbox` with the same -c entries; positive control: each
+    refused probe lands under a :workspace profile with the network on and the run's home writable."""
     exe = rx.binary()
     home = pathlib.Path(world.home).resolve()
     copy, other = home / "memory-copies" / "box", home / "memory-copies" / "other"
@@ -375,23 +389,28 @@ def agent_profile(world) -> Outcome:
     (home / "home-secret").write_text("secret")
     pathlib.Path(world.tool).mkdir(parents=True, exist_ok=True)
     (pathlib.Path(world.tool) / "auth.json").write_text("{}")   # a canary login for the run home to link
-    store_file = rx._store() / "canary"
-    store_file.parent.mkdir(parents=True, exist_ok=True)
-    store_file.write_text("store")
+    import hubconf
+    planted = {}
+    for key, folder in (("s", rx._store()), ("st", hubconf.STATE), ("b", hubconf.BUS_DIR), ("d", hubconf.data_dir())):
+        f = pathlib.Path(folder) / "brunna-canary"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("platform")
+        planted[key] = f
     run_home = rx.run_home()
     try:
         entries = rx.profile_entries(read=[copy], write=[copy / "STATE.md", copy / "memory" / "reference"], exe=exe)
         guarded = rx.run_args(None, entries)
-        opened = ["-c", "permissions.brunna-open.extends=\":workspace\"", "-c", "default_permissions=\"brunna-open\""]
-        names = {"c": copy, "o": other, "h": home / "home-secret", "a": run_home / "auth.json", "s": store_file}
+        opened = ["-c", "permissions.brunna-open.extends=\":workspace\"",
+                  "-c", f"permissions.brunna-open.filesystem={{{rx._toml(run_home)} = \"write\"}}",
+                  "-c", "permissions.brunna-open.network.enabled=true", "-c", "default_permissions=\"brunna-open\""]
+        names = {"c": copy, "o": other, "h": home / "home-secret", "a": run_home / "auth.json", **planted}
         wrong, untested = [], []
         for what, cmd, may in PROFILE_PROBES:
             line = cmd.format(**{k: shlex.quote(str(v)) for k, v in names.items()})
             ok = _sandboxed(exe, copy, run_home, guarded, rx.PROFILE, line)
             if ok != may:
                 wrong.append(what)
-            if not may and not _sandboxed(exe, copy, run_home, opened, "brunna-open", line) \
-                    and what != "write the run's login link":
+            if not may and not _sandboxed(exe, copy, run_home, opened, "brunna-open", line):
                 untested.append(what)
             for f in ("AGENT.md",):   # a probe that moved it puts it back
                 if not (copy / f).exists() and (copy / "memory" / "reference" / "moved").exists():

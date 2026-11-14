@@ -349,7 +349,7 @@ class CodexFixture:
         m.check_binary(str(exe))
         p = _hubconf.p
         for patch in (mock.patch.object(_hubconf, "runtimes_dir", lambda: tmp / "runtimes"),
-                      mock.patch.object(_hubconf, "p", lambda k, d=None: origin if k == "git_origin" else p(k, d))):
+                      mock.patch.object(_hubconf, "p", lambda k, d=None: {"git_origin": origin, "memory_copies": copy.parent}.get(k) or p(k, d))):
             patch.start()
             self._patches.append(patch)
         return {"HUB_LLM_POINT": self.POINT}

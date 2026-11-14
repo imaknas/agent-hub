@@ -33,9 +33,11 @@ class Temp(unittest.TestCase):
         self.origin = self.tmp / "origin"
         (self.origin / "box-memory.git").mkdir(parents=True)
         p = hubconf.p
+        places = {"git_origin": self.origin, "memory_copies": self.tmp / "copies"}
         for patch in (mock.patch.object(hubconf, "runtimes_dir", lambda: self.tmp / "runtimes"),
                       mock.patch.object(hubconf, "private_tmp", lambda: self.private()),
-                      mock.patch.object(hubconf, "p", lambda k, d=None: self.origin if k == "git_origin" else p(k, d)),
+                      mock.patch.object(hubconf, "_private_tmp_path", lambda: self.tmp / "private"),
+                      mock.patch.object(hubconf, "p", lambda k, d=None: places[k] if k in places else p(k, d)),
                       mock.patch.object(rx, "codex_home", lambda: self.user),
                       mock.patch("i18n.lang", lambda: "en"),
                       mock.patch("alert.once", lambda *a, **k: self.alerts.append(a))):
@@ -89,13 +91,41 @@ class NothingNewWhileOnlyInstalled(Temp):
         self.assertEqual(update.in_use(), ["claude"])
         self.assertEqual(session_versions.runtimes(), ["claude"], "a Codex session can't be confined (B1): no copies")
 
+    def sent(self):
+        """The alerts that say something (an alert.once with no problem only ends one that was open: nothing is sent
+        for a key never alerted)."""
+        return [a for a in self.alerts if a[1]]
+
     def test_the_login_job_checks_nothing_and_alerts_nothing(self):
         import importlib
         job = importlib.import_module("check-runtime-login")
         with mock.patch.object(rx, "login_check", side_effect=AssertionError("no login use")):
             self.assertEqual(job.main(["--runtime", "codex"]), 0)
-        self.assertEqual(self.alerts, [])
+        self.assertEqual(self.sent(), [])
+        self.assertEqual([a[0] for a in self.alerts], ["runtime-login-codex"], "one left open before ends")
         self.assertFalse((self.tmp / "runtimes").exists(), "nothing made in the store")
+
+    def test_update_runtimes_ends_what_it_alerted_and_starts_nothing(self):
+        import importlib
+        update = importlib.import_module("update-runtimes")
+        with mock.patch.object(update, "first_or_new", side_effect=AssertionError("no install")) as first, \
+                mock.patch.object(update, "in_use", lambda: []), \
+                mock.patch.object(update.hubconf, "worktree_lookup", lambda: None):
+            self.assertEqual(update.main([]), 0)
+        first.assert_not_called()
+        self.assertEqual(self.sent(), [])
+        self.assertIn("runtime-held-codex", [a[0] for a in self.alerts])
+
+    def test_secrets_doctor_notes_and_brunna_runtimes_say_nothing_of_its_platform_runs(self):
+        import importlib
+        import yaml
+        self.assertNotIn("secrets", yaml.safe_load((ROOT / "modules" / "codex.yaml").read_text()),
+                         "no login file for check-secrets to check")
+        self.assertEqual(rx.doctor_notes(), [])
+        runtimes = importlib.import_module("runtimes")
+        lines = runtimes.show_runtime("codex")
+        self.assertEqual(len(lines), 1)
+        self.assertIn("serves your sessions only", lines[0])
 
     def test_doctor_and_the_status_page_have_nothing_red_for_it(self):
         import importlib.machinery
@@ -110,9 +140,12 @@ class NothingNewWhileOnlyInstalled(Temp):
         self.assertEqual(stores, ["claude"], "no store row for a runtime only installed for sessions")
         codex = [r for r in rows if "codex" in r[1]]
         self.assertEqual([lvl for lvl, _w in codex], ["info"], "said once, never red")
-        page = (ROOT / "bin" / "gen-status-page.py").read_text()
-        self.assertIn("for n in runtime_ports.platform_work() if n != \"none\"", page,
-                      "the status page's no-copy alert is for the runtimes the platform runs work on")
+        import importlib
+        page = importlib.import_module("gen-status-page")
+        with mock.patch.object(runtime_ports, "no_checked_copy", lambda n: "none here" if n == "codex" else None):
+            self.assertEqual(page.store_alerts(), [], "no red row for a runtime only installed for sessions")
+            self.CONF = {**self.CONF, "llm.points": {"first-look": {"runtime": "codex"}}}
+            self.assertEqual([lvl for lvl, _w in page.store_alerts()], ["bad"], "red once it runs platform work")
 
     def test_a_pin_or_a_provider_brings_it_in(self):
         import importlib
@@ -274,8 +307,14 @@ class RunHome(Temp):
     def test_the_profile_denies_the_home_the_store_and_the_temp_roots_and_reads_back(self):
         folder = self.tmp / "f"
         (folder / "ref").mkdir(parents=True)
+        rx.end_run_home(rx.run_home())   # the store's Codex folder there (a profile names what is there)
         e = rx.profile_entries(read=[folder], write=[folder / "ref"], exe="/v/triple/bin/codex")
         self.assertEqual(e[str(pathlib.Path.home().resolve())], "deny")
+        for wide in ("/Users", "/Volumes", "/opt", "/usr/local"):
+            if os.path.exists(wide):
+                self.assertEqual(e[wide], "deny", wide)
+        self.assertEqual(e[os.path.realpath(self.tmp / "copies")] if (self.tmp / "copies").exists() else "deny", "deny")
+        self.assertEqual(e[str(hubconf.STATE.resolve())] if hubconf.STATE.exists() else "deny", "deny")
         self.assertEqual(e[os.path.realpath(self.tmp / "runtimes" / "codex")], "deny")
         self.assertEqual(e[str(folder)], "read")
         self.assertEqual(e[str(folder / "ref")], "write")
@@ -300,6 +339,10 @@ class Shape(Temp):
         deferred = self.items() + [{"type": "message", "role": "developer",
                                     "content": [{"text": "<tools>\nDeferred tool namespaces:\n- multi_agent_v1"}]}]
         self.assertTrue(rx.shape_problems(deferred), "v1's deferred sub-agents")
+        padded = self.items() + [{"type": "message", "role": "developer", "content": [{"text": "\n  <skills_instructions>"}]}]
+        self.assertTrue(rx.shape_problems(padded), "context checked after leading blanks (review nit)")
+        later = self.items() + [{"type": "additional_tools", "tools": [{"name": "collaboration", "tools": [{"name": "x"}]}]}]
+        self.assertTrue(rx.shape_problems(later), "every additional_tools item, not the first (review S2)")
 
 
 class Completion(Temp):
@@ -345,6 +388,25 @@ class Completion(Temp):
                 self.assertFalse(got.ok)
                 self.assertIn("refused", got.error)
 
+    def test_a_rollout_with_the_network_open_another_model_or_a_second_world_state_is_refused(self):
+        self.login()
+        for conf in ({"network": "enabled"}, {"model_seen": "gpt-5.5"}):
+            with self.subTest(**conf):
+                self.stand_in(**conf)
+                got = rx.complete(self.req(), {})
+                self.assertFalse(got.ok)
+                self.assertIn("refused", got.error)
+        home = self.tmp / "h"
+        roll = home / "sessions" / "2026" / "11" / "14" / "rollout-x.jsonl"
+        roll.parent.mkdir(parents=True)
+        roll.write_text("".join(json.dumps(x) + "\n" for x in (
+            {"type": "world_state", "payload": {"state": {"top_level_tools": {"functions": "a"}}}},
+            {"type": "world_state", "payload": {"state": {"top_level_tools": {"functions": "a", "collaboration": "b"}}}})))
+        self.assertTrue(any("top-level" in w for w in rx.rollout_problems(roll, False, {}, home)), "every world_state")
+
+    def test_web_search_is_off_on_the_command_line_too(self):
+        self.assertIn('web_search="disabled"', rx.run_args("m", {}))
+
     def test_no_login_is_said(self):
         self.stand_in()
         got = rx.complete(self.req(), {})
@@ -381,6 +443,9 @@ class Points(unittest.TestCase):
 
     def test_an_unknown_field_or_rule_is_refused_never_dropped(self):
         spec = dict(POINTS["librarian-state"])
+        for rule in ("Edit(./.)", "Edit(./.git/**)", "Edit(./.gitattributes)", "Edit(./memory/.gitmodules)", "Edit(./)"):
+            self.assertTrue(rx.point_refusal("x", {**spec, "allowed_tools": [rule]}), rule)
+        self.assertTrue(rx.point_refusal("x", {**spec, "tools": "Read,Glob"}), "a rule for writing without a tool that writes")
         self.assertIn("new_limit", rx.point_refusal("x", {**spec, "new_limit": 1}))
         self.assertTrue(rx.point_refusal("x", {**spec, "allowed_tools": ["Bash(git:*)"]}))
         self.assertTrue(rx.point_refusal("x", {**spec, "allowed_tools": ["Edit(./../x)"]}))
@@ -424,6 +489,16 @@ class Folders(Temp):
             (d / ".git").mkdir(parents=True)
             (d / ".git" / "config").write_text(cfg)
             cases[name] = d
+        for name, extra in (("a submodule", "modules/x/config"), ("a hook", "hooks/pre-commit")):
+            d = self.tmp / "copies" / name.replace(" ", "-")
+            (d / ".git" / pathlib.Path(extra).parent).mkdir(parents=True)
+            (d / ".git" / "config").write_text("[core]\n\tbare = false\n")
+            (d / ".git" / extra).write_text("x")
+            cases[name] = d
+        outside = self.tmp / "elsewhere" / "box"
+        (outside / ".git").mkdir(parents=True)
+        (outside / ".git" / "config").write_text("[core]\n\tbare = false\n")
+        cases["a clone outside the memory copies and the private temp folder"] = outside
         attrs = self.tmp / "attrs"
         (attrs / ".git" / "info").mkdir(parents=True)
         (attrs / ".git" / "config").write_text("[core]\n\tbare = false\n")
@@ -491,7 +566,17 @@ class Auth(Temp):
         (self.user / "config.toml").write_text('cli_auth_credentials_store = "keyring"\n')
         self.assertTrue(rx.credentials()[0].note)
         self.assertIn("store", [i for i, _p in rx.login_check()])
-        self.assertTrue(any("keyring" in what for _l, what, _f in rx.doctor_notes()))
+        self.assertEqual(rx.doctor_notes(), [], "nothing while the platform runs no work on Codex")
+        with mock.patch.object(runtime_ports, "platform_work", lambda: ["claude", "codex"]):
+            self.assertTrue(any("keyring" in what for _l, what, _f in rx.doctor_notes()))
+
+    def test_the_denies_that_cant_be_computed_refuse_the_run(self):
+        self.login()
+        self.stand_in()
+        with mock.patch("policy.credentials", side_effect=RuntimeError("broken")):
+            got = rx.complete(CompletionRequest(point="first-look", prompt="x", model="gpt-6-luna"), {})
+        self.assertFalse(got.ok)
+        self.assertIn("can't be computed", got.error)
 
     def test_the_login_check_runs_status_through_a_run_home(self):
         self.login()
