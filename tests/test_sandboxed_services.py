@@ -226,6 +226,7 @@ ls "$ROOT" >/dev/null 2>&1 || echo root-list-blocked
 mkdir -p "$WS/.ctl" && { touch "$WS/.ctl/settings" 2>/dev/null || echo control-blocked; }
 ln -s /etc "$WS/l" 2>/dev/null || echo link-blocked
 mkdir -p "$WS/node_modules" && ln -s /etc "$WS/node_modules/l" && echo tool-link-ok
+ln -s /etc "$WS/allowed-link" && echo allowed-link-ok
 cat "$OTHER/secret" >/dev/null 2>&1 || echo other-blocked
 cat "$CRED" >/dev/null 2>&1 || echo cred-blocked
 cat "$SECRETS_LINK/key" >/dev/null 2>&1 || echo linked-secrets-blocked
@@ -256,7 +257,7 @@ PY
 # workspace root, whose contents it can't read) can be stat'ed, or a program resolving the path to its own folder fails
 # (git 2.56 resolves every component of `git -C <dir>`: "Invalid path '<workspace root>': Operation not permitted")
 WORKS = {"rt-write", "ws-write", "linked-write", "system-read", "bind-declared-ok", "socketpair-ok", "root-stat",
-         "tool-link-ok"}
+         "tool-link-ok", "allowed-link-ok"}
 # guarantee (isolation.GUARANTEES) → the probe lines that show it holds
 PROBES = {"own-writes-only": {"outside-write-blocked", "bus-write-blocked"},
           "isolated-reads": {"other-blocked", "cred-blocked", "bus-read-blocked", "root-list-blocked",
@@ -285,8 +286,8 @@ real_get = hubconf.get
 hubconf.get = lambda k, d=None: [args["cred"]] if k == "credentials.files" else real_get(k, d)
 loader = importlib.machinery.SourceFileLoader("sr", args["bin"] + "/sandboxed-run")
 spec = importlib.util.spec_from_loader("sr", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
-sys.exit(m.main(["--project", "proj", "--cwd", args["ws"], "--port", str(args["port"]), "--", "/bin/sh", "-c",
-                 args["probe"]]))
+sys.exit(m.main(["--project", "proj", "--cwd", args["ws"], "--port", str(args["port"]),
+                 "--allow-link", args["ws"] + "/allowed-link", "--", "/bin/sh", "-c", args["probe"]]))
 """
 
 

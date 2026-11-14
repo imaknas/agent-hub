@@ -254,14 +254,16 @@ def links(d: dict) -> dict:
     checkouts, the workspace and the runtime folder. Any process of the project can otherwise swap a tracked folder for a
     link while someone else's unsandboxed checkout writes there (the owner's terminal or editor, a coding agent's own
     worktree mode, a deploy's pull), and that checkout then writes the project's files wherever the link points, as the
-    owner. {roots: [Path], folders: LINK_FOLDERS, inside: [Path] (the platform's own folders where tracked links are
-    written for the project: the test runner's runs, both spellings), allow: [Path] (exact link paths one platform job
-    may make; empty here, the caller adds them)}."""
+    owner. {roots: [Path], folders: LINK_FOLDERS, inside: [Path] (the platform's own folders, which no checkout writes:
+    the test runner's runs, where tracked links are checked out and tests make links, and the tool caches cache_env
+    names, where uv's cache links its wheels to their unpacked archives (measured 11-14: `uv pip install` and `uv sync`
+    failed without it); both spellings), allow: [Path] (exact link paths one platform job may make; empty here, the
+    caller adds them)}."""
     roots = [p for p in (d.get("workspace"), d.get("runtime")) if p]
     ws = d.get("workspace")
-    return {"roots": roots, "folders": [dict(f) for f in LINK_FOLDERS],
-            "inside": [ws / f".{n}" / "test" for n in dict.fromkeys(names.all("product"))] if ws else [],
-            "allow": []}
+    inside = [*(ws / f".{n}" / "test" for n in dict.fromkeys(names.all("product"))),
+              *(ws / ".git" / n / "cache" for n in dict.fromkeys(names.all("repo_dir")))] if ws else []
+    return {"roots": roots, "folders": [dict(f) for f in LINK_FOLDERS], "inside": inside, "allow": []}
 
 
 def cache_env(ws: pathlib.Path | None) -> dict[str, str]:
