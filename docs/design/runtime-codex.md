@@ -5,8 +5,10 @@ Status (11-14): step 0 (fail closed) built 11-08; **Step 2 built 11-14** (`bin/r
 on measurements with the owner's login ("Measured 11-14 (with the owner's login)"), and revised after a cold review
 ("r2 (11-14), after the blind review"). **It can't ship as "confined"**: Codex runs git as the user in the session's
 folder, and a repo filter ran from it (B1). r2's steps 1–2 are built (11-14): `.codex` and `.agents` protected in every
-sandbox, and a per-version probe whose B1 check fails on 0.167. The path to "confined" is the owner's (D9). Step 1 follows `runtime-versions.md` steps 1–4 (it is that
-doc's step 5). The Codex preset now leaves `runtime.default` at `none`, not `command` as "Where it stands" below says.
+sandbox, and a per-version probe whose B1 check fails on 0.167. The path to "confined" is the owner's (D9). **Step 1
+is planned** ("Step 1: plan (11-14)", on measurements without a login, "Measured 11-14 for Step 1"); D11–D13 wait for
+the owner. Step 1 follows `runtime-versions.md` steps 1–4 (it is that doc's step 5). The Codex preset now leaves
+`runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
 
@@ -845,6 +847,405 @@ r2 and the plan above disagree, r2 holds.
   - S10;
   - running the probe on a schedule.
 
+### Step 1: plan (11-14)
+
+Not built. Goal: the platform's own runs (completions, then the agent points that work in a memory copy) can run on
+Codex, on a checked copy in runtime-versions.md's store, in a Codex home of the platform's, each run's tools pinned and
+checked. It is runtime-versions.md's step 5; that doc's steps 1–4 (the store, `update-runtimes`, `checked_copy`, the
+conformance runner, session versions) are on main. Measured for it without a login on 0.169.0 (npm's latest) and 0.167.0:
+"Measured 11-14 for Step 1 (no login)" at the end of this doc. What needs a model call is listed under (9).
+
+**What the measurements change in the earlier Step 1 text** (where this plan and the text above disagree, this plan
+holds):
+- **The tool-free switch is `[agents] enabled = false`**, with `features.multi_agent_v2 = false`. On 0.167 and 0.169 it
+  removes the `collaboration` namespace from v2 models (`gpt-6-luna`, the default, included), and the deferred
+  `multi_agent_v1` namespace that a v1 model announces in a developer `<tools>` message. `features.multi_agent` is
+  deprecated (Codex says so on every run) and isn't written. So no model is pinned to keep a run tool-free. Models are
+  still pinned per group, for strength and for the per-run check.
+- **No `--ignore-user-config`.** It drops `$CODEX_HOME/config.toml`, which is the platform's own file here, and `codex debug
+  prompt-input` doesn't take it, so the check before a run and the run itself would differ.
+- **"Only `sessions/` writable" can't hold.** A run writes sqlite state, thread history, `installation_id`,
+  `skills/.system`, `tmp/` and locks into its home. So each run gets a fresh home built from a template (2).
+- **`confine` isn't a Step 1 port** (1e).
+- **`--output-schema` is checked by Codex only for being JSON**; whether the server takes a non-strict schema is a
+  login measurement (9). The fallback rule is in (1c).
+- **`codex exec` has no updater** and starts no daemon (measured with a newer version published); the pins stay as
+  reinforcement, and the digest check is what holds the copy.
+
+**1. The ports `runtime_codex.py` gains.** Codex's syntax stays in the adapter; the neutral files get only the small
+additions named here.
+
+*a. distribution* (`latest`, `install`, `version_of`, `pin_env`, `MIN_VERSION`), as Claude's:
+- `PACKAGE = "@openai/codex"`. `latest()` is `npm view … version`. `published()` keeps only `X.Y.Z`: the package lists
+  about 5,900 versions, most of them platform-suffixed builds (`0.169.0-darwin-arm64`) and alphas.
+- `install(version, folder)`: `npm install --prefix <folder> @openai/codex@<version> --save-exact`. It runs in a clean
+  environment (no caller's `npm_config_*`, no `OPENAI_*` or `CODEX_*` variables, `HOME` the folder, the store's npm
+  cache). The package has no install scripts. Its platform builds are npm aliases in `optionalDependencies`
+  (`@openai/codex-darwin-arm64` → `npm:@openai/codex@<version>-darwin-arm64`), and the lockfile carries a sha512
+  integrity for the wrapper and for all six of them. Any resolved entry without one refuses the install, as for Claude.
+- **It returns the native binary**, `node_modules/@openai/codex-<os>-<arch>/vendor/<triple>/bin/codex`. The path is read
+  from `codex-package.json` beside it, whose `version` and `target` must match. It is not `.bin/codex`, which is a node
+  shim that sets `CODEX_MANAGED_BY_NPM` and execs the binary, so its digest would say nothing.
+- **The digest covers every executable of the copy**: `bin/codex`, `bin/codex-code-mode-host` (code mode's JS host),
+  and `codex-path/rg`. `runtime_store.verify` gains an optional adapter list, `executables(entry)`. The size, mtime and
+  real path of each are checked every run, the full sha256 once a day.
+- `version_of` exists. `version_at` learns the store's layout (`<runtimes>/codex/<version>/…`), as Claude's did.
+- `pin_env(folder)` is `npm_config_prefix` at `<store>/codex/.npm-sink`. The home's config is the `pin_config`:
+  `check_for_update_on_startup = false`, `features.daemon_auto_start = false`, `features.in_app_updates = false`.
+- **`MIN_VERSION = "0.169.0"`**, Claude's precedent: the version the platform-side measurements were taken on, and the
+  one the login list (9) is measured on. 0.167.0 passed the model-free ones too, and M9's link-following is in both.
+- `install_global` / `user_copy` (section 8) only with D12's yes.
+
+*b. The copy a run uses.* `checked_copy()`, `_run_copy()` and `binary()` as Claude's: the store's `current`, held and
+verified, or `NoCheckedCopy`. **`binary()` loses its PATH fallback.** It is used today by the session-side checks;
+`conformance.py run codex --binary <path>` still names any binary for those.
+
+*c. completion* (`complete`, `health`):
+- **Where.** A fresh empty folder under `hubconf.private_tmp()`. No `.git` may be above it (checked as files, before the
+  run).
+- **How.** `exec --strict-config --skip-git-repo-check --json -m <model> -o <file> -`, with the prompt on stdin.
+  - `req.system` goes in as `-c developer_instructions=…` (measured: a developer message).
+  - The config comes from the run's home (2). One function builds the `-c` list for the run and for its check.
+- **Environment.** Minimal, never `os.environ` (M6): `HOME`, `LANG`, a private `TMPDIR`, `CODEX_HOME` (the run's home),
+  `HUB_LLM_POINT`, `pin_env`, and a PATH of the system folders. The native binary needs no node.
+- **Before the run:** `codex debug prompt-input` with the same flags in the same folder (0.16 s, no model call). Its
+  shape is compared with the pinned one for that model:
+  - the `additional_tools` tree: `functions.exec`, whose nested tools are `apply_patch`, `list_mcp_resource_templates`,
+    `list_mcp_resources`, `read_mcp_resource`, and `clock__curr_time` on GPT-6 models; and `functions.wait`;
+  - the kinds of developer messages: the model's base instructions, permissions, and on GPT-6 models the collaboration
+    mode; no `<tools>` (deferred namespaces), no skills, no AGENTS.md, no `multi_agent_role`.
+
+  A mismatch refuses the run.
+- **After the run**, from the rollout in the run's home:
+  - `additional_tools` as above;
+  - `turn_context`: the model, `multi_agent_version == "disabled"`, `approval_policy == "never"`, `sandbox_policy.type
+    == "read-only"`, `active_permission_profile.id == ":read-only"`;
+  - `world_state.top_level_tools` keys equal to the namespaces seen.
+
+  A mismatch refuses the result and alerts per point, as Claude's `_tools_alert` does.
+- **A model whose list `prompt-input` can't show is refused.** For `gpt-5.5` (no `tool_mode` in the catalog) it shows no
+  tool list at all, even with the shell on. Only models where a positive control shows a tool are pinned (4).
+- **Output.** The `-o` file. Usage comes from `turn.completed`. A login error is `is_login_error`'s (a 401, "Not logged
+  in").
+- **Schemas.** `--output-schema` for a schema the version's `completion-schemas` check recorded as taken. Any other
+  schema goes into the prompt, as `provider_openai`'s `structured: false` does. `completion.py` validates either way. Two of
+  the eleven schemas in `contracts/llm/` are strict (`first-look`, `mailbox-route`).
+- `health(conf)`: a checked copy, and the login link (2) in place; no request.
+
+*d. agent* (`run`, `describe`). One table maps a point's declaration to Codex. A field or value it doesn't know refuses
+the run with the reason, never dropped (step 0's bug). A test walks `contracts/llm-points.yaml`: every point maps fully
+or is refused, and a new field fails it.
+- **Where (B1).** Codex runs git as you in the run's folder, so the agent port starts a run only in a folder whose git
+  config the platform owns:
+  - a memory copy under `hubconf`'s memory-copies root, after `memory_paths.folder_problems` (llm.py's `works_in: memory`
+    check; `.gitattributes` and anything else beside the notes is refused there);
+  - a folder the run made under `private_tmp`.
+
+  A project's workspace, its worktrees and the throwaway copy are refused ("Codex runs git as you in the folder, and
+  its git config is the project's"). `FOLDER_GIT_OFF` stays False, so doctor's "folder git unknown" row stays. A future
+  version whose `session-folder-git` passes is a reason to revisit, as Claude's `NO_FOLDER_GIT` was.
+- **`tools`:**
+  - `""` gives the completion's home and checks.
+  - `Read,Write,Edit,Glob,Grep` (any subset) turns the shell on with `-c features.shell_tool=true -c
+    features.unified_exec=true`, under a per-run permission profile. Codex has no file-only tools: its shell is how it
+    reads.
+  - Any other tool name is refused.
+- **The per-run profile** (`brunna-run`, all of it in `-c`, measured to arrive whole in `turn_context`):
+  - `extends = ":read-only"`;
+  - `write` for each path in `allowed_tools`;
+  - `deny` for what `policy.py` denies a platform run: credentials (`~/.codex` and `~/.claude` among them), other
+    projects, `platform_state`, `deny_read`, and the store's Codex folder;
+  - `network.enabled = false`.
+
+  `:minimal` can't be extended ("unsupported built-in"), and a profile with no base can't start `/bin/sh`, so
+  `:read-only` plus denies is the form (measured; it is Claude's form too). Measured with `codex sandbox -P`: `STATE.md`
+  writable, while `AGENT.md`, a new file in `memory/`, `$TMPDIR` and the network were refused.
+- **`allowed_tools`:** only `Edit(./<path>)` and `Edit(./<dir>/**)`, resolved under the folder and never through a link.
+  Any other rule is refused.
+- **`permission_mode`:** `dontAsk` and `acceptEdits` become `approval_policy = "never"`; anything else is refused.
+- **`extra_args`:** `--strict-mcp-config` and `--no-session-persistence` are what the home always does (no MCP servers;
+  the rollout goes with the run's home). Anything else is refused.
+- **`restricted`** always holds: the folder isn't trusted in the platform's home, so no `.codex/` of it loads (measured).
+- **Refused:** `settings: platform`, `allow_from_env`, `extra_allow_env`, `tool_servers`, mail. llm.py refuses most of
+  them first (no `confine`, `rule_check`, `tool_servers` or `run_server` port).
+- **Per run**, as the completion's, with the shell's nested tools (`exec_command`, `write_stdin`) in the pinned list.
+  After the run, `turn_context.permission_profile` must equal the rendered entries.
+- **A new optional adapter function, `point_refusal(point, spec) -> str | None`.** `llm_ready.unsupported` and llm.py
+  read it, so the librarian takes its `-edits` completion for a part Codex refuses, instead of failing on every item.
+  This is what `THROWAWAY_ONLY` does for whole runtimes.
+
+*e. `confine` is left out of Step 1.*
+- `runtime_ports.sessions_confined()` and `CAGED_NEEDS` (hub-event, render-project-settings) are `{"control", "confine"}
+  <= capabilities`, and Codex already has `control`. Adding `platform_settings` would make hub-event serve a sandboxed
+  project's Codex sessions while B1 holds.
+- None of the points Step 1 opens needs `confine`: a memory copy's `restricted` is held by the folder check and the
+  untrusted folder.
+- `confine` comes with Step 4 r2's `confinement()` (item 5). That function replaces the port test in both callers, so an
+  adapter's own word decides, and Codex's says "not confined" while B1 holds.
+
+*f. auth* (`auth_env`, `clean_env`, `credentials`, `is_login_error`, `billing`):
+- `auth_env("token")` is the run's home with the login link (2). `"subscription"` is the same login: Codex has one
+  ChatGPT login, and no connectors run through it.
+- `clean_env` drops `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_*`.
+- `credentials()`:
+  - the user's `auth.json` is present;
+  - the user's config uses the file store (`cli_auth_credentials_store` absent or `"file"`; the keyring is keyed by the
+    home's path, M9);
+  - `auth_mode`, and the age of `last_refresh`.
+
+  The file is read for those fields only; no token is printed or kept.
+- `billing`: `subscription` for a ChatGPT login with no API key in the environment; `metered` for an API key (which
+  needs the owner's `metered_models`); `unknown` otherwise.
+
+*g.* `unsupported()` loses `agent` and `completion`, and names `confine` (Step 4), `stream`, `tool_servers`,
+`rule_check` and `run_server`. Leases and the confined points stay on Claude.
+
+**2. The platform's Codex home.**
+- **Template.** `<runtimes>/codex/home/` holds `config.toml` only. It isn't a version folder, so prune leaves it.
+  `install` and `update-runtimes` render it from an adapter constant and record its digest.
+- **Per run.** Each run gets `<runtimes>/codex/runs/<random>/` (mode 700):
+  - `config.toml`, copied after its digest matched the record (else refused: "the platform's Codex config changed after
+    it was written");
+  - `auth.json`, a link to the user's login file (`$CODEX_HOME` or `~/.codex`, resolved when the home is built);
+  - nothing else. Codex fills the rest.
+
+  The home is removed when the run ends, after the rollout is read. A home left by a crash goes after a day, as llm.py's
+  run folders do.
+- **Why one home per run.**
+  - The runs' sqlite files, thread history and rollouts would otherwise build up, in one folder, the text of every
+    project the platform reads.
+  - Runs at the same time don't share a state database.
+  - A home that someone changed can't carry over into the next run.
+- **`config.toml`** (accepted under `--strict-config` on 0.167.0 and 0.169.0):
+  - top level: `check_for_update_on_startup = false`, `cli_auth_credentials_store = "file"`, `web_search = "disabled"`,
+    `default_permissions = ":read-only"`, `approval_policy = "never"`, `project_doc_max_bytes = 0`;
+  - `[features]`: `shell_tool`, `unified_exec`, `apps`, `plugins`, `goals`, `multi_agent_v2`, `daemon_auto_start`,
+    `in_app_updates`, `view_image`, `sleep_tool`, `memories` and `hooks`, all `false`;
+  - `[agents] enabled = false`, `[tools.experimental_request_user_input] enabled = false`;
+  - `[skills] include_instructions = false`: the user's `~/.agents/skills` is otherwise listed in a platform run's
+    instructions, whatever `CODEX_HOME` is (measured);
+  - `[analytics] enabled = false`.
+
+  Never `[hooks]`, `hooks.json`, `[projects]`, `mcp_servers` or a profile wider than the run asks for. Each widening is a
+  per-run `-c` (1d), so the file is the tightest form.
+- **Why each matters.**
+  - With `plugins` on, a run in a fresh home cloned a plugin marketplace's git repo into the home (measured).
+  - `features.hooks = false` and the `HUB_LLM_POINT` guard both stand. Measured: a trusted hook in `$HOME/.codex` didn't
+    fire for a run whose `CODEX_HOME` was elsewhere, even with `--dangerously-bypass-hook-trust`; its positive control
+    (no `CODEX_HOME`) fired.
+  - `--strict-config` on every run: a key a new version no longer knows stops the run instead of being ignored. It
+    rejected a misspelt `features.shell_tol` (measured).
+- **Never passed:** `--trust` (writes trust), `--dangerously-bypass-*`, `--ephemeral` (the rollout is the after-run check),
+  `-p` profiles.
+- **Never run with a platform home:** `codex login` and `codex logout`. A login through the link rewrote the user's file
+  (measured with dummy keys).
+- **Admin layers.** `/etc/codex/{config,requirements,managed_config}.toml` and a managed-preferences domain can override
+  the home. None exists here. Doctor says when one does, since an administrator can lock the updater setting or the
+  sandbox.
+- **Denied to every sandbox.** `<runtimes>/codex` joins Codex's `credential_paths()`: the template, the run homes (which
+  hold the login link and the rollouts) and the store's copies.
+- **The login, M9 and section 3a.**
+  - The link is the only way the login is shared.
+  - The keyring store would need the same home path, so doctor refuses it (the user's config, read with `tomllib`).
+  - Narrowed residual: a write through the link takes `auth.json.lock` beside the target. With that lock held by
+    another process, the write waited 5 s and failed (measured). Whether a token refresh takes the same lock is on the
+    login list (9).
+  - A candidate's model checks get the real link only after its model-free checks pass (`auth-link-write` among them,
+    with dummy keys in the world), and only when the credential check says no refresh can fall due during the checks.
+    That is `last_refresh` against Codex's refresh interval, read from that version's source (9). Otherwise the checks
+    wait for the next night.
+- **The login-check job** (`codex/codex-login`, hourly, `bin/check-codex-login.py`, model-free):
+  - the user's file and the link target are there;
+  - `codex login status` through a fresh platform home exits 0;
+  - the file store is in use;
+  - `last_refresh` isn't older than a limit.
+
+  A real request is the daily checks' completion (3). A platform run's login error alerts at once, as Claude's do. One
+  alert per problem, by a stable id, as `check-claude-login` does.
+
+**3. `conformance_codex.py`: the platform side**, beside the three session-side checks. Each check runs in the runner's
+world. Names are shared with Claude's where they mean the same, so `update-runtimes`' `DAILY` (`agent-result`,
+`completion-no-tools`, `completion-schemas`) picks them up; `home-flags` joins `DAILY`.
+- **`distribution-integrity`** (function): the version; a lockfile integrity for every resolved tarball;
+  `codex-package.json` matching the version and target.
+- **`home-flags`** (safety, no model):
+  - the rendered `config.toml` loads under `--strict-config`;
+  - `prompt-input` gives the pinned shape for each model in `MODELS`;
+  - positive controls: `-c features.shell_tool=true` shows `exec_command` (measured), and `agents.enabled=true` shows
+    `collaboration` on a v2 model; either missing is "tests nothing".
+- **`completion-no-tools`** (safety, login): a real completion asked to run a command:
+  - its rollout and `turn_context` are as pinned;
+  - no `exec` call in the rollout;
+  - positive control: the same run with the shell on calls `exec_command`.
+- **`completion-schemas`** (function, login): one completion per schema in `contracts/llm/`. Each schema is recorded as
+  taken by `--output-schema` or not; one not taken goes into the prompt, and the check passes when that answer validates.
+- **`agent-result`** and **`agent-models`** (function, login): `--json` events parse (`thread.started`, `turn.completed`
+  usage, the final message, `-o`); each model in `MODELS` is in the catalog the run used and answers.
+- **`agent-profile`** (safety, no model). `codex sandbox -P` with the per-run profile rendered for a memory-copy-shaped
+  world. Canaries, as M8's:
+  - a credential canary, another project, platform state, the store's Codex folder;
+  - a write to `AGENT.md`, `RULES`, `.git/config`, a new `memory/` file, `$TMPDIR`;
+  - a link and a rename;
+  - the network.
+
+  `STATE.md` must stay writable. Each canary has its positive control (the profile without its entry).
+- **`auth-link-write`** (safety, no model). A dummy API key logged into the world's "user" home, and a platform-shaped
+  home linking it. A write through the link must land in the target and keep the link. Positive control: a home holding
+  a copy instead leaves the target unchanged.
+- **`auth-login-error`** (function, no model): a run with no login is a login error to `is_login_error` (the 401
+  measured).
+- **`updater-off`**: not-checkable. `exec` has no update path: 0.167.0, with 0.169.0 published, wrote no `version.json`
+  or `packages/`, left the npm sink empty, and kept its digest. The store's digest check is what holds the copy.
+- **`lifecycle-hooks`** becomes checkable under section 3a: the platform's hooks installed by `user_install` into the
+  world's home, and a marker in `additionalContext` that reaches the model.
+- `session-folder-git` and `control-globs` stay. `test_conformance_cover` holds every port to a check or a named
+  not-checkable entry.
+
+**The promotion rule needs one change.** `conformance.verdict()` fails on any safety fail. `session-folder-git` fails on
+every Codex version measured (B1), so no Codex copy would ever be promoted.
+- `Check` gains an optional `holds = "sessions"`, set only on `session-folder-git`. Its fail still gates that version's
+  sandboxed sessions (`runtime_ports.gated`) and alerts.
+- It doesn't hold back the platform's copy, because the agent port starts no run in a folder whose git config the
+  platform doesn't own (1d, tested). Promotion reads `verdict(doc, for_promotion=True)`.
+- Claude's checks keep the default. The rule is the owner's to confirm (D13).
+
+**`update-runtimes` and `session-versions` for Codex.** Both start on Codex the day it has the distribution port, since
+both read `runtime.installed`, which here holds `codex`:
+- `session-versions` installs the versions the user's Codex sessions run (the daemon's own updates included) as session
+  copies (about 370 MB each, at most 5) and runs the session-side checks: model-free, but for `lifecycle-hooks`.
+- `update-runtimes` installs a platform copy, runs every check (the login ones under 3a), promotes, and raises the user's
+  npm `codex` (section 8).
+
+So the distribution port ships behind D11: until the owner says otherwise, a runtime only in `runtime.installed` gets
+session checks and no platform copy, and no check uses the owner's login. `in_use()` splits into "runs platform work"
+(`runtime.default`, `llm.points` pins, providers whose impl is a runtime) and "sessions only".
+
+**4. MODELS, and which points run on Codex first.**
+- **`MODELS = {"fast": "gpt-6-luna", "standard": "gpt-6.1-sol", "strong": "gpt-6-astra"}`**, from 0.169's bundled
+  catalog ("fast and affordable", "workhorse", "frontier"). All are `code_mode_only` and v2, which `agents.enabled =
+  false` handles.
+  - `gpt-5.5` (legacy, no `tool_mode`) is never pinned: its tools can't be seen before a run.
+  - Whether the live catalog says the same, and whether a ChatGPT plan serves each model, is on the login list.
+  - Pinning the catalog itself (`model_catalog_json` = the copy's bundled catalog, written into the template at
+    promotion) would take surface C's tool-shape changes out of the platform's runs. It was taken by `prompt-input` with
+    no login; whether a logged-in run keeps it over the server's catalog is on the login list. Until then the per-run
+    check holds.
+- **First, the completion points:** `librarian-state-edits`, `librarian-index-edits`, `librarian-todo-format-edits`,
+  `first-look`, `reflect-week`, `mailbox-route`. They run on Codex through `llm.points.<point>.runtime: codex`, a
+  provider whose `impl` is `codex`, or `runtime.default: codex`.
+- **Then the agent points in a memory copy:** `librarian-state`, `librarian-todo-format`, `consolidate`, behind
+  `agent-profile`.
+- **Refused on Codex, said by `point_refusal` and doctor:**
+  - `librarian-index` (`acceptEdits` with no allow list, in the data folder);
+  - `agent-job`, `agent-job-confined`, `agent-job-event`, `project-agent`, `mailbox-escalation` and
+    `mailbox-conversation` (they need `confine`, `rule_check`, `tool_servers`, `run_server`, or a project folder);
+  - `mailbox-propose` (the throwaway copy, B1);
+  - `lease-*` (`stream`);
+  - `login-check` (Claude's point; Codex has its job).
+
+**5. `modules/codex.yaml`.**
+- **The preset** is for an instance that picks Codex at init (a Codex-only user): `runtime.default: codex`, `runtime.installed:
+  [codex]`. On this machine `runtime.default` stays `claude`: D3 is the owner's.
+- **`runtime.command` (the `codex exec` template for `mailbox-propose`) leaves the preset.** Codex's own runtime replaces
+  it. And if propose's throwaway copy shares the project's git config (a linked worktree; to check), that template's run
+  is B1's case today. An instance that has it keeps it until the owner removes it; doctor says what it leaves.
+- **Jobs:** `codex-login` (hourly, 2). Secrets: the user's `auth.json` declared by path (no backup: a new login replaces
+  it), so `brunna/secrets` checks it's there.
+- `description` and the README say what works: Codex sessions served (Step 2), completions and memory-copy judgment
+  points on a checked Codex copy, nothing confined in sandboxed projects (B1).
+
+**6. D9 (i), layer 2.** Layer 2 needs a Codex the platform holds and a home that isn't the user's (B3). Step 1 builds
+both, so layer 2 adds a config, not a mechanism:
+- the store copy, digest-checked, started with the top-level `--no-daemon` (accepted there; `exec` rejects it and needs
+  none);
+- the home builder takes its config as a parameter. Layer 2 renders a session config: tools on, the project's profile,
+  the updater off, which matters there, since the TUI is what updates itself. It keeps a home per project under the
+  store, so `sessions/` and resume persist.
+- The login is the same link.
+
+**7. Tests** (scratch homes and a stand-in `codex` only, never `~/.codex`):
+- `install` from a fake npm: the native path from `codex-package.json`, a missing integrity refused, the wrong target
+  refused; `published()` filtering.
+- `verify` over every executable.
+- The home builder:
+  - the template's digest checked;
+  - the link made to the resolved user file;
+  - a changed template refused;
+  - the run home removed on every way out;
+  - crash leftovers pruned.
+- The argv and `-c` list from one function for the run and its check; no `--ignore-user-config`, `--trust`,
+  `--ephemeral` or `--dangerously-*` ever.
+- The before and after checks against fixtures from these measurements (a v2 tree, a v1 `<tools>` message, a
+  `gpt-5.5` empty list, a `turn_context` with `multi_agent_version` `v2`), each refusing.
+- The declaration table over every point in `contracts/llm-points.yaml`, and an unknown field refused.
+- The cwd rule: a workspace, a worktree, the throwaway copy and a folder below a `.git` refused; a memory copy and a run
+  folder taken.
+- `point_refusal` read by `llm_ready` (the librarian falls back).
+- `CAGED_NEEDS` unchanged for Codex (no `confine`, a test says so until Step 4).
+- `verdict(for_promotion=True)` with a `holds: sessions` fail.
+- `in_use()`'s split.
+- `credentials()` from fixture files (never printing a token).
+- The `config.toml` text against the measured keys.
+- `test_runtime_boundary`'s ratchet unchanged (all syntax in the adapter); `test_llm_golden` with a Codex fake store.
+- The conformance checks against a stand-in `codex` that honours or ignores each property (pass, fail, tests nothing).
+
+**8. Order of work** (each with its tests; one cold review of the code before merging):
+1. Distribution and the store's Codex layout (`executables`, `version_at`), `checked_copy`, `binary()` without the PATH
+   fallback, `in_use()`'s split. D11's default is "sessions only", so nothing installs yet.
+2. The home template and builder, the config, `credentials()`, `codex-login`, `auth-link-write`, `home-flags`,
+   `agent-profile`, `distribution-integrity`.
+3. The completion port with its two checks; `completion-no-tools`, `completion-schemas`; the promotion rule (D13).
+4. The agent port with the declaration table, the cwd rule, `point_refusal`; `agent-result`, `agent-models`.
+5. `modules/codex.yaml`, doctor's rows (the Codex column's agent and completion rows, the admin layers, the keyring),
+   the README.
+6. With the owner's login and yes (D11): the login list (9), then one `update-runtimes --runtime codex` from main, and
+   its result recorded here.
+
+**9. What needs the owner's login to measure** (0.169.0, a platform-shaped home linking the user's login, scratch
+folders):
+- the live catalog: the same models, `tool_mode` and `multi_agent_version`; whether `model_catalog_json` holds over a
+  catalog refresh;
+- a real completion's rollout equal to `prompt-input`'s list with the home's flags, and `ALL_TOOLS` from inside `exec`
+  (the nested list is a floor in its description);
+- whether `apply_patch` still fails under `:read-only` on 0.169 (M1 again was 0.167);
+- `--output-schema` with each of the eleven schemas: taken, refused (and how), or loosened;
+- whether a ChatGPT plan serves `gpt-6-luna`, `gpt-6.1-sol` and `gpt-6-astra` through `exec`;
+- an agent run in a memory-copy-shaped folder under the per-run profile: the canaries through the model (M8's set) and
+  `turn_context.permission_profile`;
+- whether a token refresh takes `auth.json.lock` beside the target, and Codex's refresh interval (`last_refresh`), read
+  from the 0.169 source and seen once;
+- usage in `turn.completed`, and the error text of a lost login;
+- `lifecycle-hooks` in the world (additionalContext reaching the model);
+- the time a completion takes (the librarian's nightly budget).
+
+**10. Risks.**
+- **Surface C.** The server can change the tool shape (11-08's code mode did). The per-run check refuses rather than
+  widens. The residual is one run's wider tools under `:read-only` and no shell, with no MCP servers, until the after-run
+  check refuses its result.
+- **Deferred tools.** `exec` describes deferred nested tools only sometimes; the developer `<tools>` message names
+  deferred namespaces. A version that defers something without saying so is caught only after the run. `world_state`'s
+  tool hashes help, but don't list deferred ones.
+- **B1 reaches the platform's own runs** wherever the folder's git config isn't the platform's. The cwd rule is the whole
+  defence, so it is tested mechanically.
+- **The shared login.** A refresh by a platform run rotates the user's tokens. Linked, both homes see the result. The
+  residual is a refresh racing the user's daemon, narrowed (not closed) by the lock measured above.
+- **Disk.** About 370 MB per copy: `current`, `previous`, up to 5 session copies, and a candidate.
+- **The user's npm `codex`.** Its TUI offers "Update now" itself (11-14's slip); section 8's raise is D12.
+- **Linux.** Codex's bwrap and M10: no copy is promoted where the profile check fails, as runtime-versions.md says.
+
+**For the owner to decide:**
+- **D11, the platform's Codex copy and your login.** A runtime that is only in `runtime.installed` (sessions) gets
+  session checks and no platform copy, and no check uses your ChatGPT login. The platform installs a Codex copy and runs
+  login checks (section 3a's rule) only once Codex runs platform work: a point pinned to it, a provider with `impl: codex`,
+  or `runtime.default: codex`. Recommended: yes.
+- **D12, your own npm `codex`.** Raise it to the promoted version after each promotion (section 8, as DV2 (a) for
+  Claude), only while Codex runs platform work. Recommended: yes; the Desktop app and the daemon update themselves
+  anyway.
+- **D13, promotion with a sessions-only safety fail.** `session-folder-git` (B1) gates the sandboxed sessions of a
+  version, but not the platform's copy, whose runs never start where it matters. Recommended: yes; without it no Codex
+  copy can be promoted.
+- **D3 stays as it is.** The default runtime is yours; Step 1 needs a pin or a provider, not the default.
+
 ## Found by the second blind review (11-08), taken into the steps
 
 - **Step 1 ships completion and tool-free points only.** Codex has no file-only tools: the shell is how it reads, and nothing yet
@@ -1262,3 +1663,120 @@ What changes for Step 2, a follow-up apart from Step 4:
   writable there).
 - **`session_meta.cli_version`** is the version of the process that created the thread: 0.169.0 for daemon threads behind
   a 0.167.0 client. A resumed thread keeps it.
+
+### Measured 11-14 for Step 1 (no login)
+
+**Setup.**
+- codex-cli 0.169.0 (npm's latest that day) and 0.167.0, each installed from npm into a scratch prefix.
+- Every run had a scratch `HOME` and `CODEX_HOME` and a bare PATH, under `env -i`.
+- No login. A model request failed with 401 after the client had built it, so the rollout still shows what would have
+  been sent.
+- `~/.codex` was neither read nor linked. One `codex --version` of the scratch 0.167.0 ran with the real environment by
+  mistake; `--version` makes a `tmp/` entry in its home, so it may have left one under `~/.codex/tmp`.
+
+**The package.**
+- `@openai/codex@0.169.0`: a 13.5 KB wrapper (`bin/codex.js`, a node shim) and no install scripts.
+- Six platform builds as npm aliases in `optionalDependencies` (`@openai/codex-darwin-arm64` →
+  `npm:@openai/codex@0.169.0-darwin-arm64`). The lockfile has a sha512 integrity for the wrapper and for all six; npm
+  installs only the one that fits. The registry also lists provenance attestations.
+- The installed copy is 371 MB: `vendor/aarch64-apple-darwin/bin/codex` (Mach-O, 281 MB),
+  `bin/codex-code-mode-host` (70 MB), `codex-path/rg`, and `codex-package.json` (`version`, `target`, `entrypoint`).
+- `codex --version` gives `codex-cli 0.169.0` through the shim and from the native binary alike. The native binary
+  needs no node.
+- The shim sets `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`, then execs the binary.
+- `npm view @openai/codex versions` lists about 5,900 versions, mostly platform-suffixed builds and alphas.
+
+**exec, the daemon and the updater.**
+- `codex exec` ran in process: no `packages/`, `app-server-control/` or `version.json` in its home, and no process left
+  after it. That held with and without the updater settings.
+- Positive-control attempt: 0.167.0 through npm's shim, with 0.169.0 published, a default home and npm's global prefix
+  pointed at an empty sink. No `version.json`, no `packages/`, nothing in the sink, the binary's digest unchanged. exec
+  has no update path; the update prompt is the TUI's.
+- `--no-daemon` is a top-level flag: `codex --no-daemon exec` is accepted, and `codex exec --no-daemon` is an error.
+- A fresh home with the default features cloned a plugin marketplace's git repo into `$CODEX_HOME/.tmp/plugins`;
+  `features.plugins = false` stops it.
+- What a run writes into its home: sqlite files (`state_5`, `logs_2`, `goals_1`, `memories_1`, `queue_1`,
+  `thread_history_1`, each with `-wal`/`-shm`), `installation_id`, `.sandbox_migration`, `skills/.system/…`,
+  `shell_snapshots/`, `thread-writer-locks/`, `tmp/`, `sessions/…/rollout-*.jsonl`. `config.toml` was left as it was.
+
+**The tools a run gets** (`codex debug prompt-input`, no model call, 0.16 s; the same on 0.167.0).
+
+| config | `gpt-6-luna` (v2, the default with no login) | `gpt-5.6-luna` (v1) |
+| --- | --- | --- |
+| none | exec{apply_patch, exec_command, list_mcp_*, read_mcp_resource, view_image, write_stdin, clock__curr_time}, wait, request_user_input(_async), clock.sleep, collaboration.* | (not run) |
+| Step 1's earlier flags (shell, unified_exec, apps, plugins, goals, multi_agent, multi_agent_v2 off; web search off; `:read-only`; never) | exec{apply_patch, list_mcp_*, read_mcp_resource, view_image, clock__curr_time}, wait, request_user_input(_async), clock.sleep, **collaboration.*** | exec{apply_patch, list_mcp_*, read_mcp_resource, view_image}, wait, request_user_input; **a developer `<tools>` message: "Deferred tool namespaces: multi_agent_v1"** |
+| + `features.view_image`, `features.sleep_tool`, `tools.experimental_request_user_input.enabled` off | exec{apply_patch, list_mcp_*, read_mcp_resource, clock__curr_time}, wait, **collaboration.*** | exec{apply_patch, list_mcp_*, read_mcp_resource}, wait; the `<tools>` message |
+| + `[agents] enabled = false` (Step 1's home) | exec{apply_patch, list_mcp_*, read_mcp_resource, clock__curr_time}, wait | exec{apply_patch, list_mcp_*, read_mcp_resource}, wait |
+
+- `agents.max_depth = 0` and `features.deferred_tool_world_state = false` each removed v1's deferred announcement, and
+  neither removed v2's `collaboration`. `features.tool_search = false` removed neither (tried on v1).
+  `agents.max_concurrent_threads_per_session = 0` is refused at load.
+- Codex itself says: "`[features].multi_agent` is deprecated … `[agents].enabled = false` disables subagent tools even
+  when the model selects a subagent version, unless `[features].multi_agent_v2` is enabled."
+- With the home's flags, `gpt-6.1-sol` and `gpt-6-astra` gave `gpt-6-luna`'s list. A positive control, `-c
+  features.shell_tool=true -c features.unified_exec=true`, added `exec_command` and `write_stdin`.
+- `gpt-5.5` (no `tool_mode` in the catalog) shows no tool list in `prompt-input` at all, with the shell on or off. It
+  isn't code mode, so its tools go in the request, not in the input list.
+- The catalog without a login is the bundled one (`codex debug models` equals `--bundled`):
+  - v2: `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, and the
+    hidden `gpt-daybreak-*`;
+  - v1: `gpt-5.6-luna`, and the hidden `codex-auto-review`;
+  - neither: `gpt-5.5`;
+  - all but `gpt-5.5` are `code_mode_only`.
+- `model_catalog_json` (a config key) pointed at an edited copy of the bundled catalog (`gpt-6-luna` as v1) was used by
+  `prompt-input`.
+- `project_doc_max_bytes = 0` kept a folder's `AGENTS.md` out.
+- A skill in the user's `$HOME/.agents/skills` was listed in a run's instructions with `CODEX_HOME` elsewhere, unless
+  `[skills] include_instructions = false`.
+- `-c developer_instructions=…` arrives as a developer message.
+
+**The rollout of a run with no login** (`exec --json`, the home's flags, `gpt-5.6-luna`):
+- `session_meta` (`originator: codex_exec`, `cli_version`);
+- `additional_tools` with exactly the tree above;
+- the developer and user messages;
+- `world_state`, with `top_level_tools` (each namespace and tool by hash) and a hash of `model_catalog`;
+- `turn_context`: `model`, `multi_agent_version: "disabled"`, `approval_policy: "never"`, `sandbox_policy: read-only`,
+  `active_permission_profile: {"id": ":read-only"}`.
+
+**Config.**
+- `--strict-config` refused a misspelt `features.shell_tol` and took every key of Step 1's home, `[analytics] enabled =
+  false` included, on 0.167.0 and 0.169.0.
+- `--ignore-user-config` is documented as "Do not load `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`".
+- exec also has `--trust` ("Save trust for this project … Persists even with --ephemeral"),
+  `--dangerously-bypass-hook-trust` and `--ignore-rules`.
+- A per-run permission profile passed whole by `-c` arrived in `turn_context.permission_profile`: `permissions.<name>.extends`,
+  a `filesystem` table of absolute paths, `network.enabled`, and `default_permissions`.
+- The binary names system layers `/etc/codex/config.toml`, `requirements.toml` and `managed_config.toml`, and a managed
+  preferences domain. None exists here.
+
+**`--output-schema`.** Codex only checks that the file is JSON: a file that wasn't stopped the run before any request.
+`mailbox-route` (strict), `librarian-state-edits` and `reflect-week` (not strict), and a schema with an invalid type all
+went on to the request (401). Strict by OpenAI's rules (`additionalProperties: false` everywhere, every property
+required, no `pattern` or `min`/`max`): `first-look` and `mailbox-route`, two of eleven. The rollout doesn't record the
+schema.
+
+**Hooks and a project's config.**
+- A scratch `$HOME/.codex` held a SessionStart hook trusted by `trust_hash`. It fired for a run with no `CODEX_HOME`
+  (the positive control). It didn't fire for a run whose `CODEX_HOME` was Step 1's home, nor with
+  `--dangerously-bypass-hook-trust`.
+- A `.codex/config.toml` turning the shell and agents on, and a `.codex/hooks.json`, in a run's untrusted folder: neither
+  loaded.
+
+**The login link (M9 without a real login).**
+- Setup: dummy API keys and the file store, in a scratch "user" home. `codex login --with-api-key` wrote its
+  `auth.json` (`auth_mode`, `OPENAI_API_KEY`). A platform-shaped home held `auth.json` as a link to it.
+- `login status` through the link read it.
+- A second `login --with-api-key` through the platform home wrote the user's file and kept the link.
+- `logout` through the platform home removed only the link.
+- A write through the link takes `auth.json.lock` beside the target: with that file locked by another process the write
+  waited 5 s and failed; with the user home's `auth.lock` locked instead it went through at once.
+
+**Permission profiles for a run in a memory copy** (`codex sandbox -P`, no model).
+- `:minimal` can't be extended ("cannot extend unsupported built-in profile"). A profile with no `extends` can't start
+  `/bin/sh`.
+- `extends = ":read-only"` with the copy `read` and its `STATE.md` `write`:
+  - `STATE.md` written;
+  - `AGENT.md`, a new file in `memory/` and `$TMPDIR` refused;
+  - the network refused;
+  - a folder outside and the home readable, so the denies come from the policy.
+- `:workspace` with the same entries wrote everything in the folder and `$TMPDIR`.
