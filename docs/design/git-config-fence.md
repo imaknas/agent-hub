@@ -434,7 +434,7 @@ Rewritten in r2 with the blind review's recommendation for each; the owner decid
 - **Git-dir-shaped folders** under other names, until question 2 is answered; the scan reports them.
 - **Rebase and sequencer state**: a planted `exec` line runs if the owner continues an operation a session left
   (measured); it can't be fenced, since sessions rebase. The scan reports it.
-- **The platform's own commit gate**: closed by r2 B3 (built 11-14): a sandboxed project's tiers run in its sandbox
+- **The platform's own commit gate**: closed by r2 B3 (built and reviewed 11-14): a sandboxed project's tiers run in its sandbox
   whoever commits.
 - **Other tools' project files**: editor settings and tasks (`.vscode/`, `.idea/`) and other agents' control files are
   the same class as `.codex` and `.claude`; this fence is git's part only.
@@ -478,26 +478,44 @@ Folded in:
 - Residual: a folder holding a link, made elsewhere and moved in deeper than the pinned entries (into a folder git writes
   in, below `logs/refs/heads/`, say). The scan finds it; nothing prevents it.
 
-**B3, the commit gate ran the project's commands as the owner. Built 11-14.** `commit_gate` and `tests` aren't owner-only
-registry fields, so a sandboxed project could set them by manifest.update, and the platform's pre-commit hook then ran
-`brunna test --index`, whose tiers are `/bin/sh -c <run>`, as whoever committed: the owner's next commit from a terminal
-or editor ran the project's commands as the owner. As built:
-- `bin/test-runner.py` asks `isolation.run_as_project` right after it finds the project: for a sandboxed project, unless
-  the process already runs inside an OS sandbox (`isolation.confined_now`: Seatbelt's `sandbox_check` on itself; on
-  Linux, `no_new_privs` plus a seccomp filter, both of which sandboxed-run sets), it re-execs itself through
-  `sandboxed-run` as the project. Everything after (the export, which runs git on the repo, `cmd:` inputs, `uv sync` /
-  `npm ci`, the tiers) then runs in the project's sandbox. The commit gate, `merge-branch` and a person running
-  `brunna test` all go through it.
-- Where this machine can't sandbox, it refuses and runs nothing ("… can't be done here (why); nothing was run", exit 2,
-  so the commit stops). The mark the wrapped run carries only stops a loop: outside a sandbox it is a refusal, never a
-  reason to skip the wrap.
+**B3, the commit gate ran the project's commands as the owner. Built 11-14, revised after its code review.**
+`commit_gate` and `tests` aren't owner-only registry fields, so a sandboxed project could set them by manifest.update,
+and the platform's pre-commit hook then ran `brunna test --index`, whose tiers are `/bin/sh -c <run>`, as whoever
+committed: the owner's next commit from a terminal or editor ran the project's commands as the owner. As built:
+- **Which project, by folder.** `bin/test-runner.py` decides the project from the folder it starts in, before any git:
+  the sandboxed project whose workspace, runtime folder or `allow_write` holds it (`claimant`). A sandboxed project
+  writes its repo's pointers, and the first build took the project from git's common dir, so a `.git/commondir` aimed at
+  another project's git dir (or the hub's) made the runner take that project and skip the wrap (review F1,
+  reproduced). After git has named the repo, the run is refused when git's common dir is outside that project's
+  folders or names another project, and a sandboxed project's checkout outside its folders (a tool's own worktree
+  folder, which its sandbox can't read) is refused with that said, rather than failing inside the sandbox.
+- **The wrap.** For that project, unless the process already runs in a sandbox that holds, `isolation.run_as_project`
+  runs the same command through `sandboxed-run` as the project. Everything after (the export, which runs git on the
+  repo, `cmd:` inputs, `uv sync` / `npm ci`, the tiers) runs in the project's sandbox. The commit gate, `merge-branch`
+  and a person running `brunna test` all go through it.
+- **A fixed environment** (review F2, reproduced: a token in the owner's shell reached the tier): the wrapped run gets
+  only `PATH`, the locale, `HOME`, `TERM`, git's hook variables (`GIT_INDEX_FILE`, `GIT_DIR`, `GIT_WORK_TREE`, the
+  `GIT_CONFIG_*` two), the platform's own settings variables and the mark. A sandboxed project's `env:` inputs pass
+  nothing (their names are the project's to choose and no owner-only field names allowed ones), and the run says so.
+- **"Already in a sandbox that holds"** (review F4, reproduced: a permissive `sandbox-exec` profile skipped the wrap):
+  `isolation.confined_now` needs the adapter's own check (Seatbelt's `sandbox_check`; on Linux `no_new_privs` plus a
+  seccomp filter, and the mark, since Flatpak, bubblewrap and hardened units show the same) **and** a probe of the
+  REQUIRED isolated-reads guarantee: the platform's state and secrets folder can't be opened from here. Inside some
+  other sandbox the run is wrapped; on macOS a profile can't be applied inside another one (`sandbox-exec` exits 71,
+  measured), which the runner reports as its own refusal. Landlock stacks, so on Linux nesting is safe.
+- **Refusals** say "… can't be done here (why); nothing was run", exit 2, so a commit stops; never sandboxed-run's 78
+  or its "service or job" wording. The mark only stops a loop: outside a sandbox it is a refusal, never a reason to skip
+  the wrap.
 - The hook installer takes nothing from the project: the hooks' texts are the platform's fixed text chosen by exact
   field values, and they exec only the platform's own scripts (tested with hostile values in every field a project
   sets).
 - Tests: a sandboxed project's tier can't read the platform's state whether `brunna test` or an owner's `git commit`
-  through the hook starts it (the same tier of an unsandboxed project can, the positive control); a forged mark is
-  refused; `run_as_project`'s cases; Seatbelt's `confined_now` inside and outside a profile.
-- A project in `service_sandbox_exempt` still runs its tiers as the user: the owner's exemption, as for its jobs.
+  through the hook starts it (an unsandboxed project's can, the positive control); an owner's token doesn't reach it;
+  a planted `commondir` is refused and the other project's tier doesn't run; a checkout outside the folders is refused;
+  under a permissive profile the tier never runs as the starter; a forged mark is refused; `run_as_project`'s cases;
+  Seatbelt's own check inside and outside a profile. The wrap tests skip where the test process is itself sandboxed.
+- A project in `service_sandbox_exempt` still runs its tiers as the user, at the owner's commit too: the owner's
+  exemption, as for its jobs (said in AGENTS.md).
 - "Fence holds" gains: no platform hook runs project code unsandboxed (the commit gate as built; any later hook the
   same way).
 
@@ -526,8 +544,12 @@ folder (every sandboxed project writes that).
 **S5, reading project-writable files.** The scan opens every file with `O_NONBLOCK` and `O_NOFOLLOW`, checks with
 `fstat` that it is a regular file, reads at most a size cap, and runs under a timeout. Found while checking: cap-runner
 read a request file, which the project can swap in its own folder between the check and the read, with a blocking open:
-a FIFO there would have held the shared service. **Built 11-14** as its own fix: the read opens without blocking and
-reads only a regular file (tested with a FIFO).
+a FIFO there would have held the shared service. **Built 11-14** as its own fix, completed after its code review
+(F3: three more opens, all reproduced): every read in a job folder goes through the folder's descriptor without
+blocking and reads only a regular file, checked before any read (the request; `state.json` in `recover()` at start-up,
+which a FIFO had kept from ever coming up, and in `prune()`, whose age is now taken without following a link); and
+`write_state` makes `.state.tmp` fresh and exclusively instead of opening whatever is there for writing. Tested: a FIFO
+with and without a writer, a folder renamed into place, a link at `state.json`.
 
 **S6, `worktree add`.** The runner chooses the location; the request names only a worktree name. The runner walks the
 path component by component without following links (directory descriptors) and requires that the target doesn't exist.
