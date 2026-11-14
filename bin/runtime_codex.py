@@ -181,6 +181,51 @@ def foreign_controls(workspace) -> list[str]:
     return [_("{file} would be loaded by its Codex sessions", file=f"{TOOL_FOLDER}/{n}") for n in names]
 
 
+def profile_control_entries(workspace) -> dict[str, str]:
+    """The permission-profile entries that keep a session's tools off every control path at any depth (measured 11-14:
+    a `read` entry can't be a glob, and `deny` globs on <ws>/**/<name> and <ws>/**/<name>/** refused making one by mkdir,
+    cp, mv and a symlink, the top one included). What conformance_codex's control-globs check holds per version, and
+    what the renderer of Step 4 r2 steps 3-5 writes."""
+    ws = os.path.realpath(workspace)
+    return {f"{ws}/**/{n}{tail}": "deny" for n, _tree in CONTROL for tail in ("", "/**")}
+
+
+# ---------- the binary (what conformance_codex checks; Step 1 adds the distribution port around it) ----------
+_CHECKED: str | None = None
+
+
+def check_binary(path: str | None) -> None:
+    """For bin/conformance.py's child alone: this process's checks use the binary under check."""
+    global _CHECKED
+    _CHECKED = str(path) if path else None
+
+
+def binary() -> str:
+    """The codex a check runs: the one under check in a conformance child, else the one on PATH (there are no platform
+    runs of Codex yet, so no store copy; Step 1)."""
+    import shutil
+    got = _CHECKED or shutil.which("codex")
+    if not got:
+        raise FileNotFoundError("codex")
+    return got
+
+
+_VERSION_LINE = re.compile(r"^codex-cli (\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\s*$")
+
+
+def version_of(exe, env: dict | None = None) -> str | None:
+    """The version this codex says it is (`codex --version`: "codex-cli X.Y.Z"), or None. env: the environment to run it
+    in (a throwaway world's)."""
+    import subprocess
+    try:
+        r = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL,
+                           env=dict(os.environ if env is None else env))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = _VERSION_LINE.match(r.stdout.strip())
+    return m.group(1) if r.returncode == 0 and m else None
+
+
 def unconfined() -> str:
     """Why a Codex session in a sandboxed project isn't confined, whatever is rendered (docs/design/runtime-codex.md,
     r2 B1): Codex runs git itself in the session's folder, outside its tool sandbox, and the repo's filters run from it.

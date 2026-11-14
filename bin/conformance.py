@@ -11,7 +11,9 @@ tool still does what each of the platform's ports rests on.
         the platform's current copy, for a check of a session's version that pairs the two, world.pair)
 
 Neutral: the checks are the adapters' (bin/conformance_<runtime>.py: CHECKS, a list of runtime_ports.Check); only runtimes with the
-distribution port have versions to check. How every check runs:
+distribution port have versions to check, and (until it has one) a runtime whose checks are all of the session side and
+which says its version (versioned(): one whose sessions run a version the platform doesn't install, such as a shared
+daemon that updates itself; its result goes where the per-version gate reads it, record_any). How every check runs:
 - in its own process, whose environment points the platform's config, state, data, secrets (and so the session records),
   bus and logs, the instance directory, and HOME, at a throwaway world under hubconf.private_tmp() (never the system temp folder, which every
   sandboxed project can write as the same user). Before its check the child proves it: every place the platform would
@@ -208,7 +210,7 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None, pai
     current copy, which a check of a session's version pairs it with (sessions-fork); with none such a check pairs the
     binary with itself."""
     mod = runtime_ports._module(runtime)
-    if "distribution" not in runtime_ports.capabilities(runtime):
+    if not versioned(runtime):
         raise RuntimeError(_("the runtime {runtime} has no distribution port: it is unversioned, nothing to check",
                              runtime=runtime))
     exe = exe or getattr(mod, "binary")()
@@ -234,6 +236,24 @@ def run(runtime: str, exe: str | None = None, only: list[str] | None = None, pai
         return out
     finally:
         shutil.rmtree(top, ignore_errors=True)
+
+
+def versioned(runtime: str) -> bool:
+    """Whether the runtime has versions to check: the distribution port, or (before it has one) a version_of and checks
+    of the session side only, whose versions are the ones its sessions run (docs/design/runtime-codex.md, Step 4 r2,
+    S9)."""
+    if "distribution" in runtime_ports.capabilities(runtime):
+        return True
+    return callable(getattr(runtime_ports._module(runtime), "version_of", None)) and bool(checks(runtime)) \
+        and all(c.side == "session" for c in checks(runtime))
+
+
+def record_any(doc: dict) -> pathlib.Path:
+    """A runtime with the distribution port: its full result (promotion reads it). One without: its session result,
+    which the per-version gate reads (runtime_ports.gated), paired with no copy of the platform's."""
+    if "distribution" in runtime_ports.capabilities(doc["runtime"]):
+        return record(doc)
+    return record_session(doc, None)
 
 
 def results_file(runtime: str, version: str) -> pathlib.Path:
@@ -362,7 +382,7 @@ def main(argv: list[str]) -> int:
         return 1
     print(show(doc))
     if not report:
-        print(_("recorded: {file}", file=record(doc)))
+        print(_("recorded: {file}", file=record_any(doc)))
     return 0 if verdict(doc) == "pass" else 1
 
 

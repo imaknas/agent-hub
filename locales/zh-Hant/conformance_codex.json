@@ -1,0 +1,10 @@
+{
+ "no git on PATH": "PATH 上沒有 git",
+ "no answer in {s} s": "{s} 秒內沒有回應",
+ "Codex's own git ran the folder's git filter, outside its sandbox (runtime-codex.md, B1)": "Codex 自己的 git 執行了資料夾 git 設定裡的 filter,在它的沙盒之外(runtime-codex.md,B1)",
+ "tests nothing: Codex ran no git status in the folder": "沒測到任何東西:Codex 沒有在資料夾裡跑 git status",
+ "Codex's own git ran in the folder and the filter didn't run": "Codex 自己的 git 在資料夾裡跑了,filter 沒有執行",
+ "codex sandbox didn't run the probe under the profile (exit {code})": "codex sandbox 沒有在這個 profile 下跑探測(結束碼 {code})",
+ "written under the profile: {paths}": "在 profile 下被寫入:{paths}",
+ "tests nothing: {paths} not written without the entries either": "沒測到任何東西:拿掉這些條目後 {paths} 也沒被寫入"
+}

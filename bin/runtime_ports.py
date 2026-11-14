@@ -472,7 +472,9 @@ PORTS = {
 # the user's sessions' versions (docs/design/runtime-versions.md section 6): published() → every version the vendor
 # publishes (raises RuntimeError when it can't be told), and session_version(pid) → (version, build) of the tool a
 # session's process runs, read from its executable's files and never by running it (version UNREADABLE when its layout
-# isn't one the adapter knows; build: the vendor's build id when the layout names one, else None).
+# isn't one the adapter knows; build: the vendor's build id when the layout names one, else None). A runtime whose
+# sessions share one process (Codex's daemon) takes session_version(pid, raw=<the hook's input>) and reads the
+# session's own record named there instead (hub-event passes it when the signature has raw).
 # Ports a runtime may lack without any platform feature switching off (only reinforcement is lost): load() without
 # ports= doesn't ask for them
 OPTIONAL = ("wake", "session_status", "session_summary", "distribution")

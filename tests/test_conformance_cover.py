@@ -12,8 +12,10 @@ import runtime_ports  # noqa: E402
 
 class Cover(unittest.TestCase):
     def test_every_port_of_a_versioned_runtime_has_an_entry(self):
-        versioned = [n for n in runtime_ports.RUNTIMES if "distribution" in runtime_ports.capabilities(n)]
+        # the distribution port, or session-side checks of the versions its sessions run (conformance.versioned)
+        versioned = [n for n in runtime_ports.RUNTIMES if conformance.versioned(n)]
         self.assertIn("claude", versioned)
+        self.assertIn("codex", versioned)
         for name in versioned:
             with self.subTest(runtime=name):
                 entries = conformance.checks(name)
@@ -32,7 +34,7 @@ class Cover(unittest.TestCase):
 
     def test_an_unversioned_runtime_declares_none(self):
         for name in runtime_ports.RUNTIMES:
-            if "distribution" not in runtime_ports.capabilities(name):
+            if not conformance.versioned(name):
                 with self.subTest(runtime=name):
                     self.assertEqual(conformance.checks(name), [], "nothing to check without versions")
 

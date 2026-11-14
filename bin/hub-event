@@ -263,21 +263,33 @@ def session_record(ev, ws):
     if stale and ev.event != "session_start" and runtime_ports.touch_record(ev.session, _RT_NAME):
         return None   # a shared process's session on record: its hook only says it is still there
     pid, person = fn(os.environ), getattr(_RT, "person_session", None)
-    version = getattr(_RT, "session_version", None)
     if pid:
         import inspect
         raw = {"raw": _RAW} if callable(person) and "raw" in inspect.signature(person).parameters else {}
         runtime_ports.record_session(ev.session, _RT_NAME, pid, ev.cwd, refresh=ev.event == "session_start",
                                      wanted=(lambda p: person(p, os.environ, **raw)) if callable(person) else None,
-                                     project_of=_project_of_folder, version=version if callable(version) else None,
-                                     stale_s=stale)
+                                     project_of=_project_of_folder, version=_version_of(), stale_s=stale)
     return None
+
+
+def _version_of():
+    """The runtime's session_version as a function of the process, or None: given the hook's input as well when it
+    takes it (a runtime whose sessions share one process says the version from the session's own record, as Codex's
+    from its rollout)."""
+    import inspect
+    fn = getattr(_RT, "session_version", None)
+    if not callable(fn):
+        return None
+    if "raw" in inspect.signature(fn).parameters:
+        return lambda pid: fn(pid, raw=_RAW)
+    return fn
 
 
 def _hook_version() -> tuple[str, str | None] | None:
     """(version, build) of the tool this hook's session runs, read from its process (the runtime's session_pid and
-    session_version, files only); None when the runtime can't say."""
-    pid_of, version_of = getattr(_RT, "session_pid", None), getattr(_RT, "session_version", None)
+    session_version, files only; with the hook's input where the runtime reads it from there); None when the runtime
+    can't say."""
+    pid_of, version_of = getattr(_RT, "session_pid", None), _version_of()
     pid = pid_of(os.environ) if callable(pid_of) else None
     if not pid or not callable(version_of):
         return None
