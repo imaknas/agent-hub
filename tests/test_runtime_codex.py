@@ -568,7 +568,16 @@ class Doctor(unittest.TestCase):
         self.assertEqual(level, "warn")
         self.assertEqual(text, i18n.translate("agenthub", "{project} (sandboxed): sessions confined: {yes}; not confined, so "
                                               "the platform's hooks give them nothing there: {no}",
-                                              {"project": "caged", "yes": "claude", "no": "codex"}))
+                                              {"project": "caged", "yes": "claude", "no": self.codex_said()}))
+
+    @staticmethod
+    def codex_said():
+        """Codex with its reason: Codex runs git in the folder outside its sandbox (runtime-codex.md, r2 B1)"""
+        return f"codex ({runtime_ports.unconfined_reason('codex')})"
+
+    def test_codexs_reason_is_b1(self):
+        self.assertEqual(runtime_ports.unconfined_reason("codex"), runtime_codex.unconfined())
+        self.assertIsNone(runtime_ports.unconfined_reason("claude"))
 
 
     def test_a_codex_only_instance_says_it_too(self):
@@ -578,7 +587,7 @@ class Doctor(unittest.TestCase):
             ah.doctor_confined(lambda *a: rows.append(a), ["codex"])
             self.assertEqual([r[1] for r in rows], [i18n.translate(
                 "agenthub", "{project} (sandboxed): sessions confined: {yes}; not confined, so the platform's hooks give "
-                "them nothing there: {no}", {"project": "caged", "yes": "-", "no": "codex"})])
+                "them nothing there: {no}", {"project": "caged", "yes": "-", "no": self.codex_said()})])
             rows.clear()
             ah.doctor_confined(lambda *a: rows.append(a), ["claude"])
         self.assertEqual(rows, [], "every one confined: the control rows say the rest")
@@ -833,6 +842,43 @@ class RuleNames(unittest.TestCase):
                 got = prompts.listed_rules(f, {"commits": "conventional"})
         self.assertEqual(got, ["engineering", "multi-agent-review", "conventional-commits"])
         self.assertIn("../../etc/x", err.getvalue())
+
+
+class Control(Home):
+    """Codex's control port (runtime-codex.md, Step 4 r2, S1/S3): .codex and .agents, protected in every sandbox
+    whether or not Codex is installed; its sessions still aren't confined (no confine port; B1)."""
+
+    def test_it_has_the_control_port_but_its_sessions_stay_unconfined(self):
+        self.assertIn("control", runtime_ports.capabilities("codex"))
+        self.assertNotIn("confine", runtime_ports.capabilities("codex"))
+        self.assertFalse(runtime_ports.sessions_confined("codex"))
+        self.assertEqual(runtime_codex.control_paths(), [(".codex", True), (".agents", True)])
+        self.assertEqual(runtime_codex.control_root(), (".codex", ()))
+
+    def test_protected_whatever_is_installed(self):
+        for installed in (["claude"], ["claude", "codex"]):
+            with ti.hub_json(installed=installed):
+                self.assertIn("codex", runtime_ports.protected_runtimes())
+                import policy
+                names = [x["name"] for x in policy.protect()]
+                self.assertIn(".codex", names)
+                self.assertIn({"name": ".codex", "writable": []}, policy.protect_roots())
+                self.assertEqual(len(names), len(set(names)))
+
+    def test_every_entry_in_its_folder_is_foreign_and_a_link_is_said(self):
+        ws = self.tmp / "ws"
+        ws.mkdir()
+        self.assertEqual(runtime_codex.foreign_controls(ws), [])
+        (ws / ".codex").mkdir()
+        (ws / ".codex" / "hooks.json").write_text("{}")
+        (ws / ".codex" / "config.toml").write_text("")
+        got = runtime_codex.foreign_controls(ws)
+        self.assertEqual(len(got), 2)
+        self.assertTrue(".codex/config.toml" in got[0] and ".codex/hooks.json" in got[1], got)
+        other = self.tmp / "ws2"
+        other.mkdir()
+        (other / ".codex").symlink_to(ws / ".codex")
+        self.assertEqual(len(runtime_codex.foreign_controls(other)), 1)
 
 
 if __name__ == "__main__":

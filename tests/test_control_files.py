@@ -66,14 +66,40 @@ class Policy(Base):
         self.assertIn(f"Edit(/{self.ws}/**/.mcp.json)", deny)
         self.assertNotIn(f"Edit(/{self.ws}/**/.claude)", deny, "the folder itself is the sandbox's, not a file rule")
 
+    def test_other_agents_control_folders_are_denied_at_any_depth_and_by_the_sandbox(self):
+        """Codex's .codex and .agents (runtime-codex.md, Step 4 r2, S1): Edit denies at any depth (the sandbox takes them
+        in, so Bash too), and a denyWrite on each one at the top of every session folder as a second layer, whether
+        it exists or not."""
+        import runtime_codex
+        protect = PROTECT + [{"name": n, "tree": t} for n, t in runtime_codex.control_paths()]
+        pol = {"other_projects": [], "deny_write": [], "deny_read": [], "platform_commands": [], "write": [],
+               "network": [], "workspace": self.ws, "protect": protect}
+        sandbox, deny, _allow = runtime_claude.settings(pol)
+        for name in (".codex", ".agents"):
+            self.assertIn(f"Edit(/{self.ws}/**/{name})", deny)
+            self.assertIn(f"Edit(/{self.ws}/**/{name}/**)", deny)
+        dw = sandbox["filesystem"]["denyWrite"]
+        w = self.ws / ".claude" / "worktrees" / "w"
+        for folder in (self.ws, w):
+            for name in (".codex", ".agents"):
+                self.assertIn(str(folder / name), dw)
+        self.assertFalse(any(e.endswith("/.claude") or e.endswith("/.mcp.json") for e in dw),
+                         "Claude's own are its sandbox's and its Edit rules', not this layer's")
+
+    def test_no_other_agent_means_no_second_layer(self):
+        pol = {"other_projects": [], "deny_write": [], "deny_read": [], "platform_commands": [], "write": [],
+               "network": [], "workspace": self.ws, "protect": PROTECT}
+        sandbox, _deny, _allow = runtime_claude.settings(pol)
+        self.assertNotIn("denyWrite", sandbox["filesystem"])
+
 
 @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
 class SeatbeltLock(Base):
     """A sandboxed project's service or job (bin/sandboxed-run on macOS) can't write them."""
 
-    def run_in(self, script, roots=()):
+    def run_in(self, script, roots=(), protect=None):
         pol = {"workspace": self.ws, "write": [], "other_projects": [], "deny_read": [], "credentials": [],
-               "credential_files": [], "protect": PROTECT, "protect_roots": list(roots)}
+               "credential_files": [], "protect": PROTECT if protect is None else protect, "protect_roots": list(roots)}
         prof = seatbelt.service_profile(pol, [self.ws])
         return subprocess.run([seatbelt.SANDBOX_EXEC, "-p", prof, "/bin/sh", "-c", script], capture_output=True,
                               text=True, cwd=self.ws)
@@ -94,6 +120,25 @@ echo ok > {w}/work.py && echo worktree-code-written
                                             "rename-blocked", "nested-blocked", "code-written",
                                             "worktree-code-written"], r.stderr)
         self.assertFalse((self.ws / ".claude" / "settings.local.json").exists())
+
+    def test_codex_control_folders_are_locked_at_any_depth(self):
+        """runtime-codex.md, Step 4 r2, S1: a sandboxed project's service can't plant a .codex or .agents folder, at the
+        top, nested or in a worktree, and Codex's tool folder is one rule (control_root, nothing writable)."""
+        import runtime_codex
+        protect = PROTECT + [{"name": n, "tree": t} for n, t in runtime_codex.control_paths()]
+        folder, writable = runtime_codex.control_root()
+        w = self.ws / ".claude" / "worktrees" / "w"
+        r = self.run_in(f"""
+mkdir -p .codex 2>/dev/null && echo x > .codex/config.toml 2>/dev/null || echo root-blocked
+mkdir -p sub/.codex 2>/dev/null && echo x > sub/.codex/config.toml 2>/dev/null || echo nested-blocked
+mkdir -p {w}/.codex 2>/dev/null && echo x > {w}/.codex/hooks.json 2>/dev/null || echo worktree-blocked
+mkdir -p .agents/skills/x 2>/dev/null && echo x > .agents/skills/x/SKILL.md 2>/dev/null || echo agents-blocked
+mkdir -p other && mv other .codex 2>/dev/null || echo rename-blocked
+echo ok > code.py && echo code-written
+""", [{"name": folder, "writable": list(writable)}], protect)
+        self.assertEqual(r.stdout.split(), ["root-blocked", "nested-blocked", "worktree-blocked", "agents-blocked",
+                                            "rename-blocked", "code-written"], r.stderr)
+        self.assertFalse((self.ws / ".codex" / "config.toml").exists())
 
     def test_the_tool_folder_is_one_rule_but_its_worktrees(self):
         """V-M9: nothing new or changed under the tool's folder (a name no list knows included), its worktrees

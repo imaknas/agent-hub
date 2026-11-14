@@ -332,7 +332,9 @@ class Protected(Tree):
 
     def test_services_get_the_rule_beside_protect_denies(self):
         pol = self.pol()
-        self.assertEqual(pol["protect_roots"], [{"name": self.folder, "writable": list(self.writable)}])
+        # Claude's first; Codex's is there too, whatever is installed (runtime-codex.md, Step 4 r2, S3)
+        self.assertEqual(pol["protect_roots"], [{"name": self.folder, "writable": list(self.writable)},
+                                                {"name": ".codex", "writable": []}])
         lines = seatbelt.service_profile(pol, [self.ws]).splitlines()
         top = self.ws.resolve() / self.folder
         rule = (f'(deny file-write* (require-all (subpath "{top}") '

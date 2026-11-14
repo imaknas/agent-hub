@@ -1431,12 +1431,14 @@ def doctor_confined(add, installed) -> None:
         return
     yes = [n for n in names if runtime_ports.sessions_confined(n)]
     no = [n for n in names if n not in yes]
+    # each one not confined with its reason (runtime_ports.unconfined_reason: Codex's B1, runtime-codex.md r2)
+    said = [f"{n} ({why})" if (why := runtime_ports.unconfined_reason(n)) else n for n in no]
     for project, doc in sorted(hubconf.projects().items()):
         if (doc.get("enforce") or {}).get("sandbox") is not True:
             continue
         add("info" if not no else "warn",
             _("{project} (sandboxed): sessions confined: {yes}; not confined, so the platform's hooks give them nothing "
-              "there: {no}", project=project, yes=", ".join(yes) or "-", no=", ".join(no) or "-"),
+              "there: {no}", project=project, yes=", ".join(yes) or "-", no=", ".join(said) or "-"),
             _("open {project}'s sessions with {yes}", project=project, yes=runtime_ports.or_list(yes)) if no and yes
             else "")
 

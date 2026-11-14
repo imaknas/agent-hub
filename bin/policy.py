@@ -177,12 +177,13 @@ def others_memory(name: str, doc: dict, index: dict) -> list[pathlib.Path]:
 
 
 def protect() -> list[dict]:
-    """The control files of every installed runtime that can name them (docs/design/mailbox-runtimes.md A1): the
-    default runtime's first, as before; a runtime without the control port adds nothing (its hooks are never installed
-    in a sandboxed project)."""
+    """The control files of every runtime that can name them and is protected (runtime_ports.protected_runtimes: the
+    installed ones, docs/design/mailbox-runtimes.md A1, and those protected whatever is installed): the default runtime's
+    first, as before; a runtime without the control port adds nothing (its hooks are never installed in a sandboxed
+    project)."""
     import runtime_ports
     out = []
-    for name in dict.fromkeys([runtime_ports.default_name(), *runtime_ports.installed()]):
+    for name in runtime_ports.protected_runtimes():
         try:
             rt = runtime_ports.load(name, ports=("control",))
         except runtime_ports.Unsupported:
@@ -192,12 +193,12 @@ def protect() -> list[dict]:
 
 
 def protect_roots() -> list[dict]:
-    """Each installed runtime's own folder in a project, with the entries in it that stay writable ([{name, writable}];
-    the control port's optional control_root): nothing of the project's services or jobs creates or changes anything
+    """Each protected runtime's own folder in a project (as protect), with the entries in it that stay writable
+    ([{name, writable}]; the control port's optional control_root): nothing of the project's services or jobs creates or changes anything
     else under it (docs/design/runtime-versions.md section 7, V-M9)."""
     import runtime_ports
     out = []
-    for name in dict.fromkeys([runtime_ports.default_name(), *runtime_ports.installed()]):
+    for name in runtime_ports.protected_runtimes():
         try:
             rt = runtime_ports.load(name, ports=("control",))
         except runtime_ports.Unsupported:

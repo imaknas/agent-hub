@@ -57,9 +57,10 @@ if "automated test of a sandbox" in prompt:   # control / confine-sandbox: one c
         if tool == "Write":
             denied = any(glob(r[5:-1], target) for r in (st.get("permissions") or {}).get("deny") or []
                          if r.startswith("Edit("))
-        else:
+        else:   # the sandbox: its denyWrite, and the Edit rules it takes in (V-M9)
             fs = (st.get("sandbox") or {}).get("filesystem") or {}
-            denied = any(target == path(e) or target.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or [])
+            denied = any(target == path(e) or target.startswith(path(e).rstrip("/") + "/") for e in fs.get("denyWrite") or []) \
+                or any(glob(r[5:-1], target) for r in (st.get("permissions") or {}).get("deny") or [] if r.startswith("Edit("))
     # unread: no rule honoured, but a Write over a file it hasn't read fails validation (no denial, nothing written)
     unread = mode == "unread" and tool == "Write" and pathlib.Path(target).exists()
     if mode != "idle":
@@ -176,6 +177,11 @@ class Through(unittest.TestCase):
                     self.assertTrue((world.project / ".claude" / "agent-memory").is_dir(), "the seeded entry kept")
                     self.assertIn("/.claude/agent-memory", json.dumps(settings["sandbox"]["filesystem"]["denyWrite"]))
                     self.assertFalse((world.tool / "remote").exists(), "the user-level canaries' folders gone")
+                    # other agents' control folders (runtime-codex.md, Step 4 r2, S1): tried, and gone again
+                    for gone in (world.project / ".codex", world.project / "sub" / ".codex",
+                                 world.project / ".claude" / "worktrees" / "wt-canary" / ".codex"):
+                        self.assertFalse(gone.exists(), gone)
+                    self.assertIn("/.codex", json.dumps(settings["sandbox"]["filesystem"]["denyWrite"]))
                 if name == "control":
                     self.assertTrue(got["reason"], "the residual is said")
 

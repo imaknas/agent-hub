@@ -10,9 +10,13 @@ Ports (runtime_ports infers them from the functions below):
   sessions     alive / live_sessions / context_size / current_session. Every thread of the Desktop app and of the
                terminal UIs runs under one shared daemon (M7), so a session's record is keyed by Codex's session id, never by
                its process, and is live from its SessionStart until its SessionEnd or SESSION_STALE_S without a hook (a TUI
-               that quits fires no SessionEnd, and the daemon lives for days; r2 B2)
+               that quits fires no SessionEnd, and the daemon lives for days; r2 B2). session_version: the rollout's
+               cli_version (the daemon's)
+  control      control_paths / control_root / session_folders / foreign_controls: .codex and .agents, protected in every
+               sandbox whether or not Codex is installed (ALWAYS_PROTECTED; Step 4 r2, S1/S3). Its sessions still aren't
+               confined: no confine port, and unconfined() says why (B1)
 Absent (Unsupported; doctor's feature table names each, with unsupported(port)'s reason): instructions (the rules arrive by
-the SessionStart injection, so nothing writes the tracked AGENTS.md), agent, completion, auth, confine, control, stream,
+the SessionStart injection, so nothing writes the tracked AGENTS.md), agent, completion, auth, confine, stream,
 wake (D4: a Codex thread is never woken until M11), session_status, session_summary, tool_servers, rule_check, run_server,
 distribution. So dispatch neither routes to nor forks a Codex session (its candidates need a wake, a fork the default
 runtime's resume): a letter reaches a Codex session only through its hooks, then triage on the default runtime.
@@ -136,6 +140,55 @@ def rules_note() -> str:
              "when you wait for a reply, or before you finish a task, run `brunna inbox` yourself.")
 
 
+# ---------- control (runtime_ports' control port; docs/design/runtime-codex.md, Step 4 r2, S1/S3) ----------
+# What Codex loads settings, hooks, tools and instructions from inside a project folder, measured 11-14: a trusted folder's
+# .codex/ (config.toml: the permission profile, the approval policy, MCP servers, inline hooks, `features.hooks = false`,
+# which switches off the platform's user-level hooks too; hooks.json; execpolicy rules/), at any depth (a nested
+# .codex/config.toml loads for a session started below it), and .agents/skills (loaded as skills). Every sandbox the
+# platform renders keeps a sandboxed project's own processes off both, whether or not Codex is installed: a planted one
+# would run in the owner's later Codex session (ALWAYS_PROTECTED, runtime_ports.protected_runtimes).
+CONTROL = ((".codex", True), (".agents", True))
+TOOL_FOLDER = ".codex"
+ALWAYS_PROTECTED = True
+
+
+def control_paths() -> list[tuple[str, bool]]:
+    return list(CONTROL)
+
+
+def control_root() -> tuple[str, tuple[str, ...]]:
+    """(the tool's folder in a project, the entries in it that stay writable): none (nothing of the project's makes or
+    changes anything under .codex)."""
+    return TOOL_FOLDER, ()
+
+
+def session_folders(workspace) -> list[pathlib.Path]:
+    """Where its sessions start: the folder itself (where Codex makes its own worktrees isn't measured; a nested .codex is
+    covered by the control names at any depth)."""
+    return [pathlib.Path(workspace)]
+
+
+def foreign_controls(workspace) -> list[str]:
+    """What in the folder its sessions would load that the platform didn't put there: the platform writes nothing into
+    .codex/ yet, so every entry there (read without following links)."""
+    base = pathlib.Path(workspace) / TOOL_FOLDER
+    if base.is_symlink():
+        return [_("{file} is a link", file=TOOL_FOLDER)]
+    try:
+        names = sorted(os.listdir(base)) if base.is_dir() else []
+    except OSError as e:
+        return [_("{file} can't be listed ({why})", file=TOOL_FOLDER, why=e)]
+    return [_("{file} would be loaded by its Codex sessions", file=f"{TOOL_FOLDER}/{n}") for n in names]
+
+
+def unconfined() -> str:
+    """Why a Codex session in a sandboxed project isn't confined, whatever is rendered (docs/design/runtime-codex.md,
+    r2 B1): Codex runs git itself in the session's folder, outside its tool sandbox, and the repo's filters run from it.
+    conformance_codex's session-folder-git check tests it per version."""
+    return _("Codex runs git in the session's folder outside its own sandbox, and a filter in the repo's config runs "
+             "from it as you (runtime-codex.md, B1)")
+
+
 # ---------- lifecycle ----------
 
 def _hook_input(raw: str) -> tuple[dict | None, str | None]:
@@ -235,6 +288,35 @@ def session_pid(env, ancestors=None) -> int | None:
 
 
 EXEC_ORIGINATOR = "codex_exec"   # session_meta.originator of a `codex exec` run (M4; sessions_codex.NOT_A_PERSON)
+
+
+def _session_meta(raw: str | None) -> dict | None:
+    """The session_meta payload of the rollout the hook input's transcript_path names, only when that file is a rollout
+    in this user's Codex home (sessions/ or archived_sessions/, resolved; every sandbox denies the home): a file elsewhere
+    is a transcript anyone may have written. None when it can't be read."""
+    try:
+        path = (json.loads(raw or "{}") or {}).get("transcript_path")
+        if not isinstance(path, str) or not re.fullmatch(r"rollout-[^/]*\.jsonl", os.path.basename(path)):
+            return None
+        real, home = pathlib.Path(os.path.realpath(path)), pathlib.Path(os.path.realpath(codex_home()))
+        if not any(real.is_relative_to(home / d) for d in ("sessions", "archived_sessions")):
+            return None
+        with open(real, errors="replace") as fh:
+            meta = (json.loads(fh.readline(1 << 20) or "null") or {}).get("payload") or {}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+_CLI_VERSION = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?")
+
+
+def session_version(pid, raw: str | None = None) -> tuple[str, None] | None:
+    """(version, None) of the Codex that runs this session: its rollout's session_meta.cli_version (raw: the hook's
+    input). A thread runs in the shared daemon, which updates itself, so the version is the daemon's, not the client's
+    (measured 11-14: 0.169.0 threads behind a 0.167.0 TUI); its process (pid) can't tell it."""
+    v = (_session_meta(raw) or {}).get("cli_version")
+    return (v, None) if isinstance(v, str) and _CLI_VERSION.fullmatch(v) else None
 
 
 def _originator(raw: str | None) -> str | None:

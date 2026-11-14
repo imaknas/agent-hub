@@ -255,6 +255,34 @@ def sessions_confined(name: str) -> bool:
     return set(CONFINED_SESSION_PORTS) <= capabilities(name)
 
 
+def unconfined_reason(name: str) -> str | None:
+    """Why this runtime's sessions in a sandboxed project aren't confined, for doctor: its own word (an optional
+    unconfined() in the adapter, for what no port says), else the ports it lacks; None when they are."""
+    fn = getattr(_module(name), "unconfined", None)
+    why = fn() if callable(fn) else None
+    if why:
+        return why
+    if sessions_confined(name):
+        return None
+    return _("it lacks {ports}", ports=or_list([missing_label(name, p) for p in CONFINED_SESSION_PORTS
+                                               if p not in capabilities(name)]))
+
+
+def protected_runtimes() -> list[str]:
+    """The runtimes whose control files every sandbox keeps a sandboxed project's own processes off (policy.py protect,
+    protect_roots): the default and the installed ones, and every registered one that declares ALWAYS_PROTECTED (a file
+    planted for a tool the owner might open later is loaded then, whatever is installed today; docs/design/runtime-codex.md,
+    Step 4 r2, S3)."""
+    out = [default_name(), *installed()]
+    for name in RUNTIMES:
+        try:
+            if getattr(_module(name), "ALWAYS_PROTECTED", False):
+                out.append(name)
+        except ImportError:
+            continue
+    return list(dict.fromkeys(out))
+
+
 def throwaway_only(name: str | None = None) -> bool:
     return bool(getattr(_module(name or default_name()), "THROWAWAY_ONLY", False))
 

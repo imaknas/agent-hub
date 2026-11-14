@@ -249,6 +249,7 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
     # one rule for sessions), for the file tools and Bash both
     present = present_controls(ws).paths if ws else []
     deny += [r for p in present for r in _entry_edit(p)]
+    others = _other_controls(pol)
     # docs/design/capabilities.md 11-08, A1: what its services are denied, its sessions are too (points 5 and 6)
     state = _spelled(pol.get("platform_state") or [])
     cred_dirs = _spelled(_not_home(pol.get("credentials") or []))
@@ -268,8 +269,9 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
         "allowUnsandboxedCommands": False,
         "filesystem": {
             "allowWrite": list(pol["write"]),
-            **({"denyWrite": list(dict.fromkeys(_tilde(x) for p in present for x in _entry_spellings(p)))}
-               if present else {}),
+            **({"denyWrite": list(dict.fromkeys([_tilde(x) for p in present for x in _entry_spellings(p)]
+                                                + [_tilde(x) for x in _spelled(others)]))}
+               if present or others else {}),
             # not the workspace root: git dies when a folder above its -C can't be stat'ed, and these settings have no
             # stat-only allow (other_projects names each project instead)
             "denyRead": list(dict.fromkeys([_tilde(p) for p in pol["other_projects"]] + [_tilde(p) for p in secret]
@@ -278,6 +280,19 @@ def settings(pol: dict) -> tuple[dict, list[str], list[str]]:
         "network": {"allowedDomains": list(pol["network"]), "allowLocalBinding": bool(pol.get("local_bind"))},
     }
     return sandbox, deny, allow
+
+
+def _other_controls(pol: dict) -> list[pathlib.Path]:
+    """Other agents' control folders (the policy's protect entries that aren't Claude's own, a whole folder at the top of
+    the project) under each session folder, whether they exist or not: a second layer under their Edit denies, which the
+    sandbox takes in too and which hold at any depth (docs/design/runtime-codex.md, Step 4 r2, S1)."""
+    ws = pol.get("workspace")
+    if not ws:
+        return []
+    own = {n for n, _t in CONTROL}
+    names = [c["name"] for c in pol.get("protect") or [] if c.get("tree") and c["name"] not in own
+             and "/" not in c["name"] and RULE_NAME.fullmatch(c["name"])]
+    return [pathlib.Path(f) / n for f in session_folders(ws) for n in names]
 
 
 def session_env(pol: dict) -> dict[str, str]:
@@ -1904,6 +1919,9 @@ CONTROL = ((".claude", False), (".claude/settings.json", True), (".claude/settin
 # The tool's folder in a project and what in it the platform names writable: the worktrees Desktop's sessions work in
 # (runtime_ports' control_root; V-M9)
 TOOL_FOLDER, TOOL_FOLDER_WRITABLE = ".claude", ("worktrees",)
+# Its control files are protected in every sandbox whether or not it is installed (runtime_ports.protected_runtimes): a
+# sandboxed project could plant them for a session the owner opens later
+ALWAYS_PROTECTED = True
 WORKTREES = f"{TOOL_FOLDER}/worktrees"
 
 

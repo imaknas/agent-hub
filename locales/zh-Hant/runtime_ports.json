@@ -38,5 +38,6 @@
  "scheduled agent jobs that send mail (mail: true)": "會寄信的排程 agent job(mail: true)",
  "a project's own agent calls (brunna agent)": "專案自己的 agent 呼叫(brunna agent)",
  "way to install and pin a checked version": "安裝並固定一個檢查過的版本的方法",
- "this session's {runtime} version {version} can't be forked by the platform's copy {current}: {reason}": "這個 session 的 {runtime} 版本 {version} 無法由平台的版本 {current} 分支:{reason}"
+ "this session's {runtime} version {version} can't be forked by the platform's copy {current}: {reason}": "這個 session 的 {runtime} 版本 {version} 無法由平台的版本 {current} 分支:{reason}",
+ "it lacks {ports}": "它缺少{ports}"
 }

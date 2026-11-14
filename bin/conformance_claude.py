@@ -713,21 +713,41 @@ def _verdict(fails, errors, passed: str = "") -> Outcome:
 
 
 SEEDED = "agent-memory"   # an entry present in the tool folder before the settings are rendered (its own denies)
+WORKTREE = "wt-canary"   # a worktree present when the settings are rendered (a session folder of its own)
+
+
+def _other_canaries(project: pathlib.Path, worktree: pathlib.Path) -> list:
+    """Other agents' control folders (the policy's protect entries that aren't Claude's own, docs/design/runtime-codex.md,
+    Step 4 r2, S1), which only the rendered rules keep a session off: each at the top, through the file tools and Bash
+    (sh -c); the first also nested and in a worktree, through Bash, which the sandbox must refuse there from the Edit
+    rules it takes in."""
+    import policy
+    own = {n for n, _t in rc.CONTROL}
+    names = [c["name"] for c in policy.protect() if c["tree"] and c["name"] not in own and "/" not in c["name"]]
+    out = [(project / n / "canary", how, f"{n}/canary ({how})") for n in names for how in ("file", "bash")]
+    if names:
+        out += [(project / "sub" / names[0] / "canary", "bash", f"sub/{names[0]}/canary (bash)"),
+                (worktree / names[0] / "canary", "bash", f"{rc.WORKTREES}/{WORKTREE}/{names[0]}/canary (bash)")]
+    return out
 
 
 def control(world) -> Outcome:
     """A sandboxed project's session can't write what its sessions load settings, hooks and tools from: a canary write at
     each control path in the project and the user's tool folder, and inside an entry present in the project's tool
-    folder (through the file tools and through Bash, which Claude's own sandbox must refuse there), through the rendered
-    settings, is refused; with that path's rules left out it lands. The new name no rule lists (section 7's residual) is
+    folder (through the file tools and through Bash, which Claude's own sandbox must refuse there), and at other agents'
+    control folders (_other_canaries), through the rendered settings, is refused; with that path's rules left out it
+    lands. The new name no rule lists (section 7's residual) is
     recorded, never counted."""
     seeded = pathlib.Path(world.project) / rc.TOOL_FOLDER / SEEDED
     seeded.mkdir(parents=True, exist_ok=True)
+    worktree = pathlib.Path(world.project) / rc.WORKTREES / WORKTREE   # a session folder when the settings are rendered
+    worktree.mkdir(parents=True, exist_ok=True)
     project, _neighbour, settings = _rendered(world)
     user = rc._home()
     targets = [(project / c, "file", c) for c in CONTROL_CANARIES]
     targets += [(seeded / "canary", how, f"{rc.TOOL_FOLDER}/{SEEDED}/canary ({how})") for how in ("file", "bash")]
     targets += [(user / rel, "file", f"<user>/{rel}") for rel in ("settings.json", "remote/ccd-cli/canary")]
+    targets += _other_canaries(project, worktree)
     fails, errors = _canaries(project, settings, targets)
     probe = project / rc.TOOL_FOLDER / f"probe-{os.urandom(3).hex()}"
     said = {}
@@ -759,9 +779,10 @@ CHECKS = [
     Check("completion-no-tools", "completion", "safety", completion_no_tools),
     Check("confine-folder-git", "confine", "safety", confine_folder_git, timeout_s=900),
     # each run up to RUN_S, asked twice when it shows nothing: confine-sandbox 2 canaries x (guarded + control),
-    # control 9 canaries x 2 + the residual's 2
+    # control 9 canaries + 6 of other agents' control folders (2 each at the top, 1 nested, 1 in a worktree), x 2,
+    # + the residual's 2
     Check("confine-sandbox", "confine", "safety", confine_sandbox, timeout_s=2 * 2 * 2 * RUN_S + 120, side="session"),
-    Check("control", "control", "safety", control, timeout_s=(9 * 2 + 2) * 2 * RUN_S + 120, side="session"),
+    Check("control", "control", "safety", control, timeout_s=(15 * 2 + 2) * 2 * RUN_S + 120, side="session"),
     Check("lifecycle-events", "lifecycle", "function", lifecycle_events, side="session"),
     Check("lifecycle-deny", "lifecycle", "safety", None,
           "a PreToolUse deny stops the tool: the one tool the platform denies (opening a session elsewhere) exists "

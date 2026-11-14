@@ -146,9 +146,12 @@ class ClaudeOnlyToday(Bus):
                            text=True)
         self.assertEqual(r.stdout.split(), ["CLAUDE.local.md", ".claude/settings.local.json"])
 
-    def test_the_protected_control_files_are_claudes(self):
+    def test_the_protected_control_files_are_claudes_and_every_always_protected_ones(self):
+        # Codex's are protected whether or not it is installed (runtime-codex.md, Step 4 r2, S3)
         import policy
-        self.assertEqual(policy.protect(), [{"name": n, "tree": t} for n, t in runtime_claude.CONTROL])
+        import runtime_codex
+        self.assertEqual(policy.protect(), [{"name": n, "tree": t} for n, t in runtime_claude.CONTROL]
+                         + [{"name": n, "tree": t} for n, t in runtime_codex.CONTROL])
 
     def test_doctor_rows_are_the_default_runtimes(self):
         self.assertEqual([f for f, _ok, _m in runtime_ports.feature_table()],
@@ -422,7 +425,7 @@ class Projects(WithHalf):
         import policy
         with hub_json(installed=["claude", "fake", "half"]):
             names = [x["name"] for x in policy.protect()]
-        self.assertEqual(names, [n for n, _t in runtime_claude.CONTROL] + [".fake-hooks.json"])
+        self.assertEqual(names, [n for n, _t in runtime_claude.CONTROL] + [".fake-hooks.json", ".codex", ".agents"])
 
     def test_sandboxed_projects_get_only_the_hooks_of_a_runtime_with_control_and_confine(self):
         rps = load_file("rps_installed", BIN / "render-project-settings.py")
