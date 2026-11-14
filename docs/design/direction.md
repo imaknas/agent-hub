@@ -67,11 +67,13 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
 2. **Codex adapter (`runtime-codex.md`):** step 0 (fail closed) and **step 2** (`bin/runtime_codex.py`: user-level hooks,
    rules by injection, session state; merged 11-14) are built. Order now: Step 2 → Step 4 layer 1 → Step 1 → Step 4
    layer 2 → Step 3. Step 1 is `runtime-versions.md` step 5.
-   - **Step 1:** planned 11-14 and revised after a cold review (r2), on measurements without a login: the platform's
-     own runs on a checked Codex copy in the store, a fresh Codex home per run (updater, hooks, plugins and the shell
-     snapshot off; the run's own `HOME`), the tool list checked before and after every run. Completions first, then
-     the judgment points that work in a memory copy; nothing starts in a project's folder (B1). No `confine` port yet.
-     D11–D14 are provisional as recommended, the owner's. Not built; the login list in its plan comes first.
+   - **Step 1:** planned and revised after a cold review (r2), then **built 11-14 on its branch** through r2's step 5:
+     the platform's own runs on a checked Codex copy in the store, a fresh Codex home per run (updater, hooks, plugins
+     and the shell snapshot off; the run's own `HOME`), the tool list checked before and after every run; completions
+     and the judgment points that work in a memory copy; nothing starts in a project's folder (B1); no `confine` port.
+     The model-free checks pass on 0.169 (B1's probe fails, which holds only sessions). Left: the login list with the
+     owner, then a first promoted copy. With Codex only in `runtime.installed` nothing new happens (tested). D11–D14
+     are provisional as recommended, the owner's.
    - **Step 3:** wake, status, resume and fork. Wake also waits on M11 (is a client attached), under D4.
    - **Step 4 layer 1** (Codex's own sandbox, rendered by the platform): planned and revised after a cold review (r2,
      11-14, on measurements with the owner's login). **It can't ship as "confined"**: Codex runs `git status` as the user

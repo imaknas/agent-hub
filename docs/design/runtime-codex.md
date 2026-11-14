@@ -6,8 +6,8 @@ on measurements with the owner's login ("Measured 11-14 (with the owner's login)
 ("r2 (11-14), after the blind review"). **It can't ship as "confined"**: Codex runs git as the user in the session's
 folder, and a repo filter ran from it (B1). r2's steps 1–2 are built (11-14): `.codex` and `.agents` protected in every
 sandbox, and a per-version probe whose B1 check fails on 0.167. The path to "confined" is the owner's (D9). **Step 1
-is planned** ("Step 1: plan (11-14)", on measurements without a login, "Measured 11-14 for Step 1"), and revised after
-a cold review (its r2); D11–D14 are provisional as recommended, the owner's. Step 1 follows `runtime-versions.md`
+is built** on its branch through r2's order step 5 ("Step 1 as built (11-14)"); step 6, the login list and a first
+promoted copy, waits for the owner. D11–D14 are provisional as recommended, the owner's. Step 1 follows `runtime-versions.md`
 steps 1–4 (it is that doc's step 5). The Codex preset now leaves
 `runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
@@ -1442,6 +1442,165 @@ can see them.
 5. `modules/codex.yaml`, doctor's rows (the admin layers with the cloud ones), the README.
 6. With the owner's login and yes (D11): the login list, B1's and S5's items included, then one `update-runtimes
    --runtime codex` from main, its result recorded here.
+
+#### Step 1 as built (11-14), r2's order steps 1–5
+
+Built on its branch, not merged. r2's order steps 1–5 are in; step 6 (the login list, then a first `update-runtimes
+--runtime codex` from main) waits for the owner. With D11 provisional, **nothing changes on an instance that has Codex
+only in `runtime.installed`** (this machine), and a test holds that:
+- no store install;
+- no session copies;
+- no login use;
+- no alert.
+
+**The neutral pieces:**
+- **`runtime_ports.platform_work()`**: the default, `llm.points` pins, and providers whose impl is a runtime. It is never
+  `runtime.installed` alone.
+  - `update-runtimes`' `in_use()` reads it, so a sessions-only runtime gets no platform copy and no raise of the user's
+    own copy (D11, D12).
+  - `session_versions.runtimes()` skips a runtime whose sessions can't be confined (`unconfined_reason`) unless the
+    platform runs work on it (S6).
+- **The session-check alert** is one per runtime, `session-versions-<runtime>`. Each problem is a check and reason,
+  naming the versions; the per-version alerts of before end once.
+- **`Check.login`**:
+  - the runner orders login checks last;
+  - after a safety fail it records them as `error` ("withheld");
+  - it asks the adapter's `login_window(seconds)` before each one;
+  - `update-runtimes.promotable` refuses a result whose login checks didn't run (`conformance.login_unrun`).
+- **`Check.holds = "sessions"`**: `conformance.verdict(doc, for_promotion=True)` lets that check's fail through and
+  never its error (S7).
+- **`DAILY`** adds `agent-models` and `home-flags`. On Claude that is one more model call per model each day.
+- **`runtime_store`**: a distribution port's optional `executables(exe)` goes into `installed.json` (`also`). Promotion
+  records each one's real path, size, time and sha256, and `verify` checks them as it checks the executable.
+- **`point_refusal(point, spec)`**, an optional adapter function, is read by `llm_ready.unsupported` and `llm.py`. The
+  librarian takes its `-edits` completion for a part Codex refuses.
+- **`bin/check-runtime-login.py --runtime <name>`** is neutral. It returns at once, saying so and with no alert, for a
+  runtime the platform runs no work on. Otherwise it alerts once per runtime on the adapter's `login_check()` problems,
+  by their ids.
+- **Doctor** shows an adapter's own `doctor_notes()` rows: Codex's admin layers, its keyring store, and the cloud
+  layers it can't see.
+
+**`bin/runtime_codex.py`**: the ports `distribution`, `completion`, `agent` and `auth`. `confine` is left out (1e).
+- **Distribution:**
+  - `latest`, and `published` (only `X.Y.Z`);
+  - `install` (npm into a prefix, then `copy_problems`: the lockfile's integrity, and `codex-package.json`'s version
+    and target). It returns the native binary. Its `--version` runs with a throwaway home.
+  - `executables` (the binary, `codex-code-mode-host`, `rg`);
+  - `pin_env` (the npm sink), `MIN_VERSION = "0.169.0"`;
+  - `user_copy` and `install_global` (D12; only reached for a runtime in platform work).
+  - `binary()` no longer falls back to PATH; `version_at` knows the store's layout.
+- **The run home.** `run_home()` makes `<runtimes>/codex/runs/<random>/` holding:
+  - `config.toml`, written from `HOME_CONFIG` for every run. There is no template file to drift, which departs from
+    r2's digest-checked template: nothing can change the file between its writing and the run;
+  - `auth.json`, a link to the user's resolved file;
+  - `home/`, the run's `HOME`.
+
+  `HOME_CONFIG` is the plan's config plus `features.shell_snapshot = false` (B1). `run_env` keeps only the language,
+  the user name, `HUB_LLM_POINT` and the confinement marker, then sets `HOME`, `CODEX_HOME`, a `TMPDIR` in the home,
+  `PATH=/usr/bin:/bin` and the npm sink. Homes older than a day are pruned when the next one is made.
+- **`profile_entries` + `run_args`** build one `-c` list for `prompt-input` and the run:
+  - `-c model=` (never `-m`) and `-c developer_instructions=`;
+  - the shell flags for agent runs;
+  - the `brunna-run` profile:
+    - `extends :read-only`;
+    - the user's home, the store's Codex folder, the temp roots and every credential path the policy knows: `deny`;
+    - the folder and the running version's vendor folder: `read`;
+    - the written paths: `write`, with `<subtree>/**/.git*` `deny` for a folder;
+  - network off.
+- **The checks around a run (`_one_run`):**
+  - Before: `prompt-input`, checked by `shape_problems`. The namespaces must equal `{"functions": ["exec", "wait"]}`.
+    The nested tools may only be the pinned ones (plus the shell's two when asked). There may be no `<tools>`,
+    `<skills_instructions>`, `<multi_agent_*>` or AGENTS.md context. A model with no list at all is refused.
+  - After: the rollout (exactly one in the home), checked by `rollout_problems`:
+    - the same shape;
+    - per `turn_context`: approval `never`, sub-agents `disabled`, profile `brunna-run`, and permission entries equal
+      to the rendered ones, beside the root read and Codex's own read of its `tmp/arg0*`;
+    - `world_state`'s top-level tools.
+
+    A mismatch refuses the result even of a run that failed, since what it was sent is the safety fact, and alerts per
+    point (`completion-tools:codex:<point>`).
+  - A timeout sends SIGTERM, then SIGKILL after `GRACE_S = 10` (S5).
+- **Completion:**
+  - a fresh folder under `private_tmp` with no `.git` above it;
+  - the narrowed profile (S2);
+  - the schema in the prompt (`SCHEMA_ASK`), not `--output-schema`, until the login list says the server takes the
+    platform's schemas; `completion.py` validates either way;
+  - usage from `turn.completed`.
+- **Agent:**
+  - `point_refusal`'s table (`KNOWN_FIELDS`; file tools; `dontAsk`/`acceptEdits`; `Edit(./…)` rules; the two
+    held arguments). Over `llm-points.yaml`, Codex runs exactly `librarian-state`, `librarian-todo-format` and
+    `consolidate`, and every completion point.
+  - `folder_refusal`, read as files: a real `.git` directory, nothing above it, a config of only plain-clone keys whose
+    remote is a bare `.git` directly under `git_origin`, and no `config.worktree`, `info/attributes` or `commondir`.
+  - A folder rule's folder is made first; `describe` makes nothing.
+  - The answer is parsed as JSON when the point has a schema.
+- **Auth:**
+  - `auth_env` gives the same login for both modes, and says when the file is missing;
+  - `clean_env` drops `OPENAI_API_KEY`, `CODEX_API_KEY` and `CODEX_*`;
+  - `billing` (an API key, or the file's `auth_mode`);
+  - `credentials` (the file, and a note for a keyring store);
+  - `login_window`: `last_refresh` against `REFRESH_INTERVAL_S`, 7 days, a guess short of Codex's own until the login
+    list reads it, plus an hour's margin;
+  - `login_check` (the file, its store, `codex login status` through a run home);
+  - `doctor_notes`. Only `auth_mode` and `last_refresh` are read from the login file.
+- **`unconfined()`** reads the newest of all of a version's results, full and session.
+
+**`bin/conformance_codex.py`, the platform side:**
+- `distribution-integrity` (function);
+- `updater-off` (not-checkable: `exec` has no update path);
+- `home-flags` (safety). It covers:
+  - every model in `MODELS` through `prompt-input`;
+  - one unauthenticated `exec --strict-config` whose rollout is checked;
+  - rc files planted in the world's home that must not run, nor reach a snapshot;
+  - positive controls: the shell, sub-agents, and the rc files with the snapshot on and the world's `HOME`;
+- `agent-profile` (safety): 16 probes through `codex sandbox -c … -P brunna-run`, the copy under the world's home, each
+  refused probe with a `:workspace` control;
+- `auth-link-write` (safety; dummy API keys);
+- `auth-login-error` (function, a 401);
+- login checks, all not-checkable: `completion-no-tools`, `completion-schemas`, `agent-result`, `agent-models` and
+  `lifecycle-hooks`;
+- `session-folder-git` gets `holds="sessions"`.
+
+**Run against the real 0.169.0** (a scratch npm prefix; the platform's config, state, data, secrets, instance and `HOME`
+pointed at a scratch instance; `--report`; no login):
+- pass: `distribution-integrity`, `home-flags` (its rc control saw the rc files run with the snapshot on and the user's
+  `HOME`, so B1's finding holds on 0.169), `agent-profile`, `auth-link-write`, `auth-login-error`, `control-globs`;
+- fail: `session-folder-git` (all four drivers ran: B1 on 0.169, now by the probe too);
+- not-checkable: `updater-off` and the five login checks.
+
+So `verdict` is fail, `verdict(for_promotion=True)` pass, and `login_unrun` names the five: not promoted.
+
+**`modules/codex.yaml`:**
+- the preset is `runtime.default: codex`, `runtime.installed: [codex]`, and no command template;
+- the job `codex-login` is hourly, `bin/py bin/check-runtime-login.py --runtime codex`;
+- the secret `codex-login` is `~/.codex/auth.json`, with no backup.
+
+The module is off on this machine.
+
+**Tests:**
+- `tests/test_runtime_codex_runs.py` (29) with the stand-in `tests/codex_fake.py`:
+  - nothing new while only installed;
+  - distribution;
+  - the run home and its config;
+  - the shapes;
+  - completion (clean, refused before, refused after, no login);
+  - every declared point;
+  - every folder kind;
+  - the agent run;
+  - auth;
+- `test_runtime_contracts` runs the run and auth contracts on Codex (a memory-copy point, a stand-in, the login as a
+  file);
+- the runner's login order, the promotion rules and the store's `also` in their own tests.
+
+**Left for the owner (step 6) and later:**
+- the login list (r2 (9), B1's and S5's items), after which:
+  - the login checks become real checks;
+  - `--output-schema` per schema;
+  - `REFRESH_INTERVAL_S` from Codex's source;
+- a first `update-runtimes --runtime codex` from main once D11 brings Codex into platform work;
+- D14's measurement.
+
+Nothing points a judgment point at Codex yet.
 
 ## Found by the second blind review (11-08), taken into the steps
 
