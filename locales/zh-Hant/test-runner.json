@@ -18,5 +18,7 @@
  "this checkout's repo ({path}) is {other}'s, not {project}'s; nothing was run": "這個 checkout 的 repo({path})是 {other} 的,不是 {project} 的;什麼都沒跑",
  "this checkout is in {project}'s folders, but its repo ({path}) is not {project}'s; nothing was run": "這個 checkout 在 {project} 的資料夾裡,但它的 repo({path})不是 {project} 的;什麼都沒跑",
  "{project} is sandboxed, and this checkout ({path}) is outside its folders, where its sandbox can't reach (a tool's own worktree folder, say): test or commit from a worktree inside the project; nothing was run": "{project} 是沙盒專案,而這個 checkout({path})在它的資料夾外,它的沙盒碰不到(例如工具自己的 worktree 資料夾):請在專案裡的 worktree 測試或 commit;什麼都沒跑",
- "{names}: env inputs aren't passed to a sandboxed project's tiers (the starter's environment stays out of its sandbox)": "{names}:沙盒專案的測試層不會收到 env 輸入(啟動者的環境不進它的沙盒)"
+ "{names}: env inputs aren't passed to a sandboxed project's tiers (the starter's environment stays out of its sandbox)": "{names}:沙盒專案的測試層不會收到 env 輸入(啟動者的環境不進它的沙盒)",
+ "{cli} test: the run of {project}'s tests was stopped by signal {signal}; nothing passed": "{cli} test:{project} 的測試被訊號 {signal} 停掉了;沒有通過任何東西",
+ "{project} isn't sandboxed, but this checkout ({path}) is inside {other}'s folders, which {other}'s sandbox writes: its tests would run on what {other} can put there; move the checkout out of them; nothing was run": "{project} 沒有沙箱,但這份 checkout({path})在 {other} 的資料夾裡,而 {other} 的沙箱寫得到那裡:它的測試會跑在 {other} 能放進去的東西上;把 checkout 移出去;什麼都沒跑"
 }

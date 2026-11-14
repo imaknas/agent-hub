@@ -227,6 +227,23 @@ class Runner(unittest.TestCase):
         self.assertIn("outside its folders", r.stderr)
         self.assertFalse(out.exists())
 
+    def test_an_unsandboxed_project_inside_a_sandboxed_ones_folders_is_refused_and_told_why(self):
+        """Review 2 nit: said as what it is, not as a repo that isn't its own."""
+        inner = self.ws / "inner"
+        self.git(self.ws, "init", "-q", "-b", "main", str(inner))
+        (inner / "check.sh").write_text("true\n")
+        self.git(inner, "add", "-A")
+        self.git(inner, "commit", "-q", "-m", "a")
+        tiers = [{"tier": "t", "run": "sh check.sh", "when": ["merge"]}]
+        projects = {"demo": {"v": 2, "name": "demo", "paths": {"workspace": str(self.ws)}, "enforce": {"sandbox": True},
+                             "tests": tiers},
+                    "inner": {"v": 2, "name": "inner", "paths": {"workspace": str(inner)}, "tests": tiers}}
+        (self.tmp / "state" / "shared" / "registry" / "index.json").write_text(json.dumps({"v": 1, "projects": projects}))
+        r = self.run_("--tier", "t", "--force", cwd=inner)
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("isn't sandboxed, but this checkout", r.stderr)
+        self.assertIn("demo's folders", r.stderr)
+
     @unittest.skipUnless(sys.platform == "darwin" and SANDBOX_HERE, "a permissive Seatbelt profile: macOS")
     def test_some_other_sandbox_is_not_the_projects(self):
         """Review F4: under a permissive profile the platform's state is readable, so the run is wrapped; inside a
@@ -398,6 +415,25 @@ class SlotsTest(unittest.TestCase):
         self.assertGreaterEqual(got, 1)
         self.assertEqual(target.read_text(), "keep")
         s.release()
+
+
+class Wrapped(unittest.TestCase):
+    def test_a_run_killed_by_a_signal_isnt_called_a_sandbox_that_couldnt_start(self):
+        """Review 2 nit: the sandbox had started; the run stopped."""
+        import importlib.machinery
+        import importlib.util
+        import io
+        from contextlib import redirect_stderr
+        loader = importlib.machinery.SourceFileLoader("test_runner_wrapped", str(RUNNER))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        m = importlib.util.module_from_spec(spec)
+        loader.exec_module(m)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = m.run_wrapped("demo", ["/bin/sh", "-c", "kill -TERM $$"], {"PATH": "/usr/bin:/bin"})
+        self.assertEqual(code, 1)
+        self.assertIn("15", err.getvalue())
+        self.assertNotIn("can't be done here", err.getvalue())
 
 
 if __name__ == "__main__":

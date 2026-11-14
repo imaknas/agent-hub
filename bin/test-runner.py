@@ -158,11 +158,21 @@ def same_project(claimed, found: tuple[str, dict], top: pathlib.Path, common: pa
     name, doc = found
     for p in (top, common):
         if (c := claimant(p)) and c[0] != (claimed or found)[0]:
+            if claimed is None and (doc.get("enforce") or {}).get("sandbox") is not True:
+                raise SetupError(_("{project} isn't sandboxed, but this checkout ({path}) is inside {other}'s folders, "
+                                   "which {other}'s sandbox writes: its tests would run on what {other} can put there; "
+                                   "move the checkout out of them; nothing was run", project=name, path=p,
+                                   other=c[0]))
             raise SetupError(_("this checkout's repo ({path}) is {other}'s, not {project}'s; nothing was run",
                                path=common, other=c[0], project=(claimed or found)[0]))
     if claimed:
         own = roots({**claimed[1], "name": claimed[0]})
         real = pathlib.Path(os.path.realpath(common))
+        if name != claimed[0] and (doc.get("enforce") or {}).get("sandbox") is not True:
+            raise SetupError(_("{project} isn't sandboxed, but this checkout ({path}) is inside {other}'s folders, "
+                               "which {other}'s sandbox writes: its tests would run on what {other} can put there; "
+                               "move the checkout out of them; nothing was run", project=name, path=top,
+                               other=claimed[0]))
         if name != claimed[0] or not any(real == r or r in real.parents for r in own):
             raise SetupError(_("this checkout is in {project}'s folders, but its repo ({path}) is not {project}'s; "
                                "nothing was run", project=claimed[0], path=common))
@@ -186,6 +196,11 @@ def run_wrapped(name: str, argv: list[str], env: dict) -> int:
     refusal with exit 2, not as a service's."""
     sys.stdout.flush()
     r = subprocess.run(argv, env=env, stderr=subprocess.PIPE, text=True, errors="replace")
+    if r.returncode < 0:   # killed by a signal: the run stopped, the sandbox had started (review 2 nit)
+        sys.stderr.write(r.stderr)
+        print(_("{cli} test: the run of {project}'s tests was stopped by signal {signal}; nothing passed",
+                cli=names.current("cli"), project=name, signal=-r.returncode), file=sys.stderr)
+        return 1
     if r.returncode not in (0, 1, 2):
         why = r.stderr.strip().splitlines()[-1:] or [f"exit {r.returncode}"]
         print(refused(name, why[0].removeprefix("sandboxed-run: ").split("; not run")[0]), file=sys.stderr)
