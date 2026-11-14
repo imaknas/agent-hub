@@ -108,8 +108,15 @@ def codex_home() -> pathlib.Path:
 def credential_paths() -> dict:
     """Its whole home: the login (auth.json), and every project's conversations (runtime_ports.credential_paths, asked
     whether or not Codex is installed: ALWAYS_PROTECTED). The default ~/.codex always, and a $CODEX_HOME elsewhere where
-    the process computing the policy has it."""
-    return {"dirs": list(dict.fromkeys([str(pathlib.Path.home() / ".codex"), str(codex_home())])), "files": []}
+    the process computing the policy has it. And the platform's own Codex folder in the store, whole: its run homes hold
+    each run's rollout (a project's notes as the prompt, and the answer), last message and logs, and the login link
+    (runtime-codex.md, Step 1 section 2; a review found them readable from a sandbox, B1)."""
+    dirs = [str(pathlib.Path.home() / ".codex"), str(codex_home())]
+    try:
+        dirs.append(str(_store()))
+    except Exception:   # noqa: BLE001 (no store to name: nothing of the platform's runs to deny)
+        pass
+    return {"dirs": list(dict.fromkeys(dirs)), "files": []}
 
 
 def credential_override(env) -> tuple[str, list[str], list[str]] | None:

@@ -186,8 +186,14 @@ def credential_paths() -> dict:
     """Its login (runtime_ports credential_paths), under its home as configured now: the credential file, not the folder
     it is in, whose other entries its sessions use (transcripts, plans, skills; docs/design/capabilities.md 11-08, A2 for
     the finer rules there). And the headless token the platform's runs log in with (_token_file), which is not under
-    $CLAUDE_CONFIG_DIR."""
-    return {"dirs": [], "files": list(dict.fromkeys([str(_home() / ".credentials.json"), str(_token_file())]))}
+    $CLAUDE_CONFIG_DIR. And the platform's own config dir in the store (platform_config_dir), whole: the platform's
+    completions run there, and what they keep is the platform's, not a project's to read (runtime-codex.md, Step 1,
+    review B1: its Codex counterpart was readable from a sandbox)."""
+    try:
+        dirs = [str(platform_config_dir())]
+    except Exception:   # noqa: BLE001 (no store to name)
+        dirs = []
+    return {"dirs": dirs, "files": list(dict.fromkeys([str(_home() / ".credentials.json"), str(_token_file())]))}
 
 
 def credential_override(env) -> tuple[str, list[str], list[str]] | None:

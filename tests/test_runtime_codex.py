@@ -342,7 +342,9 @@ class Sessions(unittest.TestCase):
     def test_its_home_is_a_credential_and_codex_stays_denied(self):
         default = str(pathlib.Path.home() / ".codex")
         with mock.patch.dict(os.environ, {"CODEX_HOME": str(self.tmp / "ch")}):
-            self.assertEqual(runtime_codex.credential_paths(), {"dirs": [default, str(self.tmp / "ch")], "files": []})
+            self.assertEqual(runtime_codex.credential_paths(),
+                             {"dirs": [default, str(self.tmp / "ch"), str(runtime_codex._store())], "files": []},
+                             "the store's Codex folder too: its run homes (Step 1, review B1)")
             with ti.hub_json(installed=["claude", "codex"]):
                 self.assertIn(str(self.tmp / "ch"), runtime_ports.credential_paths()[0])
         # ~/.codex denied whichever runtimes are installed: its adapter is protected always (review N3 moved it there)

@@ -123,6 +123,64 @@ class NothingNewWhileOnlyInstalled(Temp):
         self.assertEqual(update.in_use(), ["claude", "codex"])
 
 
+class StoreDenied(unittest.TestCase):
+    """Review B1: in an instance-dir layout (no STATE override, so the store is <instance>/runtimes), a sandboxed
+    project can't read the platform's Codex run homes or Claude's platform config dir: every sandbox the policy renders
+    (Seatbelt's read denies, Landlock's, Claude's session settings) denies both, and real Seatbelt refuses a planted
+    rollout while the project's own file stays readable."""
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        self.tmp = pathlib.Path(d.name).resolve()
+        self.inst = self.tmp / "instance"
+        self.ws = self.tmp / "workspace" / "boxed"
+        self.ws.mkdir(parents=True)
+        for patch in (mock.patch.object(hubconf, "STATE", hubconf.MAIN / ".state"),
+                      mock.patch.object(hubconf, "instance_home", lambda: self.inst),
+                      mock.patch.object(rx, "codex_home", lambda: self.tmp / "user-codex")):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def policy(self):
+        import policy
+        doc = {"name": "boxed", "paths": {"workspace": str(self.ws)}, "enforce": {"sandbox": True}}
+        return policy.policy("boxed", doc, {"projects": {"boxed": doc}})
+
+    def test_every_sandbox_denies_the_store_run_homes_and_claudes_config_dir(self):
+        import landlock
+        import runtime_claude
+        import seatbelt
+        self.assertEqual(hubconf.runtimes_dir(), self.inst / "runtimes", "the production layout")
+        codex, claude = str(self.inst / "runtimes" / "codex"), str(self.inst / "runtimes" / "claude" / "config")
+        pol = self.policy()
+        creds = [str(p) for p in pol["credentials"]]
+        self.assertIn(codex, creds)
+        self.assertIn(claude, creds)
+        denies = " ".join(seatbelt.read_denies(pol))
+        self.assertIn(f'(subpath "{codex}")', denies)
+        self.assertIn(f'(subpath "{claude}")', denies)
+        self.assertTrue({codex, claude} <= {str(p) for p in landlock.denied(pol)})
+        sandbox, deny, _allow = runtime_claude.settings(pol)
+        self.assertTrue(any(codex in r for r in sandbox["filesystem"]["denyRead"]))
+        self.assertTrue(any(r.startswith("Read(") and r.endswith(f"{codex}/**)") for r in deny))
+        self.assertTrue(any(r.startswith("Read(") and r.endswith(f"{claude}/**)") for r in deny))
+
+    @unittest.skipUnless(pathlib.Path("/usr/bin/sandbox-exec").exists(), "Seatbelt is macOS's")
+    def test_real_seatbelt_refuses_a_rollout_in_a_run_home(self):
+        import seatbelt
+        with mock.patch.object(hubconf, "runtimes_dir", lambda: self.inst / "runtimes"):
+            home = rx.run_home()
+        rollout = home / "sessions" / "2026" / "11" / "14" / "rollout-x.jsonl"
+        rollout.parent.mkdir(parents=True)
+        rollout.write_text('{"payload": "another project\'s notes"}\n')
+        (self.ws / "own.txt").write_text("own")
+        prof = seatbelt.service_profile(self.policy(), [self.ws])
+        for path, readable in ((rollout, False), (self.ws / "own.txt", True)):
+            r = subprocess.run(["/usr/bin/sandbox-exec", "-p", prof, "/bin/cat", str(path)], capture_output=True, text=True)
+            self.assertEqual(r.returncode == 0, readable, (path, r.stderr))
+
+
 class Distribution(Temp):
     def test_published_keeps_only_releases(self):
         out = json.dumps(["0.169.0", "0.169.0-darwin-arm64", "0.170.0-alpha.1", "0.168.0"])
