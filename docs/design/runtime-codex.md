@@ -6,8 +6,9 @@ on measurements with the owner's login ("Measured 11-14 (with the owner's login)
 ("r2 (11-14), after the blind review"). **It can't ship as "confined"**: Codex runs git as the user in the session's
 folder, and a repo filter ran from it (B1). r2's steps 1–2 are built (11-14): `.codex` and `.agents` protected in every
 sandbox, and a per-version probe whose B1 check fails on 0.167. The path to "confined" is the owner's (D9). **Step 1
-is planned** ("Step 1: plan (11-14)", on measurements without a login, "Measured 11-14 for Step 1"); D11–D13 wait for
-the owner. Step 1 follows `runtime-versions.md` steps 1–4 (it is that doc's step 5). The Codex preset now leaves
+is planned** ("Step 1: plan (11-14)", on measurements without a login, "Measured 11-14 for Step 1"), and revised after
+a cold review (its r2); D11–D14 are provisional as recommended, the owner's. Step 1 follows `runtime-versions.md`
+steps 1–4 (it is that doc's step 5). The Codex preset now leaves
 `runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
@@ -1269,6 +1270,178 @@ folders):
   version, but not the platform's copy, whose runs never start where it matters. Recommended: yes; without it no Codex
   copy can be promoted.
 - **D3 stays as it is.** The default runtime is yours; Step 1 needs a pin or a provider, not the default.
+
+#### r2 (11-14), after the blind review
+
+A cold review of the plan above found one blocking point (B1 below, not runtime-codex's older B1), seven should-fix items
+(S1–S7) and eight nits. The reviewer measured on 0.169 with the plan's own template. Where r2 and the plan above
+disagree, r2 holds. Not built.
+
+**D9, redefined by the owner (11-14).** In a sandboxed project nothing inside the sandbox may write git config that can
+execute code: the platform writes that config, outside the sandbox. Then any tool the owner opens normally is safe, and
+`brunna session` becomes an optional extra. The design is `git-config-fence.md` (another session's). What Step 1 rests
+on it for:
+- **Nothing in Step 1 itself.** Its runs start only in folders whose git config the platform owns (S1, S7), with or
+  without the fence.
+- **Opening Codex platform runs in a project's folder** (agent jobs, `mailbox-escalation`, `mailbox-conversation`,
+  `mailbox-propose`) waits for the fence. Once it holds, Codex's own git there runs only config the platform wrote.
+- **D13 is re-decided** when the fence lands or before Step 3's fork and resume, whichever comes first (S7).
+- **Step 4 layer 2's `--no-daemon` home** (section 6 above) is now optional, as `brunna session` is.
+
+**B1 (blocking): Codex runs the user's login shell outside any sandbox, and keeps what it exported.**
+- What the reviewer measured on 0.169, with exactly the plan's template:
+  - `exec` sourced `.zshenv`, `.zprofile` and `.zshrc`;
+  - a line in an rc file wrote outside the sandbox;
+  - `$CODEX_HOME/shell_snapshots/` held the shell's exports, a `GITHUB_TOKEN` and a `SECRET_CANARY` from `.zshrc` among
+    them;
+  - `prompt-input` does the same.
+- `-c features.shell_snapshot=false` stops all of it. `--strict-config` takes it, and it changes no tool.
+- Folded in:
+  - The template gets `features.shell_snapshot = false`.
+  - **The run's `HOME` is a folder of the run's own** (`<run home>/home`, empty, mode 700), not the user's. That also
+    drops `~/.agents/skills`, `~/.gitconfig` (for Codex's own git) and every rc file. The login link is made before the
+    run from the real home (2 above), so nothing of the user's is needed by name during it. `[skills]
+    include_instructions = false` stays as a second layer.
+  - **`home-flags` gains a canary:** an rc file (`.zshenv`, `.zprofile`, `.zshrc`) in the world's home, each writing a
+    marker and exporting a canary variable. With the template, no marker may appear, and no snapshot may hold the
+    variable. The positive control is the same run with `features.shell_snapshot = true` and the world's home as
+    `HOME`: the markers appear, or the check "tests nothing".
+  - Login list (9): an export from the user's `.zshrc` is absent from the model's shell environment in a real run.
+
+**S1. The cwd rule refused `consolidate`'s fresh clone.** It is made under `private_tmp`, where propose's throwaway
+copies live too.
+- The rule now goes by files, all read before the run, never by running git:
+  - the folder holds a real `.git` directory (a linked worktree's `.git` file is refused);
+  - no `.git` in any folder above it;
+  - its `.git/config` is one the platform wrote: its only remote is a bare repo under `git_origin` (a memory repo), and
+    it names no `filter`, `include`, `includeIf`, `core.fsmonitor`, `core.hooksPath`, `diff.external` or other
+    program-running key;
+  - no `.git/info/attributes`, and no `config.worktree`.
+- Folders under the memory-copies root are still known by name. A throwaway copy fails the rule (its `.git` is a file),
+  and so is refused.
+- `memory/reference/` is made before the run when a point's `allowed_tools` names it and it is missing. The profile's
+  `write` on a path that doesn't exist can't create it.
+
+**S2. Completions get the agent profile's narrowing**, not plain `:read-only`:
+- the user's home and the temp roots denied;
+- `read` back only on the run's empty folder and the running version's executables (S3);
+- no `write` anywhere;
+- the network off.
+
+A tool the server widened would otherwise read files, and those reads reach the provider before the check after the run
+can see them.
+
+**S3. The profile reads the running version's own executables.**
+- `codex-path/rg` and `codex-code-mode-host` live in `<instance>/runtimes/codex/<version>/`. In production that is under
+  the home deny; in the check world it isn't.
+- The profile gets an explicit `read` on that version's folder of executables (the platform package's `vendor/<triple>/`).
+  The store's `home/`, `runs/` and every other version stay denied.
+- `agent-profile` and `home-flags` render their profile with the world's store under a denied world home, so the check
+  meets the shape production has.
+
+**S4. The runner learns the login order** (neutral additions, named with the others below):
+- `Check` gains an optional `login: bool`.
+- `conformance.run` orders the login checks last.
+- It withholds them (`error`, "withheld: a safety check failed first") after any safety fail in the same run, and when
+  the adapter's credential check says a refresh could fall due during them.
+- The credential check is an optional adapter function, `login_window(seconds) -> str | None` (None: no refresh can fall
+  due that soon; else why not).
+
+**S5. A run killed mid-refresh could spend the user's rotating refresh token.**
+- The completion and agent ports end a run with SIGTERM, then SIGKILL after a grace period (10 s). Claude's `complete`
+  goes straight to `kill()`; Codex's doesn't.
+- The atomic rename of `auth.json` is measured fine, so the risk is the network half: a refresh sent and its answer
+  never written.
+- **The refresh-due rule for every run, taken in part.** Candidates and checks wait when a refresh could fall due (S4),
+  as before.
+  - For ordinary runs, refusing whenever a refresh is due would stop platform work whenever the owner hasn't opened
+    Codex within the refresh interval. That is a failure of its own, which the owner may not see for days.
+  - So an ordinary run may refresh, under the grace kill.
+  - If the login list shows a refresh can land between SIGTERM and the write, every run refuses while a refresh is due,
+    and doctor and an alert say "open Codex once to refresh its login". This is D14.
+- Login list (9): a run killed with SIGTERM during a forced refresh (an expired access token in a copy of the home):
+  does the new token pair reach `auth.json`?
+
+**S6. Session copies gate nothing yet, and would alert on every daemon version.**
+- A sandboxed project's Codex sessions are refused whatever their version (B1 of Step 4, `CAGED_NEEDS`). So a session
+  copy of a Codex version serves nothing until those sessions can be served.
+- Meanwhile `session-versions` would install one per daemon update (about 370 MB) and alert per version on
+  `session-folder-git`.
+- Taken:
+  - `session-versions` skips a runtime whose sessions can't be confined (`runtime_ports.unconfined_reason` not None).
+    This goes under D11's rule: no installs and no login for Codex until it runs platform work or its sessions can be
+    confined.
+  - The alert re-key (check and reason, not version) ships in order step 1, not later.
+- Order step 1's note about session copies is withdrawn: with D11 provisional, step 1 installs nothing.
+
+**S7. `holds = "sessions"` is sound only while no Codex platform run starts in a project folder.**
+- The invariant is tested, not just stated. Every path into Codex's agent and completion ports goes through one cwd
+  check (S1), and a test runs each declared point, and each caller's folder kind (a workspace, a worktree, a throwaway
+  copy, a session folder, a memory copy, a fresh clone, a run folder), through it. Only the last three pass.
+- `point_refusal` refuses the folder-bound points before a run is tried.
+- A `holds = "sessions"` check that ends in `error` (the probe couldn't run) **blocks promotion**, as any safety error
+  does. Only a recorded fail of that one property is let through, so a broken probe never counts as a known failure.
+- D13 is re-decided before Step 3's fork and resume (a fork of a user's thread runs in the user's folder), or when the
+  fence lands (above).
+
+**Nits, each taken:**
+- **`mailbox-propose` today is not exploitable.** It needs the owner's opt-in (`mailbox.handler: propose`), and
+  `propose_apply.unsupported()` refuses sandboxed projects. The "to check" in section 5 is withdrawn, and so is the
+  reason "B1" for dropping the template from the preset: Codex's own runtime replaces it, nothing more.
+  - **Where I disagree, in part:** "refusing propose on Codex for B1 is more than needed" is right for unsandboxed
+    projects, whose git config is the owner's own. Step 1 still keeps `mailbox-propose` off on Codex's own runtime. Its
+    copy is a project folder, and letting one kind of project folder in would split S7's single invariant.
+  - Opening it for unsandboxed projects is a separate change, after the fence.
+- **`.gitattributes` made mid-run under a writable subtree.** Each `write` subtree of a profile gets `deny` globs on
+  `<subtree>/**/.git*` (`.gitattributes`, `.gitmodules`, a nested `.git`), measured form as `profile_control_entries`.
+  `agent-profile` gets a canary for it.
+- **The pre-check can't take "the same flags".**
+  - `prompt-input` rejects `-m` and `--strict-config`, so the model goes in as `-c model=…` in both, from one function.
+  - The pre-check isn't strict. It is fail-closed: a shape it doesn't expect refuses the run, and the run itself is
+    strict.
+- **Doctor's admin-layer row** adds Codex's `cloud_requirements` and `cloud_managed_config` (the account-delivered
+  layers) beside the files and the managed-preferences domain. How to read them without a login is to measure; until
+  then the row says they can't be seen.
+- **Catalog pinning:** the login list (9) measures `features.remote_models = false` beside `model_catalog_json`.
+- **`update-runtimes.DAILY` adds `agent-models`.**
+- **The login-check job** is neutral: no `bin/check-codex-login.py`.
+  - The logic is an adapter function, `runtime_codex.login_check() -> list[problem]`.
+  - A neutral `bin/check-runtime-login.py --runtime <name>` runs it, so the ratchet's exempt set doesn't grow.
+  - Claude's `check-claude-login.py` moving onto it is later cleanup.
+- **`agent-profile` targets the run's own `$CODEX_HOME/auth.json` link**, read and write, as canaries. The run's home is
+  denied to its tools whole; the check proves it.
+
+**The neutral-file changes, all of them** (the rest stays in `runtime_codex.py` / `conformance_codex.py`):
+- `runtime_store.verify`: an optional `executables(entry)`.
+- `conformance`:
+  - `Check.holds` and `Check.login`;
+  - login checks ordered last and withheld (S4);
+  - `verdict(doc, for_promotion=True)`;
+  - the session alert keyed by check and reason (S6).
+- `update-runtimes`: `in_use()` split; `DAILY` + `home-flags`, `agent-models`.
+- `session_versions`: skips unconfinable runtimes (S6).
+- `llm_ready` / `llm.py`: `point_refusal`.
+- `runtime_ports`: `login_window` named as an optional function.
+- `bin/check-runtime-login.py`.
+- doctor's rows.
+
+**New for the owner:**
+- **D14, a refresh due during an ordinary run (S5).** Provisionally: allowed, under the grace kill. If the login
+  measurement shows the grace isn't enough, refuse and ask the owner to open Codex once.
+
+**Order of work, revised:**
+1. Distribution, the store's Codex layout, `checked_copy`, `binary()`, `in_use()`'s split, `session-versions` skipping
+   Codex (S6), and the alert re-key (S6). Nothing is installed for Codex after this step while D11 holds.
+2. The home template and builder (with `shell_snapshot` off and the run's own `HOME`), `credentials()`, `login_window`,
+   `login_check` and the neutral job, `auth-link-write`, `home-flags` (with B1's rc canary), `agent-profile` (S2, S3, the
+   `.git*` globs, the auth link), `distribution-integrity`, and the runner's login order (S4).
+3. The completion port: the narrowed profile (S2), `-c model=`, the grace kill (S5), and the checks before and after a
+   run. `completion-no-tools`, `completion-schemas`, the promotion rule with S7's error rule.
+4. The agent port: the declaration table, the cwd check by files (S1) with S7's test over every folder kind,
+   `point_refusal`, `memory/reference/` made first. `agent-result`, `agent-models`.
+5. `modules/codex.yaml`, doctor's rows (the admin layers with the cloud ones), the README.
+6. With the owner's login and yes (D11): the login list, B1's and S5's items included, then one `update-runtimes
+   --runtime codex` from main, its result recorded here.
 
 ## Found by the second blind review (11-08), taken into the steps
 

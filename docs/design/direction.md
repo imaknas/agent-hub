@@ -67,7 +67,11 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
 2. **Codex adapter (`runtime-codex.md`):** step 0 (fail closed) and **step 2** (`bin/runtime_codex.py`: user-level hooks,
    rules by injection, session state; merged 11-14) are built. Order now: Step 2 → Step 4 layer 1 → Step 1 → Step 4
    layer 2 → Step 3. Step 1 is `runtime-versions.md` step 5.
-   - **Step 1:** agent, completion and login ports, confined. The tool list is checked on every run.
+   - **Step 1:** planned 11-14 and revised after a cold review (r2), on measurements without a login: the platform's
+     own runs on a checked Codex copy in the store, a fresh Codex home per run (updater, hooks, plugins and the shell
+     snapshot off; the run's own `HOME`), the tool list checked before and after every run. Completions first, then
+     the judgment points that work in a memory copy; nothing starts in a project's folder (B1). No `confine` port yet.
+     D11–D14 are provisional as recommended, the owner's. Not built; the login list in its plan comes first.
    - **Step 3:** wake, status, resume and fork. Wake also waits on M11 (is a client attached), under D4.
    - **Step 4 layer 1** (Codex's own sandbox, rendered by the platform): planned and revised after a cold review (r2,
      11-14, on measurements with the owner's login). **It can't ship as "confined"**: Codex runs `git status` as the user
@@ -80,7 +84,8 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
-   Measurements still open: `--output-schema` with the platform's own schemas, the model pin per kind of point (V-M1),
+   Measurements still open: `--output-schema` with the platform's own schemas (Step 1's login list; the V-M1 model pin
+   is answered: `[agents] enabled = false`),
    M10 and M11, the network proxy, the daemon's socket from a tool shell with the network on, worktree trust,
    `turn_context` timing at UserPromptSubmit, and a sandboxed project's `brunna send` end to end. The Step 2 follow-ups (`TELLS_ON` widening, `current_session` inside Codex's sandbox) are in
    `runtime-codex.md`.
@@ -168,6 +173,13 @@ Built: steps 0–2 and step 4, the waiting report. Left:
 ### 6. Waiting on the owner
 
 - Codex D3: which runtime is the default.
+- Codex Step 1 (`runtime-codex.md`, the plan and its r2), provisional as recommended until the owner says otherwise:
+  - D11: a Codex copy is installed, and the owner's ChatGPT login used, only once Codex runs platform work;
+  - D12: the owner's npm `codex` raised to the promoted version, while Codex runs platform work;
+  - D13: a sessions-only safety fail (B1's probe) doesn't hold back the platform's copy; re-decided before Step 3 or
+    when the git-config fence lands;
+  - D14: a login refresh due during an ordinary run is allowed under a grace kill, unless the login measurement says
+    otherwise.
 - Codex Step 4 (`runtime-codex.md`, the plan and its r2). D5–D8 were decided by the owner 11-14:
   - D5: trust entries through `brunna user-settings --trust`, and Codex's own prompt checked;
   - D6: an overridden session isn't served;
