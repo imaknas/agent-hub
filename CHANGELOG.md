@@ -3,6 +3,53 @@
 What changed in each version, generated from the commit messages (git cliff) when it is tagged; only new features,
 fixes, speed-ups and reverts are listed.
 
+## v0.17.0 (2026-11-14)
+
+### New
+
+- **runtime-codex:** A per-version session probe and the version from the rollout
+- **runtimes:** A runtime only installed for sessions gets no platform copy or session copies, and login checks run last
+- **runtime-store:** Every executable of a checked copy is recorded at promotion and verified
+- **runtime-codex:** The platform's own runs on a checked copy of Codex
+- **conformance-codex:** The platform side's checks, model-free, and the login checks named
+- **codex:** Its preset runs the platform on Codex, an hourly login check, and doctor's own rows
+- **git-fence:** The fence's scan, report only, as a nightly platform job
+- **conformance-codex:** The login checks run with the user's login linked into the world, and MODELS what a ChatGPT plan serves
+- **isolation:** Sandboxed services and jobs make no symbolic links in their checkouts
+- **worktrees:** The platform makes Claude Code's worktrees in sandboxed projects, as the project
+
+### Fixed
+
+- **alert:** A test on the live instance sends no alert; the memory-sync tests no longer reach Discord
+- **alert:** A test that reaches a real channel sends nothing, whatever state files it replaced
+- **control:** Protect .codex and .agents in every sandbox, whatever is installed
+- **control:** Close the staged-move and long-s gaps, and make the canaries count only real refusals
+- **runtime-codex:** The running daemon's version, and a folder-git probe of every config source
+- **conformance:** A positive control leaves out the long-s spellings too, as Claude's sandbox folds them
+- **test-runner:** A sandboxed project's tiers run in its sandbox, whoever starts them
+- **cap-runner:** A request swapped for a FIFO can't hold the shared service
+- **codex:** Nothing red for a sessions-only Codex, no default before a copy can be promoted, a wider profile deny
+- **cap-runner:** No open in a job folder blocks or follows a link, at start-up and pruning too
+- **doctor:** The folder-git row stays for a runtime without a store, as before
+- **test-runner:** A sandboxed project's run is decided by its folder, in a fixed environment, in a sandbox that holds
+- **cap-runner:** Prune and recover walk the job folders as one chain of fds
+- **runtime-codex:** Every sandbox denies the platform's Codex run homes and Claude's platform config dir
+- **test-runner:** Say why a nested unsandboxed checkout is refused, and call a signal death that
+- **runtimes:** A runtime that leaves platform work ends its alerts, and a sessions-only one gets no secret, row or version run
+- **runtime-codex:** A run's profile from the policy's own sources, wider denies, and stricter checks around it
+- **conformance:** The results folder follows hubconf.STATE at each call, never frozen at import
+- **git-fence:** The scan says what it can't check, and reads pointers, shapes and indexes as git does
+- **git-fence:** Pointers, index entries and split indexes read as git does, and a best-effort check said as one
+- **isolation:** The tool caches may hold symbolic links
+- **worktrees:** A failed make leaves nothing behind, and tracked links stay in the worktree
+- **isolation:** The link rule is friction, not a boundary
+- **worktrees:** Links from the branch checked out, nothing left by a killed hook, names with slashes
+- **worktrees:** A drop clears the platform's own files first and never unregisters a folder it can't delete
+
+### Reverted
+
+- **isolation:** Remove the link rule for sandboxed services and jobs
+
 ## v0.16.0 (2026-11-13)
 
 ### New
