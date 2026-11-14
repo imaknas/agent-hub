@@ -1,4 +1,5 @@
 {
+ "bin/agenthub": 1,
  "bin/backup.py": 1,
  "bin/check-claude-login.py": 2,
  "bin/check-secrets.py": 1,
@@ -13,6 +14,7 @@
  "bin/merge-hook-settings.py": 11,
  "bin/migrate-to-mini.py": 10,
  "bin/onboard-project.sh": 4,
+ "bin/policy.py": 3,
  "bin/recover-project.sh": 2,
  "bin/registry.py": 2,
  "bin/rename-project.sh": 2,

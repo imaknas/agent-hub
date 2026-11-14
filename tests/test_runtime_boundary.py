@@ -17,7 +17,10 @@ BIN = ROOT / "bin"
 NEUTRAL = ["policy.py", "seatbelt.py", "landlock.py", "isolation.py", "sandboxed-run", "cap-runner.py", "hub-run",
            "appliers.py", "applier_scheduler.py", "config-check", "hub",
            # the session reader and its callers: they read every tool's sessions through sessions_<tool>.py only
-           "sessions.py", "weekly-reflect.py", "check-memory-gaps.py", "test-waiting-report.py"]
+           "sessions.py", "weekly-reflect.py", "check-memory-gaps.py", "test-waiting-report.py",
+           # the hooks' entry point and the settings applier: each runtime's syntax is its adapter's
+           # (docs/design/runtime-codex.md, Step 4 r2, S12)
+           "hub-event", "render-project-settings.py"]
 PATTERNS = [
     (re.compile(r"(?<![\w])\.claude\b"), "Claude's settings/credentials directory"),
     (re.compile(r"\b(Read|Edit|Write|MultiEdit|NotebookEdit|Bash|WebFetch|WebSearch|Glob|Grep)\("),
@@ -45,6 +48,13 @@ class TestRuntimeBoundary(unittest.TestCase):
                     self.assertIsNone(pat.search(line), f"{name}:{i} contains {what}: {line.strip()}")
         self.assertGreater(checked, 0)
 
+    def test_codex_patterns_catch_examples(self):
+        for bad in ['p = home / ".codex"', "os.environ['CODEX_THREAD_ID']", 'd["turn_context"]',
+                    '"[permissions.brunna]"']:
+            self.assertTrue(any(p.search(bad) for p, _ in CODEX_PATTERNS), bad)
+        for ok in ["runtime_codex.session_version(pid)", "a codex session"]:
+            self.assertFalse(any(p.search(ok) for p, _ in CODEX_PATTERNS), ok)
+
     def test_patterns_catch_examples(self):
         for bad in ['deny += ["Read(~/x/**)"]', 'p = home / ".claude"', "settings.local.json",
                     'cmd = ["claude", "-p"]', '"--resume", sid', "os.environ['CLAUDE_CODE_OAUTH_TOKEN']"]:
@@ -60,13 +70,23 @@ class TestRuntimeBoundary(unittest.TestCase):
 # One more Claude-specific model name counts too (a judgment point names a tier, not haiku/sonnet/opus).
 RATCHET_SCOPE = ("bin", "modules", "agent-jobs", "contracts/llm-points.yaml")
 RATCHET_EXEMPT = {"bin/runtime_claude.py",   # the translation lives only here
-                  "modules/claude.yaml"}    # Claude Code-only upkeep (login check, update, token):
+                  "bin/runtime_codex.py",    # and Codex's here
+                  "modules/claude.yaml",    # Claude Code-only upkeep (login check, update, token):
+                  "modules/codex.yaml"}     # and Codex's preset
                   # someone not using Claude leaves this module off
 # session sources: each is the one place that reads its tool's session files (bin/sessions.py); the neutral reader
 # itself, bin/sessions.py, is in NEUTRAL above
 # and the conformance adapters: each holds its tool's checks (bin/conformance.py runs them; runtime-versions.md section 2)
 RATCHET_EXEMPT_GLOBS = ("bin/sessions_*.py", "bin/conformance_*.py")
-RATCHET = PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude's model names")]
+# Codex's syntax too (docs/design/runtime-codex.md, Step 4 r2, S12): its folders, its environment variables, its rollout's
+# turn records and its permission profiles' tables
+CODEX_PATTERNS = [
+    (re.compile(r"(?<![\w])\.codex\b"), "Codex's settings/credentials directory"),
+    (re.compile(r"\bCODEX_[A-Z]+"), "Codex's environment variables"),
+    (re.compile(r"\bturn_context\b"), "Codex's rollout turn records"),
+    (re.compile(r"\[permissions\."), "Codex's permission profile tables"),
+]
+RATCHET = PATTERNS + CODEX_PATTERNS + [(re.compile(r"\b(haiku|sonnet|opus)\b", re.I), "Claude's model names")]
 RUNTIME_BASELINE = ROOT / "tests" / "fixtures" / "runtime-baseline.json"
 
 

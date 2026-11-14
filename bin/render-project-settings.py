@@ -1,6 +1,6 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
-"""Stage two: each project's sandbox + permission rules, generated from the project registry and written into
-`.claude/settings.local.json` (managed file).
+"""Stage two: each project's sandbox + permission rules, generated from the project registry and written into the
+coding agent's local settings file in the project (runtime_claude.settings_path; a managed file).
 
 What to write: policy.py computes the neutral policy, runtime_claude.settings() translates it into Claude Code's
 format; this script only writes the file, records, and detects drift.
