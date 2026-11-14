@@ -290,5 +290,9 @@
  "change them outside the project's sandbox, or stop tracking them": "在專案的沙盒之外修改它們,或不再追蹤它們",
  "{project} (sandboxed): could not list the files it tracks under control names ({why})": "{project}(沙盒化):無法列出它在控制名稱底下追蹤的檔案({why})",
  "{runtime}: its own checks broke: {error}": "{runtime}:它自己的檢查壞了:{error}",
- "the runtime {runtime} serves your sessions only: the platform keeps no copy of it and starts none of its runs (pin a judgment point to it, or make it a provider, to change that)": "{runtime} 這個 runtime 只服務你的 session:平台不保管它的副本,也不在它上面跑任何工作(要改的話,把某個判斷點釘到它上面,或把它設成 provider)"
+ "the runtime {runtime} serves your sessions only: the platform keeps no copy of it and starts none of its runs (pin a judgment point to it, or make it a provider, to change that)": "{runtime} 這個 runtime 只服務你的 session:平台不保管它的副本,也不在它上面跑任何工作(要改的話,把某個判斷點釘到它上面,或把它設成 provider)",
+ "the git config fence hasn't scanned the sandboxed projects yet": "git config 圍欄還沒掃過沙盒專案",
+ "bin/git_fence.py --report scans now (the brunna/git-fence job does it nightly)": "bin/git_fence.py --report 現在就掃(brunna/git-fence 這個 job 每晚會掃)",
+ "{project} (sandboxed): git config fence {line}": "{project}(沙盒):git config 圍欄{line}",
+ "bin/git_fence.py --report lists every finding ({n})": "bin/git_fence.py --report 會列出每一項發現({n})"
 }

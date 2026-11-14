@@ -846,7 +846,10 @@ class SystemTempIsNoPlaceForIt(unittest.TestCase):
             "bin/runtime_claude.py", "bin/conformance_claude.py",
             # Codex's runs deny the temp roots to their tools and keep their own TMPDIR in the run's home; a profile
             # canary writes /tmp to prove it refused (runtime-codex.md, Step 1 r2, S2)
-            "bin/runtime_codex.py", "bin/conformance_codex.py"}
+            "bin/runtime_codex.py", "bin/conformance_codex.py",
+            # it only reads the temp area, to report folders shaped like a git dir there (git-config-fence.md r2 S1);
+            # its own copies go in private_tmp
+            "bin/git_fence.py"}
     USE = __import__("re").compile(r"tempfile[.](?:mkdtemp|TemporaryDirectory|NamedTemporaryFile|mkstemp|gettempdir|TemporaryFile)[(]"
                                    r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders|TMPDIR")
     MOVED = __import__("re").compile(r"dir=(?:hubconf[.])?(?:private_tmp[(][)]|STATE\b)")   # both denied to every sandbox

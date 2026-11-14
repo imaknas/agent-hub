@@ -417,6 +417,28 @@ def waiting_html() -> str:
             f"{_('Details: bin/test-waiting-report.py (docs/design/test-waiting.md B7)')}</div>")
 
 
+def git_fence_html() -> str:
+    """The git config fence's last scan (bin/git_fence.py, docs/design/git-config-fence.md, report only): per sandboxed
+    project, holds or not and its first finding, the commit gate's state; and the temp area. Nothing before the first
+    scan, or with no sandboxed project."""
+    import git_fence
+    rep = git_fence.load()
+    if rep is None:
+        return ""
+    rows = []
+    for name, level, line, details in git_fence.rows(rep):
+        more = "".join(f"<div class=sub>{esc(d)}</div>" for d in details[1:])
+        rows.append(f"<tr><td>{proj_html(name) if name else esc(_('temp area'))}</td>"
+                    f"<td class={'ok' if level == 'ok' else 'bad'}>{esc(_('holds') if level == 'ok' else _('not holding'))}</td>"
+                    f"<td>{esc(line)}{more}</td></tr>")
+    if not rows:
+        return ""
+    return (f"<h2>{esc(_('Git config fence (report only, scanned {at})', at=str(rep.get('at', ''))[:16]))}</h2>"
+            f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Fence')}</th><th>{_('What the scan found')}</th>"
+            f"</tr>{''.join(rows)}</table></div><div class='sub gap'>"
+            f"{_('Details: bin/git_fence.py --report (docs/design/git-config-fence.md)')}</div>")
+
+
 def store_alerts() -> list[tuple[str, str]]:
     """The coding agents' checked copies (docs/design/runtime-versions.md section 3): with none, no platform run starts.
     Only for the runtimes the platform runs work on: one only installed for sessions keeps no copy (runtime-codex.md,
@@ -699,6 +721,10 @@ def main() -> None:
         waiting = waiting_html()
     except Exception as e:  # a broken report does not affect the rest of the page
         waiting = f"<div class=sub>{_('Waiting report failed: {e}', e=esc(repr(e)))}</div>"
+    try:
+        fence = git_fence_html()
+    except Exception as e:  # a broken scan result does not affect the rest of the page
+        fence = f"<div class=sub>{_('The git config fence row failed: {e}', e=esc(repr(e)))}</div>"
 
     needs, needs_error = needs_you()
     problems = [t for c, t in alerts if c == "bad"]
@@ -761,7 +787,7 @@ def main() -> None:
 <div class=tbl><table class=jobs><thead><tr><th>{_('Job')}</th><th>{_('When')}</th><th>{_('Last')}</th><th>{_('Next')}</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table></div>
 {mail_html}
-{wt_html}{waiting}{usage_html}
+{wt_html}{waiting}{fence}{usage_html}
 <h2>{_('Claude job reports')}</h2>
 {''.join(report_blocks) or f"<div class=sub>{_('No reports yet')}</div>"}
 <footer class=sub>{generated}{config_note}</footer>

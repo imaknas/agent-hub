@@ -1475,6 +1475,21 @@ def doctor_tracked_controls(add, sandboxed, names) -> None:
                 _("change them outside the project's sandbox, or stop tracking them"))
 
 
+def doctor_git_fence(add) -> None:
+    """The git config fence's last scan, per sandboxed project (bin/git_fence.py, docs/design/git-config-fence.md;
+    report only: the job neutralises nothing)."""
+    import git_fence
+    rep = git_fence.load()
+    if rep is None:
+        add("info", _("the git config fence hasn't scanned the sandboxed projects yet"),
+            _("bin/git_fence.py --report scans now (the brunna/git-fence job does it nightly)"))
+        return
+    for name, level, line, details in git_fence.rows(rep):
+        add("ok" if level == "ok" else "warn",
+            _("{project} (sandboxed): git config fence {line}", project=name, line=line) if name else line,
+            "" if level == "ok" else _("bin/git_fence.py --report lists every finding ({n})", n=len(details)))
+
+
 def doctor_control(add, why_no_sandbox, installed) -> None:
     """What keeps sandboxed projects off what their sessions load settings, hooks and tools from
     (docs/design/runtime-versions.md section 7): the macOS profile's one rule over the coding agent's folder and what it
@@ -1688,6 +1703,7 @@ def cmd_doctor(argv: list[str]) -> int:
                       "the coding agent's own sandbox can't block it, and denying the security command is only reinforcement"))
         doctor_control(add, why, installed)
         doctor_confined(add, installed)
+        doctor_git_fence(add)
     hb = hubconf.STATE / "scheduler-heartbeat"
     if hb.exists():
         age = (datetime.datetime.now() - datetime.datetime.fromtimestamp(hb.stat().st_mtime)).total_seconds() / 60

@@ -103,6 +103,15 @@ jobs:
   max_attempts_per_day: 3
   run: bin/librarian-publish.sh
   cwd: hub
+# the git config fence's scan, report only (docs/design/git-config-fence.md, r2's order of work step 1): every
+# sandboxed project's repos and the temp area, read without running git in them; the result for the status page and
+# doctor in .state/git-fence/scan.json, an alert on a new finding. It changes nothing
+- name: git-fence
+  at: 04:50
+  background: true
+  max_attempts_per_day: 3
+  run: bin/py bin/git_fence.py --apply
+  cwd: hub
 # the waiting report (docs/design/test-waiting.md B7): the last 7 days of agent sessions' waiting on tests (transcripts,
 # through the runtime's port) and the test runner's run logs (read as each project) → <data>/test-waiting/<day>.json,
 # shown on the status page; zero LLM. Its window ends at that day's midnight, so a night's 04:00 test runs are in the

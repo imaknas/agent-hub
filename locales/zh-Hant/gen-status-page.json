@@ -207,5 +207,13 @@
  "passed on": "轉交下一個",
  "today's runs or wakes are used up": "今天的執行或叫醒次數用完了",
  "Cannot tell whether the coding agent has a checked copy: {e}": "看不出 coding agent 有沒有檢查過的那份:{e}",
- "The platform starts no {runtime} run: {reason}": "平台不啟動任何 {runtime} 執行:{reason}"
+ "The platform starts no {runtime} run: {reason}": "平台不啟動任何 {runtime} 執行:{reason}",
+ "Fence": "圍欄",
+ "What the scan found": "掃描找到的",
+ "Details: bin/git_fence.py --report (docs/design/git-config-fence.md)": "細節:bin/git_fence.py --report(docs/design/git-config-fence.md)",
+ "Git config fence (report only, scanned {at})": "Git config 圍欄(只回報,掃描於 {at})",
+ "The git config fence row failed: {e}": "git config 圍欄這一列出錯:{e}",
+ "temp area": "暫存區",
+ "holds": "守得住",
+ "not holding": "守不住"
 }
