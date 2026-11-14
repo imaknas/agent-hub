@@ -13,5 +13,6 @@
  "✓ {tier} passed in {secs}s; output: {path}": "✓ {tier} 通過,{secs} 秒;輸出:{path}",
  "✗ {tier} failed in {secs}s; complete output: {path}": "✗ {tier} 沒過,{secs} 秒;完整輸出:{path}",
  "no private temp folder for the tests ({error}); they don't run in the system's, which every sandboxed project can write. A hub in the old layout moves with {command}": "測試沒有私有暫存資料夾({error});不會改在系統的暫存資料夾跑,那裡每個沙盒專案都寫得到。舊配置的 hub 用 {command} 搬過去",
- "{n} {n:file|files} the sandbox may not create left out of the tested copy ({names})": "沙盒不准建立的 {n} 個檔案沒有放進測試副本({names})"
+ "{n} {n:file|files} the sandbox may not create left out of the tested copy ({names})": "沙盒不准建立的 {n} 個檔案沒有放進測試副本({names})",
+ "{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't be done here ({why}); nothing was run": "{cli} test:{project} 是沙盒專案,它的測試指令只在它的沙盒裡跑,而這裡做不到({why});什麼都沒跑"
 }

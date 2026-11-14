@@ -36,6 +36,26 @@ class WantedHooks(unittest.TestCase):
             self.assertTrue(text.startswith("#!/bin/sh\n" + rps.MARK))
 
 
+    def test_a_project_puts_nothing_of_its_own_into_a_hook(self):
+        """commit_gate, tests, gate and commits are a project's to set (manifest.update): the hooks they choose are
+        the platform's fixed text, which runs only the platform's own scripts (the runner then runs a sandboxed
+        project's tiers in its sandbox: docs/design/git-config-fence.md, r2 B3); nothing a project writes reaches one."""
+        evil = "$(touch /tmp/pwned)`id`;evil"
+        doc = {"name": evil, "commit_gate": True, "gate": "strict", "commits": "conventional",
+               "tests": [{"tier": evil, "run": evil, "when": ["commit"]}], "runtime": {"test": evil}, "env": {evil: evil}}
+        want = rps.wanted_hooks(doc)
+        self.assertTrue(set(want) <= set(rps.HOOKS))
+        allowed = {"test-runner.py", "commit_title.py", "private_names.py"}
+        for hook, (text, _why) in want.items():
+            self.assertNotIn("evil", text, hook)
+            self.assertNotIn("pwned", text, hook)
+            for line in text.splitlines():
+                if line.startswith("exec "):
+                    self.assertIn(pathlib.Path(line.split()[2].strip("'")).name, allowed, line)
+        self.assertEqual(rps.wanted_hooks({**doc, "commit_gate": "yes", "gate": "x", "commits": "y"}), {},
+                         "only the exact values choose a hook")
+
+
 class HooksInARepo(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp()).resolve()

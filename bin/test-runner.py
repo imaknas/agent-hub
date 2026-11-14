@@ -55,6 +55,7 @@ sys.path.insert(0, str(BIN))
 import hubconf  # noqa: E402
 import names  # noqa: E402
 import i18n  # noqa: E402
+import isolation  # noqa: E402
 import policy  # noqa: E402
 import tiers  # noqa: E402
 
@@ -402,7 +403,19 @@ def main(argv: list[str]) -> int:
         top, git_dir, common = repo_dirs(pathlib.Path.cwd())
         main_dir = common.parent if common.name == ".git" else top
         name, doc = project_of(main_dir)
+        # a sandboxed project's tiers, inputs and installs are its own code: they run in its sandbox whoever starts
+        # this (the owner's commit through the commit gate's hook, the owner's terminal), never as the starter; the
+        # export too, since git runs the repo's filters (docs/design/git-config-fence.md, r2 B3)
+        inner = isolation.run_as_project(name, doc, [*hubconf.launch(BIN / "test-runner.py"), *argv],
+                                         names.env_names("TEST_WRAPPED")[1])
+        if inner:
+            sys.stdout.flush()
+            os.execv(inner[0], inner)
         run = pathlib.Path(tempfile.mkdtemp(prefix="run.", dir=runs_dir(main_dir, common)))
+    except isolation.SandboxRefused as e:
+        print(_("{cli} test: {project} is sandboxed, so its test commands run only inside its sandbox, and that can't "
+                "be done here ({why}); nothing was run", cli=names.current("cli"), project=name, why=e), file=sys.stderr)
+        return 2
     except SetupError as e:
         print(f"{names.current('cli')} test: {e}", file=sys.stderr)
         return 2

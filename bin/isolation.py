@@ -12,6 +12,8 @@ The backend interface (what a module needs to be an adapter here):
   guarantees() → set[str]                     which of GUARANTEES it enforces on this machine
   exec_service(pol, dirs, port, argv)         replace this process with argv under the policy (raises OSError when it
                                               can't; nothing was run)
+  confined_now() → bool                       optional: whether this process already runs inside an OS sandbox (a
+                                              session's, or sandboxed-run's); missing or unsure = no
 An adapter that doesn't guarantee every one of REQUIRED, or names a guarantee not in GUARANTEES, is refused like one
 that can't work here. tests/test_sandboxed_services.py runs the same probe through every adapter on its own OS and
 checks each guarantee it declares (Conformance): a new backend is added by passing that, not by review alone.
@@ -21,6 +23,10 @@ checks each guarantee it declares (Conformance): a new backend is added by passi
   as_project(project, cwd, argv) → argv       argv as the project: wrapped when it is sandboxed, as is otherwise (the
                                               platform's git in project repos goes only through this: project_git.py,
                                               with a timeout and an output cap)
+  confined_now() → bool                       whether this process already runs inside an OS sandbox (the adapter's check)
+  run_as_project(project, doc, argv, guard)   for a platform command that runs a sandboxed project's own commands
+                                              (brunna test): None when it may go on here (already confined, or the
+                                              project isn't sandboxed), else the argv to exec instead, or SandboxRefused
   adapter() → (name, module) | None           this machine's adapter
   can_sandbox() → None | why not              the adapter's own reason, or a missing/unknown guarantee
   guarantees() → list[str]                    what this machine's adapter guarantees (empty when it can't sandbox)
@@ -113,6 +119,33 @@ def as_project(project: str | None, cwd, argv: list[str]) -> list[str]:
     if project and doc is None and project in hubconf.roster():
         return wrap(project, cwd, argv)
     return wrap(project, cwd, argv) if doc and sandboxed({**doc, "name": project}) else argv
+
+
+def confined_now() -> bool:
+    a = adapter()
+    fn = getattr(a[1], "confined_now", None) if a else None
+    return bool(fn and fn())
+
+
+class SandboxRefused(Exception):
+    """A sandboxed project's commands can't be run in its sandbox here; they are not run at all."""
+
+
+def run_as_project(project: str, doc: dict, argv: list[str], guard: str) -> list[str] | None:
+    """A platform command whoever starts it (the owner's commit hook, the owner's terminal, a session) that runs a
+    sandboxed project's own commands (its test tiers, its `cmd:` inputs, its lockfile installs) never runs them with the
+    starter's authority (docs/design/git-config-fence.md, r2 B3). None: go on in this process (the project isn't
+    sandboxed, or this process is already inside an OS sandbox). Otherwise the argv to exec: the same command through
+    sandboxed-run, with guard set in its environment so the inner run knows it was wrapped. Raises SandboxRefused when
+    this machine can't sandbox, or when a wrapped run still can't see its sandbox (never a loop, never unsandboxed)."""
+    if not sandboxed({**doc, "name": project}) or confined_now():
+        return None
+    if os.environ.get(guard):
+        raise SandboxRefused("it was started through sandboxed-run but this process can't confirm its sandbox")
+    if (why := can_sandbox()):
+        raise SandboxRefused(why)
+    os.environ[guard] = "1"
+    return wrap(project, os.getcwd(), argv)
 
 
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):

@@ -62,6 +62,22 @@ def guarantees() -> set[str]:
             "signals-blocked", "runtime-files-locked"}
 
 
+def confined_now() -> bool:
+    """isolation.py's backend interface: whether this process already runs under some Seatbelt profile (sandbox_check
+    on itself; a runtime's session sandbox counts). A second profile can't be applied inside a runtime's sandbox, so a
+    caller already in one runs as it is; anything that can't be checked counts as not confined (the caller then wraps,
+    or refuses)."""
+    import ctypes
+    import os
+    try:
+        lib = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+        check = lib.sandbox_check
+        check.restype, check.argtypes = ctypes.c_int, [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        return check(os.getpid(), None, 0) == 1
+    except (OSError, AttributeError):
+        return False
+
+
 def exec_service(pol: dict, dirs: list, port: int | None, argv: list[str]):
     """isolation.py's adapter entry: replace this process with argv under service_profile."""
     import os

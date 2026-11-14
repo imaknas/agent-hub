@@ -109,6 +109,19 @@ def can_sandbox() -> str | None:
     return None
 
 
+def confined_now() -> bool:
+    """isolation.py's backend interface: whether this process already runs under this adapter's rules, as far as the
+    kernel shows it: no_new_privs and a seccomp filter, both of which sandboxed-run sets before it execs (Landlock
+    itself can't be queried). A process the owner starts has neither; a container may have the filter, rarely both.
+    Landlock stacks, so a wrong "no" only nests a second sandbox."""
+    try:
+        status = pathlib.Path("/proc/self/status").read_text()
+    except OSError:
+        return False
+    fields = dict(line.split(":", 1) for line in status.splitlines() if ":" in line)
+    return fields.get("NoNewPrivs", "").strip() == "1" and fields.get("Seccomp", "").strip() == "2"
+
+
 def guarantees() -> set[str]:
     """isolation.py's backend interface: what plan + the seccomp filter enforce on this kernel (capabilities.md,
     "What each OS enforces"); not the listening address, so not localhost-inbound-only."""

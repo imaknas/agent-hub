@@ -133,6 +133,57 @@ class Runner(unittest.TestCase):
         self.assertFalse(tmp.exists(), "removed with the run")
         self.assertFalse((self.tmp / "secrets").exists(), "the private folder isn't asked for")
 
+    def sandbox_probe(self, tier_when=("merge",)):
+        """A sandboxed project whose tier reports whether it could read the platform's state (every sandbox denies it;
+        the owner can read it)."""
+        canary = self.tmp / "state" / "canary.txt"
+        canary.write_text("platform state\n")
+        out = self.tmp / "probe-out"
+        self.declare(v=2, enforce={"sandbox": True}, inputs=["env:OUT", "env:CANARY"],
+                     tests=[{"tier": "t", "when": list(tier_when),
+                             "run": 'if cat "$CANARY" >/dev/null 2>&1; then echo as-starter; else echo sandboxed; fi > "$OUT"'}])
+        return out, {"OUT": str(out), "CANARY": str(canary)}
+
+    @unittest.skipUnless(__import__("isolation").can_sandbox() is None, "needs this machine's sandbox adapter")
+    def test_a_sandboxed_projects_tiers_run_in_its_sandbox_whoever_starts_them(self):
+        """r2 B3 (docs/design/git-config-fence.md): the project's own commands never run with the starter's authority."""
+        out, env = self.sandbox_probe()
+        r = self.run_("--tier", "t", "--force", **env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(out.read_text().strip(), "sandboxed")
+        # the positive control: the same tier of a project that isn't sandboxed runs as the starter and reads it
+        idx = self.tmp / "state" / "shared" / "registry" / "index.json"
+        doc = json.loads(idx.read_text())
+        doc["projects"]["demo"].pop("enforce")
+        idx.write_text(json.dumps(doc))
+        r = self.run_("--tier", "t", "--force", **env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(out.read_text().strip(), "as-starter")
+
+    @unittest.skipUnless(__import__("isolation").can_sandbox() is None, "needs this machine's sandbox adapter")
+    def test_the_owners_commit_runs_a_sandboxed_projects_tiers_in_its_sandbox(self):
+        """The commit gate's hook, as the owner's own `git commit` starts it from a terminal or an editor."""
+        out, env = self.sandbox_probe(("commit",))
+        hook = self.ws / ".git" / "hooks" / "pre-commit"
+        hook.write_text(f"#!/bin/sh\nexec '{PY}' '{RUNNER}' --index --when commit\n")
+        hook.chmod(0o755)
+        (self.ws / "more.txt").write_text("x")
+        self.git(self.ws, "add", "more.txt")
+        r = subprocess.run(["git", "-C", str(self.ws), "commit", "-q", "-m", "b"], env={**self.env, **env},
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(out.read_text().strip(), "sandboxed")
+
+    def test_a_forged_wrapped_mark_is_refused_not_trusted(self):
+        """The inner run's mark only stops a loop: outside a sandbox it refuses, it never skips the wrap."""
+        out, env = self.sandbox_probe()
+        r = self.run_("--tier", "t", "--force", **env, **{names.env_names("TEST_WRAPPED")[1]: "1"})
+        if __import__("isolation").confined_now():
+            self.skipTest("this process already runs in a sandbox")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn("nothing was run", r.stderr)
+        self.assertFalse(out.exists())
+
     def test_a_project_whose_jobs_are_exempt_runs_as_the_user_in_the_private_folder(self):
         """service_sandbox_exempt: its nightly tiers run as the user, so not in a folder its own sandboxed sessions write; a session of it,
         sandboxed, can't have the private folder and takes the run folder."""

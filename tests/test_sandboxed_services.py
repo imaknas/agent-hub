@@ -406,5 +406,50 @@ class Profile(Fixture):
         self.assertIn('(allow network-inbound (local ip "localhost:*"))', p)
 
 
+class RunAsProject(unittest.TestCase):
+    """isolation.run_as_project (docs/design/git-config-fence.md, r2 B3): a platform command that runs a sandboxed
+    project's own commands goes on only inside a sandbox; outside one it is wrapped, or refused, never run as is."""
+    DOC = {"enforce": {"sandbox": True}}
+    GUARD = "TEST_RUN_AS_PROJECT_GUARD"
+
+    def setUp(self):
+        p = mock.patch.dict(os.environ, {}, clear=False)
+        p.start()
+        self.addCleanup(p.stop)
+        os.environ.pop(self.GUARD, None)
+
+    def test_not_sandboxed_or_already_confined_goes_on(self):
+        self.assertIsNone(isolation.run_as_project("p", {}, ["x"], self.GUARD))
+        with mock.patch.object(isolation, "confined_now", lambda: True):
+            self.assertIsNone(isolation.run_as_project("p", self.DOC, ["x"], self.GUARD))
+
+    def test_outside_a_sandbox_it_is_wrapped_with_the_mark(self):
+        with mock.patch.object(isolation, "confined_now", lambda: False), \
+                mock.patch.object(isolation, "can_sandbox", lambda: None):
+            argv = isolation.run_as_project("p", self.DOC, ["x", "y"], self.GUARD)
+        self.assertIn("--project", argv)
+        self.assertEqual(argv[-3:], ["--", "x", "y"])
+        self.assertEqual(os.environ.get(self.GUARD), "1")
+
+    def test_no_sandbox_here_or_a_mark_outside_one_refuses(self):
+        with mock.patch.object(isolation, "confined_now", lambda: False), \
+                mock.patch.object(isolation, "can_sandbox", lambda: "no adapter"):
+            with self.assertRaises(isolation.SandboxRefused):
+                isolation.run_as_project("p", self.DOC, ["x"], self.GUARD)
+        os.environ[self.GUARD] = "1"
+        with mock.patch.object(isolation, "confined_now", lambda: False), \
+                mock.patch.object(isolation, "can_sandbox", lambda: None):
+            with self.assertRaises(isolation.SandboxRefused):
+                isolation.run_as_project("p", self.DOC, ["x"], self.GUARD)
+
+    @unittest.skipUnless(seatbelt.can_sandbox() is None, "needs Seatbelt")
+    def test_seatbelt_sees_its_own_profile(self):
+        self.assertFalse(seatbelt.confined_now(), "this test process runs outside any profile")
+        r = subprocess.run([seatbelt.SANDBOX_EXEC, "-p", "(version 1)(allow default)", sys.executable, "-c",
+                            "import sys; sys.path.insert(0, sys.argv[1]); import seatbelt; print(seatbelt.confined_now())",
+                            str(pathlib.Path(seatbelt.__file__).parent)], capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "True", r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
