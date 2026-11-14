@@ -2,7 +2,10 @@
 
 Status (11-14): step 0 (fail closed) built 11-08; **Step 2 built 11-14** (`bin/runtime_codex.py`, lifecycle + sessions;
 "Step 2: progress (11-14)" below); steps 1, 3, 4 not built. Step 4 layer 1 is planned ("Step 4 layer 1: plan (11-14)"),
-on measurements with the owner's login ("Measured 11-14 (with the owner's login)"). Step 1 follows `runtime-versions.md` steps 1–4 (it is that
+on measurements with the owner's login ("Measured 11-14 (with the owner's login)"), and revised after a cold review
+("r2 (11-14), after the blind review"). **It can't ship as "confined"**: Codex runs git as the user in the session's
+folder, and a repo filter ran from it (B1). r2 builds the hardening that closes today's holes, and leaves the path to
+"confined" to the owner (D9). Step 1 follows `runtime-versions.md` steps 1–4 (it is that
 doc's step 5). The Codex preset now leaves `runtime.default` at `none`, not `command` as "Where it stands" below says.
 Design, 11-08. Owner, 11-01: the adapter is designed, cold-reviewed, then built port by port, each port that
 isn't there said to be off (`Unsupported`, doctor). Owner, 11-08: "start the Codex enhancements" after the sandbox gaps.
@@ -395,8 +398,9 @@ the profile, the approval policy, whether hooks run at all, MCP servers, and (by
 these sandboxes:
 - The project's services and jobs get it from the Seatbelt/Landlock profiles (`protect_denies`, `protect_roots`).
 - The Codex profile names Claude's control files `read` (1).
-- Claude's sandboxed sessions get `Edit` denies on `**/.codex` from today's `settings()`, but those hold Claude's file tools
-  only.
+- Claude's sandboxed sessions would get `Edit` denies on `**/.codex` from `settings()`, but those hold Claude's file tools
+  only. (Corrected in r2, S1: today they get none, since `policy.protect()` skips a runtime without the control port, and
+  Codex has none. Nothing protects `.codex` in a sandboxed project now.)
 
 **A gap to close in the same change.** Claude's own sandbox doesn't keep its Bash off `.codex`:
 - `settings()` turns protect names into `Edit` rules;
@@ -537,6 +541,175 @@ Each step ships with its tests.
   setting). The alternative is on-request, where the owner approves each escalation. Recommended: never.
 - **D8, the network.** No network for Codex sessions in sandboxed projects until the proxy is measured. Recommended: accept;
   measure it first in the build.
+
+#### r2 (11-14), after the blind review
+
+A cold review of the plan above found two blocking points (B1, B2), thirteen should-fix items (S1–S13) and some nits. The
+measurements it asked for were taken the same day; they are under "Measured 11-14 for r2", at the end of this doc. Where
+r2 and the plan above disagree, r2 holds.
+
+Provisional owner decisions until the owner says otherwise: D6 not served; D7 `never`; D8 no network until the proxy is
+measured (with S8 below). D5 is revised under S2.
+
+**B1 decides the outcome: layer 1 does not ship as "confined".**
+- Codex runs git itself in the session's folder, as the user and outside its tool sandbox. Measured from `codex exec`
+  (0.167) and from the shared daemon (0.169) through a logging `git` first on PATH:
+  - the calls are `rev-parse`, `remote get-url` / `remote -v`, `config --get core.fsmonitor` and `status --porcelain`, at a
+    session's start and around each turn, and `/diff`;
+  - each runs with `-c safe.bareRepository=explicit -c core.hooksPath=/dev/null -c core.fsmonitor=false` and
+    `GIT_OPTIONAL_LOCKS=0`.
+- So fsmonitor and hooks are neutralised, but **filters are not**. A clean filter named in the repo's `.git/config` (with
+  `.gitattributes` selecting a file whose stat changed) **ran as the user, unsandboxed**, from `git status --porcelain`.
+  This happened under both exec and the daemon; the canary's parent was `codex app-server`. `diff.external`, `gpg.program`
+  and the hooks didn't run.
+- Codex has no measured switch for its own git. The binaries hold no "git off" setting; `features.ghost_snapshot` is a
+  different thing. Claude's `NO_FOLDER_GIT` has no counterpart here.
+- What can make git read a filter: `.git/config`, and every other config source git follows from the folder. A profile
+  can make `.git/config` and `.git/hooks` read-only to the Codex session itself. But measured under the rendered profile,
+  the session can still:
+  - write `.git/worktrees/<n>/config.worktree` and `commondir`;
+  - write `.git/modules/<x>/config` (submodule recursion);
+  - write `.git/info/attributes`;
+  - make a linked worktree inside the project with `git worktree add`.
+- More importantly, a sandboxed project's Claude sessions and services may write their own `.git` today, by design
+  (runtime-versions.md r3; projects-and-repos.md, "Platform git in project repos"). The platform's own rule is that it never
+  runs git as the user in a project's repo (`project_git`). Codex breaks that rule for every session the owner opens in a
+  sandboxed project, and nothing in Codex's profile can prevent it.
+- So the confined check (5) can't pass for Codex while this holds. It returns "not confined: Codex runs git in the folder
+  as you, and the folder's git config is the project's to write". Doctor says the same, and hub-event goes on refusing a
+  sandboxed project's Codex sessions as it does today.
+- Ways to "confined", for the owner to choose (D9 below):
+  - **(i)** Layer 2 with `--no-daemon`. Codex's CLI has the flag, so the TUI and its git run inside the platform's OS
+    sandbox as the project. Untested: M10, and whether `--no-daemon` keeps every thread, MCP server and git call in that
+    process.
+  - **(ii)** A platform-wide fence on a sandboxed project's git config sources, for every writer (sessions of any agent,
+    services, jobs). That means `.git/config`, `config.worktree`, `worktrees/*`, `modules/*/config`, `info/`, and the
+    gitdir pointers. It conflicts with the decision that sessions write their own `.git` (worktrees, submodules), and
+    projects-and-repos.md calls such a fence cosmetic within a shared repo.
+  - **(iii)** Wait for Codex to offer a switch. The conformance probe below watches for it.
+  - Rejected: a `git` shim first on Codex's PATH. The daemon's PATH is fixed when it starts (by the Desktop app or a
+    terminal), and the platform doesn't own it.
+- What layer 1 is worth building anyway, as hardening rather than a guarantee: S1/S3 (`.codex` protected in every sandbox,
+  which is a hole today whether or not Codex is used), the renderer (Codex's own tools fenced), the checks and doctor rows
+  that say why it isn't confined, and the version gate. hub-event keeps refusing.
+
+**B2, canaries through `apply_patch` and the other targets** (measured; profile B plus `deny` globs):
+- `apply_patch` obeys the profile: root `.codex/`, `.git/config` and `.git/hooks/` were refused with "rejected as outside
+  the project", and an allowed file was written.
+- A new nested `sub/.codex/config.toml` **was written** under the root-only entries. **It loads**: a session started in
+  `sub/` got the nested profile (here a wide one) in place of the root's. It read the denied folder and `~/.codex`, wrote
+  `$TMPDIR` and wrote the root's `.codex/`.
+- `read` entries can't be globs ("only supports `deny` access"). `deny` globs `<ws>/**/.codex` and `<ws>/**/.codex/**` did
+  refuse creating a nested `.codex` by `mkdir`, `cp -r`, `mv` and a symlink, and they cover the root's `.codex` too (`**`
+  matches no folder). So the renderer writes those two `deny` globs. The root's exact `read` entry goes; the tool can't read
+  `.codex` then, which nothing needs.
+- `git worktree add wt` from inside the session: allowed. `wt/.codex` was refused by the glob. Writable:
+  `.git/worktrees/wt/commondir` and `config.worktree`, `.git/modules/x/config`, `.git/info/attributes`, new files in `.git`.
+  `mv .git g` and writing a `.git` file were refused (the read-only entries inside `.git` hold the folder in place). A
+  linked worktree's own `.git` file inside the project is writable unless named. All of this matters only through B1, and
+  goes to the residual list.
+- S4 (linked worktrees): a session folder that is a linked worktree gets its own entries for its `.git` file (`read`) and
+  for the common dir's `config`, `hooks` and `worktrees/<n>/` (`read`). Still not enough while B1 holds.
+
+**The other measurements** (S13, S9):
+- **MCP servers.** The daemon starts a project's MCP server once per thread (two threads gave two processes), in that
+  thread's own folder (`cwd` = the session's folder, `sub/` for one started there), outside the profile (`ps` works, no
+  `CODEX_SANDBOX`), with no `CODEX_THREAD_ID`. User-level servers weren't added (that would change the owner's file); the
+  same spawner is assumed. So `mcp_server.py`'s project from its working directory is right, and a sandboxed project's
+  server uses its outbox and view (it already does). But every MCP server runs with the user's authority, beside the
+  profile (S8).
+- **The daemon's socket** (`/tmp/codex-daemon-<uid>/<hash>`, linked from `~/.codex/app-server-control/`): from a tool shell
+  under the rendered profile, listing the folder and connecting by its full path were both "Operation not permitted", and
+  `codex queue` couldn't read its config. Outside the sandbox the same connect worked. Measured with the network off;
+  with the network on it is unmeasured.
+- **Collaboration sub-threads.** A `spawn_agent` sub-thread (rollout `thread_source: "subagent"`, `parent_thread_id`) ran
+  under the same `active_permission_profile`, and its canaries were refused as the parent's were.
+- **`.agents`.** `.agents/hooks.json` and `[[hooks.*]]` / `[mcp_servers.*]` in `.agents/config.toml` didn't load (`/hooks`
+  and `/mcp` showed none). `.agents/skills/<n>/SKILL.md` **is** loaded as a skill into the model's instructions. So
+  `.agents` is like Claude's `.claude/skills`: a control path (tree), protected the same way, `deny` globs included.
+- **`brunna send` / `brunna inbox`.** Under the rendered profile the CLI starts. In an unregistered folder `brunna inbox`
+  tries the bus and fails with a raw `sqlite3.OperationalError` traceback (the bus is unwritable; a clean message would be
+  better). The end-to-end path through a registered sandboxed project's outbox and view wasn't measured: no such project
+  could be used.
+- **The version** in `session_meta.cli_version` is the process that runs the thread: `0.169.0` for TUI threads on the
+  daemon behind a `0.167.0` client (`originator: "codex-tui"`, `source: "vscode"`), `0.167.0` for exec.
+
+**The should-fix items, and how each is folded in:**
+- **S1.** Today no sandbox protects `.codex` (the correction in section 3). The fix comes first:
+  - the Codex adapter's `control` port (`.codex` and `.agents`, both trees);
+  - a Bash canary in Claude's control check (`conformance_claude`): `sh -c` writes to `.codex/config.toml`, to a new
+    `sub/.codex/`, and to `.codex/` in a new worktree, all expected refused;
+  - `denyWrite` entries only as a second layer.
+- **S2 + D5.** No sandboxed project gets a trust entry until the control port and the renderer are deployed.
+  - `brunna user-settings --trust <project> --runtime codex` refuses unless the project's `.codex/` holds exactly the
+    recorded file and nothing else.
+  - Doctor flags any trust entry for a sandboxed project's folder (or a folder inside one) whose `.codex/` isn't exactly
+    the record. This also catches one added through Codex's own prompt, which the platform can't prevent.
+  - The confined check requires `.codex/` to equal the record at every hook, not only at start.
+  - **D5 now reads: (b) recommended; (a) can't be stopped, so it is checked.**
+- **S3.** `.codex` and `.agents` are protected in every sandbox whichever runtimes are installed, as `~/.codex` stays in
+  `CREDENTIALS`. `policy.protect()` takes them from a list of known agents' control names (each declared by its adapter,
+  installed or not), not only from installed runtimes. `unapply` never removes the rendered file while a trust entry for
+  that folder remains; it says so instead.
+- **S4.** Worktree entries, as under B2.
+- **S5.** `rules` in `AS_PROJECT` needs the runtime: `_as_project` passes `--runtime <name>` through to `hub-event
+  as-project`, so the inner run loads the right adapter (and `rules_note()`).
+- **S6.** `_memory_sync_as_project` at a sandboxed session's end is detached for a runtime with `END_BUDGET_S`, as the
+  plain `memory_sync` already is.
+- **S7.** The per-session check reads only the `turn_context` whose `turn_id` is the hook's own. If that isn't in the rollout
+  yet, the hook tells nothing and records nothing for that turn.
+- **S8.** The renderer also writes `web_search = "disabled"` and `[features] apps = false`. Doctor's row says plainly that
+  user-level MCP servers (the brunna MCP server included) run outside the profile, with the user's authority. "Network off"
+  is about the session's tools only.
+- **S9.** A version gate:
+  - `session_version` for Codex comes from the rollout's `session_meta.cli_version` (the daemon's version, measured), not
+    from the client's process;
+  - the conformance probe (`codex sandbox` canaries, no model, B1's filter canary included) runs in Order step 2 for every
+    version the store checks;
+  - in a sandboxed project, a version without a passing probe counts as not confined.
+  - The daemon's self-updates go through no store, so a daemon version without a recorded pass is unconfined until the
+    probe has run on it.
+- **S10.** Every other installed runtime's home is denied whole, declared by its adapter (`~/.claude` from Claude's, as
+  `~/.codex` is from Codex's); today a confined Codex session could read `~/.claude/projects/**`. Same as `CREDENTIALS`.
+- **S11.** A `.codex/config.toml` found with no record is foreign. It is never overwritten; it counts as drift and the
+  project gets no rendered file until the owner removes it.
+- **S12.**
+  - `turn_context` parsing (profile id, entries, approval, sandbox type) and the `CODEX_SANDBOX` / `CODEX_THREAD_ID`
+    precedence are adapter functions; hub-event and `runtime_ports` call them neutrally.
+  - `tests/test_runtime_boundary.py`'s ratchet gains `\.codex\b`, `CODEX_[A-Z]+`, `turn_context` and `\[permissions\.`,
+    and hub-event and render-project-settings join `NEUTRAL` where they can.
+  - The facts read from a project's repo (is `.codex/config.toml` tracked, the worktrees' git dirs) go through
+    `project_git` as the project.
+- **S13.** The measurements above.
+- **Nits, each taken:**
+  - `unrecorded()` covers sandboxed folders too, counting them as "unconfined" rather than "no hooks".
+  - Presence is recorded only after a passing check. SessionStart `mail` tells a sandboxed session nothing, the
+    open-questions line included.
+  - `:tmpdir` read-only holds Codex's tools only; the project's services can still write the shared temp folders (their
+    own profile's business).
+  - One name for the renderer port: `session_settings` with `session_files(pol, folder)`.
+  - On Linux the confined check returns "not confined" (no Codex layer measured, M10).
+  - `user_cleanup` removes the trust entries the platform wrote (listed in its record), and only those.
+
+**r2's order of work** (each step with its tests, nothing marked confined until B1 is resolved):
+1. S1 and S3: the Codex control port (`.codex`, `.agents`) protected in every sandbox, plus the Bash canary in Claude's
+   control check. This closes today's hole and doesn't wait for anything else.
+2. S9: the version gate and the no-model conformance probe, B1's filter canary included (today it fails, which is what
+   keeps "confined" off).
+3. The renderer as hardening: deny globs, `.git` entries, the temp folders, `web_search` and apps off, `approval_policy =
+   never`. render-project-settings with S11's foreign rule and S3's no-removal-while-trusted rule.
+4. The confined check (static plus per turn, S7, S12), whose answer while B1 holds is "not confined", and the hub-event
+   pieces that would serve a confined session (S5, S6, presence after the check), tested but reached only by a passing
+   check.
+5. Doctor and status rows, trust checks (S2), `user-settings --trust` (refusing as S2 says), and `user_cleanup`.
+6. Then the owner's D9 path to "confined".
+
+**For the owner to decide (new):**
+- **D9, the path to a confined Codex session in a sandboxed project.** Option (i), layer 2 with `--no-daemon` (recommended:
+  it puts Codex's own git inside the OS sandbox and depends on no agent setting); option (ii), a platform-wide fence on git
+  config sources; or option (iii), wait for Codex.
+- **D10, build steps 3–5 now as hardening, or stop after steps 1–2 until D9?** Recommended: steps 1–2 now (they close real
+  holes), and steps 3–5 with D9's path.
 
 ## Found by the second blind review (11-08), taken into the steps
 
@@ -891,3 +1064,67 @@ What changes for Step 2, a follow-up apart from Step 4:
 - `TELLS_ON` can add `prompt` and `tool_used`. Letters still go as a notice, since the context is developer-role.
 - `current_session` gives Codex's id when the walk can't run and `CODEX_SANDBOX` is set.
 - Whether the hub's own Codex sessions should get the managed block.
+
+### Measured 11-14 for r2 (with the owner's login)
+
+**Setup.**
+- The same permissions and versions as above.
+- One scratch git repo under `$TMPDIR` with profile B, trusted for the run. `~/.codex/config.toml` was copied first and
+  copied back after; it was then byte-identical to that copy and to the one from before the first round. `hooks.json` and
+  `auth.json` weren't touched or read.
+- Every TUI start answered Codex's update prompt deliberately with Esc ("skip"). The driver checks the screen first and
+  never sends Enter while that prompt shows. `codex --version` was 0.167.0 at the end.
+- The git canaries in the repo's `.git/config` and `.gitattributes`: `core.fsmonitor`, a clean/smudge filter on `*.txt`,
+  `diff.external`, `gpg.program` with `commit.gpgsign`, and hooks (`post-index-change`, `reference-transaction`,
+  `pre-commit`, `post-checkout`). Each canary logged its parent process, whether `ps` worked and `CODEX_SANDBOX`. It wrote
+  to a folder outside the profile, falling back to one inside, so a sandboxed run would still have left a line. Checked
+  first with a plain `git status` and `git diff` from a shell, where fsmonitor, the clean filter and `post-index-change`
+  fired.
+- A logging `git` wrapper first on PATH, for exec and the embedded TUI.
+- About eight small model calls.
+
+**Results.**
+- **Codex's own git** (exec 0.167; daemon 0.169 by the canary's parent):
+  - Calls: `rev-parse --git-dir`, `rev-parse HEAD`, `rev-parse --abbrev-ref HEAD`, `remote get-url origin`, `remote -v`,
+    `config --null --get core.fsmonitor` (and with `--type=bool`), and `status --porcelain`. They ran at the session's
+    start and around a turn, and `/diff` ran git too.
+  - Every call was outside the sandbox, as the user, with `-c safe.bareRepository=explicit -c core.hooksPath=/dev/null -c
+    core.fsmonitor=false` and `GIT_OPTIONAL_LOCKS=0`; the `config --get` calls had only the first `-c`.
+  - **The clean filter ran from `status --porcelain`** once a tracked file's stat changed with its content as staged. Its
+    parent was `git … status --porcelain`, and the git's parent was the native `codex` (exec) or `codex app-server
+    --listen unix://` (daemon 0.169).
+  - fsmonitor, the hooks, `diff.external` and `gpg.program` never ran from Codex.
+  - The 0.167 and 0.169 binaries carry `--no-ext-diff`, `--no-textconv`, `core.fsmonitor=false`, `core.hooksPath=/dev/null`
+    and `GIT_CONFIG_NOSYSTEM`, and no setting that turns Codex's git off.
+- **`apply_patch` under profile B**:
+  - root `.codex/ap.txt`, `.git/config` and `.git/hooks/ap`: refused ("rejected as outside the project");
+  - `a.txt`: written;
+  - a new `sub/.codex/config.toml`: **written**.
+- **The nested config loads.** `codex debug prompt-input` started in `sub/` showed the nested profile's entries (a wide
+  `:workspace`, the temp folders writable). `codex sandbox` from `sub/` then read the denied folder and `~/.codex`, wrote
+  `$TMPDIR` and the root's `.codex/`.
+- **Globs.** A `read` glob stops Codex at load: "filesystem glob path … only supports `deny` access; use an exact path or
+  trailing `/**` for `read` subtree access". With `deny` on `<ws>/**/.codex` and `<ws>/**/.codex/**`:
+  - creating a nested `.codex` by `mkdir`, `cp -r`, `mv` and `ln -s` was refused;
+  - the root's `.codex` was refused for reads and writes;
+  - other writes in the workspace worked.
+- **Inside the sandbox (shell)**:
+  - `git worktree add wt -b wtb`: ok;
+  - `wt/.codex/`: refused;
+  - `.git/worktrees/wt/commondir` and `config.worktree`, `.git/modules/x/config`, `.git/info/attributes`, a new file in
+    `.git`: ok;
+  - `mv .git g` and writing a `.git` file: refused.
+- **MCP servers.** A project MCP server, with two TUIs at once on the daemon (one started in the root, one in `sub/`), gave
+  two processes. Each ran in its thread's folder, with parent `codex app-server`, `ps` working, no `CODEX_SANDBOX` and no
+  `CODEX_THREAD_ID`.
+- **The daemon's socket** from the sandbox (network off): listing `/tmp/codex-daemon-<uid>/` and connecting to both sockets
+  by full path were refused, and `codex queue` failed reading `~/.codex/config.toml`. Unsandboxed, both connects succeeded,
+  and `codex queue` to a nonexistent thread reached the daemon ("no rollout found").
+- **`spawn_agent`.** The sub-thread's rollout has `thread_source: "subagent"`, `parent_thread_id` and the same
+  `active_permission_profile`, and its canaries were refused as the parent's were.
+- **`.agents`.** Its `hooks.json` and its `config.toml` hooks and MCP server didn't load. A `SKILL.md` under
+  `.agents/skills/` appeared in the model's skills list (`codex debug prompt-input`).
+- **`brunna inbox`** under the profile in an unregistered folder: a `sqlite3.OperationalError` traceback (the bus isn't
+  writable there).
+- **`session_meta.cli_version`** is the version of the process running the thread: 0.169.0 for daemon threads behind a
+  0.167.0 client.

@@ -39,7 +39,8 @@ that day; they are listed at the end.
 1. Claude Code, native: all ports.
 2. Any CLI agent through `runtime_command`, and ACP agents through `runtime_acp`: in the throwaway copy only (propose,
    then the platform applies). Proven live with Antigravity CLI and Codex (10-29), and with two ACP agents (11-01).
-3. **Codex, a dedicated adapter**: designed and cold-reviewed 11-08; built after `runtime-versions.md` steps 1–4.
+3. **Codex, a dedicated adapter**: designed and cold-reviewed 11-08. Step 2 (sessions the owner opens) built 11-14; the
+   rest after `runtime-versions.md` steps 1–4.
 4. Antigravity CLI: a later candidate (11-08). Check what it supports before designing.
 5. Every other agent: MCP (the mailbox) and ACP, with no adapter of its own.
 
@@ -63,16 +64,23 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    2. The store and `update-runtimes` (promotion, hold-back, rollback); this retires `update-claude`.
    3. Each session's agent version recorded and gated.
    4. One control rule over the tool's own folder.
-2. **Codex adapter (`runtime-codex.md`):** step 0 (fail closed) is built. Steps 1–4 are not, and `bin/runtime_codex.py`
-   doesn't exist yet. Step 1 is `runtime-versions.md` step 5.
+2. **Codex adapter (`runtime-codex.md`):** step 0 (fail closed) and **step 2** (`bin/runtime_codex.py`: user-level hooks,
+   rules by injection, session state; merged 11-14) are built. Order now: Step 2 → Step 4 layer 1 → Step 1 → Step 4
+   layer 2 → Step 3. Step 1 is `runtime-versions.md` step 5.
    - **Step 1:** agent, completion and login ports, confined. The tool list is checked on every run.
-   - **Step 2:** hooks, rules injection, session state.
    - **Step 3:** wake, status, resume and fork. Wake also waits on M11 (is a client attached), under D4.
-   - **Step 4:** confinement for sandboxed projects and `allow:` jobs. D2's `brunna session <project> --agent` launcher
-     is part of it.
+   - **Step 4 layer 1** (Codex's own sandbox, rendered by the platform): planned and revised after a cold review (r2,
+     11-14, on measurements with the owner's login). **It can't ship as "confined"**: Codex runs `git status` as the user
+     in the session's folder, and a filter in the repo's config ran from it. r2's first steps close today's holes
+     anyway: `.codex` is protected in no sandbox now, and the version gate and probe come next. The path to "confined" is
+     D9.
+   - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
+     Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
    Measurements still open: `--output-schema` with the platform's own schemas, the model pin per kind of point (V-M1),
-   M10 and M11, and `FOLDER_GIT_OFF`. D3 (the default runtime) is the owner's.
+   M10 and M11, the network proxy, worktree trust, `turn_context` timing at UserPromptSubmit, and a sandboxed project's
+   `brunna send` end to end. The Step 2 follow-ups (`TELLS_ON` widening, `current_session` inside Codex's sandbox) are in
+   `runtime-codex.md`.
 3. **The long-running session port.** This is `runtime-abstraction.md` step 4, `runtime-acp.md` step 4 and
    `tool-agnostic.md`'s postponed "leasing over ACP". The lease runner still builds Claude's flags itself and reads
    Claude's folders. The sandbox and credential questions in `runtime-acp.md` §4 come first.
@@ -157,6 +165,14 @@ Built: steps 0–2 and step 4, the waiting report. Left:
 ### 6. Waiting on the owner
 
 - Codex D3: which runtime is the default.
+- Codex Step 4 (`runtime-codex.md`, the plan and its r2), with the provisional answers r2 works to:
+  - **D5**, trust entries: (b) `brunna user-settings --trust`, run by the owner, recommended; (a) Codex's own prompt
+    can't be stopped, so it is checked.
+  - **D6**: a session the owner overrode by flag isn't served (provisional).
+  - **D7**: `approval_policy = "never"` (provisional).
+  - **D8**: no network until the proxy is measured (provisional).
+  - **D9**: the path to a confined Codex session (layer 2 with `--no-daemon`, a fence on git config, or wait for Codex).
+  - **D10**: whether r2's steps 3–5 are built now as hardening.
 - test-waiting B8 and A2.
 - Positioning: no wording decision is recorded since the README was rewritten.
 - Principal Handoff: whether to send the drafted ACP RFD.
