@@ -774,8 +774,12 @@ r2 and the plan above disagree, r2 holds.
       - Write makes folders, Bash only what its command makes;
       - a rename is checked at its two ends;
       - the rules don't fold the long s.
-    - **Not run against the real Claude here** (it needs the headless token under `~/.claude`). Whether Claude's sandbox
-      refuses the staged move and the long s from these rules is what that run will tell.
+    - **Run against the real Claude 2.1.323 (11-14, `--only control --report`): pass**, all 18 canaries refused through
+      the rendered settings and written with their rules left out, the staged move and `.agentſ` included;
+      confine-sandbox passes too. The first run found the positive controls testing nothing for `.agents`: Claude's
+      sandbox folds the long s in the rules merged into it, so `Edit(…/.agentſ)` and the `.agentſ` `denyWrite` entry
+      refused a Bash write to `.agents` with the literal rules left out. The controls now leave out what covers the
+      target as the sandbox reads it (case-folded); the file tools' matching is unchanged.
   - Doctor's per-project row names each unconfined agent's reason (`runtime_ports.unconfined_reason`). Codex's comes from the
     newest recorded probe once there is one, else from what was measured by hand (review N4).
 - **Step 2 (S9).**
