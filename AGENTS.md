@@ -417,7 +417,7 @@ memory tracking and runs nothing long-lived (most projects) needs nothing under 
   the platform's runner service `bin/cap-runner.py` under the platform's own Seatbelt profile (`bin/seatbelt.py`, which
   can block the Keychain; macOS only). Design in `docs/design/capabilities.md`.
   **The owner's checkout race** (`docs/design/git-broker.md` r3 B-1): a sandboxed project's services and jobs make no
-  symbolic link in their checkouts but inside `.venv`/`node_modules` (`policy.links`, macOS only; a platform job that
+  symbolic link in their checkouts but inside `.venv`/`node_modules` and the tool caches (`policy.links`, macOS only; a platform job that
   must make one gets that exact path: `--allow-link`), and its Claude Code worktrees are made by the platform as the
   project (the `WorktreeCreate` hook → `hub-event worktree-make` → `bin/session_worktree.py`), never as the user.
   `type`/`enforce`/`network`/`allow_write`/`privacy`/`metered_models`/`paths` are security fields that `manifest.update` cannot

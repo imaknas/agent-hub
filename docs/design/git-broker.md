@@ -1236,35 +1236,33 @@ worktrees) are still open. Until they are decided, the caveats on the principle 
     the folder only, never the folder's own entry;
   - so may the platform's own test runs (`.brunna/test/`, both spellings), where the test runner checks out tracked
     links and tests make links in their temp folder;
+  - so may the tool caches `cache_env` names (`.git/brunna/cache/`, both spellings), which no checkout writes;
   - `allow` lists exact paths one platform job may link.
 - **The Seatbelt rendering.** `seatbelt.link_rules` sits in the isolation both profile kinds share. That covers
   `sandboxed-run` (services, command jobs, the test runner's wrap, the platform's git work run as the project) and
   cap-run. It is placed before the control-file rules, so those still win. An allowance outside the roots is dropped.
   The guarantee is `links-blocked`, probed by `tests/test_sandboxed_services.py`'s Conformance.
-- **Linux** doesn't declare it, and doctor says so (a warning row). Landlock does have a make-symlink right, but it is
-  granted per folder that exists when the rules are made, so a `node_modules` or `.venv` made later would get no
-  links. Not built.
+- **Linux** doesn't declare it, and doctor says so (a warning row: "the platform doesn't refuse links on this OS").
+  Contrary to the r3 assumption, Landlock does have a make-symlink right. But it is granted per folder that exists when
+  the rules are made, so a `node_modules` or `.venv` made later would get no links. Unmeasured, and not built.
 - **Exact allowances, for the platform's own links made as the project:**
   - `worktree-memory.sh` (`project_git.py run-as --allow-link`): a worktree's `.agent-memory` link and the rules-file
     links;
   - the worktree maker below: each tracked link of the checkout.
 - **Carve-outs, measured before adding any:**
-  - `uv venv` with uv's cache in `.git/brunna/cache/uv` left no link in the cache;
+  - **uv's cache needs one.** With the caches where `policy.cache_env` puts them, `uv pip install six` and `uv sync`
+    failed under the rule: uv links each wheel to its unpacked archive in the cache. `uv python install 3.12` puts
+    links in `uv-python`. With `.git/brunna/cache/` carved out, all three worked. (`uv venv` alone made no link in the
+    cache: that first measurement was too narrow.);
   - a pnpm store in the workspace held no links (its links are in `node_modules`);
   - cargo's `target/` couldn't be measured: in the sandbox rustup tries to download a toolchain and can't reach the
     Keychain to check certificates;
   - tox and pdm (`.tox`, `__pypackages__`) aren't installed here.
 
-  None was added. A tool that needs one fails loudly, and gets a folder added after it is measured.
-- **This machine's sandboxed projects** (read from the registry and their folders, read only):
-  - five sandboxed projects; one declares a service (a shell sync script) and a job (`python3 <script>`) that run in
-    its runtime folder;
-  - neither script makes a link, uses a venv or runs node (searched for `ln -s`, `symlink`, `venv`, `uv`, `npm`,
-    `pip install`, `git clone|checkout|pull|worktree`);
-  - they weren't run under the new profile, because they call outside services with real credentials;
-  - no other sandboxed project declares services or jobs, and none has a `.venv` or `node_modules` at its top.
-
-  Nothing is expected to break.
+  Only the cache folder was added. A tool that needs another fails loudly, and gets a folder added after it is measured.
+- **Before it goes live on a machine,** list each sandboxed project's declared services and jobs and what they run,
+  and look for link-making outside the carve-outs (`ln -s`, `symlink`, a venv outside `.venv`). The deployment this was
+  built on was checked so, read only; what was found is in the session's report, not here.
 
 **Mitigation 3: Claude Code's worktrees in a sandboxed project are made by the platform, as the project.**
 - **The contract**, read from Claude Code's binary (2.1.x, not run):
@@ -1283,13 +1281,19 @@ worktrees) are still open. Until they are decided, the caveats on the principle 
   - the place is `<workspace>/.claude/worktrees/<name>`, on branch `worktree-<name>` (new from HEAD, or the existing
     one);
   - the steps are `worktree add --no-checkout`, `reset`, then `checkout-index`;
-  - the tracked links are allowed by exact path;
+  - the tracked links are allowed by exact path, only relative ones without `..` under the new worktree (the list is
+    the project's own word, read from its repo);
+  - a checkout that fails takes the worktree and its new branch back, so the same name can be made again;
   - tracked files the sandbox may not write (control names, a runtime's own folder) are left out as skip-worktree, so
     git doesn't show them as deleted, and the hook says so on stderr.
 
   A swap during that checkout can only redirect writes to places the project could already write.
-- **What changes on this machine:** one sandboxed project tracks 44 files under control names (`.claude/skills`,
-  `.agents/skills`). Its Claude worktrees will now lack those skills (left out). Doctor already lists those files.
+- **What changes:** a sandboxed project that tracks files under control names (skills folders, say) gets Claude
+  worktrees without them (left out). Doctor already lists such files. The hooks carry a 30-minute timeout, past the
+  checkout job's own.
+- **Going live:** the hooks reach every sandboxed project's settings at the next render after the merge (every 15
+  minutes). From then on, Claude's worktree mode there goes through the platform, and fails closed if it can't. So the
+  real-Claude check below comes before `merge-branch`.
 - **The existing worktree path, checked.** For a sandboxed project, `worktree-memory.sh` already runs its git and
   links as the project (`project_git.py run-as`), and `render-project-settings --worktree` writes the worktree's
   settings without following links. The remaining owner-run checkouts in a sandboxed project's folder are Claude's own
@@ -1315,13 +1319,18 @@ worktrees) are still open. Until they are decided, the caveats on the principle 
   - an exact allowance; the positive control without the rule;
   - venv, `uv venv` and npm's `.bin` links still work;
 - **the owner race** (the review's `owner_race2`, the attacker under the rule): nothing written outside, the file there
-  intact, the link never made;
+  intact, the link never made. The positive control here only shows the link can be made without the rule; the race
+  landing without it (~2,900 files in the first round) was measured in scratch, not in the test;
+- `--allow-link` end to end through `sandboxed-run` (the Conformance probe), and `project_git.py run-as`'s parsing;
+- the doctor rows (macOS, Linux, a tracked file in a tool folder);
 - the hook contract (request, location, reply, `makes_worktrees`, the commands fail closed and are the platform's);
 - `hub-event` exit codes and stdout;
 - a worktree made through the hook under the real Seatbelt profile: made as the project, the tracked link present, a
   control file left out as skip-worktree, status clean, removed again, nothing run for an unsandboxed project or a bad
   name;
-- a race against the hook path writing nothing outside.
+- a race against the hook path writing nothing outside, its attacker under no link rule (as a session's own command
+  would be);
+- a failed make leaves no worktree or branch behind; tracked-link paths outside the new worktree are dropped.
 
 **Needs a real Claude run** (the platform's own tests can't start Claude; listed for the owner or the coordinator):
 1. In a sandboxed project, `claude --worktree <name>` (and the `EnterWorktree` tool, and a subagent with
