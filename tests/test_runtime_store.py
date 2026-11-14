@@ -97,6 +97,29 @@ class Store(Temp):
         e.exe.unlink()
         self.assertIsNotNone(store.verify(e))
 
+    def test_every_executable_of_a_copy_is_verified(self):
+        """runtime-codex.md, Step 1: a copy whose runs execute more than its executable (Codex's code-mode host)."""
+        def executables(exe):
+            host = exe.parent / "host"
+            host.write_text("#!/bin/sh\necho host\n")
+            return [exe, host]
+        self.dist.executables = executables
+        store.install("claude", "2.1.400", self.dist)
+        e = store.promote("claude", "2.1.400")
+        self.assertEqual(list(e.promoted["also"]), ["node_modules/.bin/host"])
+        self.assertIsNone(store.verify(e))
+        host = e.exe.parent / "host"
+        st = host.stat()
+        host.write_text("#!/bin/sh\necho hosX\n")
+        os.utime(host, (st.st_atime, st.st_mtime))
+        self.assertIsNone(store.verify(e), "checked today already: size and time only")
+        (e.folder / ".verified").unlink()
+        self.assertIn("host", store.verify(e) or "")
+        host.write_text("#!/bin/sh\necho a longer host\n")
+        self.assertIn("host", store.verify(e) or "")
+        host.unlink()
+        self.assertIn("host", store.verify(e) or "")
+
     def test_an_entry_never_points_outside_its_folder(self):
         store.install("claude", "2.1.400", self.dist)
         e = store.promote("claude", "2.1.400")

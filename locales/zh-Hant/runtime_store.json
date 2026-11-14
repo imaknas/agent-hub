@@ -9,5 +9,8 @@
  "its executable's content": "它的執行檔內容",
  "{version} isn't installed in the store": "{version} 沒有裝在 store 裡",
  "its executable is gone": "它的執行檔不見了",
- "{version} changed while it was checked: not promoted": "{version} 在檢查期間被改過:不採用"
+ "{version} changed while it was checked: not promoted": "{version} 在檢查期間被改過:不採用",
+ "{file}'s size, time or place": "{file} 的大小、時間或位置",
+ "{file}'s content": "{file} 的內容",
+ "{file} is gone": "{file} 不見了"
 }

@@ -148,8 +148,15 @@ def install(runtime: str, version: str, dist, kind: str | None = None, seen: str
         try:
             exe = pathlib.Path(dist.install(version, staging))
             rel = exe.relative_to(staging)
+            # the copy's other executables, which runs of it execute too (the distribution port's optional
+            # executables(exe); runtime-codex.md, Step 1: Codex's code-mode host and its rg): promotion records each,
+            # and verify checks each as it checks the executable
+            more = getattr(dist, "executables", None)
+            also = sorted({str(pathlib.Path(p).relative_to(staging)) for p in (more(exe) if callable(more) else ())}
+                          - {str(rel)})
             (staging / ".lock").touch(mode=0o600)
             (staging / "installed.json").write_text(json.dumps({"version": version, "exe": str(rel),
+                                                                **({"also": also} if also else {}),
                                                                 **({"kind": kind} if kind else {}),
                                                                 **({"seen": seen} if kind and seen else {})}) + "\n")
             staging.rename(final)
@@ -223,8 +230,17 @@ def promote(runtime: str, version: str, result_file: str | None = None, expect: 
         sha = digest(real)
         if expect is not None and sha != expect:
             raise RuntimeError(_("{version} changed while it was checked: not promoted", version=version))
+        also = {}
+        for rel in done.get("also") or []:
+            other = pathlib.Path(os.path.realpath(folder / rel))
+            if not other.is_file() or folder.resolve() not in other.parents:
+                raise RuntimeError(_("{version}'s executable isn't a file inside its folder", version=version))
+            ost = other.stat()
+            also[rel] = {"real": str(other.relative_to(folder.resolve())), "size": ost.st_size, "mtime": ost.st_mtime,
+                         "ino": ost.st_ino, "sha256": digest(other)}
         record = {"version": version, "exe": done["exe"], "real": str(real.relative_to(folder.resolve())),
                   "size": st.st_size, "mtime": st.st_mtime, "ino": st.st_ino, "sha256": sha, "result": result_file,
+                  **({"also": also} if also else {}),
                   "at": datetime.datetime.now().astimezone().isoformat(timespec="seconds")}
         _fsync_write(folder / PROMOTED, json.dumps(record, indent=1) + "\n")
         was = _linked(runtime, "current")
@@ -329,6 +345,16 @@ def verify(e: Entry) -> str | None:
         return changed.format(what=_("its executable points elsewhere"))
     if st.st_size != p.get("size") or st.st_mtime != p.get("mtime") or st.st_ino != p.get("ino", st.st_ino):
         return changed.format(what=_("its executable's size or time"))
+    also = p.get("also") or {}
+    for rel, rec in also.items():   # the copy's other executables, as the executable (install's executables)
+        other = pathlib.Path(os.path.realpath(e.folder / rel))
+        try:
+            ost = other.stat()
+        except OSError:
+            return changed.format(what=_("{file} is gone", file=rel))
+        if str(other) != str(e.folder.resolve() / rec.get("real", "")) or ost.st_size != rec.get("size") \
+                or ost.st_mtime != rec.get("mtime") or ost.st_ino != rec.get("ino", ost.st_ino):
+            return changed.format(what=_("{file}'s size, time or place", file=rel))
     stamp = e.folder / ".verified"
     today = datetime.date.today().isoformat()
     try:
@@ -338,6 +364,9 @@ def verify(e: Entry) -> str | None:
         pass
     if digest(real) != p.get("sha256"):
         return changed.format(what=_("its executable's content"))
+    for rel, rec in also.items():
+        if digest(pathlib.Path(os.path.realpath(e.folder / rel))) != rec.get("sha256"):
+            return changed.format(what=_("{file}'s content", file=rel))
     try:
         stamp.write_text(today + "\n")
     except OSError:
