@@ -297,7 +297,8 @@ class SwappedJobs(unittest.TestCase):
         (self.outside / "state.json").write_text(json.dumps({"state": "running"}))
         (self.tmp / "state").mkdir()
         for p in (mock.patch.object(cr, "eligible", lambda: {"p": {"dirs": [self.ws], "caps": [], "models": {}}}),
-                  mock.patch.object(cr, "DIR", self.tmp / "state")):
+                  mock.patch.object(cr, "DIR", self.tmp / "state"),
+                  mock.patch.object(cr, "LOG", self.tmp / "state" / "log.jsonl")):   # fixed at import: the tree's own .state
             p.start()
             self.addCleanup(p.stop)
 

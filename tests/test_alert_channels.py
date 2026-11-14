@@ -55,6 +55,15 @@ class Channels(unittest.TestCase):
 CURL = ["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}"]
 
 
+class NoCurl(unittest.TestCase):
+    def test_a_machine_without_curl_has_the_alert_not_sent_not_a_crash(self):
+        """A slim Linux has no /usr/bin/curl (11-15: the git fence job died there): the channel says not sent, which is
+        recorded and shown, and the job that alerted goes on."""
+        m = load()
+        with mock.patch.object(m.subprocess, "run", side_effect=FileNotFoundError(2, "No such file", "/usr/bin/curl")):
+            self.assertEqual(m._curl("http://127.0.0.1:9/x", data="t"), "")
+
+
 class AssistantChannel(unittest.TestCase):
     """alerts.assistant: keyed notices to the personal assistant, beside the other channels
     (its platform-alerts contract, modules/assistant.yaml)."""

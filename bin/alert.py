@@ -84,8 +84,11 @@ def _curl(*args: str, data: str | None = None) -> str:
     """Returns the HTTP status code (a string); an empty string when curl itself fails."""
     if _reaches_out(subprocess.run):
         return ""
-    r = subprocess.run(["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", *args],
-                       input=data, capture_output=True, text=True)
+    try:
+        r = subprocess.run(["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", *args],
+                           input=data, capture_output=True, text=True)
+    except OSError:   # no curl on this machine (a slim Linux): not sent, recorded as such, never the caller's crash
+        return ""
     return r.stdout.strip()
 
 
