@@ -18,9 +18,15 @@ done, the worktree fails.
                                           platform's state until it is undone: the next make of that name undoes it
                                           first, so no worktree or branch it made is left behind
   HOOK_TIMEOUT_S                          what a tool's hook must allow: the plan, the job and the undo, plus a margin
-                                          (under Claude Code's 10-minute default for hooks)
-  drop(cwd, path)                         `git worktree remove --force` of that worktree, as the project; only one inside
-                                          that project's workspace
+                                          (under the 10-minute hook default a tool may have)
+  drop(cwd, path, rt)                     that worktree removed (one at the tool's place, rt.worktree_location): first what the platform itself wrote into it at a
+                                          session's start (clear_platform_entries, as the platform), then the rest as the
+                                          project (project-git-job.py session-worktree-remove), which unregisters it
+                                          only once its folder is gone; only one inside that project's workspace
+  clear_platform_entries(ws, path)        the runtimes' local-only files the platform writes into a worktree (the
+                                          instructions port's local_ignores: a runtime's local settings file and rules-file
+                                          link), and their folder when that empties it, walked down from the workspace
+                                          without following a link: the project's sandbox may not remove them
 Both raise Refused with a reason a person can act on.
 """
 from __future__ import annotations
@@ -34,6 +40,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import hubconf  # noqa: E402
 import i18n  # noqa: E402
+import nofollow  # noqa: E402
 import policy  # noqa: E402
 import project_git  # noqa: E402
 
@@ -75,7 +82,41 @@ def _pending(project: str, path: pathlib.Path) -> pathlib.Path:
     return PENDING / project / f"{path.name}.json"
 
 
+def platform_entries() -> list[str]:
+    import runtime_ports
+    out = []
+    for name in runtime_ports.installed():
+        try:
+            rt = runtime_ports.load(name, ports=("instructions",))
+        except runtime_ports.Unsupported:
+            continue
+        out += [e for e in rt.local_ignores() if e not in out]
+    return out
+
+
+def clear_platform_entries(ws: pathlib.Path, path: pathlib.Path) -> None:
+    """Raises Refused when a link stands on the way (nothing is followed or removed through it)."""
+    rel = pathlib.Path(path).relative_to(ws)
+    folders = []
+    try:
+        for e in platform_entries():
+            if nofollow.is_dir(ws, rel / e):
+                continue   # never a folder's contents: only the files and links the platform writes
+            nofollow.remove(ws, rel / e)
+            folders += [f for f in pathlib.PurePosixPath(e).parents if str(f) != "." and f not in folders]
+        for f in sorted(folders, key=lambda f: -len(f.parts)):
+            if nofollow.entries(ws, rel / f) == []:
+                nofollow.remove_dir(ws, rel / f)
+    except OSError as e:
+        raise Refused(_("couldn't clear what the platform wrote in {path} ({why}); nothing more was removed", path=path,
+                        why=e)) from None
+
+
 def _undo(project: str, ws: pathlib.Path, rec: dict) -> None:
+    try:
+        clear_platform_entries(ws, pathlib.Path(rec["path"]))
+    except Refused:
+        pass   # the job then leaves it registered, and the next make of the name tries again
     project_git.job(project, ws, "session-worktree-undo", ws, rec["path"], rec["branch"], "1" if rec.get("new") else "0",
                     timeout=UNDO_TIMEOUT_S)
 
@@ -104,6 +145,12 @@ def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
         raise Refused(_("couldn't look at {project}'s branches ({why})", project=project, why=e)) from None
     if not isinstance(plan, dict):
         raise Refused(_("couldn't look at {project}'s branches ({why})", project=project, why=plan))
+    # the tool's worktree folder: the project's sandbox holds the tool's own folder (protect_roots), so a first worktree
+    # couldn't make it there; made as the platform, walked down from the workspace without following a link
+    try:
+        nofollow.make_dirs(ws, path.parent.relative_to(ws))
+    except OSError as e:
+        raise Refused(_("couldn't make {path} ({why})", path=path.parent, why=e)) from None
     rec = {"path": str(path), "branch": branch, "new": not plan.get("exists")}
     rec_file.parent.mkdir(parents=True, exist_ok=True)
     rec_file.write_text(json.dumps(rec))
@@ -121,14 +168,21 @@ def make(cwd, name: str, rt) -> tuple[pathlib.Path, list[str]]:
     return path, project_git.strs(got.get("skipped"))
 
 
-def drop(cwd, path) -> None:
+def drop(cwd, path, rt) -> None:
     project, _doc, ws = _project(cwd)
     p = pathlib.Path(path)
     if not p.is_absolute():
         p = pathlib.Path(cwd) / p
-    if p == ws or not p.is_relative_to(ws) or ".." in p.parts:
+    # only a worktree at the tool's place, with a .git pointer file, read without following a link
+    place = pathlib.Path(rt.worktree_location(ws, "x")[0]).parent
+    try:
+        pointer = nofollow.read(ws, p.relative_to(ws) / ".git", cap=4096) if p.parent == place else None
+    except (OSError, ValueError):
+        pointer = None
+    if ".." in p.parts or not pointer or not pointer.startswith(b"gitdir: "):
         raise Refused(_("{path} isn't a worktree in {project}'s workspace", path=path, project=project))
-    r = project_git.job(project, ws, "worktree-remove", ws, p, "--force")
+    clear_platform_entries(ws, p)
+    r = project_git.job(project, ws, "session-worktree-remove", ws, p, timeout=UNDO_TIMEOUT_S)
     if r.returncode != 0:
         raise Refused(_("removing the worktree as {project} failed ({why})", project=project,
                         why=r.stderr.strip()[-300:] or f"exit {r.returncode}"))

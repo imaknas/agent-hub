@@ -702,7 +702,7 @@ def worktree_maker(what: str, raw: str, name: str | None) -> int:
                         n=len(skipped), example=", ".join(skipped[:3])), file=sys.stderr)
             print(rt.worktree_reply(path))
         else:
-            session_worktree.drop(req["cwd"], req["path"])
+            session_worktree.drop(req["cwd"], req["path"], rt)
     except (session_worktree.Refused, runtime_ports.Unsupported) as e:
         print(f"{names.current('cli')}: {e}", file=sys.stderr)
         _log(what, project, [], [what])

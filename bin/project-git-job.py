@@ -30,7 +30,12 @@ readable. Nothing here decides anything for the platform; the caller treats the 
                                           branch, skipped (at most 50), n_skipped}
   session-worktree-undo <repo> <path> <branch> <new>
                                           what a session-worktree that didn't finish left: the worktree at <path>
-                                          (forced), the admin entries, and <branch> when <new> is 1 (it made it)
+                                          (session-worktree-remove's way), and <branch> when <new> is 1 (it made it)
+  session-worktree-remove <repo> <path>   a coding agent's worktree removed: everything in it but its .git first,
+                                          bottom-up, never through a link; only when all of that went is it
+                                          unregistered (`worktree remove --force`), so a folder that can't be deleted
+                                          stays a registered worktree (exit 1, what is left on stderr). Then its branch
+                                          with `branch -d` (merged ones only)
   branch-delete <repo> <branch>           git branch -d (merged branches only)
   remove-dep <worktree> <dep> <marker> <line>
                                           delete a dependency folder (never through a symlink) and append <line> to
@@ -161,9 +166,58 @@ def op_worktree_plan(repo: str, branch: str) -> int:
     return emit({"exists": git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0})
 
 
-def op_session_worktree_undo(repo: str, path: str, branch: str, new: str) -> int:
-    git(repo, "worktree", "remove", "--force", path)
+def _remove_worktree(repo: str, path: str) -> list[str]:
+    """Empty the worktree but its .git (bottom-up, links removed as links), then unregister it only if nothing was left:
+    git's own `worktree remove` unregisters even when it can't delete the folder (measured 11-15: a control file the
+    project's sandbox may not remove). What was left, if anything."""
+    top = pathlib.Path(path)
+    if not top.is_dir() or top.is_symlink():
+        git(repo, "worktree", "prune")   # gone already: only its admin entries, if any
+        return []
+    left = []
+    for root, dirs, files in os.walk(top, topdown=False, followlinks=False):
+        r = pathlib.Path(root)
+        for n in files + [d for d in dirs if (r / d).is_symlink()]:
+            if r == top and n == ".git":
+                continue
+            try:
+                os.unlink(r / n)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                left.append(str((r / n).relative_to(top)))
+        for d in dirs:
+            if (r / d).is_symlink() or (r == top and d == ".git"):
+                continue
+            try:
+                os.rmdir(r / d)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                left.append(str((r / d).relative_to(top)) + "/")
+    if left:
+        return left
+    r = git(repo, "worktree", "remove", "--force", path)
+    if r.returncode != 0:
+        return [f"git worktree remove: {r.stderr.strip()[-200:]}"]
     git(repo, "worktree", "prune")
+    return []
+
+
+def op_session_worktree_remove(repo: str, path: str) -> int:
+    branch = out(path, "symbolic-ref", "-q", "--short", "HEAD").strip()
+    if left := _remove_worktree(repo, path):
+        sys.stderr.write(f"left in the worktree, which stays registered: {', '.join(left[:10])}\n")
+        return 1
+    if branch:
+        git(repo, "branch", "-d", branch)   # merged only: a branch with work of its own stays
+    return 0
+
+
+def op_session_worktree_undo(repo: str, path: str, branch: str, new: str) -> int:
+    if left := _remove_worktree(repo, path):
+        sys.stderr.write(f"left in the worktree, which stays registered: {', '.join(left[:10])}\n")
+        return 1
     if new == "1" and git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode == 0:
         git(repo, "branch", "-D", branch)
     return 0
@@ -564,7 +618,7 @@ def op_test_runs(repo: str, since: str) -> int:
 
 OPS = {"test-runs": op_test_runs, "worktrees": op_worktrees, "ignored": op_ignored, "worktree-add": op_worktree_add,
        "worktree-remove": op_worktree_remove, "worktree-plan": op_worktree_plan, "session-worktree": op_session_worktree,
-       "session-worktree-undo": op_session_worktree_undo, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
+       "session-worktree-undo": op_session_worktree_undo, "session-worktree-remove": op_session_worktree_remove, "branch-delete": op_branch_delete, "remove-dep": op_remove_dep,
        "checkout-sigs": op_checkout_sigs, "changed": op_changed, "copy-back": op_copy_back, "hooks": op_hooks,
        "hook-write": op_hook_write, "hook-remove": op_hook_remove, "bundle-unpushed": op_bundle_unpushed, "diff-head": op_diff_head,
        "memory-sync": op_memory_sync, "exclude": op_exclude, "save": op_save, "head": op_head, "first-look": op_first_look,

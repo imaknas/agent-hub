@@ -15,6 +15,7 @@ workspace) is opened normally: its parent is not the project's to change. Standa
                                              is fine
   is_dir(base, rel) → bool                   this entry itself is a folder (a link to one isn't); missing: False
   remove_dir(base, rel)                      remove one empty folder; OSError if it isn't empty
+  make_dirs(base, rel)                       the folder and the missing ones above it (a link on the way: OSError)
 All raise OSError for a link, a FIFO or anything else that isn't a regular file / folder on the way (read: the file
 itself too), and read for a file over cap.
 """
@@ -158,6 +159,10 @@ def is_dir(base, rel) -> bool:
         return False
     finally:
         os.close(d)
+
+
+def make_dirs(base, rel) -> None:
+    os.close(_folder(base, _parts(rel), create=True))
 
 
 def remove_dir(base, rel) -> None:

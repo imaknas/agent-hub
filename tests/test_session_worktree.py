@@ -140,7 +140,7 @@ class SessionWorktree(Base):
         self.wrapped.append((project, list(argv)))
         if not HAS_SEATBELT:
             return ["/bin/sh", "-c", "echo 'sandboxed-run: refused' >&2; exit 78"]
-        pol = {**self.pol(), "protect": [{"name": ".ctl", "tree": True}]}
+        pol = {**self.pol(), "protect": policy.protect(), "protect_roots": policy.protect_roots()}
         return [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, [self.ws]), *argv]
 
     def test_it_is_made_as_the_project_never_as_the_user(self):
@@ -161,7 +161,7 @@ class SessionWorktree(Base):
         ops = [a for _p, a in self.wrapped]
         self.assertTrue(any("session-worktree" in a for a in ops), ops)
         self.assertTrue(all(p == "proj" for p, _a in self.wrapped))
-        session_worktree.drop(self.ws, path)
+        session_worktree.drop(self.ws, path, runtime_claude)
         self.assertFalse(path.exists())
 
     def test_refusals(self):
@@ -195,6 +195,46 @@ class SessionWorktree(Base):
         self.assertTrue((path / "only" / "l").is_symlink())
 
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_a_drop_after_a_session_start_wrote_its_settings(self):
+        """The real check (11-15): a session start writes the platform's settings and the rules-file link into the
+        worktree, which the project's sandbox may not remove. The drop clears those as the platform first, then removes the
+        rest as the project; nothing is left registered or on disk."""
+        import session_worktree
+        protect = [{"name": ".claude/settings.local.json", "tree": False}, {"name": "CLAUDE.local.md", "tree": False},
+                   {"name": ".ctl", "tree": True}]
+        roots = [{"name": ".claude", "writable": ["worktrees"]}]   # a worktree's own .claude is held too
+        with mock.patch.object(policy, "protect", lambda: protect), mock.patch.object(policy, "protect_roots", lambda: roots):
+            path, _s = session_worktree.make(self.ws, "w7", runtime_claude)
+            (path / ".claude").mkdir()
+            (path / ".claude" / "settings.local.json").write_text("{}\n")   # what render-project-settings writes
+            (self.ws / "CLAUDE.local.md").write_text("rules\n")
+            os.symlink(self.ws / "CLAUDE.local.md", path / "CLAUDE.local.md")   # worktree-memory.sh's link
+            os.symlink(self.ws, path / ".agent-memory")
+            (path / "work.txt").write_text("uncommitted\n")
+            with mock.patch.object(session_worktree, "platform_entries",
+                                   lambda: ["CLAUDE.local.md", ".claude/settings.local.json"]):
+                session_worktree.drop(self.ws, path, runtime_claude)
+        self.assertFalse(os.path.lexists(path))
+        self.assertNotIn("w7", git(self.ws, "worktree", "list"))
+        self.assertTrue((self.ws / "CLAUDE.local.md").is_file(), "the link removed, never what it points to")
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
+    def test_a_folder_that_cant_be_emptied_stays_registered(self):
+        """Never unregistered with its folder still there (git's own `worktree remove` does that)."""
+        import session_worktree
+        protect = [{"name": ".claude/settings.local.json", "tree": False}, {"name": ".ctl", "tree": True}]
+        roots = [{"name": ".claude", "writable": ["worktrees"]}]
+        with mock.patch.object(policy, "protect", lambda: protect), mock.patch.object(policy, "protect_roots", lambda: roots):
+            path, _s = session_worktree.make(self.ws, "w8", runtime_claude)
+            (path / ".claude").mkdir()
+            (path / ".claude" / "settings.local.json").write_text("{}\n")   # not in platform_entries here: left
+            with mock.patch.object(session_worktree, "platform_entries", lambda: []):
+                with self.assertRaises(session_worktree.Refused):
+                    session_worktree.drop(self.ws, path, runtime_claude)
+        self.assertIn("w8", git(self.ws, "worktree", "list"))
+        self.assertTrue((path / ".git").is_file())
+
+    @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
     def test_a_make_that_didnt_finish_is_undone_by_the_next(self):
         """Its hook killed (the job's own cleanup never ran): the record it left makes the next make of that name undo
         the worktree and the branch first."""
@@ -219,11 +259,13 @@ class SessionWorktree(Base):
         for entries in runtime_claude.worktree_maker_hooks().values():
             self.assertEqual(entries[0]["hooks"][0]["timeout"], t)
 
-    def test_drop_only_inside_the_workspace(self):
+    def test_drop_only_a_worktree_at_the_tools_place(self):
         import session_worktree
-        for bad in (self.ws, self.tmp / "elsewhere", self.ws / ".." / "x"):
+        (self.ws / "src" / ".git").write_text("gitdir: /x\n")   # a pointer, but not at the tool's place
+        for bad in (self.ws, self.tmp / "elsewhere", self.ws / ".." / "x", self.ws / "src",
+                    self.ws / ".claude" / "worktrees" / "nothing-here"):
             with self.assertRaises(session_worktree.Refused):
-                session_worktree.drop(self.ws, bad)
+                session_worktree.drop(self.ws, bad, runtime_claude)
 
     @unittest.skipUnless(HAS_SEATBELT, "needs Seatbelt")
     def test_a_failed_make_leaves_nothing_behind(self):
@@ -278,7 +320,7 @@ done
                 try:
                     p, _s = session_worktree.make(self.ws, f"r{i}", runtime_claude)
                     made += 1
-                    session_worktree.drop(self.ws, p)
+                    session_worktree.drop(self.ws, p, runtime_claude)
                 except session_worktree.Refused:
                     pass
         finally:
@@ -343,7 +385,7 @@ class HubEvent(Base):
         import session_worktree
         out, err = self.io.StringIO(), self.io.StringIO()
         with mock.patch.object(session_worktree, "make", make or (lambda cwd, name, rt: (self.ws / "wt" / name, []))), \
-                mock.patch.object(session_worktree, "drop", lambda cwd, path: None), \
+                mock.patch.object(session_worktree, "drop", lambda cwd, path, rt: None), \
                 self.cl.redirect_stdout(out), self.cl.redirect_stderr(err):
             rc = self.he.main(["--runtime", "claude", what] if what else [])
         return rc, out.getvalue(), err.getvalue()
