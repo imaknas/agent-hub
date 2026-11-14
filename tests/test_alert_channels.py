@@ -43,7 +43,8 @@ class Channels(unittest.TestCase):
     def test_no_channel_set_up(self):
         """nothing was there to send on: not a failed send (the status page shows a setup reminder instead)"""
         (self.tmp / "FAILED.json").write_text(json.dumps({"old": {"at": "2026-10-01T00:00:00", "text": "x"}}))
-        with mock.patch.dict(self.m.CHANNELS, {"ntfy": (lambda text: False, lambda: False)}, clear=True):
+        with mock.patch.dict(self.m.CHANNELS, {"ntfy": (lambda text: False, lambda: False)}, clear=True), \
+                mock.patch.dict(self.m.KEYED, {}, clear=True):   # this machine's own assistant channel is not this test's
             self.m.once("k", ["broken"], "fine again")
             self.assertNotIn("k", self.failed())
             self.assertEqual(self.m.failures(), {}, "records from channels that are gone do not count")
@@ -390,6 +391,25 @@ class Adapters(unittest.TestCase):
         p = mock.patch.object(self.m.subprocess, "run", run)
         p.start()
         self.addCleanup(p.stop)
+
+
+class HeldUnderTest(unittest.TestCase):
+    """A test that reaches an alert on the live instance's state (no SENT/FAILED of its own) sends and records nothing:
+    two memory-sync tests sent a project called proj to the owner's Discord from a worktree (11-14)."""
+
+    def test_nothing_goes_out(self):
+        import contextlib
+        import io
+        m = load()
+        sent = []
+        with mock.patch.dict(m.CHANNELS, {"ntfy": (lambda text: sent.append(text) or True, lambda: True)}, clear=True), \
+                mock.patch.object(m, "_save", lambda path, data: sent.append(path)), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            m.once("k", ["a problem"], "fine")
+            self.assertFalse(m.send("free text"))
+            m.record_failure("k", "x")
+        self.assertEqual(sent, [])
+        self.assertIn("held", err.getvalue())
 
 
 if __name__ == "__main__":

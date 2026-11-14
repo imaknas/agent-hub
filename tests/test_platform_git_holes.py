@@ -504,7 +504,8 @@ class MemoryBranchPaths(Base):
         def job(project, cwd, op, *args, out=None, **kw):
             out.write(bundle.read_bytes())
             return project_git.Result(0, b"", "")
-        with mock.patch.object(project_git, "job", job), mock.patch.object(hubconf, "private_tmp", lambda: self.tmp):
+        with mock.patch.object(project_git, "job", job), mock.patch.object(hubconf, "private_tmp", lambda: self.tmp), \
+                mock.patch.object(project_git, "refusal_alert", lambda name, why: None):
             why = project_git.sync_memory("proj", self.docs["proj"], self.tmp / "ws" / "proj" / ".agent-memory")
         self.assertIn("proj: refused", why)
         self.assertEqual(self.bare_tip(), self.tip)
@@ -520,7 +521,8 @@ class MemoryBranchPaths(Base):
 
         def sandboxed(project, cwd, argv, port=None):
             return [seatbelt.SANDBOX_EXEC, "-p", seatbelt.service_profile(pol, [r]), *argv]
-        with mock.patch.object(isolation, "wrap", sandboxed):
+        with mock.patch.object(isolation, "wrap", sandboxed), \
+                mock.patch.object(project_git, "refusal_alert", lambda name, why: None):
             why = project_git.sync_memory("proj", self.docs["proj"], mem)
         self.assertIn(".claude/settings.json", why or "")
         self.assertEqual(self.bare_tip(), self.tip)

@@ -33,6 +33,7 @@ from __future__ import annotations
 import datetime
 import json
 import subprocess
+import sys
 import urllib.parse
 
 import hubconf
@@ -45,6 +46,18 @@ SENT = hubconf.STATE / "alerts-sent.json"      # key -> {"problems": [...], "ids
 FAILED = hubconf.STATE / "alerts-failed.json"  # key -> {"at": …, "text": first line of the one not sent}
 REMIND = datetime.timedelta(hours=24)
 API = "https://discord.com/api/v10"
+_LIVE = (SENT, FAILED)
+
+
+def _held() -> bool:
+    """A test that reaches an alert without its own state files would tell the owner for real, from the live instance a
+    worktree shares (11-14: two memory-sync tests sent a project called proj to Discord): nothing is sent or recorded.
+    With no channel set up (the gate's fresh instance) there is no one to reach, and nothing changes."""
+    if "unittest" in sys.modules and (SENT, FAILED) == _LIVE and configured():
+        print("alert: held, a test on the live instance's alert state (patch alert.SENT/FAILED or alert.once)",
+              file=sys.stderr)
+        return True
+    return False
 
 
 def _creds() -> tuple[str, str] | None:
@@ -149,6 +162,8 @@ def send(text: str, notice: dict | None = None) -> bool:
     """Send on every channel set up; success only when all of them went out (one failing is recorded as a failure, and
     the status page turns red). None set up = False. notice: for the channels that need a key; without one they are
     skipped."""
+    if _held():
+        return False
     results = []
     for n in configured():   # every channel is tried: a broken one must not silence the rest
         if n in KEYED:
@@ -183,7 +198,7 @@ def _save(path, data: dict) -> None:
 
 
 def record_failure(key: str, text: str, notice: dict | None = None) -> None:
-    if not configured():   # no channel: not a failed send (the setup reminder covers it)
+    if _held() or not configured():   # no channel: not a failed send (the setup reminder covers it)
         return
     failed = _load(FAILED)
     failed[key] = {"at": datetime.datetime.now().isoformat(timespec="seconds"), "text": text.splitlines()[0][:200],
@@ -206,6 +221,8 @@ def failures() -> dict:
 def once(key: str, problems: list[str], ok_text: str, ids: list[str] | None = None) -> None:
     if ids is not None and len(ids) != len(problems):
         raise ValueError(f"alert.once({key!r}): {len(ids)} ids for {len(problems)} problems")
+    if _held():
+        return
     now = datetime.datetime.now()
     sent = _load(SENT)
     last = sent.get(key)
