@@ -1,6 +1,7 @@
 # The git config fence: nothing in a sandboxed project writes what makes git run code
 
-Status: plan, 11-14, not built. Measured the same day in scratch repos (git 2.50.1, macOS on a case-insensitive APFS
+Status: plan, 11-14; r2 after a blind review (below, it holds where the text above disagrees). Built: r2 B3
+(the commit gate's tiers in the project's sandbox) and cap-runner's FIFO fix (S5); the rest not built. Measured the same day in scratch repos (git 2.50.1, macOS on a case-insensitive APFS
 volume), with the platform's real Seatbelt profile (`seatbelt.service_profile`) standing in for a sandboxed writer and a
 candidate fence appended to it. No model calls; Claude's and Codex's own sandboxes were not run (their part is the
 conformance canary, below). This is D9 of `runtime-codex.md` as the owner redefined it on 11-14.
@@ -408,26 +409,24 @@ canary passed.
 
 ## Open questions for the owner
 
-1. **Scratch repos and git dependencies.** The anywhere rule means no `git init` or `git clone` inside the sandbox:
-   test suites that build scratch repos and `git+` dependencies fail (measured for pip; uv works through its exception).
-   Options: (a) accept it, with archive URLs and `git --git-dir=<x>.git --work-tree=<y>` for tests, and the runner for
-   real clones (recommended: no window); (b) a scratch folder where `.git` may be made, its folders pinned so nothing
-   leaves it, cleaned by the platform (tests can't remove their own temp folders there); (c) scratch on a separate
-   volume, so a move into the workspace becomes a copy the fence refuses (heavy; unmeasured).
-2. **`safe.bareRepository=explicit` in your global git config.** It is the only measured stop for a git-dir-shaped
-   folder planted under another name. It is your user-level setting, so the platform asks; the platform's own use of
-   bare repos by `-C` would move to `--git-dir` first.
-3. **Your global git drivers.** A tracked `.gitattributes` selects any driver your global config defines (measured).
-   If you use git-lfs, its clean and smudge run on the project's
-   files and it reads the project's `.lfsconfig` (unmeasured). Should a defined driver block "confined", or be listed and
-   accepted?
-4. **Neutralising**: automatic (backed up in the platform's state, then a notice), or report and wait for you?
-5. **Hook frameworks you set up yourself** (`core.hooksPath` into a tracked folder, pre-commit, husky): they run the
-   project's tracked content as you on every commit. Remove them in sandboxed projects, or keep them as your choice with
-   a doctor warning?
-6. **Submodules** in sandboxed projects: through the runner, or not supported? With `modules` fenced as a whole tree,
-   work *inside* an existing submodule (a commit, a fetch, its index) also fails in the sandbox (follows from the rule;
-   not measured). The alternative is fencing the same names inside each `modules/**` git dir instead of the whole tree.
+Rewritten in r2 with the blind review's recommendation for each; the owner decides.
+
+1. **Scratch repos and git dependencies.** Recommended: (b), limited to the test runner's per-run TMPDIR (r2 S3).
+   Only there may a `.git` be made; the runner removes the run folder afterwards. What it costs: a repo made there can
+   be moved into the workspace before that (pinning its folders would stop the tests' own clean-up, measured: a
+   rename's source and `rmdir` are one operation), so for these the fence is detection by the scan, not prevention.
+   Elsewhere the anywhere rule stays: `git+` dependencies use archive URLs. The other options were (a) none at all and
+   (c) a separate volume.
+2. **`safe.bareRepository=explicit` in your global git config.** Recommended: yes, as a precondition of "fence holds"
+   (r2 S1); the platform asks, since it is your user-level setting, after moving its own uses of bare repos to
+   `--git-dir`.
+3. **Your global git drivers.** Recommended: listed and accepted (they are your programs); `.lfsconfig` is measured
+   once git-lfs is available on a machine.
+4. **Neutralising.** Settled by r2 S2: automatic only at the one-time install; afterwards reported, never stripped.
+5. **Hook frameworks you set up yourself.** Your choice, but "fence holds" is false while `core.hooksPath` points into a
+   project-writable folder.
+6. **Submodules.** Recommended: fence the git-dir names inside each `modules/**` (not the whole tree, so work inside an
+   existing submodule goes on); the runner never fetches; no new submodules at first.
 
 ## Risks: what this still doesn't cover
 
@@ -435,9 +434,8 @@ canary passed.
 - **Git-dir-shaped folders** under other names, until question 2 is answered; the scan reports them.
 - **Rebase and sequencer state**: a planted `exec` line runs if the owner continues an operation a session left
   (measured); it can't be fenced, since sessions rebase. The scan reports it.
-- **The platform's own commit gate**: `brunna test` "runs as whoever runs it" (`bin/test-runner.py`), so the owner's
-  commit in a sandboxed project with `commit_gate` runs the project's tests as the owner. Out of this design's scope;
-  to be checked separately.
+- **The platform's own commit gate**: closed by r2 B3 (built 11-14): a sandboxed project's tiers run in its sandbox
+  whoever commits.
 - **Other tools' project files**: editor settings and tasks (`.vscode/`, `.idea/`) and other agents' control files are
   the same class as `.codex` and `.claude`; this fence is git's part only.
 - **Git's parser** on crafted objects, packs or an index the project wrote: git's own robustness.
@@ -448,3 +446,104 @@ canary passed.
 - **The runner runs git as the owner** in the project's repo, in the narrow measured forms, behind the scan and a timeout.
 - **Writers outside the sandbox that run project code**: anything the owner runs in the folder (a build, a test run) is
   outside this design, as it always was.
+
+## r2 (11-14), after the blind review
+
+A cold review of the plan above found four blocking points (B1–B4; B3 a hole already open in the platform), seven
+should-fix items (S1–S7) and nits. Where r2 and the text above disagree, r2 holds.
+
+**B1, an index the project writes.** An index the project writes can carry entries that git's checkout of the index
+writes into the git dir; details kept out of this public doc pending the owner's decision on reporting them to git's
+security list. Folded in:
+- The scan parses a copy of every index of the repo (the main one, each `worktrees/<n>/index`, `modules/**/index`):
+  versions 2 to 4, split index (`sharedindex.*`) and sparse entries. Any entry whose path has a `.git` component,
+  matched the way git's own path check does (case-insensitively, ignoring the characters HFS+ ignores, and the
+  8.3 short name `git~1`), is a "not holding" finding.
+- It is removed by a job run as the project (`project_git`: the index rewritten without those entries), never by the
+  platform writing the project's index as the owner.
+- This is **detection with a window, not prevention**: the index is the project's to write (every commit writes it),
+  so between a write and the next scan the owner's restore or checkout of the index can still be reached. The scan runs
+  every 15 minutes and before every runner op; the status row says so.
+
+**B2, links at names git writes.** `logs/HEAD`, `FETCH_HEAD`, `COMMIT_EDITMSG` and the like, replaced by a symlink to
+any file, make the owner's git write that file (the name is writable by design, so the deny list doesn't cover it).
+Folded in:
+- A Seatbelt rule: no symlink is created anywhere under a `.git/` folder (`file-write-create` with `vnode-type SYMLINK`),
+  except under `.git/brunna/` (the platform's folder: uv's cache makes links).
+- `logs`, `refs` and `objects` are pinned as entries too (added to the fenced names), so a folder holding links can't be
+  swapped in for them.
+- The scan walks every entry of every git dir and reports any symlink and any file with `nlink > 1`.
+- A per-runtime canary: a symlink created at `.git/FETCH_HEAD` and `.git/logs/HEAD`, expected refused. A runtime whose
+  rules can't express "no symlinks under `.git`" can't hold the fence, and its sessions keep the project unfenced.
+- Residual: a folder holding a link, made elsewhere and moved in deeper than the pinned entries (into a folder git writes
+  in, below `logs/refs/heads/`, say). The scan finds it; nothing prevents it.
+
+**B3, the commit gate ran the project's commands as the owner. Built 11-14.** `commit_gate` and `tests` aren't owner-only
+registry fields, so a sandboxed project could set them by manifest.update, and the platform's pre-commit hook then ran
+`brunna test --index`, whose tiers are `/bin/sh -c <run>`, as whoever committed: the owner's next commit from a terminal
+or editor ran the project's commands as the owner. As built:
+- `bin/test-runner.py` asks `isolation.run_as_project` right after it finds the project: for a sandboxed project, unless
+  the process already runs inside an OS sandbox (`isolation.confined_now`: Seatbelt's `sandbox_check` on itself; on
+  Linux, `no_new_privs` plus a seccomp filter, both of which sandboxed-run sets), it re-execs itself through
+  `sandboxed-run` as the project. Everything after (the export, which runs git on the repo, `cmd:` inputs, `uv sync` /
+  `npm ci`, the tiers) then runs in the project's sandbox. The commit gate, `merge-branch` and a person running
+  `brunna test` all go through it.
+- Where this machine can't sandbox, it refuses and runs nothing ("… can't be done here (why); nothing was run", exit 2,
+  so the commit stops). The mark the wrapped run carries only stops a loop: outside a sandbox it is a refusal, never a
+  reason to skip the wrap.
+- The hook installer takes nothing from the project: the hooks' texts are the platform's fixed text chosen by exact
+  field values, and they exec only the platform's own scripts (tested with hostile values in every field a project
+  sets).
+- Tests: a sandboxed project's tier can't read the platform's state whether `brunna test` or an owner's `git commit`
+  through the hook starts it (the same tier of an unsandboxed project can, the positive control); a forged mark is
+  refused; `run_as_project`'s cases; Seatbelt's `confined_now` inside and outside a profile.
+- A project in `service_sandbox_exempt` still runs its tiers as the user: the owner's exemption, as for its jobs.
+- "Fence holds" gains: no platform hook runs project code unsandboxed (the commit gate as built; any later hook the
+  same way).
+
+**B4, the URL rule.** The runner's remote and submodule URLs come only from an owner-set registry field (the origin and
+declared remotes, owner-only like `paths`), never from the request. The runner never fetches, and submodule update is
+not one of its ops.
+
+**S1, a git-dir-shaped folder in the temp area.** The owner's git run anywhere below such a folder finds it. Folded in:
+- A Seatbelt rule on the entry name `HEAD` (non-directories only) outside git dirs, with exceptions only at the exact
+  positions git uses: `/.git/HEAD`, `/.git/worktrees/<n>/HEAD`, `/.git/modules/**/HEAD` (and the per-run TMPDIR of S3).
+- The scan extends to the temp roots (git-dir-shaped folders there are reported too).
+- `safe.bareRepository=explicit` in the owner's global git config becomes a precondition of "fence holds" (question 2).
+
+**S2, neutralising.** Automatic only at the one-time install. After that the scan reports and never strips; it never
+strips `extensions.*` or the repository-format keys whatever happens (a repo with them removed can be misread). The
+allowlist gains the inert `extensions.refstorage`, `maintenance.*` and `extensions.worktreeconfig`.
+
+**S3, scratch repos.** Question 1, recommended (b) limited to the test runner's per-run TMPDIR: the fence's `.git` and
+`HEAD` rules get one exception, below `<run folder>/tmp/` of a test run, which the runner removes afterwards. A repo
+made there can be moved into the workspace before that (a rename's source can't be pinned without stopping the tests'
+own `rmdir`, measured), so for it the scan is the control.
+
+**S4.** The runner's and the scan's copies of project files go in `hubconf.private_tmp()`, never the system's temp
+folder (every sandboxed project writes that).
+
+**S5, reading project-writable files.** The scan opens every file with `O_NONBLOCK` and `O_NOFOLLOW`, checks with
+`fstat` that it is a regular file, reads at most a size cap, and runs under a timeout. Found while checking: cap-runner
+read a request file, which the project can swap in its own folder between the check and the read, with a blocking open:
+a FIFO there would have held the shared service. **Built 11-14** as its own fix: the read opens without blocking and
+reads only a regular file (tested with a FIFO).
+
+**S6, `worktree add`.** The runner chooses the location; the request names only a worktree name. The runner walks the
+path component by component without following links (directory descriptors) and requires that the target doesn't exist.
+
+**S7, a way back.** Un-flipping a project's switch removes the fence from every writer's rendering and moves brunna's
+ops back to jobs of the project; `brunna git-fence restore <project> [--at <time>]` puts back what the install or a
+neutralising changed, from `.state/git-fence/<project>/`, and reports what it restored.
+
+**Nits, each taken:**
+- The runner installs a config through git's own `config.lock`, created exclusively (`O_EXCL|O_NOFOLLOW`) in `.git`,
+  then renamed over `config`: the lock git itself honours, so a concurrent git of the owner's waits or fails.
+- The neutraliser never follows a link at any level (directory descriptors all the way down).
+- The fence is a guarantee in each adapter's `guarantees()` (`git-config-fenced`), so `isolation` and doctor say which
+  machine's adapter holds it; Landlock doesn't declare it.
+- The cap-runner `git` kind serves every fenced project, not only those declaring capabilities.
+
+**Order, revised:** ship now B3 (done) and the report-only scan, extended with index entries (B1), links and
+`nlink > 1` anywhere in git dirs (B2), git-dir-shaped folders in the temp roots (S1) and the commit gate's status
+(B3). The rest as planned above.
