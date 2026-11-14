@@ -417,6 +417,21 @@ def waiting_html() -> str:
             f"{_('Details: bin/test-waiting-report.py (docs/design/test-waiting.md B7)')}</div>")
 
 
+def store_alerts() -> list[tuple[str, str]]:
+    """The coding agents' checked copies (docs/design/runtime-versions.md section 3): with none, no platform run starts.
+    Only for the runtimes the platform runs work on: one only installed for sessions keeps no copy (runtime-codex.md,
+    Step 1 r2, D11)."""
+    out = []
+    try:
+        import runtime_ports
+        for rname in dict.fromkeys(n for n in runtime_ports.platform_work() if n != "none"):
+            if (why := runtime_ports.no_checked_copy(rname)):
+                out.append(("bad", _("The platform starts no {runtime} run: {reason}", runtime=rname, reason=why)))
+    except Exception as e:  # the status page must not crash because of this
+        out.append(("bad", _("Cannot tell whether the coding agent has a checked copy: {e}", e=e)))
+    return out
+
+
 def main() -> None:
     import hubconf  # imported further down too: put first so the whole function sees it
     now = datetime.datetime.now()
@@ -466,16 +481,7 @@ def main() -> None:
         alerts.append(("bad", _("The scheduler watchdog has no alert channel it can send on (Discord, ntfy, email or macOS "
                                 "notifications in {settings} alerts): it cannot alert when the scheduler stops")))
 
-    # the coding agent's checked copy (docs/design/runtime-versions.md section 3): with none, no platform run starts
-    try:
-        import runtime_ports
-        # only the runtimes the platform runs work on: one only installed for sessions keeps no copy (runtime-codex.md,
-        # Step 1 r2, D11)
-        for rname in dict.fromkeys(n for n in runtime_ports.platform_work() if n != "none"):
-            if (why := runtime_ports.no_checked_copy(rname)):
-                alerts.append(("bad", _("The platform starts no {runtime} run: {reason}", runtime=rname, reason=why)))
-    except Exception as e:  # the status page must not crash because of this
-        alerts.append(("bad", _("Cannot tell whether the coding agent has a checked copy: {e}", e=e)))
+    alerts += store_alerts()
 
     # no alert channel at all: one setup reminder, not red (a feature that is off does not turn the page red)
     if not hubconf.get("alerts"):

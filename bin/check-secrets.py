@@ -134,7 +134,12 @@ def main(argv: list[str]) -> int:
     projects = index["projects"]
     # Enabled modules' secrets are the platform's (e.g. the claude module's headless token); disabled modules are not
     # checked -- someone who does not use Claude is not asked for a Claude token
-    modules = {n: d for n, d in (index.get("modules") or {}).items() if d.get("secrets")}
+    # a module named for a coding agent the platform runs no work on (only installed for the user's sessions) is about
+    # that agent's platform runs: its secrets aren't checked either (runtime-codex.md, Step 1 r2, D11; review 2, 1)
+    import runtime_ports
+    work = runtime_ports.platform_work()
+    modules = {n: d for n, d in (index.get("modules") or {}).items() if d.get("secrets")
+               and not (n in runtime_ports.RUNTIMES and n not in work)}
     module_paths = {p.resolve() for d in modules.values() for s in d["secrets"] if (p := locate(d["name"], d, s["path"]))}
     problems, count = [], 0
     hub = hubconf.hub_project()

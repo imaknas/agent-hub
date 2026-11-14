@@ -37,13 +37,9 @@ runtime_preset:
 jobs:
 # does the login the platform's Codex runs share still work (no model call): the login file, the file store, `codex
 # login status` through a run home on the checked copy. Nothing is checked, and nothing alerts, while the platform runs no
-# work on Codex (runtime_ports.platform_work)
+# work on Codex (runtime_ports.platform_work). The login file isn't declared under secrets: check-secrets would check it
+# for a Codex only installed for sessions, at a fixed ~/.codex whatever $CODEX_HOME says; this job reads it where Codex
+# keeps it (runtime_codex.codex_home), and only when the platform uses it
 - name: codex-login
   every: 1h
   run: bin/py bin/check-runtime-login.py --runtime codex
-secrets:
-- name: codex-login
-  path: ~/.codex/auth.json
-  backup: false
-  why: "Codex's login (codex login); the platform's Codex runs link to it, never copy it (runtime-codex.md, M9). Lost: log in again"
-  rotate: "run codex login in a terminal"

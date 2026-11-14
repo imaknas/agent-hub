@@ -5,5 +5,6 @@
  "{runtime}: its login works": "{runtime}:登入正常",
  "{runtime}: its login works again": "{runtime}:登入恢復正常",
  "{runtime}: the platform runs no work on it; its login isn't checked": "{runtime}:平台沒有在它上面跑任何工作,不檢查它的登入",
- "{runtime}: {problem}": "{runtime}:{problem}"
+ "{runtime}: {problem}": "{runtime}:{problem}",
+ "{runtime}: its login isn't checked any more": "{runtime}:不再檢查它的登入"
 }

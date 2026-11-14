@@ -2,7 +2,6 @@
  "usage: session_versions.py [--runtime <name>]": "用法:session_versions.py [--runtime <name>]",
  "{runtime} {version}: session-side checks {verdict}": "{runtime} {version}:session 端檢查 {verdict}",
  "{head}: pending (checked by brunna/session-versions)": "{head}:待檢查(由 brunna/session-versions 檢查)",
- "{runtime} {version}: no failed check now": "{runtime} {version}:現在沒有沒通過的檢查",
  "{runtime}: {event} hooks the platform couldn't read ({reason}) from {versions}": "{runtime}:平台讀不懂 {versions} 送來的 {event} hook({reason})",
  "{head}: passed its session-side checks": "{head}:通過 session 端檢查",
  "{head}: failed {checks}": "{head}:沒通過 {checks}",
@@ -27,5 +26,6 @@
  "the copy of {version} says it is {got}": "{version} 的副本說自己是 {got}",
  "update the tool and open new sessions; if a check was wrong: brunna runtimes recheck {runtime} {version}": "更新工具並開新的 session;如果是檢查判錯:brunna runtimes recheck {runtime} {version}",
  "{runtime}: no failed session check now": "{runtime}:現在沒有沒通過的 session 檢查",
- "{runtime} {versions}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to their sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions; if the check was wrong, `brunna runtimes recheck {runtime} <version>` runs it again": "你的 session 在跑的 {runtime} {versions} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這些版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session;如果是檢查判錯,`brunna runtimes recheck {runtime} <版本>` 會重跑"
+ "{runtime} {versions}, which your sessions run, failed the platform's {check} check: {reason}. The platform delivers no letters to their sessions in sandboxed projects and wakes them for none; in other projects nothing is held back. Update the tool and open new sessions; if the check was wrong, `brunna runtimes recheck {runtime} <version>` runs it again": "你的 session 在跑的 {runtime} {versions} 沒通過平台的 {check} 檢查:{reason}。平台不會把信送進沙箱專案裡這些版本的 session,也不會喚醒它們;其他專案不受影響。請更新工具並開新的 session;如果是檢查判錯,`brunna runtimes recheck {runtime} <版本>` 會重跑",
+ "{runtime} {version}: from now on said in one alert per failed check, not per version": "{runtime} {version}:之後改成每項沒通過的檢查一則警示,不再每個版本一則"
 }

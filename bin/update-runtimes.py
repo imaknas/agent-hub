@@ -3,11 +3,14 @@
 update-claude.py). Nightly, platform job brunna/update-runtimes.
 
   update-runtimes.py [--first] [--runtime <name>]
-    For each runtime in use with a distribution port (runtime.default, runtime.installed, llm.points pins, providers
-    whose impl is a runtime):
+    For each runtime the platform runs work on with a distribution port (runtime.default, llm.points pins, providers
+    whose impl is a runtime: runtime_ports.platform_work; never runtime.installed alone, a runtime the user only opens
+    sessions with, whose alerts here end):
     - no checked copy (`current`) in the store: the first install (the newest version, checked, promoted);
     - a newer version published: installed beside `current`, every conformance check run, promoted when the result's
-      verdict is pass (a not-checkable check doesn't block it, an error holds it back) and it is at least MIN_VERSION;
+      verdict for promotion is pass (a not-checkable check doesn't block it, an error holds it back, a fail of a check
+      that holds the user's sessions only doesn't), every check that needs the user's login ran, and it is at least
+      MIN_VERSION;
       otherwise held back: `current` stays, an alert per check and reason (the next version failing the same way doesn't
       alert again), once more after 7 days held back;
     - no new version: the daily checks on `current` (the server side moves without a new version, section 4);
@@ -238,6 +241,11 @@ def main(argv: list[str]) -> int:
         for key in ("claude-version", "claude-restricted", "claude-git-filter"):
             alert.once(key, [], _("{what}: now checked by brunna/update-runtimes", what=key))
     ok, used = True, in_use()
+    for runtime in runtime_ports.RUNTIMES:   # one the platform no longer runs work on: what it alerted ends (review 2, 3)
+        if runtime not in used and "distribution" in runtime_ports.capabilities(runtime) and (not only or runtime == only):
+            for what in ("held", "daily", "install", "checks", "latest", "job", "user-copy"):
+                alert.once(f"runtime-{what}-{runtime}", [], _("{runtime}: back to normal ({what})", runtime=runtime,
+                                                               what=what))
     if only and only not in used:
         print(_("{runtime}: not a runtime the platform uses with a distribution port", runtime=only), file=sys.stderr)
         return 1

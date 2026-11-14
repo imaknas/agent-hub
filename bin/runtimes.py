@@ -52,13 +52,16 @@ def in_use() -> list[str]:
 def show_runtime(name: str) -> list[str]:
     if "distribution" not in runtime_ports.capabilities(name):
         return [_("{runtime}: unversioned (no way to install or check a fixed version)", runtime=name)]
+    if name not in runtime_ports.platform_work():   # only installed for sessions: no copy of the platform's (D11)
+        return [_("{runtime}: serves your sessions only; the platform keeps no copy of it and starts none of its runs",
+                  runtime=name)]
     mod = runtime_ports._module(name)
     try:
         exe = mod.binary() if callable(getattr(mod, "binary", None)) else None
     except runtime_ports.Unsupported as e:   # no checked copy: what platform runs start is nothing, said
         return [_("{runtime}: platform runs start nothing: {reason}", runtime=name, reason=e)]
     found = shutil.which(exe) if exe else None
-    now = mod.version_of(found) if found else None
+    now = _version(name, mod, found) if found else None
     lines = [_("{runtime}: platform runs start {binary} ({version})", runtime=name, binary=found or exe or "-",
                version=now or _("version not readable"))]
     done = conformance.recorded(name)
@@ -74,6 +77,21 @@ def show_runtime(name: str) -> list[str]:
         if (n := conformance.unrun_safety(doc)):
             lines.append(_("    {n} safety {n:check|checks} not run yet", n=n))
     return lines
+
+
+def _version(name: str, mod, exe: str) -> str | None:
+    """The version of the copy platform runs start: what the store recorded for it at promotion, read as a file; else
+    asked of the binary in a throwaway home, never the user's (a tool's --version writes into its home)."""
+    import os
+    import tempfile
+    import hubconf
+    import runtime_store
+    cur = runtime_store.current(name)
+    if cur is not None and os.path.realpath(exe) == os.path.realpath(cur.exe):
+        return cur.version
+    with tempfile.TemporaryDirectory(dir=hubconf.private_tmp()) as home:
+        # HOME alone: each tool's own folder defaults under it, so nothing of the user's is reached
+        return mod.version_of(exe, env={"HOME": home, "PATH": hubconf.LAUNCHD_PATH, "LANG": os.environ.get("LANG", "C")})
 
 
 def show_session_versions(name: str) -> list[str]:

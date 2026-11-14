@@ -21,5 +21,6 @@
  "usage: brunna runtimes [check <runtime> [--binary <exe>] [--pair <exe>] [--only <check>]... [--report] | install <runtime> | rollback <runtime> | recheck <runtime> <version>]": "用法:brunna runtimes [check <runtime> [--binary <執行檔>] [--pair <執行檔>] [--only <檢查>]... [--report] | install <runtime> | rollback <runtime> | recheck <runtime> <版本>]",
  "{runtime} {version}: its session-side checks run again at the next brunna/session-versions (within 15 minutes); until then its result stays": "{runtime} {version}:下一次 brunna/session-versions(15 分鐘內)會重跑它的 session 端檢查;在那之前結果維持不變",
  "runtimes: {root} is a linked worktree of the hub; the results are changed only from the main checkout ({main})": "runtimes:{root} 是 hub 的連結 worktree;檢查結果只從主 checkout({main})改",
- "{runtime} {version}: no session-side result to check again (a version seen in your sessions is checked by brunna/session-versions on its own)": "{runtime} {version}:沒有 session 端的結果可以重跑(你的 session 跑過的版本,brunna/session-versions 會自己檢查)"
+ "{runtime} {version}: no session-side result to check again (a version seen in your sessions is checked by brunna/session-versions on its own)": "{runtime} {version}:沒有 session 端的結果可以重跑(你的 session 跑過的版本,brunna/session-versions 會自己檢查)",
+ "{runtime}: serves your sessions only; the platform keeps no copy of it and starts none of its runs": "{runtime}:只服務你的 session;平台不保管它的副本,也不在它上面跑任何工作"
 }

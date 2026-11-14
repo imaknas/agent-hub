@@ -338,7 +338,8 @@ def alert_failed(runtime: str, st: dict) -> None:
     if not st.get("rekeyed"):
         for version in st.get("alerted") or []:
             alert.once(f"session-version-{runtime}-{version}", [],
-                       _("{runtime} {version}: no failed check now", runtime=runtime, version=version))
+                       _("{runtime} {version}: from now on said in one alert per failed check, not per version",
+                         runtime=runtime, version=version))
     st["alerted"] = sorted({v for vs in by.values() for v in vs})
     st["rekeyed"] = True
     lines, ids = [], []
@@ -482,6 +483,10 @@ def main(argv: list[str]) -> int:
         return 1
     only = argv[argv.index("--runtime") + 1] if "--runtime" in argv else None
     ok = True
+    import alert
+    for name in runtime_ports.installed():   # a runtime it no longer checks: what it alerted ends (review 2, 3)
+        if name not in runtimes() and "distribution" in runtime_ports.capabilities(name) and (not only or name == only):
+            alert.once(f"session-versions-{name}", [], _("{runtime}: no failed session check now", runtime=name))
     for runtime in runtimes():
         if only and runtime != only:
             continue

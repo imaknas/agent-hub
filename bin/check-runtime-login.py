@@ -38,14 +38,16 @@ def main(argv: list[str]) -> int:
     if name not in runtime_ports.RUNTIMES:
         print(usage(), file=sys.stderr)
         return 2
+    import alert
     if name not in runtime_ports.platform_work():
+        # what it alerted while the platform used it ends; nothing else is said or sent
+        alert.once(f"runtime-login-{name}", [], _("{runtime}: its login isn't checked any more", runtime=name))
         print(_("{runtime}: the platform runs no work on it; its login isn't checked", runtime=name))
         return 0
     check = getattr(runtime_ports._module(name), "login_check", None)
     if not callable(check):
         print(_("{runtime}: it has no login check", runtime=name))
         return 0
-    import alert
     try:
         problems = [(str(i), str(p)) for i, p in check()]
     except Exception as e:   # a check that breaks is said by its kind, never a traceback
