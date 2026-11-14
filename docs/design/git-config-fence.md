@@ -11,7 +11,8 @@ conformance canary, below). This is D9 of `runtime-codex.md` as the owner redefi
 **Superseded in part (11-14):** the owner chose git through the platform (`git-broker.md`): a sandboxed project writes
 no git dir at all, and a platform broker runs its git. That design replaces this one's per-name fence, its narrow
 `brunna git` runner and its one-time install; this doc's scan, config allowlist, URL rule and presets stay, as that
-doc's table says.
+doc's table says. Question 2 below is answered: the owner set `safe.bareRepository=explicit` on 11-14, and that doc's
+r2 makes it a checked precondition.
 
 ## The problem and the owner's decision
 

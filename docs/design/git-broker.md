@@ -1,6 +1,8 @@
 # Git through the platform: a sandboxed project never writes a git dir
 
-Status: design, 11-14, on measurements made the same day; nothing built. It takes over the prevention half of
+Status: design, 11-14, on measurements made the same day; r2 after a blind review the same day (at the end; it holds
+where the text above disagrees: chiefly, no process writes both the worktree and the git dir, and
+`safe.bareRepository=explicit` is a precondition again); nothing built. It takes over the prevention half of
 `git-config-fence.md` (the per-name fence, the narrow `brunna git` runner and the one-time install). That doc's scan stays
 as a second layer, and so do its config allowlist and its presets. Measured in scratch repos (git 2.50.1, macOS on a
 case-insensitive APFS volume). A sandboxed writer was stood in for by the platform's real Seatbelt profile
@@ -715,3 +717,291 @@ A blind review of this design before step 1, and of the code before `merge-branc
 - **The rebuild** touches every switched-on project's git dir once. It is reversible from the kept copy, and unmeasured.
 - **The nonce file** is one more write the project makes per call into its own `.hub-run/git/`. It is removed by the
   broker, and a project that floods it only slows itself.
+
+## r2 (11-14), after the blind review
+
+A cold review found two blocking points (B1, B2), both reproduced end to end, eight should-fix items (S1–S8), nits
+and a rework of the owner questions. Each fix was measured in scratch the same way as above: git 2.50.1, the platform's
+real `service_profile` plus the candidate rules, the reviewer's probes re-run against the changed prototype. Where r2
+and the text above disagree, r2 holds.
+
+### B1: a symlink swap during a broker checkout. Fixed by splitting every operation into two processes.
+
+**The finding.** The project loops, replacing a real folder `d` with a link `ln -s .git d`. Meanwhile the writer
+profile runs `checkout -f` of a tree holding `d/…`, including `d/rebase-merge/` with an `exec` line in its todo.
+- Git caches its leading-path check, so some of the tree's files land inside `.git/`.
+- The writer profile allows them there: one process may write both the worktree and the git dir, and Seatbelt checks
+  the resolved path.
+
+Re-run here, the first round put 2,931 of the tree's files and a `rebase-merge/` into `.git`. The owner's `git status`
+then reported a rebase in progress. The reviewer's run went on to the owner's `rebase --continue` running the canary;
+here the follow-up probe stopped earlier, at "merge conflicts". Every operation that writes the worktree can plant
+this way.
+
+**The fix: no single process writes both the worktree and the git dir.**
+- **P1, the git-dir writer.**
+  - It may write the request's git dir (minus the names git runs or reads elsewhere, as before) and nothing else: no
+    worktree, no temp area, only `/dev/null` and the terminal devices.
+  - The exec guard applies.
+  - A symlink in the worktree gives it nothing, since it writes no path through the worktree.
+- **P2, the materialiser.** It is the project's own fenced profile: the profile its sessions and services already
+  have. It writes the worktree from a **temporary copy of the index** outside every git dir:
+  - `read-tree -m -u <old> <new>`, or `read-tree -u --reset <new>`, with `GIT_INDEX_FILE` set to the copy;
+  - `checkout-index` for single paths.
+
+  A swapped link reaches no git dir, since the fence refuses that write.
+- **The order:**
+  1. P1 computes the next index beside the real one (`.git/index.broker`, while the worktree is still the old one;
+     `read-tree -m` checks the worktree is up to date, so it can't run after P2).
+  2. P2 materialises.
+  3. **P2 checks its own work:** `diff-files --quiet` against the temp index, which is S8, below.
+  4. Only then does the broker rename the next index into place and move the refs, and P1 refreshes the index's stat
+     information.
+  5. If P2 failed or the check failed, the next index is dropped and no ref moves. The call fails.
+- **Operations that don't write the worktree run whole under P1**, with the worktree read-only: `commit` (`-a` too),
+  `add`, `rm --cached`, `branch`, `tag`, `notes`, `update-ref`, `stash create` / `store` / `drop`, `fetch`, and the
+  reads.
+- **Operations that write the worktree are composed from plumbing:**
+
+  | operation | P1 (git dir only) | P2 (worktree only) |
+  |---|---|---|
+  | `switch` / `checkout <branch>` | next index (`read-tree -m`), then `symbolic-ref HEAD` | `read-tree -m -u` on the temp index |
+  | `reset --hard <rev>` | next index (`read-tree --reset`), `update-ref HEAD` | `read-tree -u --reset` |
+  | `restore <path>` | refresh | `checkout-index -f -- <path>` |
+  | `merge` | `merge-tree --write-tree` → `commit-tree` → next index → `update-ref`; on conflict, the stage entries through `update-index --index-info`, with `MERGE_HEAD` / `MERGE_MSG` written by the broker | the merged tree (with conflict markers) |
+  | `rebase` (no conflicts) | `replay --onto` → `update-ref --stdin` | the new head's tree |
+  | `stash push` / `pop` | `stash create` / `store`; `merge-tree --merge-base`; `stash drop` | reset to HEAD; the merged tree, index kept |
+  | `pull` | the fetch; then as `merge` | as `merge` |
+  | `clone` | `init` by the broker; fetch | `read-tree -u --reset` of the default branch |
+  | `rm` / `mv` (in the worktree) | `rm --cached` / `add` | the file removed or renamed as the project |
+  | `apply` (worktree only) | none | `git apply` itself |
+
+- **Measured, split this way.** All of these worked:
+  - clone, checkout both ways, `commit -a`;
+  - a clean merge, and a conflicted merge (`UU f`, markers in the file), then resolved and committed with two parents;
+  - a rebase through `replay`;
+  - `stash push` / `pop` (contents back);
+  - `reset --hard`, `restore` (worktree clean afterwards);
+  - `pull`.
+
+  Each operation took 3–6 sandboxed git processes. The ~8 ms of applying a profile each time dominates.
+
+  | | ms |
+  |---|---|
+  | clone | 155 |
+  | checkout | 83 |
+  | commit -a | 21 |
+  | merge, clean / conflicted | 116 / 93 |
+  | rebase | 122 |
+  | stash push / pop | 107 / 92 |
+  | reset --hard | 91 |
+  | restore | 29 |
+  | pull | 165 |
+  | the same nine commands directly, unsandboxed, in one process each | 166 in total |
+- **The race, re-run against the split (probe B/C's attack, 40 rounds, 90 s of swapping):**
+  - no file of the tree in `.git`, and no `rebase-merge/`;
+  - every round's checkout was refused as partial, and HEAD never moved;
+  - the control without the attacker completed 40 of 40;
+  - the reviewer's follow-up probe on the result: an owner's `status` clean, `checkout -f HEAD` clean, no rebase in
+    progress, no canary.
+
+  So the attack becomes a refusal: the project can only stop its own checkouts.
+- **A fetch from a path** can't run under P1. Git starts `upload-pack` through `/bin/sh`, and allowing a shell under the
+  exec guard would void it, since a shell's builtins write files. So the source is read under the project's own
+  profile into a bundle (`bundle create`), and P1 fetches the bundle (measured, for the clone and the pull above).
+- **Not measured yet:**
+  - a rebase with conflicts (`replay` stops; a stepwise `merge-tree` per commit with the `rebase-merge/` state written
+    by P1 is the plan, so the replay's being experimental in git is no lock-in);
+  - cherry-pick and revert (the same `merge-tree` shape);
+  - `stash pop` with conflicts;
+  - `switch -c` with local changes;
+  - `pull --rebase`;
+  - `worktree add`, where the broker makes the folder and writes its gitfile through no-follow directory descriptors,
+    P1 the admin dir, and P2 the checkout.
+
+  Each is in step 2 of the order of work, with the race probe run against it.
+- **Residual, newly listed: the owner's own unsandboxed checkouts race the same way.** A project process swapping a
+  folder for a link while the owner's terminal or editor checks out can land files in `.git`, as the owner. Nothing in
+  the sandbox can stop it, since the swap itself is an ordinary worktree write. The scan reports what lands (a
+  `rebase-merge/` or `sequencer/` the platform didn't write, unknown files in `.git`). The status page says that the
+  owner continuing an operation they didn't start is the risky step.
+
+### B2: git-dir shapes despite the "no HEAD" rule. `safe.bareRepository=explicit` is a precondition again.
+
+**The finding** (re-run here):
+1. **A HEAD path committed through the broker.** A commit whose tree holds `x/HEAD` (made with
+   `update-index --cacheinfo`) passed through the writer profile. A checkout under the writer refused to write
+   `x/HEAD`, with exit 0 (S8). An unsandboxed `worktree add` (the owner's, or an agent tool's worktree mode) wrote it.
+   The fenced project then added `objects/`, `refs/` and a config with `core.worktree=..` and `fsmonitor` around it,
+   and the owner's plain `git status` in `x/` **ran the fsmonitor**.
+2. **A folder holding an existing HEAD renamed in.** The sandbox moved a folder already holding a `HEAD` (a fixture)
+   into place and planted the config. The owner's `status` inside it ran the fsmonitor under git's default;
+   **`safe.bareRepository=explicit` refused it** ("cannot use bare repository").
+
+**Folded in:**
+- **The precondition.** `safe.bareRepository=explicit` in the owner's global git config is a precondition of
+  "confined" (the fence doc's question 2, answered). **The owner set it on this machine on 11-14.**
+  - Doctor checks it on every run.
+  - Its absence turns the project's row and Codex's confined check to "not confined", with the one command that fixes
+    it.
+  - The platform never writes it: it is a user-level setting.
+  - A git GUI or editor that reads repos through a library that ignores this setting is a residual: listed, not
+    covered.
+- **The HEAD rule, non-directories only** (the fence doc's S1 wording restored: a folder named `HEAD` is ordinary).
+  Measured with `(deny file-write* (require-all (regex #"/HEAD$") (require-not (vnode-type DIRECTORY))))`:
+  - refused: creating a file `HEAD`, a folded `head`, `x/HEAD`, a rename onto `r/HEAD` or onto `s/head`, a hard link
+    `t/HEAD`, `cp` to `u/HEAD`, a symlink `y/HEAD`;
+  - allowed: a folder `HEAD/` and a file inside it.
+- **The broker refuses tracked paths whose last component folds to `HEAD`.** It checks every tree it is about to write
+  (`write-tree`, `commit`, `merge-tree`'s result, `update-index` input, a fetched branch it is asked to check out),
+  matching the way the volume folds names (case, and the characters git's own path check ignores). So a HEAD file
+  can't enter the project's history through the platform. History that already holds one is listed, below.
+- **Switch-on and the scan list every existing `HEAD` entry outside a `.git`** in every area the project may write:
+  the workspace, the runtime folder, `allow_write`, its scratch roots, and tracked `HEAD` paths in the repo's history
+  on its branches. Switch-on refuses until each is gone or the owner accepts it by path. The rule stops new ones; the
+  rename case needs the precondition.
+
+### Should-fix
+
+- **S1, refs.**
+  - `update-ref` and `symbolic-ref` (and `update-ref --stdin` lines) take only `refs/heads/`, `refs/tags/` and
+    `refs/notes/` (and `HEAD` → `refs/heads/…` for `symbolic-ref`).
+  - Root refs and pseudo-refs are refused. Measured: `update-ref SHALLOW <commit>` writes `.git/shallow` and makes the
+    repo look shallow to the owner; `MERGE_HEAD` git itself refuses.
+  - `refs/replace/` is refused. Measured: a replace ref made the owner's `git show main:f` and `checkout -f main` show
+    and write content other than the commit's, and a self-replace broke the owner's `status` and `log` ("replace
+    depth too high").
+  - The broker's git runs with `GIT_NO_REPLACE_OBJECTS=1`.
+  - Fetch refspecs are the broker's own, so a fetch can't write `refs/replace/` either.
+- **S2, the rebuild.**
+  - **The old git dir is read only under the project's own profile, with the exec guard.** Measured:
+    - run as the owner, the old config's `fsmonitor` ran on `ls-files --stage`, and was quiet only with the hardened
+      `-c`;
+    - even with the hardened `-c`, the owner's fetch from the old dir **followed a planted
+      `objects/info/alternates` into project B** and copied B's file in;
+    - under A's own profile, the same read failed loudly ("unable to normalize alternate object path") and copied
+      nothing.
+
+    So the old dir is turned into a bundle under A's profile, and the fresh git dir fetches that bundle under P1, with
+    `transfer.fsckObjects`. A planted alternates file stops the rebuild, which reports it. The owner removes it from
+    the kept copy and runs again; it is never followed.
+  - `info/exclude` and the files under `brunna/` are copied by opening without following links, regular files only,
+    with a size cap.
+  - **Linked worktrees.** `worktree add --no-checkout` at an existing path fails (measured). So the broker writes the
+    admin dir (`HEAD`, `commondir` = `../..`, `gitdir`), then `worktree repair` checks it. Measured: repair, then
+    `read-tree` of the branch, left the worktree with its uncommitted file intact.
+  - **The order:** refuse while a session is open; stop the project's services and jobs; render the fence for every
+    writer; rebuild; start them again.
+  - `git-broker restore <project> --at <time>` implies switching the project off, and runs the scan afterwards.
+- **S3, pushes as the owner.** A push to GitHub starts Actions with the repo's secrets, on any branch or tag push. So:
+  - **Sessions only.** Services and jobs push only through `merge-branch`'s `push_on_merge`, as today.
+  - **Branches only, never tags, never the default branch.** Unless the registry says otherwise; the default branch is
+    `merge-branch`'s.
+  - **A push that changes `.github/workflows/**`** (the diff between the destination's current commit and the pushed
+    one) is refused unless the registry allows it.
+  - **The broker computes the destination itself.**
+    - It pushes to the registry's **URL**, not a remote name, with explicit `<src>:<dst>` refspecs. So `pushurl`,
+      `remote.*.push` and `branch.*.merge` in the repo's config never apply.
+    - Refused: `--delete`, `:<ref>`, `--tags`, `--follow-tags`, `--mirror`, `--prune`, `--all`, a `+` refspec.
+      `--force-with-lease` is allowed only on the project's own non-default branches.
+  - The config allowlist drops `remote.*.pushurl`, `remote.*.push` and `branch.*.merge` naming a protected ref.
+
+  Question 1 below.
+- **S4, the platform's hooks stay for the owner's own git.** The commit gate's and `commits: conventional`'s hooks in
+  `.git/hooks` are kept, written by the platform as today, so the owner's terminal commits still go through them. The
+  broker's `-c core.hooksPath=<forwarder folder>` overrides them only for broker git.
+- **S5, the socket rule is scoped to the broker's folder.** Measured (probe F):
+  - "deny every outbound unix socket, allow its own" also cut a service's unrelated socket (a local database);
+  - `(deny network-outbound (remote unix-socket (subpath <broker folder>)))` plus the allow for its own socket kept
+    the database socket, refused project B's socket, and allowed its own.
+- **S6, nested projects and tool worktrees.**
+  - **Nested or overlapping projects.** A project whose nonce folder (`<workspace>/.hub-run/git/`) lies inside
+    another project's write roots isn't served. The deepest root claims a folder, as `test-runner.claimant` does,
+    so the outer project can't prove the inner one.
+  - **Codex app worktrees** (under the user's Codex home, outside the project's folders). By the principle, git in a
+    normal Codex app worktree must work, not fail. The design: such a worktree is served when all of these hold:
+    - its gitfile leads to an admin dir inside a common dir the project owns, and that admin dir's `gitdir` leads back;
+    - no other project's write roots contain the worktree;
+    - its nonce folder is the worktree's own `.hub-run/git/`, listed in the repo's `info/exclude` by the platform.
+
+    Identity is then "can write that worktree", which only the session working in it can. The fence there comes from
+    Codex's rendered profile, whose writable root that worktree is. Unmeasured: whether the Codex app's sandbox
+    writes the worktree only, and where it puts the worktree. Question 3.
+- **S7, hook tools inside a commit.**
+  - **lint-staged and the pre-commit framework** run `git stash` and `git add` inside the commit's own hook, with
+    `GIT_INDEX_FILE` set by git to the commit's in-flight index (`index.lock` or a `next-index-*.lock`).
+    - The forwarder gives the hook's environment a token for that commit.
+    - The wrapper forwards a call carrying the token, with its `GIT_INDEX_FILE`.
+    - The broker accepts that variable only when it names exactly the in-flight index of the commit the token belongs
+      to, and runs the call under P1 (`add`), or split (`stash`).
+    - Any other `GIT_INDEX_FILE` stays "in place".
+
+    Unmeasured.
+  - **The pre-commit framework's own repos** (`git init`, `remote add`, `fetch`, `checkout` in its cache).
+    - The platform sets `PRE_COMMIT_HOME` (with the other tool caches in `policy.cache_env`) to a per-project cache
+      folder outside every `.git`.
+    - The broker accepts `init` there as a recorded scratch root: https URLs only, fetched under P1, checked out by P2.
+    - The owner never runs git in it.
+
+    Unmeasured.
+  - **The project's own hooks** run through the forwarder in the plain project sandbox when the registry declares a
+    tracked hooks folder (the old question 4, settled).
+- **S8, a partial checkout fails the call.** A checkout that couldn't write a file exits 0, with only an "unable to
+  create file" message (measured: the writer profile's refused `x/HEAD`). The split's own check (`diff-files --quiet`
+  on the temp index after P2) turns any such result into a failure, and no ref or index moves. Measured: 40 of 40
+  partial checkouts under the race were refused, and 40 of 40 completed without it.
+
+### Nits
+
+- **N1.** Every broker fetch, bundle fetch included, runs with `transfer.fsckObjects=true`. Measured: a crafted tree
+  with a `.git` entry was accepted by a plain fetch and refused with it ("hasDotgit"). `hash-object --literally` is
+  refused.
+- **N2.** The check after a stop reads only `rebase-merge/`. The sequencer that `cherry-pick` and `revert` use refuses
+  a todo holding an `exec` line, measured twice: "cannot cherry-pick during a revert", nothing ran. `git am`'s
+  `rebase-apply/` holds no commands.
+- **N3.** `core.hooksPath` and `core.fsmonitor` stay on the command line (`-c`), where no config file can override
+  them. They come off the list of what the broker's global config holds.
+- **N4.** `.git/brunna/` stays writable by the project: the outbox, the test runner's store of passes, the locks. So a
+  pass recorded there, and the commit gate's verdicts built on it, are the project's word about itself, **not a
+  boundary**. The boundary is that the project's code never runs as the owner (r2 B3 of the fence doc) and that its
+  git dir is written only by git. `merge-branch` re-runs the tiers when a recorded pass can't be trusted. A
+  switched-on project's records count only for the project's own convenience.
+
+### Decided in the design (were owner questions)
+
+- **Other URLs** (old question 2). https only, fetched under P1 (the project's network, no credentials), checked out by
+  P2. A path is read under the project's own profile into a bundle. `ext::`, `file://` outside the project's reach,
+  and ssh are refused.
+- **Scratch repos** (old question 3). Made only by the broker, in the test runner's per-run temp folder, the project's
+  own folders, and its pre-commit cache. Recorded per project, and dropped with their folder. `init --bare`,
+  `clone --bare`, `clone --mirror` and `--separate-git-dir` are refused (a bare repo is a git-dir shape the owner's git
+  would enter).
+- **Interactive git** (old question 7). No pty relay. The editor callback runs a caller's editor on its own side
+  (order step 8). `add -p` and kin are refused, with the `git apply --cached` way said.
+- **Drivers** (old question 10). A driver named per project in the registry runs **through the forwarder in the plain
+  project sandbox**, never inside P1 or P2's git: the filter's content is streamed to the broker and back. git-lfs's
+  long-running `process` protocol is relayed the same way. Unmeasured (no git-lfs here).
+- **`safe.bareRepository`** (the fence doc's question 2). Answered: set by the owner 11-14, now a checked precondition.
+
+### Open questions for the owner (r2: replaces the list above)
+
+1. **Pushing with your credentials** (S3). **Recommended:**
+   - sessions only, to the project's own non-default branches;
+   - no tags;
+   - no change to `.github/workflows/**` unless the registry allows it;
+   - `--force-with-lease` allowed there, any other force refused;
+   - services and jobs only through `push_on_merge`.
+2. **Signing** (unchanged). **Recommended:** not through the broker. Your key isn't used on a project's request.
+3. **Codex app worktrees** (S6). **Recommended:** serve them under the conditions in S6, once a measurement shows the
+   app's sandbox writes only that worktree. Until then, git there says plainly that it can't run, and why.
+4. **Submodules** (unchanged). **Recommended:** none at first.
+5. **Switching on** (unchanged). **Recommended:** you flip it per project. The rebuild runs then, with nothing open and
+   the project's services stopped.
+
+### Order of work, revised
+
+Step 2 now builds the split (P1/P2, the next-index rename, the check after materialising), with the composed operations
+in the B1 table. It does not build a single writer profile. Every composed operation gets the race probe (B/C) and the
+B2 probes (a HEAD path through the broker; a renamed folder holding HEAD, with and without the precondition) as
+tests, plus the S1 ref probes, the S2 rebuild probes (fsmonitor, alternates, worktree repair) and S5's socket probe.
+Doctor's precondition check lands with step 1.

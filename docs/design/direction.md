@@ -87,7 +87,10 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
      sandboxed project the sandbox writes no git dir at all; the `git` on its PATH forwards to a platform broker that
      runs real git under the project's profile (writes to the git dir, no program but git's own) or, for the registry's
      remotes, as the owner. It replaces the fence's per-name list and its narrow runner; the scan stays as a second
-     layer. Not built; its open questions (push, scratch repos, hooks, signing) are the owner's.
+     layer. r2 after a blind review (11-14): no process writes both the worktree and the git dir (a symlink race
+     otherwise plants files in `.git`), and `safe.bareRepository=explicit` in the owner's git config is a checked
+     precondition (set 11-14). Not built; open for the owner: push policy, signing, Codex app worktrees, submodules,
+     who switches a project on.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
