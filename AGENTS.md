@@ -62,10 +62,12 @@ brunna is meant for anyone, with any coding agent, any LLM, any key.
   shell strings such as hooks use `hubconf.sh_py()`. Never hard-code an interpreter, never rely on `python3` on PATH,
   **and never rely on the first line** (it only works on macOS; Linux runs `bin/linux-test`, all tests in a docker
   container). Tests: `bin/py -m unittest discover -s tests` (or `tests.<module>`), or the parallel `bin/run-tests` (the gate
-  uses it, about 1 minute). Every form runs on a throwaway platform (`bin/testguard.py`: the tree as root, never the main
-  checkout's live `.state` or instance, a HOME, secrets and temp folder of the run's own, all removed afterwards); what a
-  test leaves in them fails the run, so a test cleans up every temp folder it makes (`addCleanup(shutil.rmtree, …)` or
-  `TemporaryDirectory` as a context or with its cleanup registered). `tests/test_python_floor.py` checks mechanically; the only deliberate exceptions are `scheduler-watchdog.py`
+  uses it, about 1 minute). In a linked worktree every form runs on a throwaway platform (`bin/testguard.py`: the tree as
+  root, never the main checkout's live `.state` or instance, a HOME, secrets and temp folder of the run's own, all removed
+  afterwards; the main checkout is the running platform and no session runs tests there); what a test leaves in them fails
+  the run, so a test cleans up every temp folder it makes (`addCleanup(shutil.rmtree, …)`, or `TemporaryDirectory` as a
+  context or with its cleanup registered). `tests/test_python_floor.py` checks mechanically; the only deliberate
+  exceptions are `scheduler-watchdog.py`
   (it must still send alerts when the platform's Python is broken: the system python3, standard library only) and
   `migrate-to-mini.py`, which runs on the remote machine
 

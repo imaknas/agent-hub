@@ -1267,7 +1267,7 @@ def _test_entry() -> bool:
         return False
     m = sys.modules.get("__main__")
     return (getattr(getattr(m, "__spec__", None), "name", "") or "").startswith("unittest") \
-        or pathlib.Path(getattr(m, "__file__", None) or "").name.startswith("test")
+        or pathlib.Path(getattr(m, "__file__", None) or "/").parent.name == "tests"
 
 
 if _test_entry():
