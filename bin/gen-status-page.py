@@ -418,9 +418,9 @@ def waiting_html() -> str:
 
 
 def git_fence_html() -> str:
-    """The git config fence's last scan (bin/git_fence.py, docs/design/git-config-fence.md, report only): per sandboxed
-    project, holds or not and its first finding, the commit gate's state; and the temp area. Nothing before the first
-    scan, or with no sandboxed project."""
+    """The git config fence's last scan (bin/git_fence.py, docs/design/git-config-fence.md, report only, a best-effort
+    check, never proof): per sandboxed project, no known problem or its first finding, the commit gate's state; and the
+    temp area, shown here only. Nothing before the first scan, or with no sandboxed project."""
     import git_fence
     rep = git_fence.load()
     if rep is None:
@@ -429,11 +429,12 @@ def git_fence_html() -> str:
     for name, level, line, details in git_fence.rows(rep):
         more = "".join(f"<div class=sub>{esc(d)}</div>" for d in details[1:])
         rows.append(f"<tr><td>{proj_html(name) if name else esc(_('temp area'))}</td>"
-                    f"<td class={'ok' if level == 'ok' else 'bad'}>{esc(_('holds') if level == 'ok' else _('not holding'))}</td>"
+                    f"<td class={'ok' if level == 'ok' else 'bad'}>"
+                    f"{esc(_('no known problem') if level == 'ok' else _('problems found'))}</td>"
                     f"<td>{esc(line)}{more}</td></tr>")
     if not rows:
         return ""
-    return (f"<h2>{esc(_('Git config fence (report only, scanned {at})', at=str(rep.get('at', ''))[:16]))}</h2>"
+    return (f"<h2>{esc(_('Git config fence (report only, a best-effort check, scanned {at})', at=str(rep.get('at', ''))[:16]))}</h2>"
             f"<div class=tbl><table><tr><th>{_('Project')}</th><th>{_('Fence')}</th><th>{_('What the scan found')}</th>"
             f"</tr>{''.join(rows)}</table></div><div class='sub gap'>{esc(git_fence.window_text())}. "
             f"{_('Details: bin/git_fence.py --report (docs/design/git-config-fence.md)')}</div>")

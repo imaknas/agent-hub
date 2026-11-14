@@ -1477,7 +1477,7 @@ def doctor_tracked_controls(add, sandboxed, names) -> None:
 
 def doctor_git_fence(add) -> None:
     """The git config fence's last scan, per sandboxed project (bin/git_fence.py, docs/design/git-config-fence.md;
-    report only: the job neutralises nothing)."""
+    report only, a best-effort check, never proof: the job neutralises nothing)."""
     import git_fence
     rep = git_fence.load()
     if rep is None:
@@ -1485,7 +1485,7 @@ def doctor_git_fence(add) -> None:
             _("bin/git_fence.py --report scans now (the brunna/git-fence job does it every 15 minutes)"))
         return
     add("info", _("the git config fence (report only): {window}", window=git_fence.window_text()))
-    for name, level, line, details in git_fence.rows(rep):
+    for name, level, line, details in git_fence.rows(rep, temp=False):   # the temp area: the status page only
         add("ok" if level == "ok" else "warn",
             _("{project} (sandboxed): git config fence {line}", project=name, line=line) if name else line,
             "" if level == "ok" else _("bin/git_fence.py --report lists every finding ({n})", n=len(details)))

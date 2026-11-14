@@ -1,5 +1,5 @@
 """The git config fence's scan, report only (bin/git_fence.py; docs/design/git-config-fence.md, r2's order of work,
-step 1): hostile repos are reported, a clean one holds, a folder the scan can't list is said, and nothing of a project's
+step 1, a best-effort check): hostile repos are reported, a clean one has no known problem, a folder the scan can't list is said, and nothing of a project's
 runs or changes while it is scanned.
 
 The scan runs as a separate process in a throwaway instance (its own config, state and registry index), as the
@@ -26,7 +26,7 @@ PY = os.environ.get("AGENT_HUB_PYTHON") or os.environ.get("BRUNNA_PYTHON") or sy
 AS_ROOT = hasattr(os, "geteuid") and os.geteuid() == 0   # permissions don't stop root: the unlistable cases can't be made
 
 REPORTED = [b".git/config", b".GIT/hooks/x", b"sub/.git/config", b".gi\xe2\x80\x8ct/config", b"git~1/config",
-            b".git./config", b".git /config"]
+            b".git./config", b".git /config", b"../x", b"a/../../x", b"/abs/x", b"a//b", b"./a", b"a/.", b""]
 NOT_REPORTED = [b"a.txt", b".github/workflows/x.yml", b"src/.gitignore", b"gits/x", b".gitattributes"]
 
 
@@ -72,19 +72,25 @@ class Pure(unittest.TestCase):
         want = sorted([b"a.txt", b"dir/b.txt", b"dir/sub/c.txt", b"dir/sub/cd.txt", b"x" * 5000])
         for version in ("2", "3", "4"):
             subprocess.run(["git", "-C", str(tmp / "r"), "update-index", "--index-version", version], check=True, env=env)
-            self.assertEqual(git_fence.read_index((tmp / "r" / ".git" / "index").read_bytes()), (want, 0), version)
+            entries, odd, link = git_fence.read_index((tmp / "r" / ".git" / "index").read_bytes())
+            self.assertEqual(([n for n, _m in entries], odd, link), (want, 0, None), version)
 
     def test_index_entries_the_scan_reports(self):
         for p in REPORTED:
-            self.assertTrue(git_fence.into_git_dir(p), p)
+            self.assertTrue(git_fence.reported_entry(p), p)
         for p in NOT_REPORTED:
-            self.assertFalse(git_fence.into_git_dir(p), p)
-        self.assertEqual(git_fence.read_index(index_bytes([b"a", *REPORTED[:1]], 4)), ([b"a", *REPORTED[:1]], 0))
+            self.assertFalse(git_fence.reported_entry(p), p)
+        self.assertFalse(git_fence.reported_entry(b"dir/", 0o040000), "a sparse index's folder entry")
+        entries, odd, _link = git_fence.read_index(index_bytes([b"a", *REPORTED[:1]], 4))
+        self.assertEqual(([n for n, _m in entries], odd), ([b"a", *REPORTED[:1]], 0))
 
     def test_name_length_as_git_reads_it(self):
-        self.assertEqual(git_fence.read_index(index_bytes([], raw=[entry(b"ab\0cd", length=5)])), ([b"ab\0cd"], 1))
-        self.assertEqual(git_fence.read_index(index_bytes([], raw=[entry(b"abcdefgh", length=3)]))[1], 1)
-        self.assertEqual(git_fence.read_index(index_bytes([], raw=[entry(b"name", extended=True)])), ([b"name"], 0))
+        def names(data):
+            entries, odd, _link = git_fence.read_index(data)
+            return [n for n, _m in entries], odd
+        self.assertEqual(names(index_bytes([], raw=[entry(b"ab\0cd", length=5)])), ([b"ab\0cd"], 1))
+        self.assertEqual(names(index_bytes([], raw=[entry(b"abcdefgh", length=3)]))[1], 1)
+        self.assertEqual(names(index_bytes([], raw=[entry(b"name", extended=True)])), ([b"name"], 0))
         with self.assertRaises(ValueError):
             git_fence.read_index(index_bytes([b"a"], checksum=False))
         with self.assertRaises(ValueError):
@@ -112,6 +118,21 @@ class Pure(unittest.TestCase):
                ("lfs.url", "https://e.example/x", "key")]
         for k, v, why in bad:
             self.assertEqual(git_fence.check_key(k, v, remotes, own), why, (k, v))
+
+    def test_credentials_go_before_a_value_is_cut(self):
+        v = "http://user:" + "t" * 200 + "@example.com/x"
+        self.assertNotIn("ttt", git_fence.short(v, 20))
+
+    def test_pointers_as_git_reads_them(self):
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        cases = [(b"gitdir: ../x\n", ("../x", None)), (b"gitdir: ../x\r\n\n", ("../x", None)),
+                 (b"gitdir:../x\n", (None, "odd")), (b"gitdir: ../x \n", ("../x ", "odd")),
+                 (b"gitdir:  ../x\n", (" ../x", "odd")), (b"gitdir: ../x\0junk\n", ("../x", "odd"))]
+        for raw, (path, odd) in cases:
+            (tmp / "f").write_bytes(raw)
+            got_path, got_odd = git_fence.pointer(tmp / "f", b"gitdir: ")
+            self.assertEqual((got_path, bool(got_odd)), (path, odd is not None), raw)
 
     def test_values_are_made_safe_to_show(self):
         self.assertEqual(git_fence.clean("http://user:tok@example.com/x"), "http://***@​example.com/x")
@@ -212,11 +233,11 @@ class Fixture(unittest.TestCase):
 
 
 class Scan(Fixture):
-    def test_a_clean_repo_holds(self):
+    def test_a_clean_repo_has_no_known_problem(self):
         self.git(self.ws, "worktree", "add", "-q", "-b", "w", str(self.ws / ".claude" / "worktrees" / "w"))
         rep = self.scan()
         p = rep["projects"]["demo"]
-        self.assertTrue(p["holds"], p["findings"])
+        self.assertTrue(p["nothing_found"], p["findings"])
         self.assertEqual(p["repos"], 1)
         self.assertEqual(rep["temp"], [])
 
@@ -240,7 +261,7 @@ class Scan(Fixture):
         self.git(self.tmp, "init", "-q", "--bare", str(self.tmp / "temp" / "deep" / "bare.git"))
         rep = self.scan()
         p = rep["projects"]["demo"]
-        self.assertFalse(p["holds"])
+        self.assertFalse(p["nothing_found"])
         self.assertTrue({"include", "key", "hook", "link", "attributes", "alternates", "hardlink", "commondir",
                          "nested", "gitfile", "shaped"} <= self.kinds(rep), self.kinds(rep))
         keys = {f.get("key") for f in p["findings"] if f["kind"] == "key"}
@@ -278,7 +299,7 @@ class Scan(Fixture):
         got = {(f["kind"], f["where"]) for f in p["findings"]}
         self.assertIn(("unreadable", "workspace/.git/hooks"), got)
         self.assertIn(("unreadable", "workspace/vendor"), got)
-        self.assertFalse(p["holds"])
+        self.assertFalse(p["nothing_found"])
 
     def test_remotes_and_branches_files(self):
         for legacy, text in (("remotes/evil", "URL: /elsewhere/repo\n"), ("branches/b", "/elsewhere/repo\n")):
@@ -321,16 +342,67 @@ class Scan(Fixture):
         self.assertIn(("shaped", "workspace/vendor/pkg"), got)
         self.assertIn(("shaped", "allow_write[0]"), got)
 
-    def test_a_dotgit_at_a_temp_root_or_just_below(self):
+    def test_the_temp_area(self):
         t = self.tmp / "temp"
         self.git(self.tmp, "init", "-q", str(t))
-        self.git(self.tmp, "init", "-q", str(t / "first"))
-        self.git(self.tmp, "init", "-q", str(t / "first" / "second"))
+        self.git(self.tmp, "init", "-q", str(t / "clean"))
+        deep = t / "a" / "b" / "proj"
+        self.git(self.tmp, "init", "-q", str(deep))
+        with open(deep / ".git" / "config", "a") as f:
+            f.write("[core]\n\tfsmonitor = /x\n")
         bare = self.tmp / "temp2"
         self.git(self.tmp, "init", "-q", "--bare", str(bare))
         rep = self.scan("--temp-root", str(bare))
         got = {(f["kind"], f["where"]) for f in rep["temp"]}
-        self.assertEqual(got, {("temp-dotgit", str(t)), ("temp-dotgit", str(t / "first")), ("shaped", str(bare))})
+        self.assertEqual(got, {("temp-dotgit", str(t)), ("key", str(deep / ".git" / "config")), ("shaped", str(bare))},
+                         "a clean repo below a root isn't a finding; one with a key the allowlist lacks is")
+        lines, ids = git_fence.problems(rep)
+        self.assertFalse([i for i in ids if i.startswith("temp")], "the temp area is on the status page only")
+
+    @unittest.skipIf(AS_ROOT, "permissions don't stop root")
+    def test_an_owners_temp_folder_it_cant_list(self):
+        h = self.tmp / "temp" / "hidden"
+        (h / "inner").mkdir(parents=True)
+        self.unlistable(h)
+        got = {(f["kind"], f["where"]) for f in self.scan()["temp"]}
+        self.assertIn(("unreadable", str(h)), got)
+
+    def test_pointers_git_reads_differently(self):
+        (self.ws / "sub").mkdir()
+        (self.ws / "sub" / ".git").write_bytes(b"gitdir: ../.git/ \n")
+        self.git(self.ws, "worktree", "add", "-q", "-b", "w", str(self.ws / "w"))
+        (self.ws / ".git" / "worktrees" / "w" / "commondir").write_bytes(b"../.. \n")
+        got = {(f["kind"], f["where"], f.get("name")) for f in self.scan()["projects"]["demo"]["findings"]}
+        self.assertIn(("pointer", "workspace/sub", ".git"), got)
+        self.assertIn(("pointer", "workspace/.git/worktrees/w", "commondir"), got)
+
+    def test_a_split_index_is_read_where_it_says(self):
+        shared = index_bytes(REPORTED[:1])
+        link = hashlib.sha1(shared[:-20]).digest()
+        (self.ws / ".git" / f"SHAREDINDEX.{link.hex()}").write_bytes(shared)
+        main = b"DIRC" + struct.pack(">II", 2, 0) + b"link" + struct.pack(">I", 44) + link + b"\0" * 24
+        (self.ws / ".git" / "index").write_bytes(main + hashlib.sha1(main).digest())
+        f = [x for x in self.scan()["projects"]["demo"]["findings"] if x["kind"] == "index"]
+        self.assertEqual(len(f), 1, f)
+
+    def test_a_sha256_repos_worktree_index(self):
+        r = self.tmp / "s256"
+        self.git(self.tmp, "init", "-q", "--object-format=sha256", "-b", "main", str(r))
+        (r / "a").write_text("a")
+        self.git(r, "add", "a")
+        self.git(r, "commit", "-q", "-m", "a")
+        self.git(r, "worktree", "add", "-q", "-b", "w", str(r / "w"))
+        self.declare(paths={"workspace": str(r)})
+        p = self.scan()["projects"]["demo"]
+        self.assertTrue(p["nothing_found"], p["findings"])
+
+    def test_the_hard_link_exemption_is_only_objects_of_a_git_dir(self):
+        self.git(self.ws, "branch", "objects/x")
+        log = self.ws / ".git" / "logs" / "refs" / "heads" / "objects" / "x"
+        log.unlink()
+        os.link(self.tmp / "home" / ".." / "ws" / "a.txt", log)
+        got = {(f["kind"], f.get("path")) for f in self.scan()["projects"]["demo"]["findings"]}
+        self.assertIn(("hardlink", "logs/refs/heads/objects/x"), got)
 
     def test_the_index_entries_the_scan_reports(self):
         (self.ws / ".git" / "index").write_bytes(index_bytes([b"a.txt", *REPORTED[:2]]))
@@ -347,7 +419,7 @@ class Scan(Fixture):
     def test_the_deadline_is_said(self):
         p = self.scan(env={"GIT_FENCE_TIME_CAP": "0"})["projects"]["demo"]
         self.assertEqual([f["kind"] for f in p["findings"]], ["incomplete"])
-        self.assertFalse(p["holds"])
+        self.assertFalse(p["nothing_found"])
 
     def test_the_commit_gate_and_the_platforms_own_hook(self):
         self.declare(commit_gate=True)
@@ -361,7 +433,7 @@ class Scan(Fixture):
             hook.write_text(text)
             hook.chmod(0o755)
             p = self.scan()["projects"]["demo"]
-            self.assertTrue(p["holds"], p["findings"])
+            self.assertTrue(p["nothing_found"], p["findings"])
             self.assertEqual(p["commit_gate"]["hook"], "current")
         hook.write_text(wanted[0] + "evil\n")
         p = self.scan()["projects"]["demo"]
@@ -372,7 +444,7 @@ class Scan(Fixture):
         (self.ws / ".git" / "rebase-merge").mkdir()
         (self.ws / ".git" / "rebase-merge" / "git-rebase-todo").write_text("pick abc x\nexec make\n")
         p = self.scan()["projects"]["demo"]
-        self.assertTrue(p["holds"])
+        self.assertTrue(p["nothing_found"])
         self.assertEqual([n["kind"] for n in p["notes"]], ["rebase-exec"])
 
     def test_the_job_keeps_the_result_and_alerts(self):
@@ -388,6 +460,7 @@ class Scan(Fixture):
                 pass
         srv = http.server.HTTPServer(("127.0.0.1", 0), Channel)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
         self.addCleanup(srv.shutdown)
         (self.tmp / "config" / "hub.json").write_text(json.dumps(
             {**self.hub, "alerts": {"ntfy": {"topic": "t", "base_url": f"http://127.0.0.1:{srv.server_port}"}}}))
@@ -398,9 +471,9 @@ class Scan(Fixture):
         (self.ws / ".git" / "hooks" / "post-checkout").write_text("#!/bin/sh\n")
         r = self.apply()
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("✗ demo: not holding: workspace/.git: a hook the platform didn't write (post-checkout)", r.stdout)
+        self.assertIn("✗ demo: problems found: workspace/.git: a hook the platform didn't write (post-checkout)", r.stdout)
         kept = json.loads((self.tmp / "state" / "git-fence" / "scan.json").read_text())
-        self.assertFalse(kept["projects"]["demo"]["holds"])
+        self.assertFalse(kept["projects"]["demo"]["nothing_found"])
         self.assertEqual(kept["temp_at"], "2999-01-01T00:00:00", "the temp area isn't walked again within a day")
         self.assertEqual(len(got), 1, got)
         self.assertIn("post-checkout", got[0])
@@ -414,13 +487,14 @@ class Scan(Fixture):
                             "b": {"findings": [f("hook", "workspace/.git", name="x"),
                                                f("link", "workspace/.git", path="logs/HEAD")],
                                   "notes": [], "commit_gate": {"on": True, "hook": "current", "sandbox": ""}}},
-               "temp": [f("shaped", "/t/x.git")], "temp_shaped": 3}
+               "temp": [f("shaped", "/t/x.git")], "temp_count": 3}
         got = git_fence.rows(rep)
         self.assertEqual([(n, lvl) for n, lvl, _l, _d in got], [("a", "ok"), ("b", "warn"), ("", "warn")])
         self.assertIn(git_fence._(" (+{n} more)", n=1), got[1][2])   # in whatever language the run has
         self.assertEqual(len(got[1][3]), 2, "every finding listed")
         lines, ids = git_fence.problems(rep)
-        self.assertEqual(ids, ["b:hook:workspace/.git:x", "b:link:workspace/.git:logs/HEAD", "temp:shaped"])
+        self.assertEqual(ids, ["b:hook:workspace/.git:x", "b:link:workspace/.git:logs/HEAD"], "the temp area: no alert")
+        self.assertEqual(len(git_fence.rows(rep, temp=False)), 2, "doctor leaves the temp area out")
 
 
 if __name__ == "__main__":

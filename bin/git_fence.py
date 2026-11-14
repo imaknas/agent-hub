@@ -1,32 +1,36 @@
 #!/bin/sh -c exec${IFS}"${0%/*}/py"${IFS}"$0"${IFS}"$@"
 """The git config fence's scan, report only (docs/design/git-config-fence.md, r2's order of work, step 1): for every
-sandboxed project, whether anything in its repos can make the owner's git run code or read across, whatever the fence
-will later prevent. It neutralises nothing and changes no project file.
+sandboxed project, a best-effort look for anything in its repos that can make the owner's git run code or read across.
+It is detection, not a guarantee: it re-reads what git reads, and each review of it found more ways a re-reading can
+differ from git's own. The guarantee has to come from the fence preventing the writes; nothing may take this scan's
+"no known problem found" as proof (the confined checks don't). It neutralises nothing and changes no project file.
 
   git_fence.py --report [--project P] [--json] [--no-temp] [--temp-root D]...
                         scan now and print; writes nothing (copies in the private temp folder, removed afterwards)
   git_fence.py --apply  the platform job brunna/git-fence (every 15 minutes): every sandboxed project scanned, the temp
                         area at most once a day (its last result kept in between), the result in
                         .state/git-fence/scan.json for the status page's and doctor's rows, and an alert on a new
-                        finding (alert.once). It takes no narrowing option: a partial scan would end findings it never
-                        looked at
+                        project finding (alert.once; the temp area is on the status page only). It takes no narrowing
+                        option: a partial scan would end findings it never looked at
 
 What it looks at, per sandboxed project, in its folders (workspace, runtime folder, allow_write, the memory clone its
 workspace links to), with no link followed:
-  - every `.git` entry: the repo's own git dir at a folder's top; a gitfile accepted only when it leads exactly to a git
-    dir this scan inspected (a worktree's admin dir, a module's git dir); anything else is a finding (a nested repo, a
-    gitfile pointing elsewhere, a link named .git), as is any folder shaped like a git dir by git's own rule (HEAD and
-    objects and refs as entries of any kind, or HEAD and commondir), the folders themselves included;
+  - every `.git` entry: the repo's own git dir at a folder's top; a gitfile accepted only when git would read it as a
+    pointer and it leads exactly to a git dir this scan inspected (a worktree's admin dir, a module's git dir); anything
+    else is a finding (a nested repo, a gitfile pointing elsewhere or written so git reads it differently, a link named
+    .git), as is any folder shaped like a git dir by git's own rule (HEAD and objects and refs as entries of any kind,
+    or HEAD and commondir), the folders themselves included;
   - each git dir: its config sources against the allowlist of inert keys (git-config-fence.md, "The allowlist", r2 S2
     and Step 1's additions), parsed from a copy so no include is followed; hooks other than git's samples and the
-    platform's own (its text in any UI language); info/attributes; alternates; commondir and gitdir pointers;
-    remotes/ and branches/ entries; every symbolic link, and every file with more than one name outside objects/
-    (git links objects between local clones, and checks them by their hash); the index entries the scan reports;
-    rebase state with exec lines (said only). Worktrees' admin dirs and every folder under modules/ (a worktree's too)
-    are inspected the same way;
+    platform's own (its text in any UI language); info/attributes; alternates; commondir and gitdir pointers, read as
+    git reads them; remotes/ and branches/ entries; every symbolic link, and every file with more than one name outside
+    the objects/ of a repo's or a module's git dir (git links objects between local clones, and checks them by their
+    hash); the index entries the scan reports (a split index's shared part as the index names it); rebase state with
+    exec lines (said only). Worktrees' admin dirs and every folder under modules/ (a worktree's too) are inspected the
+    same way;
   - the commit gate's state (r2 B3).
-And the temp roots (r2 S1): a `.git` at each root and in each folder just below it, and folders shaped like a git dir
-anywhere to a depth.
+And the temp roots (r2 S1), breadth first: a `.git` at a root (it makes the whole area a checkout), every other repo
+inspected as a project's is, folders shaped like a git dir, and folders of the owner's it can't list.
 
 How it reads (r2 S4, S5): every file opened without following a link and without blocking, a regular file only, at most
 a size cap; a folder it can't list is a finding, never skipped; the time limit is checked per folder entry; what git must
@@ -41,6 +45,7 @@ same scan, but one made between two steps can make the scan read a file the owne
 from __future__ import annotations
 
 import argparse
+import collections
 import contextlib
 import datetime
 import hashlib
@@ -73,7 +78,7 @@ TEMP_KEPT = 200                    # temp findings kept in the result (the count
 TEMP_EVERY = datetime.timedelta(hours=24)
 TIME_CAP = float(os.environ.get("GIT_FENCE_TIME_CAP") or 300)   # seconds per project, and for the temp walk
 GIT_TIMEOUT = 20
-NOTE_KINDS = {"rebase-exec"}       # said, never "not holding"
+NOTE_KINDS = {"rebase-exec"}       # said, never a problem
 EVERY_MIN = 15                     # the job's period: the detection window the rows state
 
 
@@ -113,6 +118,26 @@ def read_capped(path, cap: int = FILE_CAP) -> bytes:
         os.close(fd)
 
 
+def pointer(path, prefix: bytes = b"") -> tuple[str | None, str | None]:
+    """(the path git reads from a pointer file, what is odd about it) as git reads one: the prefix with its space, then
+    the rest with only trailing CR and LF trimmed, ended by a NUL if there is one. Any other leading or trailing
+    whitespace is odd (git keeps it as part of the path). Raises Unreadable."""
+    raw = read_capped(path)
+    if prefix:
+        if not raw.startswith(prefix):
+            return None, _("not a pointer git reads")
+        raw = raw[len(prefix):]
+    raw = raw.rstrip(b"\r\n")
+    odd = None
+    if b"\0" in raw:
+        raw, odd = raw.split(b"\0", 1)[0], _("a NUL in it")
+    if raw != raw.strip():
+        odd = odd or _("whitespace around the path")
+    if not raw:
+        return None, odd or _("empty")
+    return os.fsdecode(raw), odd
+
+
 def lexists(p) -> bool:
     return os.path.lexists(p)
 
@@ -139,6 +164,11 @@ def shown(p) -> str:
 def no_creds(v) -> str:
     """A value with a URL's credentials left out (what is kept in the result)."""
     return re.sub(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]*@", r"\1***@", str(v))
+
+
+def short(v, n: int) -> str:
+    """A value kept in a finding: credentials left out first, then cut (a cut could split them)."""
+    return no_creds("" if v is None else v)[:n]
 
 
 def clean(v) -> str:
@@ -260,20 +290,29 @@ def config_pairs(copy: pathlib.Path, work: pathlib.Path) -> list[tuple[str, str 
     return out
 
 
+def hash_len_of(pairs) -> int:
+    return 32 if any(k.lower() == "extensions.objectformat" and (v or "").lower() == "sha256" for k, v in pairs) else 20
+
+
 # ---------- the index ----------
 
 IGNORABLE = {0x200C, 0x200D, 0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x206A, 0x2070), 0xFEFF}
 
 
-def into_git_dir(path: bytes) -> bool:
-    """Whether the scan reports an index entry with this path (docs/design/git-config-fence.md, r2 B1)."""
-    for comp in path.split(b"/"):
-        s = comp.decode("utf-8", errors="replace")
-        s = "".join(ch for ch in s if ord(ch) not in IGNORABLE).casefold()
-        t = s.rstrip(". ")
-        if t in (".git", "git~1") or s.startswith((".git:", "git~1:")):
-            return True
-    return False
+def _reported_name(comp: bytes) -> bool:
+    s = comp.decode("utf-8", errors="replace")
+    s = "".join(ch for ch in s if ord(ch) not in IGNORABLE).casefold()
+    t = s.rstrip(". ")
+    return t in (".git", "git~1") or s.startswith((".git:", "git~1:"))
+
+
+def reported_entry(path: bytes, mode: int = 0o100644) -> bool:
+    """Whether the scan reports an index entry with this path and mode (docs/design/git-config-fence.md, r2 B1)."""
+    if mode & 0o170000 == 0o040000 and path.endswith(b"/"):
+        path = path[:-1]
+    if not path or path.startswith(b"/"):
+        return True
+    return any(comp in (b"", b".", b"..") or _reported_name(comp) for comp in path.split(b"/"))
 
 
 def _varint(data: bytes, off: int) -> tuple[int, int]:
@@ -288,11 +327,57 @@ def _varint(data: bytes, off: int) -> tuple[int, int]:
     return val, off
 
 
-def read_index(data: bytes, hash_len: int = 20) -> tuple[list[bytes], int]:
-    """(the entries' names, how many entries the scan reports for their own form) of an index (versions 2 to 4; a split
-    index's shared part has the same format), read as git's reader reads them: the name length as git reads it, the
-    extended flags wherever they are set, the entries ending where the extensions begin, the checksum verified (all
-    zeros: not written). ValueError when git couldn't read it either."""
+def _entries(data: bytes, off: int, count: int, version: int, hash_len: int, end_all: int, prev: bytes = b""):
+    """(entries [(name, mode)], how many the scan reports for their own form, the offset after them)."""
+    out, odd = [], 0
+    for _i in range(count):
+        start = off
+        (mode,) = struct.unpack(">I", data[start + 24:start + 28])
+        off += 40 + hash_len
+        (flags,) = struct.unpack(">H", data[off:off + 2])
+        off += 2
+        if flags & 0x4000:
+            off += 2
+        length = flags & 0xFFF
+        if version == 4:
+            strip, off = _varint(data, off)
+            if strip > len(prev):
+                raise ValueError("prefix")
+            keep = prev[:len(prev) - strip]
+            if length == 0xFFF:
+                stop = data.index(b"\0", off, end_all)
+            else:
+                stop = off + length - len(keep)
+                if stop < off:
+                    raise ValueError("length")
+                if stop >= end_all or data[stop] != 0:
+                    odd += 1
+            name = keep + data[off:stop]
+            off = stop + 1
+        else:
+            if length == 0xFFF:
+                stop = data.index(b"\0", off, end_all)
+            else:
+                stop = off + length
+                if stop >= end_all or data[stop] != 0:
+                    odd += 1
+            name = data[off:stop]
+            off = start + (((off - start) + len(name) + 8) & ~7)
+        if b"\0" in name:
+            odd += 1
+        if off > end_all:
+            raise ValueError("truncated")
+        out.append((name, mode))
+        prev = name
+    return out, odd, off
+
+
+def read_index(data: bytes, hash_len: int = 20) -> tuple[list[tuple[bytes, int]], int, str | None]:
+    """(entries [(name, mode)], how many entries the scan reports for their own form, the shared index a split index
+    names (hex) or None) of an index (versions 2 to 4), read as git's reader reads it: the name length as git reads
+    it, the extended flags wherever set, the entries ending where the extensions begin, the checksum verified (all
+    zeros: not written); with an entry-offset table, each of its blocks read again as git's threads would, the union
+    kept. ValueError when git couldn't read it either."""
     if len(data) < 12 + hash_len or data[:4] != b"DIRC":
         raise ValueError("not an index")
     version, count = struct.unpack(">II", data[4:12])
@@ -304,56 +389,34 @@ def read_index(data: bytes, hash_len: int = 20) -> tuple[list[bytes], int]:
         h = hashlib.sha1 if hash_len == 20 else hashlib.sha256
         if h(data[:end_all]).digest() != digest:
             raise ValueError("checksum")
-    off, prev, out, odd = 12, b"", [], 0
     try:
-        for _i in range(count):
-            start = off
-            off += 40 + hash_len
-            (flags,) = struct.unpack(">H", data[off:off + 2])
-            off += 2
-            if flags & 0x4000:
-                off += 2
-            length = flags & 0xFFF
-            if version == 4:
-                strip, off = _varint(data, off)
-                if strip > len(prev):
-                    raise ValueError("prefix")
-                keep = prev[:len(prev) - strip]
-                if length == 0xFFF:
-                    stop = data.index(b"\0", off, end_all)
-                else:
-                    stop = off + length - len(keep)
-                    if stop < off:
-                        raise ValueError("length")
-                    if stop >= end_all or data[stop] != 0:
-                        odd += 1
-                name = keep + data[off:stop]
-                off = stop + 1
-            else:
-                if length == 0xFFF:
-                    stop = data.index(b"\0", off, end_all)
-                else:
-                    stop = off + length
-                    if stop >= end_all or data[stop] != 0:
-                        odd += 1
-                name = data[off:stop]
-                off = start + (((off - start) + len(name) + 8) & ~7)
-            if b"\0" in name:
-                odd += 1
-            if off > end_all:
-                raise ValueError("truncated")
-            out.append(name)
-            prev = name
+        entries, odd, off = _entries(data, 12, count, version, hash_len, end_all)
+        exts = {}
         while off < end_all:
             if end_all - off < 8:
                 raise ValueError("extensions")
-            (size,) = struct.unpack(">I", data[off + 4:off + 8])
+            sig, (size,) = data[off:off + 4], struct.unpack(">I", data[off + 4:off + 8])
+            exts[sig] = data[off + 8:off + 8 + size]
             off += 8 + size
         if off != end_all:
             raise ValueError("extensions")
+        if b"EOIE" in exts and b"IEOT" in exts and len(exts[b"IEOT"]) >= 4:
+            table = exts[b"IEOT"][4:]
+            seen = set(entries)
+            for i in range(0, len(table) - 7, 8):
+                at, n = struct.unpack(">II", table[i:i + 8])
+                try:
+                    block, more, _o = _entries(data, at, n, version, hash_len, end_all)
+                except (ValueError, struct.error, IndexError):
+                    odd += 1
+                    continue
+                odd += more
+                entries += [e for e in block if e not in seen]
+                seen.update(block)
     except (struct.error, IndexError) as e:
         raise ValueError("truncated") from e
-    return out, odd
+    link = exts.get(b"link")
+    return entries, odd, (link[:hash_len].hex() if link and len(link) >= hash_len else None)
 
 
 # ---------- findings ----------
@@ -389,6 +452,8 @@ def describe(f: dict) -> str:
         "nested": lambda: _("{where}: a repo nested in the project's folders", where=w),
         "gitfile": lambda: _("{where}: a .git file leading to a git dir the scan didn't inspect ({value})", where=w,
                              value=c.get("value")),
+        "pointer": lambda: _("{where}: {name} is written so git reads it differently ({why})", where=w,
+                             name=c.get("name"), why=c.get("why")),
         "dotgit-link": lambda: _("{where}: .git is a symbolic link", where=w),
         "shaped": lambda: _("{where}: a folder shaped like a git dir outside any .git", where=w),
         "temp-dotgit": lambda: _("{where}: a .git here makes every folder below it a checkout of that repo", where=w),
@@ -410,15 +475,21 @@ class Scan:
         self.notes: list[dict] = []
         self.dropped = 0
         self.repos = 0
-        self.wanted_hooks = platform_hooks({**doc, "name": name})
+        self.wanted_hooks = platform_hooks({**doc, "name": name}) if name else {}
         self.labels: list[tuple[pathlib.Path, str]] = []
         self.copies = 0
         self.inspected: set[str] = set()
+        self.objects: list[str] = []
         self.ids: set[str] = set()
         self.indexes: set[tuple[int, int]] = set()
         self.seen = 0
-        import policy
-        self.own = (str(policy.memory_bare(name, doc)),)
+        self.cap = WALK_CAP
+        self.keep = FINDINGS_CAP
+        if name:
+            import policy
+            self.own = (str(policy.memory_bare(name, doc)),)
+        else:
+            self.own = ()
 
     def add(self, f: dict) -> None:
         if f["id"] in self.ids:   # one folder can be listed twice (its hooks, then the whole git dir's walk)
@@ -426,7 +497,7 @@ class Scan:
         self.ids.add(f["id"])
         if f["kind"] in NOTE_KINDS:
             self.notes.append(f)
-        elif len(self.findings) < FINDINGS_CAP:
+        elif len(self.findings) < self.keep:
             self.findings.append(f)
         else:
             self.dropped += 1
@@ -445,8 +516,12 @@ class Scan:
         self.seen += 1
         if time.monotonic() > self.deadline:
             raise Late(_("time limit"))
-        if self.seen > WALK_CAP:
-            raise Late(_("{n} entries", n=WALK_CAP))
+        if self.seen > self.cap:
+            raise Late(_("{n} entries", n=self.cap))
+
+    def listable(self, d, err: OSError) -> bool:
+        """Whether a folder that can't be listed is said (a project's: always)."""
+        return True
 
     def entries(self, d, where=None):
         """A folder's entries one at a time (no link followed into it), the time limit checked at each; a folder that
@@ -456,8 +531,9 @@ class Scan:
         except FileNotFoundError:
             return
         except OSError as e:
-            self.add(finding("unreadable", where or self.where(d), path=".",
-                             why=_("can't be listed ({error})", error=e.strerror or e)))
+            if self.listable(d, e):
+                self.add(finding("unreadable", where or self.where(d), path=".",
+                                 why=_("can't be listed ({error})", error=e.strerror or e)))
             return
         with it:
             while True:
@@ -483,70 +559,96 @@ class Scan:
     def run(self) -> dict:
         roots = project_roots(self.name, self.doc)
         self.labels = [(r, label) for r, label in roots]
-        mains, gitfiles = [], []
         try:
-            for root, label in roots:
-                if git_shaped(root):
-                    self.add(finding("shaped", label))
-                stack = [root]
-                while stack:
-                    d = stack.pop()
-                    for e in self.entries(d):
-                        if e.name.casefold() == ".git":
-                            path = pathlib.Path(e.path)
-                            if e.is_symlink():
-                                self.add(finding("dotgit-link", self.where(d)))
-                            elif e.is_dir(follow_symlinks=False):
-                                if pathlib.Path(d) != root:
-                                    self.add(finding("nested", self.where(d)))
-                                mains.append(path)
-                            else:
-                                gitfiles.append(path)
-                        elif e.is_dir(follow_symlinks=False):
-                            if git_shaped(e.path):
-                                self.add(finding("shaped", self.where(e.path)))
-                            else:
-                                stack.append(e.path)
-            for gd in mains:
-                self.git_dir(gd, "main")
-                self.links(gd)
-            for entry in gitfiles:
-                self.gitfile(entry)
+            self.walk([r for r, _l in roots])
         except Late as e:
             self.add(finding("incomplete", self.labels[0][1] if self.labels else "workspace", why=str(e)))
         return self.result()
 
+    def walk(self, roots: list[pathlib.Path], depth_cap: int | None = None) -> None:
+        """Breadth first from each root: `.git` entries, folders shaped like a git dir; then every git dir found is
+        inspected, and every gitfile checked against what was inspected."""
+        mains, gitfiles, cut, stopped = [], [], False, None
+        queue = collections.deque((root, root, 0) for root in roots)
+        for root in roots:
+            if git_shaped(root):
+                self.add(finding("shaped", self.where(root)))
+        try:
+            self.bfs(queue, mains, gitfiles, depth_cap)
+        except Late as e:   # what was found is still inspected, with a budget of its own
+            stopped = e
+        cut = self.cut
+        self.seen, self.deadline = 0, max(self.deadline, time.monotonic() + TIME_CAP)
+        for gd in mains:
+            self.git_dir(gd, "main")
+            self.links(gd)
+        for entry in gitfiles:
+            self.gitfile(entry)
+        if stopped:
+            raise stopped
+        if cut:
+            raise Late(_("{n} levels deep", n=depth_cap))
+
+    def bfs(self, queue, mains, gitfiles, depth_cap) -> None:
+        self.cut = False
+        while queue:
+            d, root, depth = queue.popleft()
+            for e in self.entries(d):
+                if e.name.casefold() == ".git":
+                    path = pathlib.Path(e.path)
+                    if e.is_symlink():
+                        self.add(finding("dotgit-link", self.where(d)))
+                    elif e.is_dir(follow_symlinks=False):
+                        self.found_repo(pathlib.Path(d), root)
+                        mains.append(path)
+                    else:
+                        gitfiles.append(path)
+                elif e.is_dir(follow_symlinks=False):
+                    if git_shaped(e.path):
+                        self.add(finding("shaped", self.where(e.path)))
+                    elif depth_cap is None or depth + 1 < depth_cap:
+                        queue.append((e.path, root, depth + 1))
+                    else:
+                        self.cut = True
+
+    def found_repo(self, folder: pathlib.Path, root: pathlib.Path) -> None:
+        if folder != root:
+            self.add(finding("nested", self.where(folder)))
+
     def gitfile(self, entry: pathlib.Path) -> None:
         w = self.where(entry.parent)
         try:
-            text = read_capped(entry).decode(errors="replace").strip()
+            target, odd = pointer(entry, b"gitdir: ")
         except Unreadable as e:
             self.add(finding("unreadable", w, path=".git", why=str(e)))
             return
-        target = text[len("gitdir:"):].strip() if text.startswith("gitdir:") else None
-        real = os.path.realpath(entry.parent / target) if target else None
-        if real is None or real not in self.inspected:
-            self.add(finding("gitfile", w, value=(target or text)[:160]))
+        if odd:
+            self.add(finding("pointer", w, name=".git", why=odd))
+            return
+        real = os.path.realpath(entry.parent / target)
+        if real not in self.inspected:
+            self.add(finding("gitfile", w, value=short(target, 160)))
 
     # --- one git dir ---
-    def git_dir(self, gd: pathlib.Path, kind: str) -> None:
-        """kind: main (a repo's own), worktree (worktrees/<n>), module (a folder under modules/)."""
+    def git_dir(self, gd: pathlib.Path, kind: str, hash_len: int | None = None) -> None:
+        """kind: main (a repo's own), worktree (worktrees/<n>, its hash length given by the repo's), module (a folder
+        under modules/)."""
         if time.monotonic() > self.deadline:
             raise Late(_("time limit"))
         self.inspected.add(os.path.realpath(gd))
         self.repos += kind == "main"
         w = self.where(gd)
-        hash_len = 20
-        sources = [gd / "config.worktree"] if kind == "worktree" else [gd / "config", gd / "config.worktree"]
-        for src in sources:
-            if lexists(src):
-                pairs = self.config(src, module=gd if kind == "module" else None)
-                if any(k.lower() == "extensions.objectformat" and (v or "").lower() == "sha256" for k, v in pairs):
-                    hash_len = 32
+        if kind != "worktree":
+            self.objects.append(str(gd / "objects") + os.sep)
+            pairs = self.config(gd / "config", module=gd if kind == "module" else None) if lexists(gd / "config") else []
+            hash_len = hash_len_of(pairs)   # the common dir's config only
+        if lexists(gd / "config.worktree"):
+            self.config(gd / "config.worktree", module=gd if kind == "module" else None)
+        hash_len = hash_len or 20
         if kind == "worktree":
             self.worktree_admin(gd)
         elif lexists(gd / "commondir"):
-            self.add(finding("commondir", w, value=self.text(gd / "commondir")))
+            self.add(finding("commondir", w, value=short(self.text(gd / "commondir"), 160)))
         if kind != "worktree":
             self.hooks(gd)
             attrs = gd / "info" / "attributes"
@@ -566,10 +668,11 @@ class Scan:
                     self.add(finding("legacy", w, name=f"{legacy}/{shown(e.name)}"))
             for e in self.entries(gd / "worktrees") if is_dir(gd / "worktrees") else ():
                 if e.is_dir(follow_symlinks=False):
-                    self.git_dir(pathlib.Path(e.path), "worktree")
-        for idx in [gd / "index", *self.matching(gd, "sharedindex.")]:
-            if lexists(idx):
-                self.index(idx, hash_len)
+                    self.git_dir(pathlib.Path(e.path), "worktree", hash_len)
+        if lexists(gd / "index"):
+            self.index(gd / "index", hash_len)
+        for shared in self.matching(gd, "sharedindex."):
+            self.index(shared, hash_len)
         todo = gd / "rebase-merge" / "git-rebase-todo"
         if lexists(todo):
             try:
@@ -582,7 +685,8 @@ class Scan:
             self.module_tree(gd / "modules")
 
     def matching(self, d: pathlib.Path, prefix: str) -> list[pathlib.Path]:
-        return [pathlib.Path(e.path) for e in self.entries(d) if e.name.startswith(prefix)]
+        """Entries whose name starts with prefix in any case (the volume may open either spelling as git's)."""
+        return [pathlib.Path(e.path) for e in self.entries(d) if e.name.casefold().startswith(prefix)]
 
     def module_tree(self, top: pathlib.Path) -> None:
         """Every folder under modules/: a module's git dir (it has HEAD, a config, a commondir or an index) is inspected
@@ -619,23 +723,22 @@ class Scan:
             if low.startswith(("include.", "includeif.")):
                 self.add(finding("include", w, key=k))
             elif low == "core.hookspath":
-                self.add(finding("hookspath", w, key=k, value=(v or "")[:160]))
+                self.add(finding("hookspath", w, key=k, value=short(v, 160)))
             elif (why := check_key(k, v, remotes, self.own, rule)):
-                self.add(finding(why, w, key=k, **({"value": (v or "")[:120]} if why == "value" else {})))
+                self.add(finding(why, w, key=k, **({"value": short(v, 120)} if why == "value" else {})))
         return pairs
 
     def module_worktree_ok(self, module: pathlib.Path, v: str) -> bool:
         """A module's core.worktree as git writes it: a folder in the project's folders whose .git file leads back to
-        this module's git dir."""
+        this module's git dir, read as git reads it."""
         target = pathlib.Path(os.path.realpath(module / v))
         if not any(target == r or r in target.parents for r, _l in self.labels):
             return False
         try:
-            t = read_capped(target / ".git").decode(errors="replace").strip()
+            back, odd = pointer(target / ".git", b"gitdir: ")
         except Unreadable:
             return False
-        return t.startswith("gitdir:") and os.path.realpath(target / t[len("gitdir:"):].strip()) == \
-            os.path.realpath(module)
+        return not odd and os.path.realpath(target / back) == os.path.realpath(module)
 
     def hooks(self, gd: pathlib.Path) -> None:
         hooks = gd / "hooks"
@@ -653,26 +756,42 @@ class Scan:
                 self.add(finding("hook", self.where(gd), name=shown(e.name)))
 
     def worktree_admin(self, wt: pathlib.Path) -> None:
+        """A worktree's admin dir: its commondir must lead to its repo's git dir (`../..`, read as git reads it), and its
+        gitdir to a worktree whose .git file leads back."""
         w = self.where(wt)
-        v = self.text(wt / "commondir") if lexists(wt / "commondir") else ""
-        if v.rstrip("/") != "../..":
-            self.add(finding("commondir", w, value=v or "-"))
-        if lexists(wt / "gitdir"):
-            target = self.text(wt / "gitdir")
-            back = pathlib.Path(target) if os.path.isabs(target) else wt / target   # worktree.useRelativePaths
+        try:
+            common, odd = pointer(wt / "commondir") if lexists(wt / "commondir") else (None, None)
+        except Unreadable as e:
+            common, odd = None, str(e)
+        if odd:
+            self.add(finding("pointer", w, name="commondir", why=odd))
+        elif common not in ("../..", "../../"):
+            self.add(finding("commondir", w, value=short(common or "-", 160)))
+        if not lexists(wt / "gitdir"):
+            return
+        try:
+            target, odd = pointer(wt / "gitdir")
+        except Unreadable as e:
+            self.add(finding("unreadable", w, path="gitdir", why=str(e)))
+            return
+        if odd:
+            self.add(finding("pointer", w, name="gitdir", why=odd))
+            return
+        back = pathlib.Path(target) if os.path.isabs(target) else wt / target   # worktree.useRelativePaths
+        if not lexists(back):
+            return   # its worktree was removed: prunable, not a pointer elsewhere
+        try:
+            t, odd2 = pointer(back, b"gitdir: ")
+            ok = not odd2 and os.path.realpath(back.parent / t) == os.path.realpath(wt)
+        except Unreadable:
             ok = False
-            try:
-                t = read_capped(back).decode(errors="replace").strip()
-                ok = t.startswith("gitdir:") and os.path.realpath(
-                    back.parent / t[len("gitdir:"):].strip()) == os.path.realpath(wt)
-            except Unreadable:
-                ok = not lexists(back)   # its worktree was removed: prunable, not a pointer elsewhere
-            if not ok:
-                self.add(finding("gitdir", w, value=target))
+        if not ok:
+            self.add(finding("gitdir", w, value=short(target, 160)))
 
     def links(self, gd: pathlib.Path) -> None:
         """Every entry of a repo's git dir (its worktrees' and modules' included): a symbolic link, or a file with more
-        than one name outside an objects/ folder. The platform's own folder in it holds caches that make links."""
+        than one name outside the objects/ of a repo's or a module's git dir. The platform's own folder in it holds
+        caches that make links."""
         own = set(names.all("repo_dir"))
         stack = [(gd, ())]
         while stack:
@@ -686,7 +805,7 @@ class Scan:
                     self.add(finding("link", self.where(gd), path=r))
                 elif e.is_dir(follow_symlinks=False):
                     stack.append((e.path, parts))
-                elif "objects" not in parts[:-1]:
+                elif not any(e.path.startswith(o) for o in self.objects):
                     try:
                         if e.stat(follow_symlinks=False).st_nlink > 1:
                             self.add(finding("hardlink", self.where(gd), path=r))
@@ -700,23 +819,67 @@ class Scan:
             if (st.st_dev, st.st_ino) in self.indexes:
                 return
             self.indexes.add((st.st_dev, st.st_ino))
-            names_, odd = read_index(read_capped(idx, INDEX_CAP), hash_len)
+            entries, odd, link = read_index(read_capped(idx, INDEX_CAP), hash_len)
         except Unreadable as e:
             self.add(finding("unreadable", w, path=idx.name, why=str(e)))
             return
         except (OSError, ValueError) as e:
             self.add(finding("unreadable", w, path=idx.name, why=_("not an index git can read ({error})", error=e)))
             return
-        n = odd + sum(1 for p in names_ if into_git_dir(p))
+        n = odd + sum(1 for name, mode in entries if reported_entry(name, mode))
         if n:
-            self.add(finding("index", w, path=idx.name, n=n))
+            self.add(finding("index", w, path=shown(idx.name), n=n))
+        if link:   # a split index: the shared part it names, the file git opens
+            shared = idx.parent / f"sharedindex.{link}"
+            if lexists(shared):
+                self.index(shared, hash_len)
+            else:
+                self.add(finding("unreadable", w, path=f"sharedindex.{link}", why=_("missing")))
 
     def result(self) -> dict:
         if self.dropped:
             self.findings.append(finding("incomplete", "workspace", why=_("{n} more findings not kept",
                                                                          n=self.dropped)))
-        return {"holds": not self.findings, "findings": self.findings, "notes": self.notes, "repos": self.repos,
-                "commit_gate": commit_gate(self.name, self.doc, self.wanted_hooks)}
+        return {"nothing_found": not self.findings, "findings": self.findings, "notes": self.notes,
+                "repos": self.repos, "commit_gate": commit_gate(self.name, self.doc, self.wanted_hooks)}
+
+
+class TempScan(Scan):
+    """The temp roots (r2 S1): a repo anywhere in them is inspected as a project's is, and one at a root is said
+    whatever it holds (it makes the whole area a checkout). Folders of other users are skipped; the owner's that can't
+    be listed are said."""
+
+    def __init__(self, work: pathlib.Path, deadline: float, roots: list[pathlib.Path]):
+        super().__init__("", {}, work, deadline)
+        self.labels = [(r, shown(r)) for r in roots]
+        self.roots = roots
+        self.cap = TEMP_CAP
+        self.keep = TEMP_KEPT
+        self.private = pathlib.Path(os.path.realpath(hubconf.secrets_dir()))
+
+    def listable(self, d, err: OSError) -> bool:
+        try:
+            return os.lstat(d).st_uid == os.getuid()
+        except OSError:
+            return False
+
+    def entries(self, d, where=None):
+        for e in super().entries(d, where):
+            p = pathlib.Path(e.path)
+            if p == self.private or self.private in p.parents:
+                continue
+            yield e
+
+    def found_repo(self, folder: pathlib.Path, root: pathlib.Path) -> None:
+        if folder == root:
+            self.add(finding("temp-dotgit", self.where(folder)))
+
+    def scan(self) -> tuple[list[dict], int]:
+        try:
+            self.walk(self.roots, TEMP_DEPTH)
+        except Late as e:
+            self.findings.append(finding("incomplete", self.labels[0][1] if self.labels else "temp", why=str(e)))
+        return self.findings, len(self.findings) + self.dropped
 
 
 def project_roots(name: str, doc: dict) -> list[tuple[pathlib.Path, str]]:
@@ -799,56 +962,6 @@ def temp_roots(given=None) -> list[pathlib.Path]:
     return out
 
 
-def scan_temp(deadline: float, roots=None) -> list[dict]:
-    """In the temp roots: a `.git` (of any kind) at each root and in each folder just below it, which makes every folder
-    below it a checkout; and folders shaped like a git dir anywhere to a depth, which catch the owner's git run below
-    them. Stopping early (the time, the count, the depth) is said."""
-    found, seen = [], 0
-    private = pathlib.Path(os.path.realpath(hubconf.secrets_dir()))
-
-    def stop(root, why):
-        found.append(finding("incomplete", shown(root), why=why))
-
-    for root in temp_roots(roots):
-        if git_shaped(root):
-            found.append(finding("shaped", shown(root)))
-        if lexists(root / ".git"):
-            found.append(finding("temp-dotgit", shown(root)))
-        stack, cut = [(str(root), 0)], False
-        while stack:
-            d, depth = stack.pop()
-            try:
-                it = os.scandir(d)
-            except OSError:
-                continue   # another user's folder in a shared temp area: not this owner's git's concern
-            with it:
-                for e in it:
-                    seen += 1
-                    if time.monotonic() > deadline:
-                        stop(root, _("time limit"))
-                        return found
-                    if seen > TEMP_CAP:
-                        stop(root, _("{n} entries", n=TEMP_CAP))
-                        return found
-                    if e.name.casefold() == ".git" or not e.is_dir(follow_symlinks=False):
-                        continue
-                    p = pathlib.Path(e.path)
-                    if p == private or private in p.parents:
-                        continue
-                    if git_shaped(e.path):
-                        found.append(finding("shaped", shown(e.path)))
-                        continue   # its own folders are git's
-                    if depth == 0 and lexists(p / ".git"):
-                        found.append(finding("temp-dotgit", shown(e.path)))
-                    if depth + 1 < TEMP_DEPTH:
-                        stack.append((e.path, depth + 1))
-                    else:
-                        cut = True
-        if cut:
-            stop(root, _("{n} levels deep", n=TEMP_DEPTH))
-    return found
-
-
 # ---------- the whole machine ----------
 
 def sandboxed_projects(only: str | None = None) -> dict[str, dict]:
@@ -857,7 +970,7 @@ def sandboxed_projects(only: str | None = None) -> dict[str, dict]:
 
 
 def scan(only: str | None = None, temp: bool = True, temp_given=None) -> dict:
-    out = {"v": 1, "at": datetime.datetime.now().isoformat(timespec="seconds"), "projects": {}, "temp": []}
+    out = {"v": 2, "at": datetime.datetime.now().isoformat(timespec="seconds"), "projects": {}, "temp": []}
     work_top = pathlib.Path(tempfile.mkdtemp(prefix="git-fence.", dir=hubconf.private_tmp()))
     try:
         for name, doc in sandboxed_projects(only).items():
@@ -866,17 +979,18 @@ def scan(only: str | None = None, temp: bool = True, temp_given=None) -> dict:
             try:
                 out["projects"][name] = Scan(name, doc, work, time.monotonic() + TIME_CAP).run()
             except Exception as e:   # one project's trouble is said; the next is still scanned
-                out["projects"][name] = {"holds": False, "findings": [finding("incomplete", "workspace",
-                                                                              why=f"{type(e).__name__}: {e}")],
+                out["projects"][name] = {"nothing_found": False, "findings": [finding("incomplete", "workspace",
+                                                                                      why=f"{type(e).__name__}: {e}")],
                                          "notes": [], "repos": 0, "commit_gate": {}}
             finally:
                 shutil.rmtree(work, ignore_errors=True)
         if temp:
-            found = scan_temp(time.monotonic() + TIME_CAP, temp_given)
-            shaped = [f for f in found if f["kind"] != "incomplete"]
+            work = work_top / "t"
+            work.mkdir()
+            found, total = TempScan(work, time.monotonic() + TIME_CAP, temp_roots(temp_given)).scan()
             out["temp_at"] = out["at"]
-            out["temp_shaped"] = len(shaped)
-            out["temp"] = shaped[:TEMP_KEPT] + [f for f in found if f["kind"] == "incomplete"]
+            out["temp_count"] = total
+            out["temp"] = found
     finally:
         shutil.rmtree(work_top, ignore_errors=True)
     return out
@@ -913,9 +1027,9 @@ def gate_text(g: dict) -> str:
             "other": _("commit gate on, but the pre-commit isn't the platform's current one")}.get(g.get("hook"), "")
 
 
-def rows(rep: dict | None = None) -> list[tuple[str, str, str, list[str]]]:
-    """(project, 'ok'|'warn', its one line, every finding's line) per sandboxed project, then the temp area's row
-    ('' for the project): what the status page and doctor show."""
+def rows(rep: dict | None = None, temp: bool = True) -> list[tuple[str, str, str, list[str]]]:
+    """(project, 'ok'|'warn', its one line, every finding's line) per sandboxed project, then (temp) the temp area's
+    row ('' for the project): what the status page shows; doctor leaves the temp area out."""
     rep = rep if rep is not None else load()
     if rep is None:
         return []
@@ -923,39 +1037,37 @@ def rows(rep: dict | None = None) -> list[tuple[str, str, str, list[str]]]:
     for name, p in sorted(rep["projects"].items()):
         fs = [describe(f) for f in p.get("findings") or []]
         notes = [describe(f) for f in p.get("notes") or []]
-        line = (_("holds ({gate})", gate=gate_text(p.get("commit_gate") or {})) if not fs else
-                _("not holding: {first}{more} ({gate})", first=fs[0],
+        line = (_("no known problem found, a best-effort check ({gate})", gate=gate_text(p.get("commit_gate") or {}))
+                if not fs else
+                _("problems found: {first}{more} ({gate})", first=fs[0],
                   more=_(" (+{n} more)", n=len(fs) - 1) if len(fs) > 1 else "",
                   gate=gate_text(p.get("commit_gate") or {})))
         out.append((clean(name), "ok" if not fs else "warn", line, fs + notes))
-    shaped = [f for f in rep.get("temp") or [] if f.get("kind") != "incomplete"]
+    found = [f for f in rep.get("temp") or [] if f.get("kind") != "incomplete"]
     stopped = [f for f in rep.get("temp") or [] if f.get("kind") == "incomplete"]
-    if shaped or stopped:
-        line = (_("temp area: {n} {n:folder|folders} that catch the owner's git, e.g. {first}",
-                  n=rep.get("temp_shaped") or len(shaped), first=clean(shaped[0]["where"])) if shaped
-                else _("temp area: nothing that catches the owner's git found"))
+    if temp and (found or stopped):
+        line = (_("temp area: {n} {n:problem|problems}, e.g. {first}", n=rep.get("temp_count") or len(found),
+                  first=describe(found[0])) if found
+                else _("temp area: no known problem found, a best-effort check"))
         if stopped:
             line += _("; the walk stopped early ({why})", why=clean(stopped[0].get("why")))
-        out.append(("", "warn" if shaped else "ok", line, [describe(f) for f in shaped + stopped]))
+        out.append(("", "warn" if found else "ok", line, [describe(f) for f in found + stopped]))
     return out
 
 
 def window_text() -> str:
-    return _("scanned every {n} minutes: a change can stand that long before it is seen", n=EVERY_MIN)
+    return _("scanned every {n} minutes, a best-effort check: a change can stand that long before it is seen, and "
+             "the guarantee has to come from the fence preventing the writes", n=EVERY_MIN)
 
 
 def problems(rep: dict) -> tuple[list[str], list[str]]:
-    """(lines, ids) for alert.once: every finding of every project, each with a stable id, and one for the temp area."""
+    """(lines, ids) for alert.once: every finding of every project, each with a stable id. The temp area is on the
+    status page only until the fence's HEAD rule exists (r2 S1)."""
     lines, ids = [], []
     for name, p in sorted(rep["projects"].items()):
         for f in p.get("findings") or []:
             lines.append(f"{clean(name)}: {describe(f)}")
             ids.append(f"{name}:{f['id']}")
-    shaped = [f for f in rep.get("temp") or [] if f.get("kind") != "incomplete"]
-    if shaped:   # one problem for the area, however many: a test run can leave thousands
-        lines.append(_("temp area: {n} {n:folder|folders} that catch the owner's git, e.g. {first}",
-                       n=rep.get("temp_shaped") or len(shaped), first=clean(shaped[0]["where"])))
-        ids.append("temp:shaped")
     return lines, ids
 
 
@@ -978,11 +1090,12 @@ def main(argv: list[str]) -> int:
         due = temp_due(last, now)
         rep = scan(temp=due)
         if not due and last:
-            rep.update({k: last[k] for k in ("temp", "temp_at", "temp_shaped") if k in last})
+            rep.update({k: last[k] for k in ("temp", "temp_at", "temp_count") if k in last})
         hubconf.write_atomic(result_path(), json.dumps(rep, ensure_ascii=False, indent=1))
         import alert
         lines, ids = problems(rep)
-        alert.once("git-fence", lines, _("the git config fence's scan finds nothing any more"), ids=ids)
+        alert.once("git-fence", lines, _("the git config fence's scan (a best-effort check) finds no known problem "
+                                         "any more"), ids=ids)
     else:
         rep = scan(a.project, temp=not a.no_temp, temp_given=a.temp_root)
     if a.json:

@@ -211,9 +211,9 @@
  "Fence": "圍欄",
  "What the scan found": "掃描找到的",
  "Details: bin/git_fence.py --report (docs/design/git-config-fence.md)": "細節:bin/git_fence.py --report(docs/design/git-config-fence.md)",
- "Git config fence (report only, scanned {at})": "Git config 圍欄(只回報,掃描於 {at})",
  "The git config fence row failed: {e}": "git config 圍欄這一列出錯:{e}",
  "temp area": "暫存區",
- "holds": "守得住",
- "not holding": "守不住"
+ "Git config fence (report only, a best-effort check, scanned {at})": "Git config 圍欄(只回報,盡力而為的檢查,掃描於 {at})",
+ "no known problem": "沒有已知問題",
+ "problems found": "發現問題"
 }
