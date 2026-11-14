@@ -17,6 +17,8 @@ fixes, speed-ups and reverts are listed.
 - **conformance-codex:** The login checks run with the user's login linked into the world, and MODELS what a ChatGPT plan serves
 - **isolation:** Sandboxed services and jobs make no symbolic links in their checkouts
 - **worktrees:** The platform makes Claude Code's worktrees in sandboxed projects, as the project
+- **tests:** A test run started by hand gets bin/run-tests' throwaway platform
+- **skills:** A project's skills developed in skills/, installed by the owner's brunna skills sync
 
 ### Fixed
 
@@ -45,6 +47,11 @@ fixes, speed-ups and reverts are listed.
 - **isolation:** The link rule is friction, not a boundary
 - **worktrees:** Links from the branch checked out, nothing left by a killed hook, names with slashes
 - **worktrees:** A drop clears the platform's own files first and never unregisters a folder it can't delete
+- **tests:** Every temp folder a test makes is removed after it
+- **tests:** The test-run guard looks at the tests folder, and AGENTS.md says where it holds
+- **linux-test:** The container's tests get a private temp folder, and an alert without curl isn't a crash
+- **isolation:** Linux CI: the tests' temp folder where Landlock can hide platform state, and refusals that say which part is missing
+- **skills:** The review shows everything against what the owner approved, and only the owner approves
 
 ### Reverted
 
