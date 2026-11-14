@@ -642,8 +642,10 @@ r2 and the plan above disagree, r2 holds.
   tries the bus and fails with a raw `sqlite3.OperationalError` traceback (the bus is unwritable; a clean message would be
   better). The end-to-end path through a registered sandboxed project's outbox and view wasn't measured: no such project
   could be used.
-- **The version** in `session_meta.cli_version` is the process that runs the thread: `0.169.0` for TUI threads on the
-  daemon behind a `0.167.0` client (`originator: "codex-tui"`, `source: "vscode"`), `0.167.0` for exec.
+- **The version** in `session_meta.cli_version` is the version of the process that created the thread: `0.169.0` for TUI
+  threads on the daemon behind a `0.167.0` client (`originator: "codex-tui"`, `source: "vscode"`), `0.167.0` for exec. A
+  resumed rollout gets no new `session_meta`, so a daemon that updated itself since isn't seen there (review B1): the
+  running process's version is read first (as built, below).
 
 **The should-fix items, and how each is folded in:**
 - **S1.** Today no sandbox protects `.codex` (the correction in section 3). The fix comes first:
@@ -673,8 +675,9 @@ r2 and the plan above disagree, r2 holds.
   user-level MCP servers (the brunna MCP server included) run outside the profile, with the user's authority. "Network off"
   is about the session's tools only.
 - **S9.** A version gate:
-  - `session_version` for Codex comes from the rollout's `session_meta.cli_version` (the daemon's version, measured), not
-    from the client's process;
+  - `session_version` for Codex is the running daemon's (or exec's) version, read from its process's files, not from the
+    client's; the rollout's `session_meta.cli_version` (the thread's creator) only when that can't be read, marked so
+    (corrected after the code review, B1);
   - the conformance probe (`codex sandbox` canaries, no model, B1's filter canary included) runs in Order step 2 for every
     version the store checks;
   - in a sandboxed project, a version without a passing probe counts as not confined.
@@ -722,59 +725,117 @@ r2 and the plan above disagree, r2 holds.
 - **D10, build steps 3–5 now as hardening, or stop after steps 1–2 until D9?** Recommended: steps 1–2 now (they close real
   holes), and steps 3–5 with D9's path. Provisionally taken: steps 1–2 are built.
 
-**Steps 1–2 as built (11-14).**
+**Steps 1–2 as built (11-14), and after two cold code reviews of them (the same day).**
 - **Step 1 (S1, S3).**
   - `runtime_codex` has the `control` port: `CONTROL = (".codex", tree), (".agents", tree)`; `control_root() = (".codex",
-    ())`; `session_folders` (the folder itself); `foreign_controls` (every entry in `.codex/`, a link said as one).
+    ())`; `session_folders` (the folder itself). `foreign_controls` walks the folder for `.codex` and `.agents` at any depth,
+    in every spelling the volume folds to them, without following links and past `.git`, `node_modules` and virtualenvs; the
+    top `.codex`'s entries are named one by one (review S5).
   - Adapters that declare `ALWAYS_PROTECTED` (Codex and Claude) are protected whatever is installed
-    (`runtime_ports.protected_runtimes`). `policy.protect()` and `protect_roots()` read that list, so:
-    - Claude's session settings get `Edit` denies on `**/.codex` and `**/.agents`, which its sandbox takes in for Bash
-      (V-M9);
-    - the services' Seatbelt profile denies them at any depth, and Codex's tool folder is one rule with nothing writable;
-    - the confined runs' settings get them too.
-  - Claude's renderer adds a `denyWrite` on each other agent's control folder at the top of every session folder
-    (`_other_controls`), whether it exists or not, as the second layer.
-  - Claude's `control` check gains six canaries:
-    - `.codex/canary` and `.agents/canary`, through Edit and through `sh -c`;
-    - `sub/.codex/canary` and `.claude/worktrees/wt-canary/.codex/canary`, through `sh -c`.
+    (`runtime_ports.protected_runtimes`; an adapter that can't be loaded is left out and said on stderr, review N2).
+    `policy.protect()` and `protect_roots()` read that list, so:
+    - **Claude's sessions.** Edit denies on `**/.codex` and `**/.agents`, which V-M9 measured the sandbox takes in for Bash:
+      - under the workspace;
+      - under every other place a session may write (its runtime folder, `allow_write`, the temp area as given and resolved,
+        and the renderer's own temp folder), so that a tree staged there and moved in carries none (review A-B2);
+      - in each spelling the volume folds to the name (`.agentſ`, review A-C1).
 
-    Each has its positive control, and the check's timeout grows to match. Not run against the real Claude here: it needs
-    the headless token, a file under `~/.claude`. The stand-in tool used by the tests takes the `Edit` rules into its
-    sandbox, as the tool does.
-  - Doctor's per-project row names each unconfined agent's reason (`runtime_ports.unconfined_reason`; Codex's
-    `unconfined()`: B1).
-  - Tests: `test_control_files` (Claude's settings for both folders, Seatbelt holding them at the top, nested, in a
-    worktree and against a move), `test_runtime_codex.Control`, `test_runtime_installed`, `test_sandbox_deny_parity`,
-    `test_conformance_claude`.
+      A `denyWrite` on each folder at the top of every session folder is the second layer.
+    - **Services and jobs.** The Seatbelt profile denies writing the control names wherever they are made, not only under
+      the workspace: Seatbelt checks a rename at its two ends only, so a name made in the temp area and moved in nested used
+      to land (review A-B2, the reviewer's probe). Codex's tool folder is one rule with nothing writable.
+    - **The confined runs** get the same rules.
+    - **Linux:** Landlock enforces none of this (it can only allow, and the project's folder is writable). doctor's control
+      row says so, as for Claude's names (review N1).
+  - `user_control_paths`: what an agent loads for every session from the user's home (Codex's `~/.agents`, Claude's own
+    user-level list). It goes into every sandbox's `deny_write` (`runtime_ports.user_controls`; review S1).
+  - `~/.codex` moved from policy's `CREDENTIALS` to Codex's `credential_paths`, which is asked for every protected runtime:
+    still denied whatever is installed, and the neutral files carry no Codex syntax (review N3).
+  - **Tracked control files (review S3).**
+    - A project that tracks files under `.codex/` or `.agents/` (at any depth) can no longer change them from inside its
+      sandbox.
+    - merge-branch's up-front check holds a merge that would change one (`policy.protected_changes` with
+      `policy.is_control`, now test-runner's too; review S2).
+    - doctor names them per sandboxed project, read as the project (project-git-job `tracked`).
+    - render-project-settings reports every protected runtime's `foreign_controls` as drift, so such a project's status row
+      stays red until the files go. That is meant: they are what its sessions would load.
+  - **Claude's `control` check: nine canaries for other agents' control folders.**
+    - `.codex/canary` and `.agents/canary`, through Edit and Bash.
+    - `sub/.codex/canary` and `sub/.agents/canary` (Bash).
+    - `.codex` in a worktree made after the settings were rendered, so no second-layer entry names it (Bash; review S4).
+    - A tree built in `$TMPDIR` and moved into the project (review A-B2).
+    - `.agentſ/canary` (Write).
+
+    Each has its positive control.
+    - Every Bash canary makes its folder first (`mkdir -p … && printf …`). It counts as refused only when the Bash result
+      shows the sandbox's refusal ("Operation not permitted"), never because a file is absent (review A-B1: on the real
+      2.1.323 the earlier canaries "tested nothing").
+    - The stand-in tool behaves like the tool:
+      - Write makes folders, Bash only what its command makes;
+      - a rename is checked at its two ends;
+      - the rules don't fold the long s.
+    - **Not run against the real Claude here** (it needs the headless token under `~/.claude`). Whether Claude's sandbox
+      refuses the staged move and the long s from these rules is what that run will tell.
+  - Doctor's per-project row names each unconfined agent's reason (`runtime_ports.unconfined_reason`). Codex's comes from the
+    newest recorded probe once there is one, else from what was measured by hand (review N4).
 - **Step 2 (S9).**
-  - `bin/conformance_codex.py` holds three checks, all session-side, with no model and no login, in a `CODEX_HOME` of the
-    world's:
-    - **session-folder-git** (safety): a clean filter in the repo's config, a staged file whose timestamp moved, and `codex
-      debug prompt-input`, which runs Codex's own `git status`. A git that logs its calls tells "Codex ran no git" (an
-      error) from "its git ran nothing" (a pass).
-    - **control-globs** (safety): `codex sandbox -P` with `runtime_codex.profile_control_entries` (the `deny` globs)
-      refuses `.codex` and `.agents` at the top, nested and by a move, while an allowed write lands; with a profile
-      lacking the entries, everything lands.
+  - **`bin/conformance_codex.py`: three checks, all session-side.** No model, no login, a `CODEX_HOME` of the world's:
+    - **session-folder-git** (safety).
+      - Four drivers, one per config source git reads in a repo's folder: the repo's config, a file it includes,
+        `config.worktree` (`extensions.worktreeConfig`), and a `process` driver. Each file a driver is chosen for has its
+        timestamp moved with its content as staged.
+      - `codex debug prompt-input` runs Codex's own `git status`. It also opens an unauthenticated connection to the
+        model provider, which carries nothing of the user's.
+      - A logging `git` (not exec'ing the real one) records each call's folder, arguments, exit code and completion.
+      - It **passes** only when a `status` (the subcommand word, after git's global options) ran to the end in the
+        project's folder and no driver ran. It **errors** when no such status ran, and **fails** naming the drivers that
+        ran (review B2).
+    - **control-globs** (safety). `codex sandbox -P` with `runtime_codex.profile_control_entries` (the deny globs, written
+      as TOML strings) refuses six probes, each run on its own with its folders made by its command:
+      - `.codex` at the top and nested;
+      - an `.agents` skill;
+      - a folder moved to the top `.codex`;
+      - a folder moved to a nested `.agents`;
+      - a link named `.codex`.
+
+      An allowed write in the same run proves the command ran. With a profile lacking the entries every probe lands;
+      otherwise it errors.
     - **lifecycle-hooks**: not checkable (it needs a model call).
-  - Run against 0.167.0 in a scratch world: session-folder-git **fails** (B1) and control-globs **passes**.
-  - `conformance.py run` takes a runtime with no distribution port that says its version and has only session-side
-    checks (`versioned`). Its result goes to `<version>.session.json` (`record_any`), which `runtime_ports.gated` reads,
-    so a sandboxed project's Codex session of a failing version is gated as well as refused.
-  - Nothing runs the probe on a schedule yet: `session_versions.py` serves runtimes with the distribution port (Step 1).
-    The owner or a later step runs `conformance.py run codex` from the main checkout.
-  - A Codex session's version is its rollout's `session_meta.cli_version` (the daemon's), read only from a rollout in the
-    user's Codex home (`runtime_codex.session_version(pid, raw=)`). hub-event hands the hook's input to a
-    `session_version` that takes it (`_version_of`).
-  - Tests: `tests/test_conformance_codex.py`, with a stand-in `codex` whose sandbox is Seatbelt.
-- **S12's ratchet.** `tests/test_runtime_boundary.py` counts Codex's syntax too (`\.codex`, `CODEX_*`, `turn_context`,
-  `[permissions.`), with `runtime_codex.py` and `modules/codex.yaml` exempt. The baseline starts at policy.py's
-  `CREDENTIALS` and agenthub's help. hub-event and render-project-settings.py are in `NEUTRAL`.
+  - **Run against 0.167.0 in a scratch world:** session-folder-git **fails**, all four drivers ran; control-globs
+    **passes**, all six probes refused and landing without the entries.
+  - **`conformance.py run`** takes a runtime with no distribution port that says its version and has only session-side
+    checks (`versioned`). Its result goes to `<version>.session.json` (`record_any`), and a record that fails is said, not
+    a traceback.
+    - The binary is PATH's `codex` unless `--binary` names another. To probe the daemon's version, point `--binary` at the
+      daemon's package (`<codex home>/packages/app-server-daemon/releases/<version>-<target>/bin/codex`). The recorded
+      digest is of the file `--binary` names (for PATH's npm `codex`, the shim).
+  - **What reads the result.**
+    - `runtime_ports.gated` reads it, but only fails gate a session. A sandboxed project's Codex session is refused today
+      anyway (no confine port), so the gate isn't reachable end to end yet.
+    - "A version without a passing probe isn't confined" belongs to step 4's confined check (steps 3–5), not to `gated`.
+  - **Nothing runs the probe on a schedule yet:** `session_versions.py` serves runtimes with the distribution port (Step 1).
+  - **A Codex session's version is the running process's.**
+    - `session_pid` gives the daemon under the Desktop app and the TUIs, the native `codex` under exec. `version_at` reads
+      the daemon's own release folder or nvm's package, so a daemon that updated itself under a resumed thread is seen
+      (review B1).
+    - Only when that can't be read, the rollout's `session_meta.cli_version`, marked build `rollout`. It is read only
+      from a rollout in the user's Codex home (both sides resolved, so a linked sessions folder works and
+      `sessions/../..` doesn't), whose session id is the hook's, with a first line of up to 16 MiB.
+    - One version grammar for all of it (`runtime_ports.checkable_version`): a pre-release isn't recorded.
+    - hub-event hands the hook's input to a `session_version` that takes it, in a worktree's hooks too.
+  - Tests: `tests/test_conformance_codex.py`, with a stand-in `codex` whose sandbox is Seatbelt (macOS).
+- **S12's ratchet.**
+  - `tests/test_runtime_boundary.py` counts Codex's syntax too (`\.codex`, `CODEX_*`, `turn_context`, `[permissions.`),
+    with `runtime_codex.py` and `modules/codex.yaml` exempt.
+  - The neutral files are checked against Codex's patterns as well; hub-event and render-project-settings.py are among
+    them.
+  - The baseline went down: policy.py carries none now.
 - **S10 is left for steps 3–5.** It only matters once a Codex session has a rendered profile (Claude's sessions already
-  deny `~/.codex` through `CREDENTIALS`). The renderer then denies each other installed runtime's home, declared by its
-  adapter; Claude's declares only its credential file today, so it gains a home declaration.
+  deny `~/.codex`, now through Codex's `credential_paths`). The renderer then denies each other installed runtime's home,
+  declared by its adapter. Claude's declares only its credential file today, so it gains a home declaration.
 - **Left for steps 3–5:**
   - the renderer and render-project-settings (S3's no-removal-while-trusted, S11);
-  - the static and per-turn confined check (S7) and the hub-event pieces (S5, S6);
+  - the static and per-turn confined check (S7, and "no passing probe = not confined") and the hub-event pieces (S5, S6);
   - doctor's trust rows, `user-settings --trust` and `user_cleanup` (S2);
   - D8's network (the proxy, the socket);
   - S10;
@@ -1195,5 +1256,5 @@ What changes for Step 2, a follow-up apart from Step 4:
   `.agents/skills/` appeared in the model's skills list (`codex debug prompt-input`).
 - **`brunna inbox`** under the profile in an unregistered folder: a `sqlite3.OperationalError` traceback (the bus isn't
   writable there).
-- **`session_meta.cli_version`** is the version of the process running the thread: 0.169.0 for daemon threads behind a
-  0.167.0 client.
+- **`session_meta.cli_version`** is the version of the process that created the thread: 0.169.0 for daemon threads behind
+  a 0.167.0 client. A resumed thread keeps it.
