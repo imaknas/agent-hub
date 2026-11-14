@@ -1443,3 +1443,39 @@ nothing.
 **What is true now** (`tests/test_session_worktree.py`, `B1Open`): a sandboxed project's services and jobs can put a
 link at a tracked folder's place, directly or as a folder holding one. **B-1 is open for them as for sessions.** If that
 test ever fails, something refuses links again, and this doc should say so.
+
+### B-1 mitigation 3: the drop, after the real check (11-15)
+
+**The real check** (a sandboxed project on this machine, 11-15, on main after the merge):
+- `claude -p --worktree <name>` ran the platform's `WorktreeCreate` hook. The session ran in
+  `.claude/worktrees/<name>` on `worktree-<name>`, and Claude made no worktree of its own.
+- **The drop failed.** Git's `worktree remove`, run as the project, unregistered the worktree, then couldn't delete
+  its folder. In it were the platform's settings (`.claude/settings.local.json`, written at session start) and the
+  rules-file link (`CLAUDE.local.md`). Every sandbox protects those names at any depth, and protects a worktree's own
+  `.claude` too. So the folder and the branch were left orphaned.
+
+**Fixed:**
+- `session_worktree.drop` first removes what the platform itself writes into a worktree, as the platform:
+  - which entries: the installed runtimes' local-only files (the instructions port's `local_ignores`; for Claude Code,
+    `CLAUDE.local.md` and `.claude/settings.local.json`), and their folder when that empties it;
+  - how: walked down from the workspace through no-follow directory descriptors (`nofollow`), files and links only,
+    never a folder's contents;
+  - which worktree: only one at the tool's place, with a `.git` pointer file read the same way.
+- Then the rest goes as the project (`session-worktree-remove`): everything but `.git`, bottom-up, links removed as
+  links. **Only when nothing is left** is it unregistered (`worktree remove --force`), and its branch removed with
+  `branch -d` (merged ones only). If anything can't be deleted, the worktree stays registered, and the call fails
+  saying what is left.
+- **The make's undo** clears the platform's entries the same way, then the same removal.
+- **The tool's worktree folder** (`.claude/worktrees`) is made by the platform the same way before the job. The
+  project's sandbox holds the tool's own folder (`protect_roots`), so a first worktree could not make it.
+- **Tests** under the real Seatbelt profile, with the tool's folder and the control names held as in a real project:
+  - a drop after a session start wrote the settings and the links: nothing left on disk or registered, and the link's
+    target untouched;
+  - a folder that can't be emptied stays registered;
+  - a drop of anything not at the tool's place is refused.
+
+**Session start writes into a hook-made worktree as the owner** (`worktree-memory.sh` → `render-project-settings
+--worktree`). That write goes through `nofollow.replace` from the workspace, folder by folder without following a link.
+The worktree's path is resolved first and must stay inside the workspace, so a planted link can at most move the write
+to another folder of the same workspace, never outside it. The links and the rest (`.agent-memory`, the rules file)
+are made as the project (`project_git.py run-as`). No other owner write was found there.
