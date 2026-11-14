@@ -1056,7 +1056,8 @@ command, a service, a job), the project can make that checkout write its files a
   - With them, `python3 -m venv .venv`, `uv venv .venv` and `npm install` of a `file:` package with a `bin` worked.
   - A venv elsewhere (`venv2`) was still refused.
   - **A link made inside a carve-out can't be renamed onto `d`** (refused). The rename's destination counts as a link
-    creation outside the carve-out.
+    creation outside the carve-out. **But a folder holding a link can** (the cold review of the build, 11-14): see "B-1
+    as built, after its cold review".
   - **The broker refuses tracked paths at or under a carve-out name** (`.venv`, `node_modules`), so no checkout ever
     writes into a folder where links may exist.
   - More carve-outs (other languages' tool folders) are added one at a time with that same refusal, from the refusal
@@ -1089,7 +1090,7 @@ command, a service, a job), the project can make that checkout write its files a
 | option | what it gives | what it costs |
 |---|---|---|
 | **1. Accept and document** | nothing new; the status page and doctor say it plainly | while any process of a sandboxed project runs, the owner's and the agent tools' checkouts can be made to write anywhere as the owner; "confined" can't be claimed for checkouts; the principle isn't met for them |
-| **2. Partial mitigation for services and jobs** (the symlink rule, the carve-outs, P2's allowance, the broker's refusals) | services and jobs can't swap at all (measured) | venvs and tool folders outside the carve-outs break for services and jobs, loudly; the carve-out list needs maintaining; **sessions stay open**, so it doesn't close B-1 alone |
+| **2. Partial mitigation for services and jobs** (the symlink rule, the carve-outs, P2's allowance, the broker's refusals) | services and jobs can't make a link directly in their checkouts; **they can still move in a folder holding one**, so it is friction, not a boundary (the build's cold review, 11-14) | venvs and tool folders outside the carve-outs break for services and jobs, loudly; the carve-out list needs maintaining; **sessions stay open**, so it doesn't close B-1 alone |
 | **3. The platform makes worktrees for sandboxed projects** (Claude's `WorktreeCreate` hook → the broker, with P2 under the rule's allowance), and doctor warns about the owner's own checkouts | an agent tool's worktree mode stops being the no-owner-action trigger, for Claude; the owner is told when their checkout is exposed (a project process is running) | Codex has no such hook found; the owner's own checkouts are only warned about, not protected; a hook to build and maintain |
 | **4. Never "confined" while any process of the project can run during a checkout** | the confined check stops overclaiming | in practice a sandboxed project's sessions are never "confined" (their commands can always run during a checkout), so D9's goal of a confined Codex session isn't reached by this design |
 
@@ -1229,7 +1230,8 @@ from the project's environment shapes the program the exec guard lets run.
 built for every sandboxed project, with no switch. Option 4 (sessions never "confined") and question 4 (Codex app
 worktrees) are still open. Until they are decided, the caveats on the principle and on Codex's confined check stand.
 
-**Mitigation 2: a sandboxed project's services and jobs make no symbolic link in their checkouts.**
+**Mitigation 2: a sandboxed project's services and jobs can't make a symbolic link directly in their checkouts.**
+Withdrawn as a protection by the build's cold review: a folder holding a link can still be moved in (next section).
 - **The port.** `policy.links` is neutral:
   - the roots are the workspace and the runtime folder (a deploy's `git pull` there is a checkout too);
   - the tool folders `LINK_FOLDERS` may hold links: `.venv/` at a root's top, and `node_modules/` at any depth, inside
@@ -1301,8 +1303,8 @@ worktrees) are still open. Until they are decided, the caveats on the principle 
   own tools. `propose` is off for sandboxed projects, and its copy is outside the workspace.
 
 **Doctor:**
-- one row: services and jobs make no links (macOS), or "this OS's sandbox can't refuse links per folder" (Linux,
-  warning);
+- one row, a warning either way: services and jobs can't make a link directly but can move in a folder that holds one,
+  "friction, not a boundary" (macOS), or the platform doesn't refuse links on this OS (Linux);
 - per sandboxed project, a warning: while its programs run, a checkout the owner makes in its folder (terminal,
   editor, git apps, the Codex app's worktrees) can be made to write its files anywhere the owner can write; plus which
   agents' worktrees the platform makes there (read from the project's settings);
@@ -1342,3 +1344,74 @@ worktrees) are still open. Until they are decided, the caveats on the principle 
    worktree.
 4. Whether a project's local settings are trusted for this hook in a fresh folder (the binary mentions "workspace not
    trusted"), and that `CLAUDE_CODE_RESTRICT_PERSONAL_CONFIG` doesn't apply to project-level hooks.
+
+### B-1 as built, after its cold review (11-14)
+
+A cold review of the build found that mitigation 3 holds, and that mitigation 2 is bypassed (blocking). Where this
+section and the ones above disagree, this one holds.
+
+**Mitigation 2 is friction, not a boundary.**
+- **The bypass:** `mv d d.x; mv X d`, where `X/sub` is a link. The link can be made in a tool folder (`node_modules`),
+  in the temp area, or earlier by a session, whose own commands no rule covers. Seatbelt checks a folder's rename as a
+  directory's creation, which mkdir also is, so the link rule never sees it. The review's owner races, run under the
+  rule, wrote 660 to 717 files outside the project and overwrote an existing file there.
+- **Is there a direct rule? Measured here:**
+  - denying directory creation in the roots (`file-write-create` with `vnode-type DIRECTORY`) refuses the moved-in
+    folder, and mkdir too: unusable;
+  - denying a directory's removal outside the roots (a rename's source) refuses the folder staged in the temp area,
+    and `rmdir` there too; it leaves a folder staged inside the roots (in `node_modules`, or by a session) free to move;
+  - no Seatbelt filter was found that tells a folder's rename from mkdir.
+- **So the claim is withdrawn everywhere.** The guarantee's text (`isolation.py`), `seatbelt.link_rules`'s docstring,
+  doctor's row (now a warning) and this doc all say: the rule refuses making a link directly in the workspace, not
+  moving in a folder that holds one. **B-1 stays open for services and jobs too.**
+- **The code stays until the owner decides whether to keep it.** A test (`test_link_fence`, "the limit") asserts that
+  the folder's rename lands. It fails the day the limit is gone, so the doc can be changed then.
+
+**Mitigation 3 holds; its should-fix items, built:**
+1. **The tracked links come from the branch that is checked out.** A new op, `worktree-plan`, lists them from
+   `refs/heads/<branch>` when that branch exists, else HEAD, in the same call that says whether it exists. The review
+   reproduced "unable to create symlink … Operation not permitted" when they came from HEAD.
+2. **Timeouts, and nothing left behind.**
+   - Claude Code's default hook timeout reads as 600 s in its binary. The plan (60 s), the job (360 s) and the undo
+     (60 s), plus a margin, make `HOOK_TIMEOUT_S` = 540 s, which is the hooks' `timeout`.
+   - A make that doesn't finish is recorded in the platform's state (`.state/session-worktree/<project>/`) before the
+     job starts. A failure or the job's own timeout undoes it at once (`session-worktree-undo`, as the project: the
+     worktree forced out, pruned, and the branch deleted only if this make created it).
+   - A hook killed by the tool leaves the record. The next make of that name undoes it first. A folder no record names
+     is never undone.
+3. **The hook-path race test** now runs its attacker under no link rule, against half the names. It asserts that
+   nothing is written outside and that at least one make went through while the attacker ran.
+
+**Nits, built:**
+- **Names with `/`,** as `EnterWorktree` takes them. Each segment is `[A-Za-z0-9._-]`, with no `..` and no leading dot,
+  at most 100 characters in all. The adapter maps them as Claude Code's own worktree mode does (read from the binary):
+  `/` becomes `+` in the folder and the branch (`feat/x` → `.claude/worktrees/feat+x`, `worktree-feat+x`).
+- **Claude Code's post-create steps** (read from its binary, to be confirmed by a real run):
+  - With the hook, every worktree path takes "Created hook-based worktree" / "Using worktree via hook". This covers
+    `--worktree`, `EnterWorktree` and agent isolation.
+  - It refuses a hook path with dot segments, or one with a link in a component below the repo root.
+  - It checks that the path is a folder. For an agent worktree it runs its own `git rev-parse HEAD` there (a read).
+  - It does **not** run the git path's setup:
+    - the `.worktreeinclude` copy;
+    - the `settings.local.json` copy;
+    - "Configured worktree to use hooks from main repository" (which sets the worktree's hooks path);
+    - `symlinkDirectories`;
+    - `sparsePaths`.
+
+    Those run only in the branch where its own git makes the worktree. A sandboxed project's worktree settings are
+    written by `render-project-settings --worktree` at session start (`worktree-memory.sh`), as before.
+
+**To look for in the real Claude run** (Claude's debug log, `claude --debug` or `~/.claude/debug/`, and `git worktree
+list`):
+- "Created hook-based worktree at: <ws>/.claude/worktrees/<name>" (or "Using worktree via hook" for
+  `--worktree --tmux`);
+- the absence of all of these:
+  - "Created worktree:";
+  - "Copied settings.local.json to worktree";
+  - "Copied N files from .worktreeinclude";
+  - "Configured worktree to use hooks from main repository";
+  - "Symlinked … from main repository to worktree";
+- `hub-event.log`: a `worktree-make` line with the project, and on removal `worktree-drop`;
+- for a name with `/`: the folder `a+b` and the branch `worktree-a+b`;
+- no `.state/session-worktree/<project>/*.json` left after a successful make;
+- whether the hook's own `timeout` (540) is honoured: a slow checkout past 10 minutes is cut either way.

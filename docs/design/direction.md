@@ -127,13 +127,14 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - The Keychain is blocked for services and capability runs, not for sessions. Loosening work mode's per-command
      prompts waits on that.
    - The git-filter protection in `mailbox-session-first.md` step 3 rests on one tool's environment variable.
-   - **Partly closed (11-14, `git-broker.md` r3 B-1, "as built"):** a process of a sandboxed project could race an
-     unsandboxed checkout (the owner's, or an agent tool's worktree mode) into writing its files anywhere the owner can
-     write. Built on the owner's "2+3": its services and jobs make no symbolic link in their checkouts (macOS; not on
-     Linux), and Claude Code's worktrees there are made by the platform as the project (its `WorktreeCreate` hook).
-     Still open: its sessions' own commands (no agent's sandbox can refuse links), the owner's own checkouts (doctor
-     warns), Codex app worktrees (owner question 4), whether sessions count as confined (option 4). Needs a real Claude
-     run to confirm the hook fires in worktree mode.
+   - **Open (11-14, `git-broker.md` r3 B-1, "as built" and "after its cold review"):** any process of a sandboxed
+     project can race an unsandboxed checkout (the owner's, or an agent tool's worktree mode) into writing its files
+     anywhere the owner can write. Built on the owner's "2+3": Claude Code's worktrees there are made by the platform as
+     the project (its `WorktreeCreate` hook; holds). Its services and jobs can't make a link directly in their checkouts
+     (macOS), but the build's cold review moved in a folder holding one, so that is friction, not a boundary, and
+     whether to keep it is the owner's. Still open: services and jobs, sessions' own commands, the owner's own
+     checkouts (doctor warns), Codex app worktrees (owner question 4), option 4. Needs a real Claude run to confirm the
+     hook fires in worktree mode.
 4. **Not enforced on either OS:**
    - the outbound domain allowlist (`policy.network`);
    - on Linux, inbound connections limited to localhost, and signals on kernels older than 6.12.
