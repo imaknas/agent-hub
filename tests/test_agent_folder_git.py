@@ -843,7 +843,10 @@ class SystemTempIsNoPlaceForIt(unittest.TestCase):
             "bin/cap-runner.py", "bin/linux-test", "bin/lint", "bin/conformance.py",
             # they name the temp area only to deny control names there, and a canary stages a tree there to prove it
             # (docs/design/runtime-codex.md, Step 4 r2, review A-B2); nothing of the platform's goes there
-            "bin/runtime_claude.py", "bin/conformance_claude.py"}
+            "bin/runtime_claude.py", "bin/conformance_claude.py",
+            # Codex's runs deny the temp roots to their tools and keep their own TMPDIR in the run's home; a profile
+            # canary writes /tmp to prove it refused (runtime-codex.md, Step 1 r2, S2)
+            "bin/runtime_codex.py", "bin/conformance_codex.py"}
     USE = __import__("re").compile(r"tempfile[.](?:mkdtemp|TemporaryDirectory|NamedTemporaryFile|mkstemp|gettempdir|TemporaryFile)[(]"
                                    r"|[$][(]mktemp|[\"' ]/tmp[/\"' ]|/private/tmp|/var/folders|TMPDIR")
     MOVED = __import__("re").compile(r"dir=(?:hubconf[.])?(?:private_tmp[(][)]|STATE\b)")   # both denied to every sandbox

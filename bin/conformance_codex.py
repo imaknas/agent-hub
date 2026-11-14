@@ -234,7 +234,7 @@ def control_globs(world) -> Outcome:
 LOGIN = ("needs a model call with the user's login: measured with the owner (runtime-codex.md, Step 1 r2, the login "
          "list); the runner runs it last, under section 3a's rule")
 RC_FILES = (".zshenv", ".zprofile", ".zshrc", ".bash_profile", ".bashrc", ".profile")
-RC_VAR = "BRUNNA_RC_CANARY"
+RC_VAR = "RC_CANARY_PLANTED"
 
 
 def _prefix(exe) -> pathlib.Path | None:

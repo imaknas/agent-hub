@@ -484,6 +484,11 @@ class CompletionContract(unittest.TestCase):
         store_fixture.stand_in(self)   # a runtime's completion runs its checked copy
         names = [*runtime_ports.PROVIDERS, *[n for n in runtime_ports.RUNTIMES
                                              if "completion" in runtime_ports.capabilities(n)]]
+        import runtime_store
+        for n in names:   # every other runtime with a store gets a copy in the same one
+            if n != "claude" and n in runtime_ports.RUNTIMES and callable(getattr(runtime_ports._module(n), "checked_copy", None)):
+                runtime_store.install(n, "0.169.0", store_fixture.Dist(store_fixture.ANSWER, name=n))
+                runtime_store.promote(n, "0.169.0")
         self.assertIn("claude", names)
         for n in names:
             with self.subTest(impl=n):

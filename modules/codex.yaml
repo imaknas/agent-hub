@@ -10,7 +10,7 @@
 v: 1
 name: codex
 type: module
-description: "Codex: your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider"
+description: "your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider"
 runtime_preset:
   label: Codex
   find: codex

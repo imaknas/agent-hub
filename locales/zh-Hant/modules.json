@@ -10,6 +10,6 @@
  "Nightly: removes Docker containers labelled org.testcontainers that are more than a day old": "每晚:移除標了 org.testcontainers、超過一天的 Docker 容器",
  "run claude setup-token, then save the new token yourself: (umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token) and paste it": "執行 claude setup-token,再自己把新的 token 存起來:(umask 077; read -rs t && printf '%s\\n' \"$t\" > ~/.claude/headless-oauth-token),然後貼上 token",
  "Claude Code login check, headless token expiry reminders": "Claude Code 的登入檢查、headless token 到期提醒",
- "Codex: your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider": "Codex:你的 Codex 對話會收到平台的信件和寫筆記提醒,brunna 只需回答的判斷在它自己檢查過的 Codex 副本上跑(先用你的登入檢查過一次之後);其他的需要別的 agent 或 LLM provider",
- "run codex login in a terminal": "在終端機跑 codex login"
+ "run codex login in a terminal": "在終端機跑 codex login",
+ "your Codex chats get letters and notes reminders from the platform, and brunna's answer-only decisions run on its own checked copy of Codex (after a first check with your login); the rest needs another agent or an LLM provider": "你的 Codex 對話會收到平台的信件和寫筆記提醒,brunna 只需回答的判斷在它自己檢查過的 Codex 副本上跑(先用你的登入檢查過一次之後);其他的需要別的 agent 或 LLM provider"
 }
