@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import smtplib
 import subprocess
 import sys
 import urllib.parse
@@ -47,6 +48,17 @@ FAILED = hubconf.STATE / "alerts-failed.json"  # key -> {"at": …, "text": firs
 REMIND = datetime.timedelta(hours=24)
 API = "https://discord.com/api/v10"
 _LIVE = (SENT, FAILED)
+_REAL = (subprocess.run, smtplib.SMTP, smtplib.SMTP_SSL)   # what reaches the outside: curl and osascript, and mail
+
+
+def _reaches_out(fn) -> bool:
+    """A test about to reach a real channel (11-14: one with its own state files but this machine's assistant channel
+    pushed "broken" to the owner's phone ten times): it is not sent, whatever the test replaced around it. A test that
+    replaced the sending itself (subprocess.run, smtplib) is not stopped."""
+    if "unittest" in sys.modules and fn in _REAL:
+        print("alert: not sent, a test reached a real channel (replace the channel or alert.once)", file=sys.stderr)
+        return True
+    return False
 
 
 def _held() -> bool:
@@ -70,6 +82,8 @@ def _creds() -> tuple[str, str] | None:
 
 def _curl(*args: str, data: str | None = None) -> str:
     """Returns the HTTP status code (a string); an empty string when curl itself fails."""
+    if _reaches_out(subprocess.run):
+        return ""
     r = subprocess.run(["/usr/bin/curl", "-sS", "-m", "20", "-o", "/dev/null", "-w", "%{http_code}", *args],
                        input=data, capture_output=True, text=True)
     return r.stdout.strip()
@@ -99,7 +113,6 @@ def _ntfy(text: str) -> bool:
 
 
 def _email(text: str) -> bool:
-    import smtplib
     from email.message import EmailMessage
     conf = hubconf.get("alerts.email") or {}
     if not conf.get("host") or not conf.get("to"):
@@ -111,6 +124,8 @@ def _email(text: str) -> bool:
     try:
         password = hubconf.path(conf["password_file"]).read_text().strip() if conf.get("password_file") else None
         cls = smtplib.SMTP_SSL if conf.get("ssl") else smtplib.SMTP
+        if _reaches_out(cls):
+            return False
         with cls(conf["host"], int(conf.get("port") or (465 if conf.get("ssl") else 587)), timeout=20) as s:
             if not conf.get("ssl"):
                 s.starttls()
@@ -124,6 +139,8 @@ def _email(text: str) -> bool:
 
 def _macos(text: str) -> bool:
     if not hubconf.get("alerts.macos"):
+        return False
+    if _reaches_out(subprocess.run):
         return False
     script = f"display notification {json.dumps(text[:200])} with title \"{names.current('product')}\""
     return subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True).returncode == 0

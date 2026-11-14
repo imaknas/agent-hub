@@ -412,5 +412,34 @@ class HeldUnderTest(unittest.TestCase):
         self.assertIn("held", err.getvalue())
 
 
+class RealChannelsUnderTest(unittest.TestCase):
+    """A test with its own state files that leaves this machine's channels in place reaches nothing: the assistant
+    channel pushed "broken" to the owner's phone from test_a_channel_that_fails_is_recorded (11-14)."""
+
+    def test_no_post_with_own_state_and_the_machines_channels(self):
+        import contextlib
+        import io
+        m = load()
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        token = tmp / "token"
+        token.write_text("t")
+        calls = []
+
+        def run(*a, **k):   # stands for the real subprocess.run: a call here would have been a POST
+            calls.append(a)
+            raise AssertionError("reached a real channel")
+        conf = {"alerts.assistant": True, "assistant.api": "http://127.0.0.1:9/", "alerts.ntfy": {"topic": "t"}}
+        with mock.patch.object(m, "SENT", tmp / "s.json"), mock.patch.object(m, "FAILED", tmp / "f.json"), \
+                mock.patch.object(m.hubconf, "get", lambda k, d=None: conf.get(k, d)), \
+                mock.patch.object(m.hubconf, "p", lambda k: token), \
+                mock.patch.object(m.subprocess, "run", run), mock.patch.object(m, "_REAL", (run,)), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(sorted(m.configured()), ["assistant", "discord", "ntfy"])
+            m.once("k", ["broken"], "fine")
+            self.assertFalse(m.send("free text"))
+        self.assertEqual(calls, [])
+        self.assertIn("not sent", err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
