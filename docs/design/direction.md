@@ -92,8 +92,8 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
      precondition (set 11-14). r3 after a second blind review (11-14): an unsandboxed checkout (the owner's, or an
      agent tool's worktree mode) can be raced by any running project process into writing anywhere the owner can
      write. This is true today, with or without the broker; a symlink-creation deny closes it for services and jobs
-     only. Not built; open for the owner: B-1's options, push policy, signing, Codex app worktrees, submodules, who
-     switches a project on.
+     only. The broker isn't built; B-1's options 2 and 3 are (11-14, the owner's "2+3"). Open for the owner: option 4,
+     push policy, signing, Codex app worktrees, submodules, who switches a project on.
    - **Step 4 layer 2:** `brunna session <project> --agent` under the platform's OS sandbox (with `--no-daemon` for
      Codex, D9's option i). It waits on M10 and Step 1's platform `CODEX_HOME`.
 
@@ -127,9 +127,13 @@ Ordered by what unblocks the most. "Owner" means the step waits for a decision o
    - The Keychain is blocked for services and capability runs, not for sessions. Loosening work mode's per-command
      prompts waits on that.
    - The git-filter protection in `mailbox-session-first.md` step 3 rests on one tool's environment variable.
-   - **Open today (measured 11-14, `git-broker.md` r3 B-1):** any process of a sandboxed project can race an unsandboxed
-     checkout (the owner's, or an agent tool's worktree mode) into writing its files anywhere the owner can write. The
-     options are the owner's.
+   - **Partly closed (11-14, `git-broker.md` r3 B-1, "as built"):** a process of a sandboxed project could race an
+     unsandboxed checkout (the owner's, or an agent tool's worktree mode) into writing its files anywhere the owner can
+     write. Built on the owner's "2+3": its services and jobs make no symbolic link in their checkouts (macOS; not on
+     Linux), and Claude Code's worktrees there are made by the platform as the project (its `WorktreeCreate` hook).
+     Still open: its sessions' own commands (no agent's sandbox can refuse links), the owner's own checkouts (doctor
+     warns), Codex app worktrees (owner question 4), whether sessions count as confined (option 4). Needs a real Claude
+     run to confirm the hook fires in worktree mode.
 4. **Not enforced on either OS:**
    - the outbound domain allowlist (`policy.network`);
    - on Linux, inbound connections limited to localhost, and signals on kernels older than 6.12.

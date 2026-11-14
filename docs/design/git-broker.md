@@ -4,7 +4,8 @@ Status: design, 11-14, on measurements made the same day; r2 after a blind revie
 where the text above disagrees: chiefly, no process writes both the worktree and the git dir, and
 `safe.bareRepository=explicit` is a precondition again); r3 after a second blind review (at the very end; it holds
 over both: an unsandboxed checkout can be raced into writing anywhere the owner can write, and how far to go against
-that is the owner's choice); nothing built. It takes over the prevention half of
+that is the owner's choice; B-1's mitigations 2 and 3 built 11-14, "B-1 as built" at the very end); the broker
+itself is not built. It takes over the prevention half of
 `git-config-fence.md` (the per-name fence, the narrow `brunna git` runner and the one-time install). That doc's scan stays
 as a second layer, and so do its config allowlist and its presets. Measured in scratch repos (git 2.50.1, macOS on a
 case-insensitive APFS volume). A sandboxed writer was stood in for by the platform's real Seatbelt profile
@@ -1221,3 +1222,114 @@ from the project's environment shapes the program the exec guard lets run.
   - P2's per-request link allowance.
 - **Step 4** gains Claude's `WorktreeCreate` hook (if option 3 is chosen), with the owner race probe run against a
   worktree made through it.
+
+### B-1 as built (11-14): mitigations 2 and 3
+
+**The owner's decision (11-14):** "Yes, build 2+3", for B-1, independently of the broker (which isn't built). Both are
+built for every sandboxed project, with no switch. Option 4 (sessions never "confined") and question 4 (Codex app
+worktrees) are still open. Until they are decided, the caveats on the principle and on Codex's confined check stand.
+
+**Mitigation 2: a sandboxed project's services and jobs make no symbolic link in their checkouts.**
+- **The port.** `policy.links` is neutral:
+  - the roots are the workspace and the runtime folder (a deploy's `git pull` there is a checkout too);
+  - the tool folders `LINK_FOLDERS` may hold links: `.venv/` at a root's top, and `node_modules/` at any depth, inside
+    the folder only, never the folder's own entry;
+  - so may the platform's own test runs (`.brunna/test/`, both spellings), where the test runner checks out tracked
+    links and tests make links in their temp folder;
+  - `allow` lists exact paths one platform job may link.
+- **The Seatbelt rendering.** `seatbelt.link_rules` sits in the isolation both profile kinds share. That covers
+  `sandboxed-run` (services, command jobs, the test runner's wrap, the platform's git work run as the project) and
+  cap-run. It is placed before the control-file rules, so those still win. An allowance outside the roots is dropped.
+  The guarantee is `links-blocked`, probed by `tests/test_sandboxed_services.py`'s Conformance.
+- **Linux** doesn't declare it, and doctor says so (a warning row). Landlock does have a make-symlink right, but it is
+  granted per folder that exists when the rules are made, so a `node_modules` or `.venv` made later would get no
+  links. Not built.
+- **Exact allowances, for the platform's own links made as the project:**
+  - `worktree-memory.sh` (`project_git.py run-as --allow-link`): a worktree's `.agent-memory` link and the rules-file
+    links;
+  - the worktree maker below: each tracked link of the checkout.
+- **Carve-outs, measured before adding any:**
+  - `uv venv` with uv's cache in `.git/brunna/cache/uv` left no link in the cache;
+  - a pnpm store in the workspace held no links (its links are in `node_modules`);
+  - cargo's `target/` couldn't be measured: in the sandbox rustup tries to download a toolchain and can't reach the
+    Keychain to check certificates;
+  - tox and pdm (`.tox`, `__pypackages__`) aren't installed here.
+
+  None was added. A tool that needs one fails loudly, and gets a folder added after it is measured.
+- **This machine's sandboxed projects** (read from the registry and their folders, read only):
+  - five sandboxed projects; one declares a service (a shell sync script) and a job (`python3 <script>`) that run in
+    its runtime folder;
+  - neither script makes a link, uses a venv or runs node (searched for `ln -s`, `symlink`, `venv`, `uv`, `npm`,
+    `pip install`, `git clone|checkout|pull|worktree`);
+  - they weren't run under the new profile, because they call outside services with real credentials;
+  - no other sandboxed project declares services or jobs, and none has a `.venv` or `node_modules` at its top.
+
+  Nothing is expected to break.
+
+**Mitigation 3: Claude Code's worktrees in a sandboxed project are made by the platform, as the project.**
+- **The contract**, read from Claude Code's binary (2.1.x, not run):
+  - a `WorktreeCreate` hook replaces its own git worktree creation;
+  - its input is the common fields plus `name`;
+  - the path is read from the last line of stdout (a relative one against the session's folder);
+  - a non-zero exit or no path fails the worktree;
+  - `WorktreeRemove` (`worktree_path`) replaces its removal.
+- **What renders the hooks.** `render-project-settings` writes both hooks into every sandboxed project's settings
+  (`runtime_claude.platform_hooks`). Each hook runs `hub-event --runtime claude worktree-make|worktree-drop`, ending in
+  `exit 1` and never in `|| true`: if the platform can't make the worktree, it isn't made, and never as the user.
+- **The new port.** `worktree_maker` is an optional port of `runtime_ports`: `worktree_request`, `worktree_location`,
+  `worktree_reply`, `makes_worktrees`.
+- **How the worktree is made.** `session_worktree.make` runs `project-git-job.py session-worktree` as the project,
+  through `project_git`, inside its sandbox:
+  - the place is `<workspace>/.claude/worktrees/<name>`, on branch `worktree-<name>` (new from HEAD, or the existing
+    one);
+  - the steps are `worktree add --no-checkout`, `reset`, then `checkout-index`;
+  - the tracked links are allowed by exact path;
+  - tracked files the sandbox may not write (control names, a runtime's own folder) are left out as skip-worktree, so
+    git doesn't show them as deleted, and the hook says so on stderr.
+
+  A swap during that checkout can only redirect writes to places the project could already write.
+- **What changes on this machine:** one sandboxed project tracks 44 files under control names (`.claude/skills`,
+  `.agents/skills`). Its Claude worktrees will now lack those skills (left out). Doctor already lists those files.
+- **The existing worktree path, checked.** For a sandboxed project, `worktree-memory.sh` already runs its git and
+  links as the project (`project_git.py run-as`), and `render-project-settings --worktree` writes the worktree's
+  settings without following links. The remaining owner-run checkouts in a sandboxed project's folder are Claude's own
+  (now handed over), the Codex app's and Codex CLI's managed worktrees (left as they are: question 4), and the owner's
+  own tools. `propose` is off for sandboxed projects, and its copy is outside the workspace.
+
+**Doctor:**
+- one row: services and jobs make no links (macOS), or "this OS's sandbox can't refuse links per folder" (Linux,
+  warning);
+- per sandboxed project, a warning: while its programs run, a checkout the owner makes in its folder (terminal,
+  editor, git apps, the Codex app's worktrees) can be made to write its files anywhere the owner can write; plus which
+  agents' worktrees the platform makes there (read from the project's settings);
+- per project, files tracked under a tool folder (a carve-out a checkout of the owner's could still be redirected
+  through).
+
+**Tests** (`tests/test_link_fence.py`, and the Conformance probe):
+- the port and its rendering; the order before the control rules; Seatbelt declares the guarantee and Landlock
+  doesn't;
+- under Seatbelt:
+  - refused: a link in the workspace or runtime folder, one moved in from another writable folder, one made in a tool
+    folder and renamed onto a tracked folder's place, a tool folder that is itself a link;
+  - allowed: links inside `node_modules` (nested too), `.venv` (top only) and a test run;
+  - an exact allowance; the positive control without the rule;
+  - venv, `uv venv` and npm's `.bin` links still work;
+- **the owner race** (the review's `owner_race2`, the attacker under the rule): nothing written outside, the file there
+  intact, the link never made;
+- the hook contract (request, location, reply, `makes_worktrees`, the commands fail closed and are the platform's);
+- `hub-event` exit codes and stdout;
+- a worktree made through the hook under the real Seatbelt profile: made as the project, the tracked link present, a
+  control file left out as skip-worktree, status clean, removed again, nothing run for an unsandboxed project or a bad
+  name;
+- a race against the hook path writing nothing outside.
+
+**Needs a real Claude run** (the platform's own tests can't start Claude; listed for the owner or the coordinator):
+1. In a sandboxed project, `claude --worktree <name>` (and the `EnterWorktree` tool, and a subagent with
+   `isolation: worktree`) runs the `WorktreeCreate` hook from the project's `.claude/settings.local.json`, opens the
+   session in the path it printed, and makes no worktree with its own git. To check: no `git worktree add` from
+   Claude's process, the branch `worktree-<name>`, `hub-event.log`'s `worktree-make` line.
+2. On exit, choosing to remove the worktree runs `WorktreeRemove`, and the folder is gone.
+3. A hook that fails (a name the platform refuses, say) shows Claude's "WorktreeCreate hook failed" and makes no
+   worktree.
+4. Whether a project's local settings are trusted for this hook in a fresh folder (the binary mentions "workspace not
+   trusted"), and that `CLAUDE_CODE_RESTRICT_PERSONAL_CONFIG` doesn't apply to project-level hooks.

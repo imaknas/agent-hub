@@ -402,6 +402,7 @@ passing the same run, not by reading its docs. The table below is the prose form
 | signals to the owner's other processes | blocked | only with ABI ≥ 6 (kernel 6.12); on 6.8 a service can signal the owner's processes |
 | what its sessions load settings, hooks and tools from (`policy.protect`, any depth, worktrees included) can't be written | yes (11-01) | **no**: Landlock only allows, and a write right on a folder covers everything under it; the renderer removes hooks the platform didn't write every 15 minutes |
 | programs that need unix sockets of their own (a local database socket, syslog) | allowed | refused (`EACCES`) |
+| no symbolic link made in its checkouts but inside `.venv`/`node_modules` (`policy.links`, `links-blocked`; the owner's checkout race, `git-broker.md` r3 B-1, 11-14) | yes | **no**: Landlock's make-symlink right is granted per folder that exists when the rules are made, so tool folders made later couldn't get links; not built, doctor warns |
 
 ## 10-31: projects' own model calls (`agenthub complete`)
 
